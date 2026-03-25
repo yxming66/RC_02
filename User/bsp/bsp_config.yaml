@@ -1,0 +1,16 @@
+can:
+  devices:
+  - instance: CAN1
+    name: '1'
+  - instance: CAN2
+    name: '2'
+  enabled: true
+mm:
+  enabled: true
+time:
+  enabled: true
+uart:
+  devices:
+  - instance: USART3
+    name: RC
+  enabled: true
