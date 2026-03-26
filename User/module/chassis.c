@@ -205,7 +205,7 @@ int8_t Chassis_Control(Chassis_t *c, const Chassis_CMD_t *c_cmd, uint32_t now) {
         case CHASSIS_MODE_RELAX:
         case CHASSIS_MODE_BREAK:
         case CHASSIS_MODE_INDEPENDENT:
-            c->move_vec.wz = 0.0f;
+						c->move_vec.wz = c_cmd->ctrl_vec.wz;
             break;
         case CHASSIS_MODE_OPEN:
 						c->move_vec.wz = c_cmd->ctrl_vec.wz;

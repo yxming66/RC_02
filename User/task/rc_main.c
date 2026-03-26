@@ -45,6 +45,8 @@ void Task_rc_main(void *argument) {
   while (1) {
     tick += delay_tick; /* 计算下一个唤醒时刻 */
     /* USER CODE BEGIN */
+        // 启动下一次DMA接收
+    DR16_StartDmaRecv(&dr16);
     // 等待DMA接收完成
     if (DR16_WaitDmaCplt(100)) {
       DR16_ParseData(&dr16);
@@ -75,8 +77,7 @@ void Task_rc_main(void *argument) {
     osMessageQueuePut(task_runtime.msgq.chassis.cmd, &chassis_cmd, 0, 0);
     osMessageQueueReset(task_runtime.msgq.pole.cmd);
     osMessageQueuePut(task_runtime.msgq.pole.cmd, &pole_cmd, 0, 0);
-    // 启动下一次DMA接收
-    DR16_StartDmaRecv(&dr16);
+
         /* 检测左拨杆切换到UP位置时触发软件复位 */
     if (dr16.header.online) {
       /* 拨杆从非UP状态切换到UP状态，且复位功能已使能，触发系统复位 */
