@@ -71,13 +71,23 @@ Config_RobotParam_t robot_config = {
         },
         .pid = {
             .support_pos_pid = {
-                .k = 0.2f,
-                .p = 1.5f,
+                .k = 0.5f,
+                .p = 1.8f,
+                .i = 0.3f,
+                .d = 0.1f,
+                .i_limit = 0.15f,
+                .out_limit = 1.0f,
+                .d_cutoff_freq = -1.0f,
+                .range = 0.0f,
+            },
+              .support_vel_pid = {
+                .k = 1.0f,
+                .p = 1.0f,
                 .i = 0.0f,
                 .d = 0.0f,
                 .i_limit = 0.0f,
-                .out_limit = 0.5f,
-                .d_cutoff_freq = 30.0f,
+                .out_limit = 1.0f,
+                .d_cutoff_freq = -1.0f,
                 .range = 0.0f,
             },
             .drive_spd_pid = {

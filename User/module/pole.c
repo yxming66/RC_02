@@ -29,6 +29,7 @@ static float Pole_Clipf(float val, float min, float max) {
 static void Pole_ResetControllers(Pole_t *c) {
   for (uint8_t i = 0; i < POLE_SUPPORT_MOTOR_NUM; i++) {
     PID_Reset(&c->pid.support_pos[i]);
+    PID_Reset(&c->pid.support_vel[i]);
   }
   for (uint8_t i = 0; i < POLE_DRIVE_MOTOR_NUM; i++) {
     PID_Reset(&c->pid.drive_spd[i]);
@@ -54,8 +55,10 @@ int8_t Pole_Init(Pole_t *c, const Pole_Params_t *param, float target_freq) {
   c->mode = POLE_MODE_RELAX;
 
   for (uint8_t i = 0; i < POLE_SUPPORT_MOTOR_NUM; i++) {
-    PID_Init(&c->pid.support_pos[i], KPID_MODE_NO_D, target_freq,
+    PID_Init(&c->pid.support_pos[i], KPID_MODE_CALC_D, target_freq,
              &param->pid.support_pos_pid);
+    PID_Init(&c->pid.support_vel[i], KPID_MODE_NO_D, target_freq,
+             &param->pid.support_vel_pid);
   }
 
   for (uint8_t i = 0; i < POLE_DRIVE_MOTOR_NUM; i++) {
@@ -146,13 +149,16 @@ int8_t Pole_Control(Pole_t *c, const Pole_CMD_t *c_cmd, uint32_t now) {
       c->setpoint.drive_target_rpm[i] = 0.0f;
     }
   }
-
+static float vel[4];
+static float out[4];
   for (uint8_t i = 0; i < POLE_SUPPORT_MOTOR_NUM; i++) {
     float fb_angle = Pole_GetSupportAngle(c, i);
-    float out = PID_Calc(&c->pid.support_pos[i], c->setpoint.support_target_angle[i],
+     vel[i] = PID_Calc(&c->pid.support_pos[i], c->setpoint.support_target_angle[i],
                          fb_angle, 0.0f, c->dt);
+     out[i] = PID_Calc(&c->pid.support_vel[i], vel[i], 
+                        c->feedback.motor[i].rotor_speed, 0.0f, c->dt);
 
-    c->out.motor[i] = Pole_Clipf(out, -c->param->limit.max_current,
+    c->out.motor[i] = Pole_Clipf(out[i], -c->param->limit.max_current,
                                  c->param->limit.max_current);
   }
 

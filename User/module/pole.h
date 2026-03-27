@@ -36,6 +36,7 @@ typedef struct {
   MOTOR_RM_Param_t motor_param[POLE_MOTOR_NUM];
   struct {
     KPID_Params_t support_pos_pid;
+    KPID_Params_t support_vel_pid;
     KPID_Params_t drive_spd_pid;
   } pid;
   struct {
@@ -78,6 +79,7 @@ typedef struct {
 
   struct {
     KPID_t support_pos[POLE_SUPPORT_MOTOR_NUM];
+    KPID_t support_vel[POLE_SUPPORT_MOTOR_NUM];
     KPID_t drive_spd[POLE_DRIVE_MOTOR_NUM];
   } pid;
 

@@ -30,7 +30,7 @@ void Task_pole_main(void *argument) {
 
     Pole_UpdateFeedback(&pole);
     Pole_Control(&pole, &pole_cmd, osKernelGetTickCount());
-    Pole_Output(&pole);
+    // Pole_Output(&pole);
 
     // static float out[4]={0.0f,0.0f,0.0f,0.0f};
 
