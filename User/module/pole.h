@@ -28,7 +28,7 @@ typedef enum {
 
 typedef struct {
   Pole_Mode_t mode;
-  float lift;   /* [-1, 1], >0 means up */
+  float lift[2];   /* [-1, 1], >0 means up */
   float drive;  /* [-1, 1], drive wheel speed command */
 } Pole_CMD_t;
 
@@ -66,13 +66,13 @@ typedef struct {
 
   struct {
     bool calibrated;
-    float lower;
-    float upper;
-    float target;
+    float lower[POLE_SUPPORT_MOTOR_NUM];
+    float upper[POLE_SUPPORT_MOTOR_NUM];
+    float target_lift[2];
   } support_angle;
 
   struct {
-    float support_target_angle;
+    float support_target_angle[POLE_SUPPORT_MOTOR_NUM];
     float drive_target_rpm[POLE_DRIVE_MOTOR_NUM];
   } setpoint;
 

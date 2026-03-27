@@ -47,7 +47,7 @@ void Task_chassis_main(void *argument) {
     
 	  Chassis_UpdateFeedback(&chassis);
     Chassis_Control(&chassis, &chassis_cmd, osKernelGetTickCount());
-    Chassis_Output(&chassis);
+    // Chassis_Output(&chassis);
     
     /* USER CODE END */
     osDelayUntil(tick); /* 运行结束，等待下一次唤醒 */

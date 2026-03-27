@@ -12,6 +12,14 @@
 #define POLE_DRIVE_ATTACH_SUPPORT_0 (2u) /* 2006[0] on support #3 */
 #define POLE_DRIVE_ATTACH_SUPPORT_1 (3u) /* 2006[1] on support #4 */
 
+static float Pole_GetSupportAngle(const Pole_t *c, uint8_t idx) {
+  float angle = c->motors[idx]->gearbox_total_angle;
+  if (c->param->motor_param[idx].reverse) {
+    angle = -angle;
+  }
+  return angle;
+}
+
 static float Pole_Clipf(float val, float min, float max) {
   if (val < min) return min;
   if (val > max) return max;
@@ -73,7 +81,7 @@ int8_t Pole_UpdateFeedback(Pole_t *c) {
 
     c->feedback.motor[i] = c->motors[i]->feedback;
     if (i < POLE_SUPPORT_MOTOR_NUM) {
-      sum += c->motors[i]->gearbox_total_angle;
+      sum += Pole_GetSupportAngle(c, i);
     }
   }
 
@@ -100,17 +108,30 @@ int8_t Pole_Control(Pole_t *c, const Pole_CMD_t *c_cmd, uint32_t now) {
   }
 
   if (!c->support_angle.calibrated) {
-    c->support_angle.lower = c->feedback.support_angle_avg;
-    c->support_angle.upper = c->support_angle.lower + c->param->limit.support_total_travel;
-    c->support_angle.target = c->support_angle.lower;
+    for (uint8_t i = 0; i < POLE_SUPPORT_MOTOR_NUM; i++) {
+      float now_angle = Pole_GetSupportAngle(c, i);
+      c->support_angle.lower[i] = now_angle;
+      c->support_angle.upper[i] = now_angle + c->param->limit.support_total_travel;
+    }
+    c->support_angle.target_lift[0] = 0.0f;
+    c->support_angle.target_lift[1] = 0.0f;
     c->support_angle.calibrated = true;
     Pole_ResetControllers(c);
   }
 
-  c->support_angle.target += c_cmd->lift * c->param->limit.support_lift_speed * c->dt;
-  c->support_angle.target = Pole_Clipf(c->support_angle.target, c->support_angle.lower,
-                                       c->support_angle.upper);
-  c->setpoint.support_target_angle = c->support_angle.target;
+  c->support_angle.target_lift[0] += c_cmd->lift[0] * c->param->limit.support_lift_speed * c->dt;
+  c->support_angle.target_lift[1] += c_cmd->lift[1] * c->param->limit.support_lift_speed * c->dt;
+  c->support_angle.target_lift[0] = Pole_Clipf(c->support_angle.target_lift[0], 0.0f,
+                                               c->param->limit.support_total_travel);
+  c->support_angle.target_lift[1] = Pole_Clipf(c->support_angle.target_lift[1], 0.0f,
+                                               c->param->limit.support_total_travel);
+
+  for (uint8_t i = 0; i < POLE_SUPPORT_MOTOR_NUM; i++) {
+    uint8_t side = (i < 2u) ? 0u : 1u;
+    float target = c->support_angle.lower[i] + c->support_angle.target_lift[side];
+    c->setpoint.support_target_angle[i] = Pole_Clipf(target, c->support_angle.lower[i],
+                                                     c->support_angle.upper[i]);
+  }
 
   const uint8_t attach_support_idx[POLE_DRIVE_MOTOR_NUM] = {
       POLE_DRIVE_ATTACH_SUPPORT_0,
@@ -118,7 +139,7 @@ int8_t Pole_Control(Pole_t *c, const Pole_CMD_t *c_cmd, uint32_t now) {
   };
   for (uint8_t i = 0; i < POLE_DRIVE_MOTOR_NUM; i++) {
     uint8_t support_idx = attach_support_idx[i];
-    float lifted = c->motors[support_idx]->gearbox_total_angle - c->support_angle.lower;
+    float lifted = Pole_GetSupportAngle(c, support_idx) - c->support_angle.lower[support_idx];
     if (lifted >= c->param->limit.drive_enable_angle) {
       c->setpoint.drive_target_rpm[i] = c_cmd->drive * c->param->limit.drive_max_rpm;
     } else {
@@ -127,9 +148,10 @@ int8_t Pole_Control(Pole_t *c, const Pole_CMD_t *c_cmd, uint32_t now) {
   }
 
   for (uint8_t i = 0; i < POLE_SUPPORT_MOTOR_NUM; i++) {
-    float fb_angle = c->motors[i]->gearbox_total_angle;
-    float out = PID_Calc(&c->pid.support_pos[i], c->setpoint.support_target_angle,
+    float fb_angle = Pole_GetSupportAngle(c, i);
+    float out = PID_Calc(&c->pid.support_pos[i], c->setpoint.support_target_angle[i],
                          fb_angle, 0.0f, c->dt);
+
     c->out.motor[i] = Pole_Clipf(out, -c->param->limit.max_current,
                                  c->param->limit.max_current);
   }

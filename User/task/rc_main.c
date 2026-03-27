@@ -60,16 +60,27 @@ void Task_rc_main(void *argument) {
       chassis_cmd.ctrl_vec.wz = 0.0f;
 
       pole_cmd.mode = POLE_MODE_RELAX;
-      pole_cmd.lift = 0.0f;
+      pole_cmd.lift[0] = 0.0f;
+      pole_cmd.lift[1] = 0.0f;
       pole_cmd.drive = 0.0f;
-    } else {
+    } else if (dr16.data.sw_r == DR16_SW_MID) {
       chassis_cmd.mode = CHASSIS_MODE_INDEPENDENT;
-      chassis_cmd.ctrl_vec.vx = dr16.data.ch_r_x;
+      chassis_cmd.ctrl_vec.vx = -dr16.data.ch_r_x;
       chassis_cmd.ctrl_vec.vy = dr16.data.ch_r_y;
       chassis_cmd.ctrl_vec.wz = dr16.data.ch_l_x;
 
       pole_cmd.mode = POLE_MODE_ACTIVE;
-      pole_cmd.lift = dr16.data.ch_l_y;
+      pole_cmd.lift[0] = dr16.data.ch_l_y;
+      pole_cmd.lift[1] = dr16.data.ch_l_y;
+      pole_cmd.drive = dr16.data.ch_r_y;
+    } else if (dr16.data.sw_r == DR16_SW_DOWN) {
+      chassis_cmd.ctrl_vec.vx = 0.0f;
+      chassis_cmd.ctrl_vec.vy = 0.0f;
+      chassis_cmd.ctrl_vec.wz = 0.0f;
+
+      pole_cmd.mode = POLE_MODE_ACTIVE;
+      pole_cmd.lift[0] = dr16.data.ch_l_y;
+      pole_cmd.lift[1] = dr16.data.ch_l_x;
       pole_cmd.drive = dr16.data.ch_r_y;
     }
 
