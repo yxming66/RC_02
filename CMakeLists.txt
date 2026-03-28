@@ -88,6 +88,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     User/task/rc_main.c
     User/task/pole_main.c
     User/task/user_task.c
+    User/task/sick.c
 )
 
 # Add include paths

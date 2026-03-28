@@ -22,7 +22,7 @@ void Task_pole_main(void *argument) {
 
   Config_RobotParam_t *cfg = Config_GetRobotParam();
   Pole_Init(&pole, &cfg->pole_param, (float)POLE_MAIN_FREQ);
-
+   
   while (1) {
     tick += delay_tick;
 

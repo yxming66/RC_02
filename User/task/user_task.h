@@ -18,6 +18,7 @@ extern "C" {
 #define RC_MAIN_FREQ (500.0)
 #define CMD_MAIN_FREQ (500.0)
 #define POLE_MAIN_FREQ (500.0)
+#define SICK_FREQ (500.0)
 
 /* 任务初始化延时ms */
 #define TASK_INIT_DELAY (100u)
@@ -26,7 +27,7 @@ extern "C" {
 #define RC_MAIN_INIT_DELAY (0)
 #define CMD_MAIN_INIT_DELAY (0)
 #define POLE_MAIN_INIT_DELAY (0)
-
+#define SICK_INIT_DELAY (0)
 /* Exported defines --------------------------------------------------------- */
 /* Exported macro ----------------------------------------------------------- */
 /* Exported types ----------------------------------------------------------- */
@@ -40,6 +41,8 @@ typedef struct {
         osThreadId_t rc_main;
         osThreadId_t cmd_main;
         osThreadId_t pole_main;
+        osThreadId_t sick;
+
     } thread;
 
     /* USER MESSAGE BEGIN */
@@ -79,6 +82,7 @@ typedef struct {
         UBaseType_t rc_main;
         UBaseType_t cmd_main;
         UBaseType_t pole_main;
+        UBaseType_t sick;
     } stack_water_mark;
 
     /* 各任务运行频率 */
@@ -88,6 +92,7 @@ typedef struct {
         float rc_main;
         float cmd_main;
         float pole_main;
+        float sick;
     } freq;
 
     /* 任务最近运行时间 */
@@ -97,6 +102,7 @@ typedef struct {
         float rc_main;
         float cmd_main;
         float pole_main;
+        float sick;
     } last_up_time;
 
 } Task_Runtime_t;
@@ -111,6 +117,7 @@ extern const osThreadAttr_t attr_chassis_main;
 extern const osThreadAttr_t attr_rc_main;
 extern const osThreadAttr_t attr_cmd_main;
 extern const osThreadAttr_t attr_pole_main;
+extern const osThreadAttr_t attr_sick;
 
 /* 任务函数声明 */
 void Task_Init(void *argument);
@@ -119,6 +126,7 @@ void Task_chassis_main(void *argument);
 void Task_rc_main(void *argument);
 void Task_cmd_main(void *argument);
 void Task_pole_main(void *argument);
+void Task_sick(void *argument);
 
 #ifdef __cplusplus
 }

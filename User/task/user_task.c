@@ -34,3 +34,8 @@ const osThreadAttr_t attr_pole_main = {
     .priority = osPriorityNormal,
     .stack_size = 256 * 4,
 };
+const osThreadAttr_t attr_sick = {
+    .name = "sick",
+    .priority = osPriorityNormal,
+    .stack_size = 256 * 4,
+};
