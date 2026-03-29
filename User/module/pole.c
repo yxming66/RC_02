@@ -149,27 +149,26 @@ int8_t Pole_Control(Pole_t *c, const Pole_CMD_t *c_cmd, uint32_t now) {
       c->setpoint.drive_target_rpm[i] = 0.0f;
     }
   }
-static float vel[4];
-static float out[4];
+  float vel[4];
+  float out[4];
   for (uint8_t i = 0; i < POLE_SUPPORT_MOTOR_NUM; i++) {
     float fb_angle = Pole_GetSupportAngle(c, i);
      vel[i] = PID_Calc(&c->pid.support_pos[i], c->setpoint.support_target_angle[i],
                          fb_angle, 0.0f, c->dt);
      out[i] = PID_Calc(&c->pid.support_vel[i], vel[i], 
                         c->feedback.motor[i].rotor_speed, 0.0f, c->dt);
-
     c->out.motor[i] = Pole_Clipf(out[i], -c->param->limit.max_current,
                                  c->param->limit.max_current);
   }
 
-  for (uint8_t i = 0; i < POLE_DRIVE_MOTOR_NUM; i++) {
-    uint8_t idx = (uint8_t)(POLE_SUPPORT_MOTOR_NUM + i);
-    float fb_rpm = c->feedback.motor[idx].rotor_speed;
-    float out = PID_Calc(&c->pid.drive_spd[i], c->setpoint.drive_target_rpm[i],
-                         fb_rpm, 0.0f, c->dt);
-    c->out.motor[idx] = Pole_Clipf(out, -c->param->limit.max_current,
-                                   c->param->limit.max_current);
-  }
+//  for (uint8_t i = 0; i < POLE_DRIVE_MOTOR_NUM; i++) {
+//    uint8_t idx = (uint8_t)(POLE_SUPPORT_MOTOR_NUM + i);
+//    float fb_rpm = c->feedback.motor[idx].rotor_speed;
+//    float out = PID_Calc(&c->pid.drive_spd[i], c->setpoint.drive_target_rpm[i],
+//                         fb_rpm, 0.0f, c->dt);
+//    c->out.motor[idx] = Pole_Clipf(out, -c->param->limit.max_current,
+//                                   c->param->limit.max_current);
+  //}
 
   return POLE_OK;
 }

@@ -231,8 +231,8 @@ int8_t MOTOR_RM_SetOutput(MOTOR_RM_Param_t *param, float value) {
     if (param == NULL) return DEVICE_ERR_NULL;
     MOTOR_RM_CANManager_t *manager = MOTOR_RM_GetCANManager(param->can);
     if (manager == NULL) return DEVICE_ERR_NO_DEV;
-    if (value > 1.0f) value = 1.0f;
-    if (value < -1.0f) value = -1.0f;
+    if (value > 0.5f) value = 0.5f;
+    if (value < -0.5f) value = -0.5f;
     if (param->reverse){
         value = -value;
     }

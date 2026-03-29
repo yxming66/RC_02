@@ -9,7 +9,7 @@
 #include "module/pole.h"
 /* USER INCLUDE END */
 
-static Pole_t pole;
+ Pole_t pole;
 static Pole_CMD_t pole_cmd;
 
 void Task_pole_main(void *argument) {
@@ -30,8 +30,9 @@ void Task_pole_main(void *argument) {
 
     Pole_UpdateFeedback(&pole);
     Pole_Control(&pole, &pole_cmd, osKernelGetTickCount());
-    // Pole_Output(&pole);
+Pole_Output(&pole);
 
+		
     // static float out[4]={0.0f,0.0f,0.0f,0.0f};
 
     // MOTOR_RM_SetOutput((MOTOR_RM_Param_t *)&cfg->pole_param.motor_param[0], out[0]);
