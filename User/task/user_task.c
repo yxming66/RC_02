@@ -29,13 +29,18 @@ const osThreadAttr_t attr_cmd_main = {
     .priority = osPriorityNormal,
     .stack_size = 256 * 4,
 };
-const osThreadAttr_t attr_pole_main = {
-    .name = "pole_main",
+const osThreadAttr_t attr_sick = {
+    .name = "sick",
     .priority = osPriorityNormal,
     .stack_size = 256 * 4,
 };
-const osThreadAttr_t attr_sick = {
-    .name = "sick",
+const osThreadAttr_t attr_arm = {
+    .name = "arm",
+    .priority = osPriorityNormal,
+    .stack_size = 256 * 4,
+};
+const osThreadAttr_t attr_rod = {
+    .name = "rod",
     .priority = osPriorityNormal,
     .stack_size = 256 * 4,
 };

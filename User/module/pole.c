@@ -8,6 +8,7 @@
 #include <string.h>
 
 #include "bsp/can.h"
+#include "device/motor_rm.h"
 
 #define POLE_DRIVE_ATTACH_SUPPORT_0 (2u) /* 2006[0] on support #3 */
 #define POLE_DRIVE_ATTACH_SUPPORT_1 (3u) /* 2006[1] on support #4 */
@@ -161,14 +162,14 @@ int8_t Pole_Control(Pole_t *c, const Pole_CMD_t *c_cmd, uint32_t now) {
                                  c->param->limit.max_current);
   }
 
-//  for (uint8_t i = 0; i < POLE_DRIVE_MOTOR_NUM; i++) {
-//    uint8_t idx = (uint8_t)(POLE_SUPPORT_MOTOR_NUM + i);
-//    float fb_rpm = c->feedback.motor[idx].rotor_speed;
-//    float out = PID_Calc(&c->pid.drive_spd[i], c->setpoint.drive_target_rpm[i],
-//                         fb_rpm, 0.0f, c->dt);
-//    c->out.motor[idx] = Pole_Clipf(out, -c->param->limit.max_current,
-//                                   c->param->limit.max_current);
-  //}
+ for (uint8_t i = 0; i < POLE_DRIVE_MOTOR_NUM; i++) {
+   uint8_t idx = (uint8_t)(POLE_SUPPORT_MOTOR_NUM + i);
+   float fb_rpm = c->feedback.motor[idx].rotor_speed;
+   float out = PID_Calc(&c->pid.drive_spd[i], c->setpoint.drive_target_rpm[i],
+                        fb_rpm, 0.0f, c->dt);
+   c->out.motor[idx] = Pole_Clipf(out, -c->param->limit.max_current,
+                                  c->param->limit.max_current);
+  }
 
   return POLE_OK;
 }
@@ -183,20 +184,22 @@ void Pole_Output(Pole_t *c) {
     MOTOR_RM_SetOutput((MOTOR_RM_Param_t *)&c->param->motor_param[i], c->out.motor[i]);
   }
 
-  for (uint8_t i = 0; i < POLE_MOTOR_NUM; i++) {
-    BSP_CAN_t can = c->param->motor_param[i].can;
-    if (can == BSP_CAN_1) {
-      if (!sent_can1) {
-        MOTOR_RM_Ctrl((MOTOR_RM_Param_t *)&c->param->motor_param[i]);
-        sent_can1 = true;
-      }
-    } else if (can == BSP_CAN_2) {
-      if (!sent_can2) {
-        MOTOR_RM_Ctrl((MOTOR_RM_Param_t *)&c->param->motor_param[i]);
-        sent_can2 = true;
-      }
-    }
-  }
+  MOTOR_RM_Ctrl(&c->param->motor_param[0]);
+  // MOTOR_RM_Ctrl(&c->param->motor_param[4]);
+  // for (uint8_t i = 0; i < POLE_MOTOR_NUM; i++) {
+  //   BSP_CAN_t can = c->param->motor_param[i].can;
+  //   if (can == BSP_CAN_1) {
+  //     if (!sent_can1) {
+  //       MOTOR_RM_Ctrl((MOTOR_RM_Param_t *)&c->param->motor_param[i]);
+  //       sent_can1 = true;
+  //     }
+  //   } else if (can == BSP_CAN_2) {
+  //     if (!sent_can2) {
+  //       MOTOR_RM_Ctrl((MOTOR_RM_Param_t *)&c->param->motor_param[i]);
+  //       sent_can2 = true;
+  //     }
+  //   }
+  // }
 }
 
 void Pole_ResetOutput(Pole_t *c) {

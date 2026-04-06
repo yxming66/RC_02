@@ -11,6 +11,9 @@ cmake_minimum_required(VERSION 3.22)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS ON)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS ON)
 
 
 # Define the build type
@@ -29,7 +32,7 @@ project(${CMAKE_PROJECT_NAME})
 message("Build type: " ${CMAKE_BUILD_TYPE})
 
 # Enable CMake support for ASM and C languages
-enable_language(C ASM)
+enable_language(C CXX ASM)
 
 # Create an executable object type
 add_executable(${CMAKE_PROJECT_NAME})
@@ -66,11 +69,16 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     User/device/dr16.c
     User/device/motor.c
     User/device/motor_rm.c
-
+    User/device/motor_dm.c
+    User/device/motor_lz.c
+    User/device/motors/motor.cpp
+    User/device/motors/motor_packages/self_test/motor_self_test.cpp
+    User/device/motors/motor_packages/soft_limit_learning/motor_soft_limit_learning.cpp
     # User/module sources
     User/module/chassis.c
     User/module/pole.c
-
+    User/module/arm.cpp
+    User/module/rod.c
     # User/module/cmd sources
     User/module/cmd/cmd.c
     User/module/cmd/cmd_adapter.c
@@ -86,9 +94,10 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     User/task/cmd_main.c
     User/task/init.c
     User/task/rc_main.c
-    User/task/pole_main.c
     User/task/user_task.c
     User/task/sick.c
+    User/task/arm_main.c
+    User/task/rod_main.c
 )
 
 # Add include paths

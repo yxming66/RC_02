@@ -68,6 +68,7 @@ typedef enum {
   /* USER MUSIC MENU BEGIN */
   MUSIC_RM,     ///< RM战队音乐
   MUSIC_NOKIA,  ///< 诺基亚经典铃声
+  MUSIC_HAPPY_DOU_DI_ZHU_MELODY, ///< 欢乐斗地主主题曲
   /* USER MUSIC MENU END */
 } MUSIC_t;
 

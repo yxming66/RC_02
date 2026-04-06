@@ -17,17 +17,18 @@ extern "C" {
 #define CHASSIS_MAIN_FREQ (500.0)
 #define RC_MAIN_FREQ (500.0)
 #define CMD_MAIN_FREQ (500.0)
-#define POLE_MAIN_FREQ (500.0)
 #define SICK_FREQ (500.0)
-
+#define ARM_FREQ (500.0)
+#define ROD_FREQ (500.0)
 /* 任务初始化延时ms */
 #define TASK_INIT_DELAY (100u)
 #define BLINK_INIT_DELAY (0)
 #define CHASSIS_MAIN_INIT_DELAY (0)
 #define RC_MAIN_INIT_DELAY (0)
 #define CMD_MAIN_INIT_DELAY (0)
-#define POLE_MAIN_INIT_DELAY (0)
 #define SICK_INIT_DELAY (0)
+#define ARM_INIT_DELAY (0)
+#define ROD_INIT_DELAY (0)
 /* Exported defines --------------------------------------------------------- */
 /* Exported macro ----------------------------------------------------------- */
 /* Exported types ----------------------------------------------------------- */
@@ -40,8 +41,9 @@ typedef struct {
         osThreadId_t chassis_main;
         osThreadId_t rc_main;
         osThreadId_t cmd_main;
-        osThreadId_t pole_main;
         osThreadId_t sick;
+        osThreadId_t arm;
+        osThreadId_t rod;
 
     } thread;
 
@@ -61,6 +63,12 @@ typedef struct {
 			      osMessageQueueId_t rc; 
 
         }cmd;
+        struct {
+            osMessageQueueId_t cmd;
+        } arm;
+        struct {
+            osMessageQueueId_t cmd;
+        } rod;
     } msgq;
     /* USER MESSAGE END */
 
@@ -81,8 +89,10 @@ typedef struct {
         UBaseType_t chassis_main;
         UBaseType_t rc_main;
         UBaseType_t cmd_main;
-        UBaseType_t pole_main;
         UBaseType_t sick;
+        UBaseType_t arm;
+        UBaseType_t rod;
+
     } stack_water_mark;
 
     /* 各任务运行频率 */
@@ -91,7 +101,6 @@ typedef struct {
         float chassis_main;
         float rc_main;
         float cmd_main;
-        float pole_main;
         float sick;
     } freq;
 
@@ -101,7 +110,6 @@ typedef struct {
         float chassis_main;
         float rc_main;
         float cmd_main;
-        float pole_main;
         float sick;
     } last_up_time;
 
@@ -116,18 +124,18 @@ extern const osThreadAttr_t attr_blink;
 extern const osThreadAttr_t attr_chassis_main;
 extern const osThreadAttr_t attr_rc_main;
 extern const osThreadAttr_t attr_cmd_main;
-extern const osThreadAttr_t attr_pole_main;
 extern const osThreadAttr_t attr_sick;
-
+extern const osThreadAttr_t attr_arm;
+extern const osThreadAttr_t attr_rod;
 /* 任务函数声明 */
 void Task_Init(void *argument);
 void Task_blink(void *argument);
 void Task_chassis_main(void *argument);
 void Task_rc_main(void *argument);
 void Task_cmd_main(void *argument);
-void Task_pole_main(void *argument);
 void Task_sick(void *argument);
-
+void Task_arm(void *argument);
+void Task_rod(void *argument);
 #ifdef __cplusplus
 }
 #endif

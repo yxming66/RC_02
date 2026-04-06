@@ -8,6 +8,7 @@
 /* USER INCLUDE BEGIN */
 #include "module/chassis.h"
 #include "module/config.h"
+#include "module/pole.h"
 /* USER INCLUDE END */
 
 /* Private typedef ---------------------------------------------------------- */
@@ -18,6 +19,9 @@
 Chassis_t chassis;
 Chassis_CMD_t chassis_cmd;   
 Chassis_IMU_t chassis_imu;
+
+Pole_t pole;
+static Pole_CMD_t pole_cmd;
 /* USER STRUCT END */
 
 /* Private function --------------------------------------------------------- */
@@ -37,6 +41,8 @@ void Task_chassis_main(void *argument) {
   Config_RobotParam_t *cfg = Config_GetRobotParam();
   Chassis_Init(&chassis, &cfg->chassis_param, (float)CHASSIS_MAIN_FREQ);
   chassis.mech_zero=0.57f;
+
+  Pole_Init(&pole, &cfg->pole_param, (float)CHASSIS_MAIN_FREQ);
   /* USER CODE INIT END */
   
   while (1) {
@@ -49,6 +55,10 @@ void Task_chassis_main(void *argument) {
     Chassis_Control(&chassis, &chassis_cmd, osKernelGetTickCount());
     Chassis_Output(&chassis);
     
+		osMessageQueueGet(task_runtime.msgq.pole.cmd, &pole_cmd, NULL, 0);
+    Pole_UpdateFeedback(&pole);
+    Pole_Control(&pole, &pole_cmd, osKernelGetTickCount());
+    Pole_Output(&pole);
     /* USER CODE END */
     osDelayUntil(tick); /* 运行结束，等待下一次唤醒 */
   }

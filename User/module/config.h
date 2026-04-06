@@ -15,11 +15,14 @@ extern "C" {
 #include "module/chassis.h"
 #include "module/pole.h"
 #include "module/cmd/cmd.h"
-
+#include "module/arm.h"
+#include "module/rod.h"
 typedef struct {
     Chassis_Params_t chassis_param;
     Pole_Params_t pole_param;
     CMD_Config_t cmd_param;
+    Arm_Params_t arm_param;
+    Rod_Params_t rod_param;
 } Config_RobotParam_t;
 
 /* Exported functions prototypes -------------------------------------------- */
