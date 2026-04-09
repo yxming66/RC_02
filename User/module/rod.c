@@ -88,7 +88,7 @@ static void Rod_FinishSequence(Rod_t *r) {
   r->sequence.step = 0u;
   Rod_SetPoseSetpoint(r, ROD_POSE_DOWN);
 }
-
+  
 static void Rod_UpdateSequence(Rod_t *r, const Rod_CMD_t *cmd, uint32_t now) {
   if (!r->sequence.initialized) {
     Rod_ResetSequence(r, now);
