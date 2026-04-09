@@ -140,7 +140,7 @@ void Task_rc_main(void *argument) {
           rod_cmd.grip_done = false;
           break;
         case DR16_SW_MID:
-          rod_cmd.mode = ROD_MODE_SEQUENCE;
+          rod_cmd.mode = ROD_MODE_ACTIVE;
           rod_cmd.pose = ROD_POSE_FLIP;
           rod_cmd.sequence_trigger = true;
           rod_cmd.grip_done = false;

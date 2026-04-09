@@ -77,6 +77,8 @@ MOTOR_DM_t* MOTOR_DM_GetMotor(MOTOR_DM_Param_t *param);
 
 int8_t MOTOR_DM_Enable(MOTOR_DM_Param_t *param);
 
+int8_t MOTOR_DM_Disable(MOTOR_DM_Param_t *param);
+
 /**
  * @brief 使电机松弛（设置输出为0）
  * @param param 

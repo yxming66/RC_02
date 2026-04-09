@@ -60,7 +60,10 @@ typedef struct {
     float pit_kd;
     float rol_kp;
     float rol_kd;
-    float max_vel;
+    float pit_max_vel;
+    float pit_max_acc;
+    float rol_max_vel;
+    float rol_max_acc;
   } limit;
 } Rod_Params_t;
 
@@ -81,11 +84,20 @@ typedef struct {
   const Rod_Params_t *param;
   Rod_Mode_t mode;
   Rod_Pose_t pose;
+  Rod_Pose_t setpoint_pose;
 
   struct {
     float pit_angle;
     float rol_angle;
   } setpoint;
+
+  struct {
+    float pit_angle;
+    float rol_angle;
+    float pit_vel;
+    float rol_vel;
+    bool initialized;
+  } traj;
 
   struct {
     bool initialized;

@@ -481,6 +481,31 @@ int8_t MOTOR_DM_Enable(MOTOR_DM_Param_t *param){
     return BSP_CAN_TransmitStdDataFrame(motor->param.can, &frame) == BSP_OK ? DEVICE_OK : DEVICE_ERR;
 }
 
+int8_t MOTOR_DM_Disable(MOTOR_DM_Param_t *param) {
+    if (param == NULL) {
+        return DEVICE_ERR_NULL;
+    }
+
+    MOTOR_DM_t *motor = MOTOR_DM_GetMotor(param);
+    if (motor == NULL) {
+        return DEVICE_ERR_NO_DEV;
+    }
+
+    BSP_CAN_StdDataFrame_t frame;
+    frame.id = motor->param.can_id;
+    frame.dlc = 8;
+    frame.data[0] = 0xFF;
+    frame.data[1] = 0xFF;
+    frame.data[2] = 0xFF;
+    frame.data[3] = 0xFF;
+    frame.data[4] = 0xFF;
+    frame.data[5] = 0xFF;
+    frame.data[6] = 0xFF;
+    frame.data[7] = 0xFD;
+
+    return BSP_CAN_TransmitStdDataFrame(motor->param.can, &frame) == BSP_OK ? DEVICE_OK : DEVICE_ERR;
+}
+
 //重新设置角度零点
 int8_t MOTOR_DM_SetZero(MOTOR_DM_Param_t *param){
     if (param == NULL) {
