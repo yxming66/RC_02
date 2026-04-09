@@ -73,7 +73,8 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     User/device/motor_lz.c
     User/device/motors/motor.cpp
     User/device/motors/motor_packages/self_test/motor_self_test.cpp
-    User/device/motors/motor_packages/soft_limit_learning/motor_soft_limit_learning.cpp
+    User/device/motors/motor_packages/limit_selfLearning/dual_limit/motor_dual_limit_calibration.cpp
+    User/device/motors/motor_packages/limit_selfLearning/single_limit/motor_single_limit_calibration.cpp
     # User/module sources
     User/module/chassis.c
     User/module/pole.c

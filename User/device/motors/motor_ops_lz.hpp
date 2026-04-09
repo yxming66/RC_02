@@ -26,6 +26,15 @@ inline int8_t Motor::LZRelax(Motor* self) {
     return MOTOR_LZ_Relax(&self->lz_param_);
 }
 
+inline int8_t Motor::LZSetZero(Motor* self) {
+    int8_t ret = MOTOR_LZ_SetZero(&self->lz_param_);
+    if (ret != DEVICE_OK) {
+        return ret;
+    }
+    self->zero_position_offset_rad_ = 0.0f;
+    return DEVICE_OK;
+}
+
 inline int8_t Motor::LZCurrent(Motor* self, float current) {
     return self->MITControl(self->GetAngle(), 0.0f, 0.0f, 0.0f, current);
 }

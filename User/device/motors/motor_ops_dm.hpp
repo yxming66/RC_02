@@ -26,6 +26,15 @@ inline int8_t Motor::DMRelax(Motor* self) {
     return MOTOR_DM_Relax(&self->dm_param_);
 }
 
+inline int8_t Motor::DMSetZero(Motor* self) {
+    int8_t ret = MOTOR_DM_SetZero(&self->dm_param_);
+    if (ret != DEVICE_OK) {
+        return ret;
+    }
+    self->zero_position_offset_rad_ = 0.0f;
+    return DEVICE_OK;
+}
+
 inline int8_t Motor::DMCurrent(Motor* self, float current) {
     return self->MITControl(self->GetAngle(), 0.0f, 0.0f, 0.0f, current);
 }

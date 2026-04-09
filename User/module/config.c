@@ -110,6 +110,12 @@ Config_RobotParam_t robot_config = {
         },
     },
     .arm_param = {
+      .joint3_cali = {
+        .mode = ARM_CALI_MODE_ZERO_LIMIT_TRAVEL,
+        .seek_velocity_rad_per_sec = 0.8f,
+        .seek_positive_direction = false,
+        .user_travel_rad = 1.57f,
+      },
         .lzmotor_param = {.can = BSP_CAN_1, .motor_id = 127, .host_id = 0xff, .module = MOTOR_LZ_RSO3, .reverse = true,   .mode=MOTOR_LZ_MODE_MOTION},
         .dmmotor_param = {.can = BSP_CAN_1, .master_id = 0x12,  .can_id = 0x02, .module = MOTOR_DM_J4310, .reverse = false},
         .rmmotor_param = {.can = BSP_CAN_1, .id = 0x205, .module = MOTOR_M3508, .reverse = false, .gear = true},

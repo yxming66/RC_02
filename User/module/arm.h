@@ -18,7 +18,8 @@ extern "C" {
 #ifdef __cplusplus
 #include "device/motors/motor.hpp"
 #include "device/motors/motor_packages/self_test/motor_self_test.hpp"
-#include "device/motors/motor_packages/soft_limit_learning/motor_soft_limit_learning.hpp"
+#include "device/motors/motor_packages/limit_selfLearning/dual_limit/motor_dual_limit_calibration.hpp"
+#include "device/motors/motor_packages/limit_selfLearning/single_limit/motor_single_limit_calibration.hpp"
 #endif
 
 
@@ -37,9 +38,21 @@ typedef enum {
   ARM_MODE_POINT2POINT //点对点控制模式，直接运动到预设的目标点
 } Arm_Mode_t;
 
+typedef enum {
+  ARM_CALI_MODE_SOFT_LIMIT_LEARN = 0,
+  ARM_CALI_MODE_ZERO_LIMIT_TRAVEL,
+} Arm_Joint3CaliMode_t;
+
 
 
 typedef struct {
+  struct {
+    Arm_Joint3CaliMode_t mode;
+    float seek_velocity_rad_per_sec;
+    bool seek_positive_direction;
+    float user_travel_rad;
+  } joint3_cali;
+
   MOTOR_LZ_Param_t lzmotor_param;
   MOTOR_DM_Param_t dmmotor_param;
   MOTOR_RM_Param_t rmmotor_param;
@@ -140,14 +153,19 @@ typedef struct {
     bool cilibrate;
     bool self_test_started;
     bool soft_limit_started;
+    Arm_Joint3CaliMode_t cali_mode;
+    bool zero_limit_travel_started;
+    float user_travel_rad;
     float rmmotor_min;
     float rmmotor_max;
 #ifdef __cplusplus
     mrobot::Motor *motor;
     void *self_test_storage;
-    void *soft_limit_learning_storage;
+    void *dual_limit_storage;
+    void *single_limit_storage;
     mrobot::MotorSelfTest *self_test;
-    mrobot::MotorSoftLimitLearning *soft_limit_learning;
+    mrobot::MotorDualLimitCalibration *dual_limit;
+    mrobot::MotorSingleLimitCalibration *single_limit;
 #endif
   } joint3cil;
 

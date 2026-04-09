@@ -40,7 +40,7 @@ void Task_Init(void *argument) {
   task_runtime.thread.cmd_main = osThreadNew(Task_cmd_main, NULL, &attr_cmd_main);
   task_runtime.thread.sick = osThreadNew(Task_sick, NULL, &attr_sick);
   task_runtime.thread.arm = osThreadNew(Task_arm, NULL, &attr_arm);
-  task_runtime.thread.rod = osThreadNew(Task_rod, NULL, &attr_rod);
+  // task_runtime.thread.rod = osThreadNew(Task_rod, NULL, &attr_rod);
   // 创建消息队列
   /* USER MESSAGE BEGIN */
   task_runtime.msgq.user_msg= osMessageQueueNew(2u, 10, NULL);

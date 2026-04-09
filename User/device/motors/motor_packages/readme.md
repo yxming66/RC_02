@@ -5,5 +5,5 @@
 软限位学习
 
 - self_test: 上电自检状态机（在线/反馈/温度/可选主动探测）
-- soft_limit_learning: 通过低速寻边 + 堵转判定学习最小/最大软限位
+- limit_selfLearning/dual_limit: 通过低速寻边 + 堵转判定学习双边最小/最大软限位
 

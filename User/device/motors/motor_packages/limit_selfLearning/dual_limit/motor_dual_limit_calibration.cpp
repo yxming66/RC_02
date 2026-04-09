@@ -1,14 +1,15 @@
 /**
- * @file motor_soft_limit_learning.cpp
- * @brief 电机软限位学习状态机实现
+ * @file motor_dual_limit_calibration.cpp
+ * @brief 双边限位学习标定状态机实现
  */
 
-#include "device/motors/motor_packages/soft_limit_learning/motor_soft_limit_learning.hpp"
+#include "device/motors/motor_packages/limit_selfLearning/dual_limit/motor_dual_limit_calibration.hpp"
 
 #include <cmath>
 
 namespace mrobot {
-void MotorSoftLimitLearning::Start(uint32_t now_ms) {
+
+void MotorDualLimitCalibration::Start(uint32_t now_ms) {
     min_position_rad_ = 0.0f;
     max_position_rad_ = 0.0f;
     learned_ = false;
@@ -28,7 +29,7 @@ void MotorSoftLimitLearning::Start(uint32_t now_ms) {
     EnterState(State::SEEK_MIN, now_ms);
 }
 
-MotorSoftLimitLearning::Result MotorSoftLimitLearning::Update(uint32_t now_ms) {
+MotorDualLimitCalibration::Result MotorDualLimitCalibration::Update(uint32_t now_ms) {
     if (result_ != Result::RUNNING) {
         return result_;
     }
@@ -107,7 +108,7 @@ MotorSoftLimitLearning::Result MotorSoftLimitLearning::Update(uint32_t now_ms) {
     return result_;
 }
 
-void MotorSoftLimitLearning::Cancel() {
+void MotorDualLimitCalibration::Cancel() {
     if (motor_ != nullptr) {
         motor_->Relax();
     }
@@ -116,13 +117,13 @@ void MotorSoftLimitLearning::Cancel() {
     result_ = Result::FAIL_INVALID_RANGE;
 }
 
-void MotorSoftLimitLearning::EnterState(State state, uint32_t now_ms) {
+void MotorDualLimitCalibration::EnterState(State state, uint32_t now_ms) {
     state_ = state;
     state_enter_ms_ = now_ms;
     detector_.Reset();
 }
 
-void MotorSoftLimitLearning::Finish(Result result) {
+void MotorDualLimitCalibration::Finish(Result result) {
     if (motor_ != nullptr) {
         motor_->Relax();
     }
@@ -130,7 +131,7 @@ void MotorSoftLimitLearning::Finish(Result result) {
     state_ = (result == Result::PASS) ? State::DONE : State::ERROR;
 }
 
-bool MotorSoftLimitLearning::ParamsValid() const {
+bool MotorDualLimitCalibration::ParamsValid() const {
     return MotorLimitSeekParamsValid(params_.seek) &&
            MotorLimitIsFinite(params_.min_valid_range_rad) &&
            params_.min_valid_range_rad > 0.0f &&
@@ -141,19 +142,19 @@ bool MotorSoftLimitLearning::ParamsValid() const {
            params_.return_timeout_ms > 0U;
 }
 
-bool MotorSoftLimitLearning::FeedbackLooksValid() const {
+bool MotorDualLimitCalibration::FeedbackLooksValid() const {
     return MotorLimitFeedbackLooksValid(motor_);
 }
 
-bool MotorSoftLimitLearning::StallDetected(uint32_t now_ms) {
+bool MotorDualLimitCalibration::StallDetected(uint32_t now_ms) {
     return detector_.StallDetected(motor_, params_.seek, now_ms);
 }
 
-bool MotorSoftLimitLearning::Settled(uint32_t now_ms) {
+bool MotorDualLimitCalibration::Settled(uint32_t now_ms) {
     return detector_.Settled(motor_, params_.seek, now_ms);
 }
 
-bool MotorSoftLimitLearning::ReachedCenter() const {
+bool MotorDualLimitCalibration::ReachedCenter() const {
     return std::fabs(motor_->GetPositionRad() - GetCenterPositionRad()) <=
            params_.return_position_tolerance_rad;
 }

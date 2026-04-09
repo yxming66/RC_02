@@ -8,8 +8,6 @@
 #include "task/user_task.h"
 /* USER INCLUDE BEGIN */
 #include "module/arm.h"
-#include "device/motor_dm.h"
-#include "device/motor_lz.h"
 #include "module/config.h"
 
 /* USER INCLUDE END */
@@ -26,6 +24,14 @@ bool setzero=0;
 /* USER STRUCT END */
 
 /* Private function --------------------------------------------------------- */
+static bool ArmModeIsValid(Arm_Mode_t mode) {
+  return (mode >= ARM_MODE_RELAX) && (mode <= ARM_MODE_POINT2POINT);
+}
+
+static bool ArmPointModeIsValid(Arm_Point2PointMode_t mode) {
+  return (mode >= ARM_POINT_SLEEP) && (mode < ARM_POINT_NONE);
+}
+
 /* Exported functions ------------------------------------------------------- */
 void Task_arm(void *argument) {
   (void)argument; /* 未使用argument，消除警告 */
@@ -39,6 +45,9 @@ void Task_arm(void *argument) {
   uint32_t tick = osKernelGetTickCount(); /* 控制任务运行频率的计时 */
   /* USER CODE INIT BEGIN */
     Arm_Init(&arm, &Config_GetRobotParam()->arm_param, (float)ARM_FREQ);
+    arm_cmd.mode = ARM_MODE_RELAX;
+    arm_cmd.point2point_mode = ARM_POINT_SLEEP;
+    arm_cmd.study_mode = ARM_STUDY_NONE;
 
   /* USER CODE INIT END */
   
@@ -51,11 +60,15 @@ void Task_arm(void *argument) {
       setzero=0;
     }
 
-    osMessageQueueGet(task_runtime.msgq.arm.cmd, &arm_cmd, NULL, 0);
-
-    arm.mode = arm_cmd.mode;
-    arm.point2point_mode = arm_cmd.point2point_mode;
-
+    if (osMessageQueueGet(task_runtime.msgq.arm.cmd, &arm_cmd, NULL, 0) == osOK) {
+      if (!ArmModeIsValid(arm_cmd.mode)) {
+        arm_cmd.mode = ARM_MODE_RELAX;
+      }
+      if (!ArmPointModeIsValid(arm_cmd.point2point_mode)) {
+        arm_cmd.point2point_mode = ARM_POINT_SLEEP;
+      }
+    }
+    
     for (int i=0; i<ARM_POINT_NONE; i++) {
       arm.point2point[i].lzmotor_pos = 1.50471783f;
       arm.point2point[i].dmmotor_pos =  2.37619781f;
@@ -82,7 +95,7 @@ void Task_arm(void *argument) {
 
     Arm_UpdateFeedback(&arm);
     Arm_Control(&arm, &arm_cmd);
-    Arm_Output(&arm);
+    // Arm_Output(&arm);
     /* USER CODE END */
     osDelayUntil(tick); /* 运行结束，等待下一次唤醒 */
   }

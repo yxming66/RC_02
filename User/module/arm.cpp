@@ -14,7 +14,6 @@
 
 namespace {
 
-constexpr float ARM_J12_SLEEP_ARRIVE_TOL = 0.04f;
 constexpr float ARM_INTERP_MAX_SPEED_LZ = 0.4f;
 constexpr float ARM_INTERP_MAX_SPEED_DM = 0.4f;
 constexpr float ARM_INTERP_MAX_SPEED_RM = 1.0f;
@@ -102,9 +101,13 @@ static int8_t Arm_SetMode(Arm_t *a, Arm_Mode_t mode) {
   if (a == NULL) return ARM_ERR_NULL;
   if (a->mode == mode) return ARM_OK;
 
-  if (a->mode == ARM_MODE_CILIBRATE && a->joint3cil.soft_limit_learning != NULL &&
-      a->joint3cil.soft_limit_learning->IsRunning()) {
-    a->joint3cil.soft_limit_learning->Cancel();
+  if (a->mode == ARM_MODE_CILIBRATE && a->joint3cil.dual_limit != NULL &&
+      a->joint3cil.dual_limit->IsRunning()) {
+    a->joint3cil.dual_limit->Cancel();
+  }
+  if (a->mode == ARM_MODE_CILIBRATE && a->joint3cil.single_limit != NULL &&
+      a->joint3cil.single_limit->IsRunning()) {
+    a->joint3cil.single_limit->Cancel();
   }
   if (a->mode == ARM_MODE_CILIBRATE && a->joint3cil.self_test != NULL &&
       a->joint3cil.self_test->IsRunning()) {
@@ -121,28 +124,39 @@ static void Arm_InitJoint3Packages(Arm_t *a) {
     return;
   }
 
+  const Arm_Params_t *param = a->param;
+  if (param == NULL) {
+    return;
+  }
+
   mrobot::MotorSelfTest::Params self_test_param = mrobot::MotorSelfTest::Params::Default();
   self_test_param.active_probe_enable = true;
   self_test_param.probe_current = 0.6f;
   self_test_param.probe_duration_ms = 100;
 
-  mrobot::MotorSoftLimitLearning::Params soft_limit_param = mrobot::MotorSoftLimitLearning::Params::Default();
-  soft_limit_param.seek_current = 0.8f;
-  soft_limit_param.stall_velocity_threshold = 0.1f;
-  soft_limit_param.stall_current_threshold = 0.3f;
-  soft_limit_param.min_valid_range_rad = 0.3f;
-  soft_limit_param.return_velocity_limit_rad_per_sec = 0.8f;
+    mrobot::MotorDualLimitCalibration::Params dual_limit_param = mrobot::MotorDualLimitCalibration::Params::Default();
+    dual_limit_param.seek.seek_velocity_rad_per_sec = param->joint3_cali.seek_velocity_rad_per_sec;
 
-  if (a->joint3cil.self_test_storage == NULL || a->joint3cil.soft_limit_learning_storage == NULL) {
+    mrobot::MotorSingleLimitCalibration::Params single_limit_param =
+      mrobot::MotorSingleLimitCalibration::Params::Default();
+    single_limit_param.seek.seek_velocity_rad_per_sec = param->joint3_cali.seek_velocity_rad_per_sec;
+    single_limit_param.user_travel_rad = param->joint3_cali.user_travel_rad;
+    single_limit_param.seek_positive_direction = param->joint3_cali.seek_positive_direction;
+
+    if (a->joint3cil.self_test_storage == NULL || a->joint3cil.dual_limit_storage == NULL ||
+      a->joint3cil.single_limit_storage == NULL) {
     return;
   }
 
   a->joint3cil.self_test = new (a->joint3cil.self_test_storage)
       mrobot::MotorSelfTest(a->joint3cil.motor, self_test_param);
-  a->joint3cil.soft_limit_learning = new (a->joint3cil.soft_limit_learning_storage)
-      mrobot::MotorSoftLimitLearning(a->joint3cil.motor, soft_limit_param);
+    a->joint3cil.dual_limit = new (a->joint3cil.dual_limit_storage)
+      mrobot::MotorDualLimitCalibration(a->joint3cil.motor, dual_limit_param);
+    a->joint3cil.single_limit = new (a->joint3cil.single_limit_storage)
+      mrobot::MotorSingleLimitCalibration(a->joint3cil.motor, single_limit_param);
   a->joint3cil.self_test_started = false;
   a->joint3cil.soft_limit_started = false;
+  a->joint3cil.zero_limit_travel_started = false;
 }
 
 static void Arm_ResetCalibrationState(Arm_t *a) {
@@ -153,6 +167,7 @@ static void Arm_ResetCalibrationState(Arm_t *a) {
   a->joint3cil.cilibrate = false;
   a->joint3cil.self_test_started = false;
   a->joint3cil.soft_limit_started = false;
+  a->joint3cil.zero_limit_travel_started = false;
   a->joint3cil.rmmotor_min = 0.0f;
   a->joint3cil.rmmotor_max = 0.0f;
 
@@ -176,39 +191,15 @@ static void Arm_SetJoint3SetpointToCurrent(Arm_t *a) {
 
 static bool Arm_RunCalibration(Arm_t *a) {
   if (a == NULL || a->joint3cil.motor == NULL ||
-      a->joint3cil.self_test == NULL || a->joint3cil.soft_limit_learning == NULL) {
+      a->joint3cil.self_test == NULL) {
     return false;
   }
 
-  float sleep_joint1_target = a->point2point[ARM_POINT_SLEEP].lzmotor_pos;
-  float sleep_joint2_target = a->point2point[ARM_POINT_SLEEP].dmmotor_pos;
-  bool j12_sleep_arrived = false;
-  {
-    float sleep_lz_target, sleep_dm_target, sleep_rm_target;
-    Arm_GetPoint2PointTargets(a, ARM_POINT_SLEEP,
-                              &sleep_lz_target,
-                              &sleep_dm_target,
-                              &sleep_rm_target);
-    Arm_ApplyPoint2PointInterp(a,
-                               sleep_lz_target,
-                               sleep_dm_target,
-                               sleep_rm_target,
-                               false,
-                               a->timer.dt,
-                               ARM_INTERP_MAX_SPEED_LZ,
-                               ARM_INTERP_MAX_SPEED_DM,
-                               ARM_INTERP_MAX_SPEED_RM);
-    a->out.lzmotor = a->setpoint.lzmotor;
-    a->out.dmmotor = a->setpoint.dmmotor;
-
-    j12_sleep_arrived = (fabsf(sleep_joint1_target - a->joint_angle.joint1) <= ARM_J12_SLEEP_ARRIVE_TOL) &&
-                        (fabsf(sleep_joint2_target - a->joint_angle.joint2) <= ARM_J12_SLEEP_ARRIVE_TOL);
-  }
-
-  if (!j12_sleep_arrived) {
-    a->out.rmmotor = 0.0f;
-    return false;
-  }
+  // Keep joint1/joint2 at current pose during calibration; only calibrate joint3 RM.
+  a->setpoint.lzmotor.target_angle = a->joint_angle.joint1;
+  a->setpoint.dmmotor.angle = a->joint_angle.joint2 - a->joint_angle.joint1;
+  a->out.lzmotor = a->setpoint.lzmotor;
+  a->out.dmmotor = a->setpoint.dmmotor;
 
   const uint32_t now_ms = Arm_NowMs();
   mrobot::MotorSelfTest::Result self_test_result = a->joint3cil.self_test->GetResult();
@@ -229,33 +220,86 @@ static bool Arm_RunCalibration(Arm_t *a) {
     return false;
   }
 
-  mrobot::MotorSoftLimitLearning::Result learn_result = a->joint3cil.soft_limit_learning->GetResult();
-  if (!a->joint3cil.soft_limit_started) {
-    a->joint3cil.soft_limit_learning->Start(now_ms);
-    a->joint3cil.soft_limit_started = true;
-    learn_result = a->joint3cil.soft_limit_learning->GetResult();
-  }
-  if (a->joint3cil.soft_limit_learning->IsRunning()) {
-    learn_result = a->joint3cil.soft_limit_learning->Update(now_ms);
-  }
+  bool cali_ok = false;
+  bool cali_failed = false;
+  float learned_min = 0.0f;
+  float learned_max = 0.0f;
 
-  if (learn_result == mrobot::MotorSoftLimitLearning::Result::PASS) {
-    mrobot::MotorSoftLimitLearning::LearnedRange range = a->joint3cil.soft_limit_learning->GetLearnedRange();
-    if (range.valid) {
-      a->joint3cil.rmmotor_min = range.min_position_rad;
-      a->joint3cil.rmmotor_max = range.max_position_rad;
-      a->joint3cil.motor->SetZeroPoint();
-      a->joint3cil.cilibrate = true;
-      a->joint3cil.self_test_started = false;
-      a->joint3cil.soft_limit_started = false;
-      Arm_SetJoint3SetpointToCurrent(a);
-      Arm_SetMode(a, ARM_MODE_POINT2POINT);
+  if (a->joint3cil.cali_mode == ARM_CALI_MODE_ZERO_LIMIT_TRAVEL) {
+    if (a->joint3cil.single_limit == NULL) {
+      Arm_ResetCalibrationState(a);
       a->out.rmmotor = 0.0f;
-      return true;
+      return false;
+    }
+
+    mrobot::MotorSingleLimitCalibration::Result learn_result = a->joint3cil.single_limit->GetResult();
+    if (!a->joint3cil.zero_limit_travel_started) {
+      a->joint3cil.single_limit->Start(now_ms);
+      a->joint3cil.zero_limit_travel_started = true;
+      learn_result = a->joint3cil.single_limit->GetResult();
+    }
+    if (a->joint3cil.single_limit->IsRunning()) {
+      learn_result = a->joint3cil.single_limit->Update(now_ms);
+    }
+
+    if (learn_result == mrobot::MotorSingleLimitCalibration::Result::PASS) {
+      mrobot::MotorSingleLimitCalibration::LearnedRange range =
+          a->joint3cil.single_limit->GetLearnedRange();
+      if (range.valid) {
+        learned_min = range.min_position_rad;
+        learned_max = range.max_position_rad;
+        cali_ok = true;
+      } else {
+        cali_failed = true;
+      }
+    } else if (learn_result != mrobot::MotorSingleLimitCalibration::Result::RUNNING) {
+      cali_failed = true;
+    }
+  } else {
+    if (a->joint3cil.dual_limit == NULL) {
+      Arm_ResetCalibrationState(a);
+      a->out.rmmotor = 0.0f;
+      return false;
+    }
+
+    mrobot::MotorDualLimitCalibration::Result learn_result = a->joint3cil.dual_limit->GetResult();
+    if (!a->joint3cil.soft_limit_started) {
+      a->joint3cil.dual_limit->Start(now_ms);
+      a->joint3cil.soft_limit_started = true;
+      learn_result = a->joint3cil.dual_limit->GetResult();
+    }
+    if (a->joint3cil.dual_limit->IsRunning()) {
+      learn_result = a->joint3cil.dual_limit->Update(now_ms);
+    }
+
+    if (learn_result == mrobot::MotorDualLimitCalibration::Result::PASS) {
+      mrobot::MotorDualLimitCalibration::LearnedRange range = a->joint3cil.dual_limit->GetLearnedRange();
+      if (range.valid) {
+        learned_min = range.min_position_rad;
+        learned_max = range.max_position_rad;
+        cali_ok = true;
+      } else {
+        cali_failed = true;
+      }
+    } else if (learn_result != mrobot::MotorDualLimitCalibration::Result::RUNNING) {
+      cali_failed = true;
     }
   }
 
-  if (learn_result != mrobot::MotorSoftLimitLearning::Result::RUNNING) {
+  if (cali_ok) {
+    a->joint3cil.rmmotor_min = learned_min;
+    a->joint3cil.rmmotor_max = learned_max;
+    a->joint3cil.cilibrate = true;
+    a->joint3cil.self_test_started = false;
+    a->joint3cil.soft_limit_started = false;
+    a->joint3cil.zero_limit_travel_started = false;
+    Arm_SetJoint3SetpointToCurrent(a);
+    Arm_SetMode(a, ARM_MODE_POINT2POINT);
+    a->out.rmmotor = 0.0f;
+    return true;
+  }
+
+  if (cali_failed) {
     Arm_ResetCalibrationState(a);
   }
 
@@ -292,10 +336,14 @@ int8_t Arm_Init(Arm_t *a, Arm_Params_t *param, float target_freq) {
 
   static mrobot::Motor joint3_motor(mrobot::MotorConfig::FromRM("arm_joint3", *a->rmmotor_param));
   alignas(mrobot::MotorSelfTest) static unsigned char joint3_self_test_storage[sizeof(mrobot::MotorSelfTest)];
-  alignas(mrobot::MotorSoftLimitLearning) static unsigned char joint3_soft_limit_storage[sizeof(mrobot::MotorSoftLimitLearning)];
+  alignas(mrobot::MotorDualLimitCalibration) static unsigned char joint3_dual_limit_storage[sizeof(mrobot::MotorDualLimitCalibration)];
+  alignas(mrobot::MotorSingleLimitCalibration) static unsigned char joint3_single_limit_storage[sizeof(mrobot::MotorSingleLimitCalibration)];
   a->joint3cil.motor = &joint3_motor;
   a->joint3cil.self_test_storage = joint3_self_test_storage;
-  a->joint3cil.soft_limit_learning_storage = joint3_soft_limit_storage;
+  a->joint3cil.dual_limit_storage = joint3_dual_limit_storage;
+  a->joint3cil.single_limit_storage = joint3_single_limit_storage;
+  a->joint3cil.cali_mode = a->param->joint3_cali.mode;
+  a->joint3cil.user_travel_rad = a->param->joint3_cali.user_travel_rad;
   (void)a->joint3cil.motor->Register();
   (void)a->joint3cil.motor->Enable();
   Arm_ResetCalibrationState(a);
@@ -347,6 +395,16 @@ int8_t Arm_UpdateFeedback(Arm_t *a) {
 int8_t Arm_Control(Arm_t *a, const Arm_CMD_t *a_cmd) {
   if (a == NULL || a_cmd == NULL) return ARM_ERR_NULL;
 
+  Arm_Mode_t req_mode = a_cmd->mode;
+  if ((req_mode < ARM_MODE_RELAX) || (req_mode > ARM_MODE_POINT2POINT)) {
+    req_mode = ARM_MODE_RELAX;
+  }
+  Arm_Point2PointMode_t req_point_mode = a_cmd->point2point_mode;
+  if ((req_point_mode < ARM_POINT_SLEEP) || (req_point_mode >= ARM_POINT_NONE)) {
+    req_point_mode = ARM_POINT_SLEEP;
+  }
+  a->point2point_mode = req_point_mode;
+
   a->timer.now = BSP_TIME_Get_us() / 1000000.0f;
   a->timer.dt = (BSP_TIME_Get_us() - a->timer.lask_wakeup) / 1000000.0f;
   a->timer.lask_wakeup = BSP_TIME_Get_us();
@@ -355,14 +413,12 @@ int8_t Arm_Control(Arm_t *a, const Arm_CMD_t *a_cmd) {
     a->timer.dt = 0.001f;
   }
 
-  if (!a->joint3cil.cilibrate) {
-    if (a_cmd->mode == ARM_MODE_RELAX) {
-      a->mode = ARM_MODE_RELAX;
-    } else {
-      a->mode = ARM_MODE_CILIBRATE;
-    }
+  if (req_mode == ARM_MODE_RELAX) {
+    a->mode = ARM_MODE_RELAX;
+  } else if (!a->joint3cil.cilibrate) {
+    a->mode = ARM_MODE_CILIBRATE;
   } else {
-    a->mode = a_cmd->mode;
+    a->mode = req_mode;
   }
 
   float j3vel, j3out;

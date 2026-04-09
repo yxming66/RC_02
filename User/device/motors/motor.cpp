@@ -96,11 +96,10 @@ bool Motor::GetLZExtraFeedback(MotorLZExtraFeedback* out) const {
 }
 
 int8_t Motor::SetZeroPoint() {
-    const MOTOR_t* motor = RawMotor();
-    if (motor == nullptr) {
+    if (!ops_ || !ops_->set_zero_fn) {
         return DEVICE_ERR;
     }
-    return DEVICE_OK;
+    return ops_->set_zero_fn(this);
 }
 
 int8_t Motor::CurrentControl(float current) {

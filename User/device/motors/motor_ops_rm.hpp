@@ -29,6 +29,15 @@ inline int8_t Motor::RMRelax(Motor* self) {
     return MOTOR_RM_Ctrl(&self->rm_param_);
 }
 
+inline int8_t Motor::RMSetZero(Motor* self) {
+    const MOTOR_t* motor = self->RMRawMotor(self);
+    if (motor == nullptr) {
+        return DEVICE_ERR;
+    }
+    self->zero_position_offset_rad_ = self->feedback_.rotor_abs_angle;
+    return DEVICE_OK;
+}
+
 inline int8_t Motor::RMCurrent(Motor* self, float current) {
     return self->RMCurrentControl(current);
 }

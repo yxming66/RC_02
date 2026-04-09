@@ -198,6 +198,7 @@ private:
         int8_t (*enable_fn)(Motor* self);
         int8_t (*update_fn)(Motor* self);
         int8_t (*relax_fn)(Motor* self);
+        int8_t (*set_zero_fn)(Motor* self);
         int8_t (*current_fn)(Motor* self, float current);
         int8_t (*velocity_fn)(Motor* self, float velocity);
         int8_t (*position_fn)(Motor* self, float angle, float max_velocity);
@@ -222,6 +223,10 @@ private:
     static int8_t LZRelax(Motor* self);
     static int8_t DMRelax(Motor* self);
     static int8_t RMRelax(Motor* self);
+
+    static int8_t LZSetZero(Motor* self);
+    static int8_t DMSetZero(Motor* self);
+    static int8_t RMSetZero(Motor* self);
 
     static int8_t LZCurrent(Motor* self, float current);
     static int8_t DMCurrent(Motor* self, float current);

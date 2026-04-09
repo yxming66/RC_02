@@ -17,16 +17,16 @@ void Task_rod(void *argument) {
   osDelay(ROD_INIT_DELAY);
 
   uint32_t tick = osKernelGetTickCount();
-  Rod_Init(&rod, &Config_GetRobotParam()->rod_param, (float)ROD_FREQ);
+  // Rod_Init(&rod, &Config_GetRobotParam()->rod_param, (float)ROD_FREQ);
 
   while (1) {
     tick += delay_tick;
 
     osMessageQueueGet(task_runtime.msgq.rod.cmd, &rod_cmd, NULL, 0);
 
-    Rod_UpdateFeedback(&rod);
-    Rod_Control(&rod, &rod_cmd, osKernelGetTickCount());
-    Rod_Output(&rod);
+    // Rod_UpdateFeedback(&rod);
+    // Rod_Control(&rod, &rod_cmd, osKernelGetTickCount());
+    // Rod_Output(&rod);
 
     osDelayUntil(tick);
   }
