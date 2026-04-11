@@ -28,6 +28,9 @@ typedef enum {
 typedef struct {
   Pole_Mode_t mode;
   float lift[2];   /* [-1, 1], >0 means up */
+  bool auto_target_enable[2];
+  float auto_target_lift[2];   /* rad, relative to calibrated lower limit */
+  float auto_lift_speed[2];    /* rad/s, <=0 means use default support_lift_speed */
 } Pole_CMD_t;
 
 typedef struct {
@@ -64,7 +67,8 @@ typedef struct {
     bool calibrated;
     float lower[POLE_SUPPORT_MOTOR_NUM];
     float upper[POLE_SUPPORT_MOTOR_NUM];
-    float target_lift[2];
+    float final_target_lift[2];
+    float tracked_target_lift[2];
   } support_angle;
 
   struct {
@@ -83,6 +87,8 @@ typedef struct {
 int8_t Pole_Init(Pole_t *c, const Pole_Params_t *param, float target_freq);
 int8_t Pole_UpdateFeedback(Pole_t *c);
 int8_t Pole_Control(Pole_t *c, const Pole_CMD_t *c_cmd, uint32_t now);
+bool Pole_IsGroupAtTarget(const Pole_t *c, uint8_t group, float threshold_rad);
+bool Pole_IsAllAtTarget(const Pole_t *c, float threshold_rad);
 void Pole_Output(Pole_t *c);
 void Pole_ResetOutput(Pole_t *c);
 void Pole_Power_Control(Pole_t *c, float max_power);

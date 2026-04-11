@@ -24,6 +24,15 @@ static float Pole_Clipf(float val, float min, float max) {
   return val;
 }
 
+static float Pole_MoveTowards(float current, float target, float max_step) {
+  if (max_step <= 0.0f) return target;
+
+  float delta = target - current;
+  if (delta > max_step) return current + max_step;
+  if (delta < -max_step) return current - max_step;
+  return target;
+}
+
 static void Pole_ResetControllers(Pole_t *c) {
   for (uint8_t i = 0; i < POLE_SUPPORT_MOTOR_NUM; i++) {
     PID_Reset(&c->pid.support_pos[i]);
@@ -106,22 +115,37 @@ int8_t Pole_Control(Pole_t *c, const Pole_CMD_t *c_cmd, uint32_t now) {
       c->support_angle.lower[i] = now_angle;
       c->support_angle.upper[i] = now_angle + c->param->limit.support_total_travel;
     }
-    c->support_angle.target_lift[0] = 0.0f;
-    c->support_angle.target_lift[1] = 0.0f;
+    c->support_angle.final_target_lift[0] = 0.0f;
+    c->support_angle.final_target_lift[1] = 0.0f;
+    c->support_angle.tracked_target_lift[0] = 0.0f;
+    c->support_angle.tracked_target_lift[1] = 0.0f;
     c->support_angle.calibrated = true;
     Pole_ResetControllers(c);
   }
 
-  c->support_angle.target_lift[0] += c_cmd->lift[0] * c->param->limit.support_lift_speed * c->dt;
-  c->support_angle.target_lift[1] += c_cmd->lift[1] * c->param->limit.support_lift_speed * c->dt;
-  c->support_angle.target_lift[0] = Pole_Clipf(c->support_angle.target_lift[0], 0.0f,
-                                               c->param->limit.support_total_travel);
-  c->support_angle.target_lift[1] = Pole_Clipf(c->support_angle.target_lift[1], 0.0f,
-                                               c->param->limit.support_total_travel);
+  for (uint8_t side = 0; side < 2u; side++) {
+    float default_speed = c->param->limit.support_lift_speed;
+    float auto_speed = c_cmd->auto_lift_speed[side];
+    float speed_limit = (auto_speed > 0.0f) ? auto_speed : default_speed;
+
+    if (c_cmd->auto_target_enable[side]) {
+      c->support_angle.final_target_lift[side] = c_cmd->auto_target_lift[side];
+    } else {
+      c->support_angle.final_target_lift[side] += c_cmd->lift[side] * default_speed * c->dt;
+    }
+
+    c->support_angle.final_target_lift[side] = Pole_Clipf(
+        c->support_angle.final_target_lift[side], 0.0f, c->param->limit.support_total_travel);
+    c->support_angle.tracked_target_lift[side] = Pole_MoveTowards(
+        c->support_angle.tracked_target_lift[side], c->support_angle.final_target_lift[side],
+        speed_limit * c->dt);
+    c->support_angle.tracked_target_lift[side] = Pole_Clipf(
+        c->support_angle.tracked_target_lift[side], 0.0f, c->param->limit.support_total_travel);
+  }
 
   for (uint8_t i = 0; i < POLE_SUPPORT_MOTOR_NUM; i++) {
     uint8_t side = (i < 2u) ? 0u : 1u;
-    float target = c->support_angle.lower[i] + c->support_angle.target_lift[side];
+    float target = c->support_angle.lower[i] + c->support_angle.tracked_target_lift[side];
     c->setpoint.support_target_angle[i] = Pole_Clipf(target, c->support_angle.lower[i],
                                                      c->support_angle.upper[i]);
   }
@@ -139,6 +163,27 @@ int8_t Pole_Control(Pole_t *c, const Pole_CMD_t *c_cmd, uint32_t now) {
   }
 
   return POLE_OK;
+}
+
+bool Pole_IsGroupAtTarget(const Pole_t *c, uint8_t group, float threshold_rad) {
+  if (c == NULL || c->param == NULL) return false;
+  if (group >= 2u) return false;
+  if (!c->support_angle.calibrated) return false;
+
+  float threshold = fabsf(threshold_rad);
+  uint8_t start = (group == 0u) ? 0u : 2u;
+  uint8_t end = start + 2u;
+  for (uint8_t i = start; i < end; i++) {
+    float fb_angle = Pole_GetSupportAngle(c, i);
+    float err = c->setpoint.support_target_angle[i] - fb_angle;
+    if (fabsf(err) > threshold) return false;
+  }
+  return true;
+}
+
+bool Pole_IsAllAtTarget(const Pole_t *c, float threshold_rad) {
+  return Pole_IsGroupAtTarget(c, 0u, threshold_rad) &&
+         Pole_IsGroupAtTarget(c, 1u, threshold_rad);
 }
 
 void Pole_Output(Pole_t *c) {

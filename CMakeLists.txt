@@ -75,6 +75,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # User/module sources
     User/module/chassis.c
     User/module/pole.c
+    User/module/pole_auto.c
     User/module/arm.cpp
     User/module/rod.c
     # User/module/cmd sources
