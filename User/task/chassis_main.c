@@ -53,12 +53,12 @@ void Task_chassis_main(void *argument) {
     
 	  Chassis_UpdateFeedback(&chassis);
     Chassis_Control(&chassis, &chassis_cmd, osKernelGetTickCount());
-    // Chassis_Output(&chassis);
+    Chassis_Output(&chassis);
     
 		osMessageQueueGet(task_runtime.msgq.pole.cmd, &pole_cmd, NULL, 0);
     Pole_UpdateFeedback(&pole);
     Pole_Control(&pole, &pole_cmd, osKernelGetTickCount());
-    // Pole_Output(&pole);
+    Pole_Output(&pole);
     /* USER CODE END */
     osDelayUntil(tick); /* 运行结束，等待下一次唤醒 */
   }

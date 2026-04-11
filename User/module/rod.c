@@ -7,6 +7,11 @@
 #include <math.h>
 #include <string.h>
 
+static void Rod_SetGrip(bool open) {
+  HAL_GPIO_WritePin(rod_GPIO_Port, rod_Pin,
+                    open ? GPIO_PIN_SET : GPIO_PIN_RESET);
+}
+
 static void Rod_SetMotorEnable(Rod_t *r, bool enable) {
   if (r == NULL || r->param == NULL) return;
 
@@ -103,20 +108,23 @@ static void Rod_SetPoseSetpoint(Rod_t *r, Rod_Pose_t pose) {
   switch (pose) {
     case ROD_POSE_DOWN:
       r->setpoint.pit_angle = r->param->pose.pit_down_angle;
+      r->setpoint.rol_angle = r->param->pose.rol_home_angle;
       break;
     case ROD_POSE_UP:
       r->setpoint.pit_angle = r->param->pose.pit_up_angle;
+      r->setpoint.rol_angle = r->param->pose.rol_home_angle;
+      break;
+    case ROD_POSE_GRIP:
+      r->setpoint.pit_angle = r->param->pose.pit_grip_angle;
+      r->setpoint.rol_angle = r->param->pose.rol_home_angle;
+      break;
+    case ROD_POSE_LIFT:
+      r->setpoint.pit_angle = r->param->pose.pit_lift_angle;
+      r->setpoint.rol_angle = r->param->pose.rol_home_angle;
       break;
     case ROD_POSE_FLIP:
-      r->setpoint.pit_angle = r->param->pose.pit_up_angle;
-      if (prev_pose == ROD_POSE_UP) {
-        r->setpoint.rol_angle = r->setpoint.rol_angle + (float)M_PI;
-        if (r->setpoint.rol_angle > (float)M_2PI) {
-          r->setpoint.rol_angle -= (float)M_2PI;
-        } else if (r->setpoint.rol_angle < 0.0f) {
-          r->setpoint.rol_angle += (float)M_2PI;
-        }
-      }
+      r->setpoint.pit_angle = r->param->pose.pit_lift_angle;
+      r->setpoint.rol_angle = r->param->pose.rol_flip_angle;
       break;
     default:
       break;
@@ -157,12 +165,14 @@ static void Rod_ResetSequence(Rod_t *r, uint32_t now) {
   r->sequence.step = 0u;
   r->sequence.step_start_tick = now;
   Rod_SetPoseSetpoint(r, ROD_POSE_UP);
+  Rod_SetGrip(true);
 }
 
 static void Rod_FinishSequence(Rod_t *r) {
   r->sequence.done = true;
   r->sequence.step = 0u;
   Rod_SetPoseSetpoint(r, ROD_POSE_DOWN);
+  Rod_SetGrip(false);
 }
   
 static void Rod_UpdateSequence(Rod_t *r, const Rod_CMD_t *cmd, uint32_t now) {
@@ -184,6 +194,7 @@ static void Rod_UpdateSequence(Rod_t *r, const Rod_CMD_t *cmd, uint32_t now) {
   switch (r->sequence.step) {
     case 0u:
       Rod_SetPoseSetpoint(r, ROD_POSE_UP);
+      Rod_SetGrip(true);
       if (Rod_Arrived(r->setpoint.pit_angle, Rod_GetPitAngle(r),
                       r->param->limit.pit_arrive_threshold)) {
         r->sequence.step = 1u;
@@ -191,7 +202,8 @@ static void Rod_UpdateSequence(Rod_t *r, const Rod_CMD_t *cmd, uint32_t now) {
       }
       break;
     case 1u:
-      Rod_SetPoseSetpoint(r, ROD_POSE_UP);
+      Rod_SetPoseSetpoint(r, ROD_POSE_GRIP);
+      Rod_SetGrip(false);
       if (cmd->grip_done ||
           ((float)(now - r->sequence.step_start_tick) * 0.001f >=
            r->param->limit.grip_wait_time)) {
@@ -200,15 +212,26 @@ static void Rod_UpdateSequence(Rod_t *r, const Rod_CMD_t *cmd, uint32_t now) {
       }
       break;
     case 2u:
+      Rod_SetPoseSetpoint(r, ROD_POSE_LIFT);
+      Rod_SetGrip(false);
+      if (Rod_Arrived(r->setpoint.pit_angle, Rod_GetPitAngle(r),
+                      r->param->limit.pit_arrive_threshold)) {
+        r->sequence.step = 3u;
+        r->sequence.step_start_tick = now;
+      }
+      break;
+    case 3u:
       Rod_SetPoseSetpoint(r, ROD_POSE_FLIP);
+      Rod_SetGrip(false);
       if (Rod_Arrived(r->setpoint.rol_angle, Rod_GetRolAngle(r),
                       r->param->limit.rol_arrive_threshold)) {
-        r->sequence.step = 3u;
+        r->sequence.step = 4u;
         r->sequence.step_start_tick = now;
       }
       break;
     default:
       Rod_SetPoseSetpoint(r, ROD_POSE_DOWN);
+      Rod_SetGrip(false);
       if (Rod_Arrived(r->setpoint.pit_angle, Rod_GetPitAngle(r),
                       r->param->limit.pit_arrive_threshold)) {
         Rod_FinishSequence(r);
@@ -272,6 +295,7 @@ int8_t Rod_Control(Rod_t *r, const Rod_CMD_t *cmd, uint32_t now) {
   r->pose = cmd->pose;
 
   if (r->mode == ROD_MODE_RELAX) {
+    Rod_SetGrip(false);
     Rod_ResetOutput(r);
     r->sequence.initialized = false;
     r->sequence.done = false;
@@ -289,6 +313,7 @@ int8_t Rod_Control(Rod_t *r, const Rod_CMD_t *cmd, uint32_t now) {
   } else {
     r->sequence.initialized = false;
     r->sequence.done = false;
+    Rod_SetGrip(r->pose == ROD_POSE_UP);
     Rod_SetPoseSetpoint(r, r->pose);
   }
 

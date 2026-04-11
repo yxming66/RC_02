@@ -1,5 +1,5 @@
 /*
- * Pole module: 4x3508 support motors + 2x2006 drive-wheel motors.
+ * Pole module: 4x3508 support motors.
  */
 
 #include "module/pole.h"
@@ -9,9 +9,6 @@
 
 #include "bsp/can.h"
 #include "device/motor_rm.h"
-
-#define POLE_DRIVE_ATTACH_SUPPORT_0 (2u) /* 2006[0] on support #3 */
-#define POLE_DRIVE_ATTACH_SUPPORT_1 (3u) /* 2006[1] on support #4 */
 
 static float Pole_GetSupportAngle(const Pole_t *c, uint8_t idx) {
   float angle = c->motors[idx]->gearbox_total_angle;
@@ -31,9 +28,6 @@ static void Pole_ResetControllers(Pole_t *c) {
   for (uint8_t i = 0; i < POLE_SUPPORT_MOTOR_NUM; i++) {
     PID_Reset(&c->pid.support_pos[i]);
     PID_Reset(&c->pid.support_vel[i]);
-  }
-  for (uint8_t i = 0; i < POLE_DRIVE_MOTOR_NUM; i++) {
-    PID_Reset(&c->pid.drive_spd[i]);
   }
 }
 
@@ -60,11 +54,6 @@ int8_t Pole_Init(Pole_t *c, const Pole_Params_t *param, float target_freq) {
              &param->pid.support_pos_pid);
     PID_Init(&c->pid.support_vel[i], KPID_MODE_NO_D, target_freq,
              &param->pid.support_vel_pid);
-  }
-
-  for (uint8_t i = 0; i < POLE_DRIVE_MOTOR_NUM; i++) {
-    PID_Init(&c->pid.drive_spd[i], KPID_MODE_NO_D, target_freq,
-             &param->pid.drive_spd_pid);
   }
 
   for (uint8_t i = 0; i < POLE_MOTOR_NUM; i++) {
@@ -137,19 +126,6 @@ int8_t Pole_Control(Pole_t *c, const Pole_CMD_t *c_cmd, uint32_t now) {
                                                      c->support_angle.upper[i]);
   }
 
-  const uint8_t attach_support_idx[POLE_DRIVE_MOTOR_NUM] = {
-      POLE_DRIVE_ATTACH_SUPPORT_0,
-      POLE_DRIVE_ATTACH_SUPPORT_1,
-  };
-  for (uint8_t i = 0; i < POLE_DRIVE_MOTOR_NUM; i++) {
-    uint8_t support_idx = attach_support_idx[i];
-    float lifted = Pole_GetSupportAngle(c, support_idx) - c->support_angle.lower[support_idx];
-    if (lifted >= c->param->limit.drive_enable_angle) {
-      c->setpoint.drive_target_rpm[i] = c_cmd->drive * c->param->limit.drive_max_rpm;
-    } else {
-      c->setpoint.drive_target_rpm[i] = 0.0f;
-    }
-  }
   float vel[4];
   float out[4];
   for (uint8_t i = 0; i < POLE_SUPPORT_MOTOR_NUM; i++) {
@@ -162,44 +138,17 @@ int8_t Pole_Control(Pole_t *c, const Pole_CMD_t *c_cmd, uint32_t now) {
                                  c->param->limit.max_current);
   }
 
- for (uint8_t i = 0; i < POLE_DRIVE_MOTOR_NUM; i++) {
-   uint8_t idx = (uint8_t)(POLE_SUPPORT_MOTOR_NUM + i);
-   float fb_rpm = c->feedback.motor[idx].rotor_speed;
-   float out = PID_Calc(&c->pid.drive_spd[i], c->setpoint.drive_target_rpm[i],
-                        fb_rpm, 0.0f, c->dt);
-   c->out.motor[idx] = Pole_Clipf(out, -c->param->limit.max_current,
-                                  c->param->limit.max_current);
-  }
-
   return POLE_OK;
 }
 
 void Pole_Output(Pole_t *c) {
   if (c == NULL || c->param == NULL) return;
 
-  bool sent_can1 = false;
-  bool sent_can2 = false;
-
   for (uint8_t i = 0; i < POLE_MOTOR_NUM; i++) {
     MOTOR_RM_SetOutput((MOTOR_RM_Param_t *)&c->param->motor_param[i], c->out.motor[i]);
   }
 
   MOTOR_RM_Ctrl(&c->param->motor_param[0]);
-  // MOTOR_RM_Ctrl(&c->param->motor_param[4]);
-  // for (uint8_t i = 0; i < POLE_MOTOR_NUM; i++) {
-  //   BSP_CAN_t can = c->param->motor_param[i].can;
-  //   if (can == BSP_CAN_1) {
-  //     if (!sent_can1) {
-  //       MOTOR_RM_Ctrl((MOTOR_RM_Param_t *)&c->param->motor_param[i]);
-  //       sent_can1 = true;
-  //     }
-  //   } else if (can == BSP_CAN_2) {
-  //     if (!sent_can2) {
-  //       MOTOR_RM_Ctrl((MOTOR_RM_Param_t *)&c->param->motor_param[i]);
-  //       sent_can2 = true;
-  //     }
-  //   }
-  // }
 }
 
 void Pole_ResetOutput(Pole_t *c) {

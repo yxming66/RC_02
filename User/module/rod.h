@@ -10,6 +10,7 @@ extern "C" {
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "main.h"
 #include "device/motor_dm.h"
 
 #define ROD_OK (0)
@@ -31,6 +32,8 @@ typedef enum {
 typedef enum {
   ROD_POSE_DOWN = 0,
   ROD_POSE_UP,
+  ROD_POSE_GRIP,
+  ROD_POSE_LIFT,
   ROD_POSE_FLIP,
   ROD_POSE_NONE,
 } Rod_Pose_t;
@@ -48,6 +51,8 @@ typedef struct {
   struct {
     float pit_down_angle;
     float pit_up_angle;
+    float pit_grip_angle;
+    float pit_lift_angle;
     float rol_home_angle;
     float rol_flip_angle;
   } pose;

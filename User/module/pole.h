@@ -1,5 +1,5 @@
 /*
- * Pole module: 4x3508 support motors + 2x2006 drive-wheel motors.
+ * Pole module: 4x3508 support motors.
  */
 #pragma once
 
@@ -18,8 +18,7 @@ extern "C" {
 #define POLE_ERR_NULL (-2)
 
 #define POLE_SUPPORT_MOTOR_NUM (4)
-#define POLE_DRIVE_MOTOR_NUM (2)
-#define POLE_MOTOR_NUM (POLE_SUPPORT_MOTOR_NUM + POLE_DRIVE_MOTOR_NUM)
+#define POLE_MOTOR_NUM (POLE_SUPPORT_MOTOR_NUM)
 
 typedef enum {
   POLE_MODE_RELAX = 0,
@@ -29,7 +28,6 @@ typedef enum {
 typedef struct {
   Pole_Mode_t mode;
   float lift[2];   /* [-1, 1], >0 means up */
-  float drive;  /* [-1, 1], drive wheel speed command */
 } Pole_CMD_t;
 
 typedef struct {
@@ -37,14 +35,11 @@ typedef struct {
   struct {
     KPID_Params_t support_pos_pid;
     KPID_Params_t support_vel_pid;
-    KPID_Params_t drive_spd_pid;
   } pid;
   struct {
     float max_current;
     float support_total_travel;   /* rad */
     float support_lift_speed;     /* rad/s */
-    float drive_enable_angle;     /* rad, from lower limit */
-    float drive_max_rpm;
   } limit;
 } Pole_Params_t;
 
@@ -74,13 +69,11 @@ typedef struct {
 
   struct {
     float support_target_angle[POLE_SUPPORT_MOTOR_NUM];
-    float drive_target_rpm[POLE_DRIVE_MOTOR_NUM];
   } setpoint;
 
   struct {
     KPID_t support_pos[POLE_SUPPORT_MOTOR_NUM];
     KPID_t support_vel[POLE_SUPPORT_MOTOR_NUM];
-    KPID_t drive_spd[POLE_DRIVE_MOTOR_NUM];
   } pid;
 
   Pole_Output_t out;

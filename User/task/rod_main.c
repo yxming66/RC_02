@@ -31,7 +31,7 @@ void Task_rod(void *argument) {
     }
     Rod_UpdateFeedback(&rod);
     Rod_Control(&rod, &rod_cmd, osKernelGetTickCount());
-    Rod_Output(&rod);
+    // Rod_Output(&rod);
     // Rod_ResetOutput(&rod);
     osDelayUntil(tick);
   }

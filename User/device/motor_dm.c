@@ -147,7 +147,7 @@ static int8_t MOTOR_DM_SendMITCmd(MOTOR_DM_t *motor, MOTOR_MIT_Output_t *output)
 }
 
 /**
- * @brief 发送位置速度模式控制命令
+ * @brief 发送位置速度模式控制a命令
  * @param motor 电机实例
  * @param pos 目标位置
  * @param vel 目标速度

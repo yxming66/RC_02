@@ -23,6 +23,7 @@ DR16_t dr16;
 static Chassis_CMD_t chassis_cmd;
 static Pole_CMD_t pole_cmd;
 static DR16_SwitchPos_t last_sw_l = DR16_SW_ERR;  /* 记录左拨杆上一次状态 */
+static DR16_SwitchPos_t last_sw_r = DR16_SW_ERR;  /* 记录右拨杆上一次状态 */
 static Arm_CMD_t arm_cmd;
 static Rod_CMD_t rod_cmd;
 extern bool reset; 
@@ -66,7 +67,6 @@ void Task_rc_main(void *argument) {
       pole_cmd.mode = POLE_MODE_RELAX;
       pole_cmd.lift[0] = 0.0f;
       pole_cmd.lift[1] = 0.0f;
-      pole_cmd.drive = 0.0f;
 
       arm_cmd.mode = ARM_MODE_RELAX;
       arm_cmd.point2point_mode = ARM_POINT_SLEEP;
@@ -77,14 +77,27 @@ void Task_rc_main(void *argument) {
       rod_cmd.grip_done = false;
     } else if (dr16.data.sw_l == DR16_SW_MID) {
       chassis_cmd.mode = CHASSIS_MODE_INDEPENDENT;
-      chassis_cmd.ctrl_vec.vx = -dr16.data.ch_r_x;
+      chassis_cmd.ctrl_vec.vx = dr16.data.ch_r_x;
       chassis_cmd.ctrl_vec.vy = dr16.data.ch_r_y;
       chassis_cmd.ctrl_vec.wz = dr16.data.ch_l_x;
 
       pole_cmd.mode = POLE_MODE_ACTIVE;
-      pole_cmd.lift[0] = dr16.data.ch_l_y;
-      pole_cmd.lift[1] = dr16.data.ch_l_y;
-      pole_cmd.drive = dr16.data.ch_r_y;
+      switch (dr16.data.sw_r) {
+        case DR16_SW_UP:
+          pole_cmd.lift[0] = 0.0f;
+          pole_cmd.lift[1] = 0.0f;
+          break;
+        case DR16_SW_MID:
+          pole_cmd.lift[0] = dr16.data.ch_l_y;
+          pole_cmd.lift[1] = dr16.data.ch_l_y;
+          break;
+        case DR16_SW_DOWN:
+        default:
+          pole_cmd.lift[0] = dr16.data.ch_l_y;
+          pole_cmd.lift[1] = dr16.data.ch_l_x;
+          chassis_cmd.ctrl_vec.wz = 0.0f;  // 右拨杆DOWN时关闭底盘旋转控制
+          break;
+      }
 
       switch (dr16.data.sw_r) {
         case DR16_SW_UP:
@@ -102,7 +115,7 @@ void Task_rc_main(void *argument) {
       }
        arm_cmd.mode = ARM_MODE_POINT2POINT;
 
-      rod_cmd.mode = ROD_MODE_ACTIVE;
+      rod_cmd.mode = ROD_MODE_RELAX;
       rod_cmd.pose = ROD_POSE_DOWN;
       rod_cmd.sequence_trigger = false;
       rod_cmd.grip_done = false;
@@ -113,9 +126,8 @@ void Task_rc_main(void *argument) {
       chassis_cmd.ctrl_vec.wz = 0.0f;
 
       pole_cmd.mode = POLE_MODE_ACTIVE;
-      pole_cmd.lift[0] = dr16.data.ch_l_y;
-      pole_cmd.lift[1] = dr16.data.ch_l_x;
-      pole_cmd.drive = dr16.data.ch_r_y;
+      pole_cmd.lift[0] = 0.0f;
+      pole_cmd.lift[1] = 0.0f;
       switch (dr16.data.sw_r) {
         case DR16_SW_UP:
           arm_cmd.point2point_mode = ARM_POINT_PLUS_40CM;
@@ -135,22 +147,22 @@ void Task_rc_main(void *argument) {
       switch (dr16.data.sw_r) {
         case DR16_SW_UP:
           rod_cmd.mode = ROD_MODE_ACTIVE;
-          rod_cmd.pose = ROD_POSE_UP;
+          rod_cmd.pose = ROD_POSE_DOWN;
           rod_cmd.sequence_trigger = false;
           rod_cmd.grip_done = false;
           break;
         case DR16_SW_MID:
           rod_cmd.mode = ROD_MODE_ACTIVE;
-          rod_cmd.pose = ROD_POSE_FLIP;
-          rod_cmd.sequence_trigger = true;
-          rod_cmd.grip_done = false;
-          break;
-        case DR16_SW_DOWN:
-          rod_cmd.mode = ROD_MODE_ACTIVE;
-          rod_cmd.pose = ROD_POSE_DOWN;
+          rod_cmd.pose = ROD_POSE_UP;
           rod_cmd.sequence_trigger = false;
           rod_cmd.grip_done = false;
           break;
+        case DR16_SW_DOWN:
+          rod_cmd.mode = ROD_MODE_SEQUENCE;
+          rod_cmd.pose = ROD_POSE_NONE;
+          rod_cmd.sequence_trigger = (last_sw_r != DR16_SW_MID);
+          rod_cmd.grip_done = false;
+          break; 
         default:
           rod_cmd.mode = ROD_MODE_RELAX;
           rod_cmd.pose = ROD_POSE_DOWN;
@@ -177,6 +189,7 @@ void Task_rc_main(void *argument) {
           reset=!reset; 
       }
       last_sw_l = dr16.data.sw_l;  /* 更新拨杆状态 */
+      last_sw_r = dr16.data.sw_r;  /* 更新右拨杆状态 */
     }
     /* USER CODE END */
     osDelayUntil(tick); /* 运行结束，等待下一次唤醒 */
