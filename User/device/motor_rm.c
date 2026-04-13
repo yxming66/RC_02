@@ -115,6 +115,11 @@ static void Motor_RM_Decode(MOTOR_RM_t *motor, BSP_CAN_Message_t *msg) {
     float rotor_speed = raw_speed;
     float torque_current = raw_current * lsb / (float)MOTOR_CUR_RES;
 
+    motor->motor.raw_feedback.raw_angle = raw_angle;
+    motor->motor.raw_feedback.raw_speed = raw_speed;
+    motor->motor.raw_feedback.raw_current = raw_current;
+    motor->motor.raw_feedback.raw_temp = msg->data[6];
+
     if (motor->param.gear) {
         // 多圈累加
         int32_t delta = (int32_t)raw_angle - (int32_t)motor->last_raw_angle;
@@ -227,12 +232,17 @@ int8_t MOTOR_RM_UpdateAll(void) {
     return ret;
 }
 
+/*
+ * 底层兼容接口：输入为归一化输出值 [-1, 1]。
+ * 主要保留给旧代码或直接比例输出场景使用。
+ * 若上层按“目标力矩”控制 RM 电机，应优先走 MOTOR_RM_SetTorqueCurrent()。
+ */
 int8_t MOTOR_RM_SetOutput(MOTOR_RM_Param_t *param, float value) {
     if (param == NULL) return DEVICE_ERR_NULL;
     MOTOR_RM_CANManager_t *manager = MOTOR_RM_GetCANManager(param->can);
     if (manager == NULL) return DEVICE_ERR_NO_DEV;
-    if (value > 0.5f) value = 0.5f;
-    if (value < -0.5f) value = -0.5f;
+    if (value > 1.0f) value = 1.0f;
+    if (value < -1.0f) value = -1.0f;
     if (param->reverse){
         value = -value;
     }
@@ -244,6 +254,19 @@ int8_t MOTOR_RM_SetOutput(MOTOR_RM_Param_t *param, float value) {
     int16_t output_value = (int16_t)(value * (float)MOTOR_RM_GetLSB(param->module));
     output_msg->output[logical_index] = output_value;
     return DEVICE_OK;
+}
+
+/*
+ * C++ RM 驱动的主下发接口：输入为转子侧电流/等效电流。
+ * 上层会先完成“输出轴力矩 -> 转子侧电流”的换算，再调用这里。
+ * 本函数内部再复用 MOTOR_RM_SetOutput() 完成最终报文缓存写入。
+ */
+int8_t MOTOR_RM_SetTorqueCurrent(MOTOR_RM_Param_t *param, float current) {
+    if (param == NULL) return DEVICE_ERR_NULL;
+    const float lsb = (float)MOTOR_RM_GetLSB(param->module);
+    if (lsb <= 0.0f) return DEVICE_ERR;
+    const float normalized = current / lsb;
+    return MOTOR_RM_SetOutput(param, normalized);
 }
 
 int8_t MOTOR_RM_Ctrl(MOTOR_RM_Param_t *param) {
@@ -318,4 +341,75 @@ int8_t MOTOR_RM_Offine(MOTOR_RM_Param_t *param) {
         return DEVICE_OK;
     }
     return DEVICE_ERR_NO_DEV;
+}
+
+/* -------------------------------------------------------------------------- */
+/* 为 C++ 电机驱动层（User/device/motor/drivers/*.cpp）提供服务的 C 接口函数 */
+/* -------------------------------------------------------------------------- */
+
+/* C++ 驱动层读取底层原始反馈缓存。 */
+const MOTOR_RM_RawFeedback_t* MOTOR_RM_GetRawFeedback(MOTOR_RM_Param_t *param) {
+    MOTOR_RM_t *motor = MOTOR_RM_GetMotor(param);
+    if (motor == NULL) {
+        return NULL;
+    }
+    return &motor->motor.raw_feedback;
+}
+
+/* C++ 驱动层读取转子侧单圈角度，后续由 C++ 层完成多圈累计与输出侧换算。 */
+float MOTOR_RM_GetRotorPositionRad(MOTOR_RM_Param_t *param) {
+    MOTOR_RM_t *motor = MOTOR_RM_GetMotor(param);
+    if (motor == NULL) {
+        return 0.0f;
+    }
+
+    float angle = (float)motor->motor.raw_feedback.raw_angle / (float)MOTOR_ENC_RES * M_2PI;
+    while (angle < 0.0f) {
+        angle += M_2PI;
+    }
+    while (angle >= M_2PI) {
+        angle -= M_2PI;
+    }
+    if (param->reverse) {
+        angle = M_2PI - angle;
+        if (angle >= M_2PI) {
+            angle -= M_2PI;
+        }
+    }
+    return angle;
+}
+
+/* C++ 驱动层读取转子侧角速度。 */
+float MOTOR_RM_GetRotorVelocityRadS(MOTOR_RM_Param_t *param) {
+    MOTOR_RM_t *motor = MOTOR_RM_GetMotor(param);
+    if (motor == NULL) {
+        return 0.0f;
+    }
+
+    float velocity = (float)motor->motor.raw_feedback.raw_speed;
+    if (param->reverse) {
+        velocity = -velocity;
+    }
+    return velocity;
+}
+
+/* C++ 驱动层读取转子侧等效电流，用于换算输出侧力矩反馈。 */
+float MOTOR_RM_GetTorqueCurrent(MOTOR_RM_Param_t *param) {
+    MOTOR_RM_t *motor = MOTOR_RM_GetMotor(param);
+    if (motor == NULL) {
+        return 0.0f;
+    }
+
+    float current = (float)motor->motor.raw_feedback.raw_current
+        * (float)MOTOR_RM_GetLSB(param->module) / (float)MOTOR_CUR_RES;
+    if (param->reverse) {
+        current = -current;
+    }
+    return current;
+}
+
+/* C++ 驱动层读取温度反馈。 */
+float MOTOR_RM_GetMotorTemperatureC(MOTOR_RM_Param_t *param) {
+    const MOTOR_RM_RawFeedback_t* raw = MOTOR_RM_GetRawFeedback(param);
+    return (raw != NULL) ? (float)raw->raw_temp : 0.0f;
 }

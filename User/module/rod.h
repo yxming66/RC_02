@@ -22,6 +22,9 @@ extern "C" {
 #define ROD_PIT_COM_DISTANCE_M (0.10f)
 #define ROD_PIT_GRAVITY_DIFF_RAD (0.001f)
 #define ROD_PIT_GRAVITY_SIGN (1.0f)
+#define ROD_PIT_I_GAIN (0.35f)
+#define ROD_PIT_I_LIMIT (1.2f)
+#define ROD_PIT_I_ACTIVE_ERR_RAD (0.25f)
 
 typedef enum {
   ROD_MODE_RELAX = 0,
@@ -35,6 +38,7 @@ typedef enum {
   ROD_POSE_GRIP,
   ROD_POSE_LIFT,
   ROD_POSE_FLIP,
+  ROD_POSE_READY,
   ROD_POSE_NONE,
 } Rod_Pose_t;
 
@@ -60,7 +64,9 @@ typedef struct {
     float pit_arrive_threshold;
     float rol_arrive_threshold;
     float sequence_timeout;
+    float grip_open_wait_time;
     float grip_wait_time;
+    float rol_flip_wait_time;
     float pit_kp;
     float pit_kd;
     float rol_kp;
@@ -103,6 +109,10 @@ typedef struct {
     float rol_vel;
     bool initialized;
   } traj;
+
+  struct {
+    float pit_err_i;
+  } comp;
 
   struct {
     bool initialized;

@@ -16,6 +16,10 @@ extern "C" {
 #include "component/pid.h"
 #include "component/ahrs.h"
 #include "device/motor_rm.h"
+#ifdef __cplusplus
+#include "device/motor/motor.hpp"
+#include "device/motor/packages/controller/motor_controller.hpp"
+#endif
 /* Exported constants ------------------------------------------------------- */
 #define CHASSIS_OK (0)        /* ÔËÐÐÕý³£ */
 #define CHASSIS_ERR (-1)      /* ÔËÐÐÊ±³öÏÖÁËÒ»Ð©Ð¡´íÎó */
@@ -76,6 +80,13 @@ typedef enum {
 /* µ×ÅÌ²ÎÊý½á¹¹Ìå,ALL³õÊ¼»¯²ÎÊý */
 typedef struct {
 	MOTOR_RM_Param_t motor_param[4];
+  struct {
+    const KPID_Params_t *velocity_pid_param;
+    const KPID_Params_t *position_pid_param;
+    float wheel_radius_m;
+    float wheelbase_m;
+    float trackwidth_m;
+  } motor;
 	  struct {
     KPID_Params_t motor_pid_param;  /* µ×ÅÌµç»úPID²ÎÊý */
     KPID_Params_t follow_pid_param; /* ¸úËæÔÆÌ¨PID²ÎÊý */
@@ -132,6 +143,10 @@ typedef struct {
   Mixer_t mixer;    /* »ìºÏÆ÷,ÒÆ¶¯ÏòÁ¿->µç»úÄ¿±êÖµ */
   MoveVector_t move_vec; /* µ×ÅÌÊµ¼ÊµÄÔË¶¯ÏòÁ¿ */
   MOTOR_RM_t *motors[4];/*Ö¸Ïòµ×ÅÌÃ¿¸öµç»ú²ÎÊý*/
+#ifdef __cplusplus
+  mrobot::motor::IMotor *wheel_motors[4];
+  mrobot::motor::MotorController *wheel_controllers[4];
+#endif
 	float mech_zero;
   float wz_multi; /* Ð¡ÍÓÂÝÐý×ªÄ£Ê½ */
 

@@ -26,6 +26,13 @@ Config_RobotParam_t robot_config = {
       [2] = {.can = BSP_CAN_2, .id = 0x203, .module = MOTOR_M3508, .reverse = false, .gear = true},
       [3] = {.can = BSP_CAN_2, .id = 0x204, .module = MOTOR_M3508, .reverse = false, .gear = true},
     },
+    .motor = {
+      .velocity_pid_param = &robot_config.chassis_param.pid.motor_pid_param,
+      .position_pid_param = NULL,
+      .wheel_radius_m = 0.076f,
+      .wheelbase_m = 0.18f,
+      .trackwidth_m = 0.18f,
+    },
     .pid = {  
       .follow_pid_param = {
         .k = 1.0f,
@@ -89,6 +96,14 @@ Config_RobotParam_t robot_config = {
                 .range = 0.0f,
             },
         },
+            .preset = {
+              .step_200_all_extend = {12.7912035f, 12.7912035f},      // 200mm台阶，右拨杆UP：前两杆/后两杆
+              .step_200_front_retract = {0.0f, 12.7912035f},   // 200mm台阶，右拨杆MID：前两杆收，后两杆位置
+              .step_200_all_retract = {0.0f, 0.0f},     // 200mm台阶，右拨杆DOWN：前两杆/后两杆
+              .step_400_all_extend = {26.0381184f, 26.0315285f},      // 400mm台阶，右拨杆UP：前两杆/后两杆
+              .step_400_front_retract = {0.0f, 26.0381184f},   // 400mm台阶，右拨杆MID：前两杆收，后两杆位置
+              .step_400_all_retract = {0.0f, 0.0f},     // 400mm台阶，右拨杆DOWN：前两杆/后两杆
+            },
         .limit = {
             .max_current = 1.0f,
             .support_total_travel = 27.0f,
@@ -130,20 +145,22 @@ Config_RobotParam_t robot_config = {
             .pit_motor_param = {.can = BSP_CAN_3, .master_id = 0x14, .can_id = 0x04, .module = MOTOR_DM_J4310, .reverse = true},
             .rol_motor_param = {.can = BSP_CAN_3, .master_id = 0x13, .can_id = 0x03, .module = MOTOR_DM_J4310, .reverse = false},
             .pose = {
-              .pit_down_angle = 0.0f,
-              .pit_up_angle = 1.7f,
-              .pit_grip_angle = 1.7f,
-              .pit_lift_angle = 2.0f,
-              .rol_home_angle = 0.0f,
-              .rol_flip_angle = 3.1415926f,
+              .pit_down_angle = 0.267107785f+0.0f,
+              .pit_up_angle =   0.107107785f+1.6465615f,
+              .pit_grip_angle = 0.267107785f+1.7f,
+              .pit_lift_angle = 0.267107785f+2.0f,
+              .rol_home_angle = 1.67915916f+0.0f,
+              .rol_flip_angle = 1.67915916f+3.1415926f,
             },
             .limit = {
-              .pit_arrive_threshold = 0.03f,
-              .rol_arrive_threshold = 0.03f,
-              .sequence_timeout = 2.0f,
+              .pit_arrive_threshold = 0.1f,
+              .rol_arrive_threshold = 0.1f,
+              .sequence_timeout = 5.0f,
+              .grip_open_wait_time = 1.0f,
               .grip_wait_time = 0.25f,
-              .pit_kp = 30.0f,
-              .pit_kd = 0.1f,
+              .rol_flip_wait_time = 1.0f,
+              .pit_kp = 80.0f,
+              .pit_kd = 2.0f,
               .rol_kp = 15.0f,
               .rol_kd = 0.05f,
               .pit_max_vel = 1.5f,

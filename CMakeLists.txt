@@ -68,10 +68,12 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     User/device/motor_rm.c
     User/device/motor_dm.c
     User/device/motor_lz.c
-    User/device/motors/motor.cpp
-    User/device/motors/motor_packages/self_test/motor_self_test.cpp
-    User/device/motors/motor_packages/limit_selfLearning/dual_limit/motor_dual_limit_calibration.cpp
-    User/device/motors/motor_packages/limit_selfLearning/single_limit/motor_single_limit_calibration.cpp
+    User/device/motor/drivers/motor_driver_base.cpp
+    User/device/motor/drivers/rm_motor_driver.cpp
+    User/device/motor/drivers/dm_motor_driver.cpp
+    User/device/motor/drivers/lz_motor_driver.cpp
+    User/device/motor/factory/motor_factory.cpp
+    User/device/motor/packages/controller/motor_controller.cpp
     # User/module sources
     User/module/chassis.c
     User/module/pole.c

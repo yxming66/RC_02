@@ -203,6 +203,12 @@ static void MOTOR_LZ_Decode(MOTOR_LZ_t *motor, BSP_CAN_Message_t *msg) {
     float velocity = MOTOR_LZ_RawToFloat(raw_velocity, LZ_VELOCITY_RANGE_RAD_S);
     uint16_t raw_torque = (uint16_t)((msg->data[4] << 8) | msg->data[5]);
     float torque = MOTOR_LZ_RawToFloat(raw_torque, LZ_TORQUE_RANGE_NM);
+    uint16_t raw_temp = (uint16_t)((msg->data[6] << 8) | msg->data[7]);
+
+    motor->motor.raw_feedback.raw_angle = raw_angle;
+    motor->motor.raw_feedback.raw_speed = (int16_t)raw_velocity;
+    motor->motor.raw_feedback.raw_current = (int16_t)raw_torque;
+    motor->motor.raw_feedback.raw_temp = (uint8_t)(raw_temp / LZ_TEMP_SCALE);
 
     // while (angle <0){
     //     angle += M_2PI;
@@ -221,7 +227,6 @@ static void MOTOR_LZ_Decode(MOTOR_LZ_t *motor, BSP_CAN_Message_t *msg) {
     motor->lz_feedback.current_velocity = velocity;
     motor->lz_feedback.current_torque = torque;
 
-    uint16_t raw_temp = (uint16_t)((msg->data[6] << 8) | msg->data[7]);
     motor->lz_feedback.temperature = (float)raw_temp / LZ_TEMP_SCALE;
 
     motor->motor.feedback.rotor_abs_angle = angle;
@@ -437,4 +442,65 @@ static MOTOR_LZ_Feedback_t* MOTOR_LZ_GetFeedback(MOTOR_LZ_Param_t *param) {
         return &motor->lz_feedback;
     }
     return NULL;
+}
+
+/* -------------------------------------------------------------------------- */
+/* 为 C++ 电机驱动层（User/device/motor/drivers/*.cpp）提供服务的 C 接口函数 */
+/* -------------------------------------------------------------------------- */
+
+/* C++ 驱动层读取底层原始反馈缓存。 */
+const MOTOR_LZ_RawFeedback_t* MOTOR_LZ_GetRawFeedback(MOTOR_LZ_Param_t *param) {
+    MOTOR_LZ_t *motor = MOTOR_LZ_GetMotor(param);
+    if (motor == NULL) {
+        return NULL;
+    }
+    return &motor->motor.raw_feedback;
+}
+
+/* C++ 驱动层读取转子侧角度。 */
+float MOTOR_LZ_GetRotorPositionRad(MOTOR_LZ_Param_t *param) {
+    const MOTOR_LZ_RawFeedback_t* raw = MOTOR_LZ_GetRawFeedback(param);
+    if (raw == NULL) {
+        return 0.0f;
+    }
+
+    float angle = MOTOR_LZ_RawToFloat(raw->raw_angle, LZ_ANGLE_RANGE_RAD);
+    if (param->reverse) {
+        angle = -angle;
+    }
+    return angle;
+}
+
+/* C++ 驱动层读取转子侧角速度。 */
+float MOTOR_LZ_GetRotorVelocityRadS(MOTOR_LZ_Param_t *param) {
+    const MOTOR_LZ_RawFeedback_t* raw = MOTOR_LZ_GetRawFeedback(param);
+    if (raw == NULL) {
+        return 0.0f;
+    }
+
+    float velocity = MOTOR_LZ_RawToFloat((uint16_t)raw->raw_speed, LZ_VELOCITY_RANGE_RAD_S);
+    if (param->reverse) {
+        velocity = -velocity;
+    }
+    return velocity;
+}
+
+/* C++ 驱动层读取力矩/等效电流反馈，用于换算输出侧力矩。 */
+float MOTOR_LZ_GetTorqueCurrent(MOTOR_LZ_Param_t *param) {
+    const MOTOR_LZ_RawFeedback_t* raw = MOTOR_LZ_GetRawFeedback(param);
+    if (raw == NULL) {
+        return 0.0f;
+    }
+
+    float torque = MOTOR_LZ_RawToFloat((uint16_t)raw->raw_current, LZ_TORQUE_RANGE_NM);
+    if (param->reverse) {
+        torque = -torque;
+    }
+    return torque;
+}
+
+/* C++ 驱动层读取温度反馈。 */
+float MOTOR_LZ_GetMotorTemperatureC(MOTOR_LZ_Param_t *param) {
+    const MOTOR_LZ_RawFeedback_t* raw = MOTOR_LZ_GetRawFeedback(param);
+    return (raw != NULL) ? ((float)raw->raw_temp / LZ_TEMP_SCALE) : 0.0f;
 }
