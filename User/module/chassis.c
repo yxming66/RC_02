@@ -9,76 +9,9 @@
 #include "component/ahrs.h"
 #include "device/motor_rm.h"
 #include "device/motor.h"
-#include "device/motor/motor.hpp"
-#include "device/motor/packages/controller/motor_controller.hpp"
 #include "module/chassis.h"
 #include "config.h"
 #include "math.h"
-
-using mrobot::motor::IMotor;
-using mrobot::motor::MotorController;
-using mrobot::motor::MotorControllerConfig;
-using mrobot::motor::MotorFactory;
-using mrobot::motor::MotorHandle;
-using mrobot::motor::MotorInstallSpec;
-using mrobot::motor::specs::kRm3508;
-
-namespace {
-
-static MotorController* g_chassis_controllers[4] = {nullptr};
-
-static float Chassis_WheelLinearToAngular(const Chassis_t* c, float wheel_linear_speed_m_s) {
-  if (c == NULL || c->param == NULL) {
-    return 0.0f;
-  }
-  const float radius = c->param->motor.wheel_radius_m;
-  if (radius <= 0.0f) {
-    return 0.0f;
-  }
-  return wheel_linear_speed_m_s / radius;
-}
-
-static bool Chassis_InitWheelMotors(Chassis_t* c, float target_freq) {
-  if (c == NULL || c->param == NULL) {
-    return false;
-  }
-
-  const MotorControllerConfig controller_config = {
-    .velocity_pid = c->param->motor.velocity_pid_param,
-    .position_pid = c->param->motor.position_pid_param,
-    .sample_freq = target_freq,
-    .position_to_velocity_limit = 0.0f,
-    .velocity_to_torque_limit = 0.0f,
-  };
-
-  for (uint8_t i = 0; i < c->num_wheel; i++) {
-    const MotorInstallSpec install = {
-      .external_ratio = 1.0f,
-      .reverse_output = c->param->motor_param[i].reverse,
-    };
-    const MotorHandle handle = MotorFactory::CreateRm(c->param->motor_param[i], kRm3508, install);
-    if (!handle) {
-      return false;
-    }
-
-    c->wheel_motors[i] = handle.Get();
-    g_chassis_controllers[i] = new MotorController(*c->wheel_motors[i], controller_config);
-    c->wheel_controllers[i] = g_chassis_controllers[i];
-    if (c->wheel_controllers[i] == NULL) {
-      return false;
-    }
-    if (c->wheel_controllers[i]->Register() != DEVICE_OK) {
-      return false;
-    }
-    if (c->wheel_controllers[i]->Enable() != DEVICE_OK) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
-}
 /**
  * @brief µ×ÅÌÐ¡ÍÓÂÝÄ£Ê½Ïà¹Ø²ÎÊý
  */
@@ -191,27 +124,17 @@ int8_t Chassis_Init(Chassis_t *c, const Chassis_Params_t *param,
     }
      //³õÊ¼»¯PIDºÍ»ìºÏÆ÷
     PID_Init(&c->pid.follow, KPID_MODE_CALC_D, target_freq, &param->pid.follow_pid_param);
-    Mixer_Config_t mixer_config = {0};
-    mixer_config.output_scale = 1.0f;
-    mixer_config.normalize_output = false;
-    mixer_config.mecanum.wheelbase_m = param->motor.wheelbase_m;
-    mixer_config.mecanum.trackwidth_m = param->motor.trackwidth_m;
-    Mixer_Init(&c->mixer, mixer_mode, &mixer_config);
+    Mixer_Init(&c->mixer, mixer_mode);
      //ÇåÁãÔË¶¯ÏòÁ¿ºÍÊä³ö
     c->move_vec.vx = c->move_vec.vy = c->move_vec.wz = 0.0f;
 		for (uint8_t i = 0; i < c->num_wheel; i++) { 
 				c->out.motor[i] = 0.0f;
 		}
-  for (uint8_t i = 0; i < 4; i++) {
-    c->motors[i] = NULL;
-    c->wheel_motors[i] = NULL;
-    c->wheel_controllers[i] = NULL;
-  }
-
-  if (!Chassis_InitWheelMotors(c, target_freq)) {
-    return CHASSIS_ERR;
-  }
-
+		//×¢²á´ó½®µç»ú
+		for (int i = 0; i < c->num_wheel; i++) {
+			MOTOR_RM_Register(&(c->param->motor_param[i]));
+			 
+		}
     return CHASSIS_OK;
 }
 
@@ -222,20 +145,21 @@ int8_t Chassis_Init(Chassis_t *c, const Chassis_Params_t *param,
  * @return CHASSIS_OK:³É¹¦ CHASSIS_ERR_NULL:¿Õ
  */
 int8_t Chassis_UpdateFeedback(Chassis_t *c) {
-    for (uint8_t i = 0; i < c->num_wheel; i++) {
-    if (c->wheel_controllers[i] == NULL) {
-      return CHASSIS_ERR_NULL;
-    }
-    if (c->wheel_controllers[i]->Update() != DEVICE_OK) {
-      return CHASSIS_ERR;
-    }
 
-    const auto state = c->wheel_controllers[i]->GetState();
-    c->feedback.motor[i].rotor_speed = state.velocity_rad_s;
-    c->feedback.motor[i].torque_current = state.torque_nm;
-    c->feedback.motor[i].rotor_abs_angle = state.position_rad;
-    c->feedback.motor[i].temp = state.temperature_c;
-  }
+
+		//¸üÐÂËùÓÐµç»ú·´À¡
+    for (uint8_t i = 0; i < c->num_wheel; i++) {
+			MOTOR_RM_Update(&(c->param->motor_param[i])); 
+			MOTOR_RM_t *rm_motor = MOTOR_RM_GetMotor(&(c->param->motor_param[i]));
+			c->motors[i] = rm_motor;
+			MOTOR_RM_t *rm = c->motors[i];
+         if (rm_motor != NULL) {
+            c->feedback.motor[i] = rm_motor->feedback;
+             }else 
+					{ 
+					return CHASSIS_ERR_NULL; 
+					} 
+		}
     return CHASSIS_OK;
 }
 
@@ -300,35 +224,25 @@ int8_t Chassis_Control(Chassis_t *c, const Chassis_CMD_t *c_cmd, uint32_t now) {
             break;
     }
         //ÔË¶¯Ñ§Äæ½âËã£¬ÔË¶¯ÏòÁ¿·Ö½âÎªµç»ú×ªËÙ
-    if (Mixer_Apply(&c->mixer, &c->move_vec, c->setpoint.motor_rpm, c->num_wheel) != MIXER_OK) {
-      return CHASSIS_ERR;
-    }
+    Mixer_Apply(&c->mixer, &c->move_vec, c->setpoint.motor_rpm, c->num_wheel, 500.0f);
 
 
     for (uint8_t i = 0; i < c->num_wheel; i++) {
-      const float wheel_target_rad_s = Chassis_WheelLinearToAngular(c, c->setpoint.motor_rpm[i]);
-      float fb = LowPassFilter2p_Apply(&c->filter.in[i], (float)c->feedback.motor[i].rotor_speed);
-  				float out_current;
+				float rf = c->setpoint.motor_rpm[i];///Ä¿±ê×ªËÙ
+        float fb = LowPassFilter2p_Apply(&c->filter.in[i], (float)c->feedback.motor[i].rotor_speed);
+				float out_current;
         switch (c->mode) {
             case CHASSIS_MODE_BREAK:
             case CHASSIS_MODE_FOLLOW_GIMBAL:
             case CHASSIS_MODE_FOLLOW_GIMBAL_35:
             case CHASSIS_MODE_ROTOR:
             case CHASSIS_MODE_INDEPENDENT:
-          (void)fb;
-          if (c->wheel_controllers[i]->SetVelocity(wheel_target_rad_s) != DEVICE_OK) {
-            return CHASSIS_ERR;
-          }
-          out_current = wheel_target_rad_s;
+                out_current = PID_Calc(&c->pid.motor[i], c->setpoint.motor_rpm[i], fb, 0.0f, c->dt);
                 break;
             case CHASSIS_MODE_OPEN:
-          if (c->wheel_controllers[i]->SetTorque(0.0f) != DEVICE_OK) {
-            return CHASSIS_ERR;
-          }
-          out_current = 0.0f;
+                out_current = c->setpoint.motor_rpm[i] / 7000.0f;
                 break;
             case CHASSIS_MODE_RELAX:
-          c->wheel_controllers[i]->Disable();
                 out_current = 0.0f;
                 break;
         }
@@ -351,8 +265,22 @@ void Chassis_Output(Chassis_t *c) {
 			return;
 
     for (uint8_t i = 0; i < c->num_wheel; i++) {
-		if (c->wheel_controllers[i] == NULL) continue;
-		c->wheel_controllers[i]->CommitCommand();
+        MOTOR_RM_t *rm = c->motors[i];
+        if (!rm) continue;
+        MOTOR_RM_SetOutput(&rm->param, c->out.motor[i]);
+    }
+
+    //µ÷ÓÃctrl
+    // for (uint8_t i = 0; i < c->num_wheel; i++) {
+    //     MOTOR_RM_t *rm = c->motors[0];
+    //     if (rm) {
+    //         MOTOR_RM_Ctrl(&rm->param);
+    //     }
+    // }
+
+    MOTOR_RM_t *rm = c->motors[0];
+    if (rm) {
+        MOTOR_RM_Ctrl(&rm->param);
     }
 }
 
@@ -363,9 +291,10 @@ void Chassis_Output(Chassis_t *c) {
 void Chassis_ResetOutput(Chassis_t *c) {
     if (!c) return;
     for (uint8_t i = 0; i < c->num_wheel; i++) {
-    if (c->wheel_controllers[i] != NULL) {
-      c->wheel_controllers[i]->Disable();
-    }
+        MOTOR_RM_t *m = c->motors[i];
+        if (m) {
+            MOTOR_RM_Relax(&(m->param));
+        }
     }
 }
 

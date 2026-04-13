@@ -1,16 +1,9 @@
 #pragma once
 
+#include "device/motor/drivers/pending_command_type.hpp"
 #include "device/motor/drivers/motor_driver_base.hpp"
 
 namespace mrobot::motor {
-
-enum class PendingCommandType : uint8_t {
-    None = 0,
-    Torque,
-    Velocity,
-    Position,
-    Mit,
-};
 
 class DmMotorDriver final : public MotorDriverBase {
 public:

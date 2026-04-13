@@ -26,13 +26,6 @@ Config_RobotParam_t robot_config = {
       [2] = {.can = BSP_CAN_2, .id = 0x203, .module = MOTOR_M3508, .reverse = false, .gear = true},
       [3] = {.can = BSP_CAN_2, .id = 0x204, .module = MOTOR_M3508, .reverse = false, .gear = true},
     },
-    .motor = {
-      .velocity_pid_param = &robot_config.chassis_param.pid.motor_pid_param,
-      .position_pid_param = NULL,
-      .wheel_radius_m = 0.076f,
-      .wheelbase_m = 0.18f,
-      .trackwidth_m = 0.18f,
-    },
     .pid = {  
       .follow_pid_param = {
         .k = 1.0f,

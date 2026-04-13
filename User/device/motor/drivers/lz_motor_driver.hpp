@@ -1,5 +1,6 @@
 #pragma once
 
+#include "device/motor/drivers/pending_command_type.hpp"
 #include "device/motor/drivers/motor_driver_base.hpp"
 
 namespace mrobot::motor {

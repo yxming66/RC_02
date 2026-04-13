@@ -146,6 +146,7 @@ typedef struct {
     bool cilibrate;
     Arm_Joint3CaliMode_t cali_mode;
     float user_travel_rad;
+    float zero_offset;
     float rmmotor_min;
     float rmmotor_max;
   } joint3cil;

@@ -68,12 +68,13 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     User/device/motor_rm.c
     User/device/motor_dm.c
     User/device/motor_lz.c
+    User/device/motor/factory/motor_factory.cpp
+    User/device/motor/packages/controller/motor_controller.cpp
     User/device/motor/drivers/motor_driver_base.cpp
     User/device/motor/drivers/rm_motor_driver.cpp
     User/device/motor/drivers/dm_motor_driver.cpp
     User/device/motor/drivers/lz_motor_driver.cpp
-    User/device/motor/factory/motor_factory.cpp
-    User/device/motor/packages/controller/motor_controller.cpp
+
     # User/module sources
     User/module/chassis.c
     User/module/pole.c
