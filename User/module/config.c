@@ -137,9 +137,9 @@ Config_RobotParam_t robot_config = {
 .armpos_param = {
       .lzmotor_param = {.can = BSP_CAN_3, .motor_id = 126, .host_id = 0xff, .module = MOTOR_LZ_RSO3, .reverse = true, .mode = MOTOR_LZ_MODE_MOTION},
       .dmmotor_param = {.can = BSP_CAN_3, .master_id = 0x12, .can_id = 0x02, .module = MOTOR_DM_J4310, .reverse = false},
-      .rmmotor_param = {.can = BSP_CAN_3, .id = 0x201, .module = MOTOR_M3508, .reverse = false, .gear = true},
+      .rmmotor_param = {.can = BSP_CAN_3, .id = 0x205, .module = MOTOR_M3508, .reverse = false, .gear = true},
       .pid_dmmotor_pos = {
-        .k = 0.0f,
+        .k = 0.0f, 
         .p = 0.0f,
         .i = 0.0f,
         .d = 0.0f,

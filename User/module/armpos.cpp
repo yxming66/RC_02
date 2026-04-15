@@ -8,18 +8,7 @@
 
 namespace {
 
-constexpr float ARMPOS_TWO_PI = 2.0f * (float)M_PI;
 constexpr float ARMPOS_CMD_DEADBAND = 0.05f;
-
-static float ArmPos_Clamp(float value, float min_value, float max_value) {
-  if (value < min_value) {
-    return min_value;
-  }
-  if (value > max_value) {
-    return max_value;
-  }
-  return value;
-}
 
 static void ArmPos_ResetPid(ArmPos_t *a) {
   if (a == NULL) {
@@ -146,16 +135,6 @@ int8_t ArmPos_Control(ArmPos_t *a, const ArmPos_CMD_t *cmd) {
   a->target.lz += cmd->lz_delta * a->param->input_scale.lz_speed * a->timer.dt;
   a->target.dm = cmd->dm_delta * a->param->input_scale.dm_speed;
   a->target.rm += cmd->rm_delta * a->param->input_scale.rm_speed * a->timer.dt;
-
-  a->target.lz = ArmPos_Clamp(a->target.lz,
-                              a->param->joint_limit.lz_min,
-                              a->param->joint_limit.lz_max);
-  a->target.dm = ArmPos_Clamp(a->target.dm,
-                              -a->param->limit.dm_velocity_ref_limit,
-                              a->param->limit.dm_velocity_ref_limit);
-  a->target.rm = ArmPos_Clamp(a->target.rm,
-                              a->param->joint_limit.rm_min,
-                              a->param->joint_limit.rm_max);
 
   a->out.lzmotor.target_angle = a->target.lz;
   a->out.lzmotor.target_velocity = 0.0f;

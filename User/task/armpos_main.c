@@ -9,7 +9,7 @@
 
 static ArmPos_t armpos;
 static ArmPos_CMD_t armpos_cmd;
-
+bool setzero1=0;
 void Task_armpos(void *argument) {
   (void)argument;
 
@@ -26,6 +26,12 @@ void Task_armpos(void *argument) {
 
   while (1) {
     tick += delay_tick;
+
+    if(setzero1){
+      MOTOR_DM_SetZero(&armpos.param->dmmotor_param);
+      MOTOR_LZ_SetZero(&armpos.param->lzmotor_param);
+      setzero1=0;
+    }
 
     (void)osMessageQueueGet(task_runtime.msgq.armpos.cmd, &armpos_cmd, NULL, 0);
 
