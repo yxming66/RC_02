@@ -11,6 +11,7 @@
 #include "module/chassis.h"
 #include "module/pole.h"
 #include "module/arm.h"
+#include "module/armpos.h"
 #include "module/rod.h"
 #include "module/config.h"
 /* USER INCLUDE END */
@@ -234,8 +235,12 @@ void Task_rc_main(void *argument) {
     osMessageQueuePut(task_runtime.msgq.chassis.cmd, &chassis_cmd, 0, 0);
     osMessageQueueReset(task_runtime.msgq.pole.cmd);
     osMessageQueuePut(task_runtime.msgq.pole.cmd, &pole_cmd, 0, 0);
-    osMessageQueueReset(task_runtime.msgq.arm.cmd);
-    osMessageQueuePut(task_runtime.msgq.arm.cmd, &arm_cmd, 0, 0);
+    {
+      ArmPos_CMD_t armpos_cmd;
+      ArmPos_SetCmdFromRc(&armpos_cmd, &dr16);
+      osMessageQueueReset(task_runtime.msgq.armpos.cmd);
+      osMessageQueuePut(task_runtime.msgq.armpos.cmd, &armpos_cmd, 0, 0);
+    }
     osMessageQueueReset(task_runtime.msgq.rod.cmd);
     osMessageQueuePut(task_runtime.msgq.rod.cmd, &rod_cmd, 0, 0);
         /* 检测左拨杆切换到UP位置时触发软件复位 */

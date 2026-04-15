@@ -80,6 +80,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     User/module/pole.c
     User/module/pole_auto.c
     User/module/arm.cpp
+    User/module/armpos.cpp
     User/module/rod.c
     # User/module/cmd sources
     User/module/cmd/cmd.c
@@ -100,6 +101,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     User/task/sick.c
     User/task/arm_main.c
     User/task/rod_main.c
+    User/task/armpos_main.c
 )
 
 # Add include paths
