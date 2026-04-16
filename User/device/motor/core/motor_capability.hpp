@@ -1,5 +1,8 @@
 #pragma once
 
+// 定义电机支持的控制能力位标志。
+// 用于在编译期/运行期判断是否支持电流、速度、位置、MIT 等控制方式。
+
 #include <stdint.h>
 
 namespace mrobot::motor {

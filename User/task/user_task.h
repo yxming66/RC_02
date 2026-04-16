@@ -59,6 +59,7 @@ typedef struct {
         }chassis;
         struct {
             osMessageQueueId_t cmd;
+            osMessageQueueId_t auto_cmd;
         } pole;
 		    struct{
 			      osMessageQueueId_t rc; 

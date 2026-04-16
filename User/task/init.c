@@ -10,6 +10,7 @@
 #include "device/dr16.h"
 #include "module/chassis.h"
 #include "module/pole.h"
+#include "module/pole_auto.h"
 #include "module/arm.h"
 #include "module/armpos.h"
 #include "module/rod.h"
@@ -50,6 +51,7 @@ void Task_Init(void *argument) {
   task_runtime.msgq.user_msg= osMessageQueueNew(2u, 10, NULL);
   task_runtime.msgq.chassis.cmd = osMessageQueueNew(1u, sizeof(Chassis_CMD_t), NULL);
   task_runtime.msgq.pole.cmd = osMessageQueueNew(1u, sizeof(Pole_CMD_t), NULL);
+  task_runtime.msgq.pole.auto_cmd = osMessageQueueNew(1u, sizeof(Pole_AutoCmd_t), NULL);
   task_runtime.msgq.arm.cmd = osMessageQueueNew(1u, sizeof(Arm_CMD_t), NULL);
   task_runtime.msgq.armpos.cmd = osMessageQueueNew(1u, sizeof(ArmPos_CMD_t), NULL);
   task_runtime.msgq.rod.cmd = osMessageQueueNew(1u, sizeof(Rod_CMD_t), NULL);

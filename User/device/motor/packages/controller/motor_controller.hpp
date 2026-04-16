@@ -1,9 +1,13 @@
 #pragma once
 
+// 电机控制器包装层。
+// 在单个 MotorT 之上叠加位置/速度 PID 串级能力，提供更高层的闭环控制接口。
+
 #include <stdint.h>
 
 #include "component/pid.h"
-#include "device/motor/core/imotor.hpp"
+#include "device/motor/core/motor_install_spec.hpp"
+#include "device/motor/motor.hpp"
 
 namespace mrobot::motor {
 
@@ -16,26 +20,27 @@ struct MotorControllerConfig {
     float velocity_to_torque_limit;
 };
 
-class MotorController final : public IMotor {
+template <typename MotorType>
+class MotorControllerT final {
 public:
-    MotorController(IMotor& motor, const MotorControllerConfig& config);
+    MotorControllerT(MotorType& motor, const MotorControllerConfig& config);
 
-    int8_t Register() override;
-    int8_t Enable() override;
-    int8_t Disable() override;
-    int8_t Update() override;
-    int8_t CommitCommand() override;
-    bool HasPendingCommand() const override;
-    void ClearPendingCommand() override;
+    int8_t Register();
+    int8_t Enable();
+    int8_t Disable();
+    int8_t Relax();
+    int8_t Update();
+    int8_t CommitCommand();
+    bool HasPendingCommand() const;
+    void ClearPendingCommand();
 
-    int8_t SetTorque(float torque_nm) override;
-    int8_t SetVelocity(float velocity) override;
-    int8_t SetPosition(float position, float max_velocity = 0.0f) override;
-    int8_t SetMIT(float position, float velocity, float kp, float kd, float torque_ff) override;
+    int8_t SetTorque(float torque_nm);
+    int8_t SetVelocity(float velocity);
+    int8_t SetPosition(float position, float max_velocity = 0.0f);
+    int8_t SetMIT(float position, float velocity, float kp, float kd, float torque_ff);
 
-    MotorState GetState() const override;
-    const MotorSpec& GetSpec() const override;
-    const MotorInstallSpec& GetInstallSpec() const override;
+    MotorState GetState() const;
+    const MotorInstallSpec& GetInstallConfig() const;
 
 private:
     enum class ControlMode : uint8_t {
@@ -48,7 +53,7 @@ private:
     float ResolveVelocityLimit(float request_limit) const;
     float ResolveTorqueLimit(float request_limit) const;
 
-    IMotor& motor_;
+    MotorType& motor_;
     MotorControllerConfig config_;
 
     KPID_t velocity_pid_;
@@ -61,5 +66,7 @@ private:
     float position_velocity_limit_;
     float velocity_torque_limit_;
 };
+
+using MotorController = MotorControllerT<mrobot::motor::DmJ4310Motor>;
 
 } // namespace mrobot::motor

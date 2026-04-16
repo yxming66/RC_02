@@ -18,7 +18,8 @@ float ResolvePositiveRatio(float ratio) {
 
 } // namespace
 
-MotorController::MotorController(IMotor& motor, const MotorControllerConfig& config)
+template <typename MotorType>
+MotorControllerT<MotorType>::MotorControllerT(MotorType& motor, const MotorControllerConfig& config)
     : motor_(motor),
       config_(config),
       velocity_pid_ {},
@@ -37,11 +38,13 @@ MotorController::MotorController(IMotor& motor, const MotorControllerConfig& con
     }
 }
 
-int8_t MotorController::Register() {
+template <typename MotorType>
+int8_t MotorControllerT<MotorType>::Register() {
     return motor_.Register();
 }
 
-int8_t MotorController::Enable() {
+template <typename MotorType>
+int8_t MotorControllerT<MotorType>::Enable() {
     target_torque_ = 0.0f;
     target_velocity_ = motor_.GetState().velocity_rad_s;
     target_position_ = motor_.GetState().position_rad;
@@ -51,14 +54,24 @@ int8_t MotorController::Enable() {
     return motor_.Enable();
 }
 
-int8_t MotorController::Disable() {
+template <typename MotorType>
+int8_t MotorControllerT<MotorType>::Disable() {
     target_torque_ = 0.0f;
     mode_ = ControlMode::Torque;
     ResetControllers();
     return motor_.Disable();
 }
 
-int8_t MotorController::Update() {
+template <typename MotorType>
+int8_t MotorControllerT<MotorType>::Relax() {
+    target_torque_ = 0.0f;
+    mode_ = ControlMode::Torque;
+    ResetControllers();
+    return motor_.Relax();
+}
+
+template <typename MotorType>
+int8_t MotorControllerT<MotorType>::Update() {
     int8_t ret = motor_.Update();
     if (ret != DEVICE_OK) {
         return ret;
@@ -95,19 +108,23 @@ int8_t MotorController::Update() {
     return DEVICE_ERR;
 }
 
-int8_t MotorController::CommitCommand() {
+template <typename MotorType>
+int8_t MotorControllerT<MotorType>::CommitCommand() {
     return motor_.CommitCommand();
 }
 
-bool MotorController::HasPendingCommand() const {
+template <typename MotorType>
+bool MotorControllerT<MotorType>::HasPendingCommand() const {
     return motor_.HasPendingCommand();
 }
 
-void MotorController::ClearPendingCommand() {
+template <typename MotorType>
+void MotorControllerT<MotorType>::ClearPendingCommand() {
     motor_.ClearPendingCommand();
 }
 
-int8_t MotorController::SetTorque(float torque_nm) {
+template <typename MotorType>
+int8_t MotorControllerT<MotorType>::SetTorque(float torque_nm) {
     mode_ = ControlMode::Torque;
     target_torque_ = torque_nm;
     position_velocity_limit_ = config_.position_to_velocity_limit;
@@ -115,7 +132,8 @@ int8_t MotorController::SetTorque(float torque_nm) {
     return DEVICE_OK;
 }
 
-int8_t MotorController::SetVelocity(float velocity) {
+template <typename MotorType>
+int8_t MotorControllerT<MotorType>::SetVelocity(float velocity) {
     if (config_.velocity_pid == nullptr) {
         return DEVICE_ERR;
     }
@@ -127,7 +145,8 @@ int8_t MotorController::SetVelocity(float velocity) {
     return DEVICE_OK;
 }
 
-int8_t MotorController::SetPosition(float position, float max_velocity) {
+template <typename MotorType>
+int8_t MotorControllerT<MotorType>::SetPosition(float position, float max_velocity) {
     if (config_.position_pid == nullptr || config_.velocity_pid == nullptr) {
         return DEVICE_ERR;
     }
@@ -138,28 +157,23 @@ int8_t MotorController::SetPosition(float position, float max_velocity) {
     return DEVICE_OK;
 }
 
-int8_t MotorController::SetMIT(float position, float velocity, float kp, float kd, float torque_ff) {
-    (void)position;
-    (void)velocity;
-    (void)kp;
-    (void)kd;
-    (void)torque_ff;
-    return DEVICE_ERR;
+template <typename MotorType>
+int8_t MotorControllerT<MotorType>::SetMIT(float position, float velocity, float kp, float kd, float torque_ff) {
+    return motor_.SetMIT(position, velocity, kp, kd, torque_ff);
 }
 
-MotorState MotorController::GetState() const {
+template <typename MotorType>
+MotorState MotorControllerT<MotorType>::GetState() const {
     return motor_.GetState();
 }
 
-const MotorSpec& MotorController::GetSpec() const {
-    return motor_.GetSpec();
+template <typename MotorType>
+const MotorInstallSpec& MotorControllerT<MotorType>::GetInstallConfig() const {
+    return motor_.GetInstallConfig();
 }
 
-const MotorInstallSpec& MotorController::GetInstallSpec() const {
-    return motor_.GetInstallSpec();
-}
-
-int8_t MotorController::ResetControllers() {
+template <typename MotorType>
+int8_t MotorControllerT<MotorType>::ResetControllers() {
     if (config_.velocity_pid != nullptr) {
         PID_Reset(&velocity_pid_);
     }
@@ -169,57 +183,59 @@ int8_t MotorController::ResetControllers() {
     return DEVICE_OK;
 }
 
-float MotorController::ResolveVelocityLimit(float request_limit) const {
+template <typename MotorType>
+float MotorControllerT<MotorType>::ResolveVelocityLimit(float request_limit) const {
     const float limit = ClampLimit(request_limit);
     if (limit > 0.0f) {
         return limit;
     }
 
-    const MotorSpec& spec = motor_.GetSpec();
-    const float recommended_limit = ClampLimit(spec.recommended_velocity);
+    const float recommended_limit = ClampLimit(MotorType::recommended_velocity());
     if (recommended_limit > 0.0f) {
         return recommended_limit;
     }
 
-    const float rated_limit = ClampLimit(spec.rated_velocity);
+    const float rated_limit = ClampLimit(MotorType::rated_velocity());
     if (rated_limit > 0.0f) {
         return rated_limit;
     }
 
-    return ClampLimit(spec.max_velocity);
+    return ClampLimit(MotorType::max_velocity());
 }
 
-float MotorController::ResolveTorqueLimit(float request_limit) const {
+template <typename MotorType>
+float MotorControllerT<MotorType>::ResolveTorqueLimit(float request_limit) const {
     float limit = ClampLimit(request_limit);
     if (limit > 0.0f) {
         return limit;
     }
 
     if (mode_ == ControlMode::Velocity || mode_ == ControlMode::Position) {
-        const MotorSpec& spec = motor_.GetSpec();
-        const float ratio = ResolvePositiveRatio(spec.reducer_ratio);
-        const float output_ratio = ratio * ResolvePositiveRatio(motor_.GetInstallSpec().external_ratio);
-        const float recommended_limit = ClampLimit(spec.recommended_current);
+        const float ratio = ResolvePositiveRatio(MotorType::gear_ratio());
+        const float output_ratio = ratio * ResolvePositiveRatio(motor_.GetInstallConfig().external_ratio);
+        const float recommended_limit = ClampLimit(MotorType::recommended_current());
         if (recommended_limit > 0.0f) {
-            return motor_.GetSpec().torque_constant > 0.0f
-                ? recommended_limit * motor_.GetSpec().torque_constant * output_ratio
+            return MotorType::torque_constant() > 0.0f
+                ? recommended_limit * MotorType::torque_constant() * output_ratio
                 : recommended_limit;
         }
-        const float rated_limit = ClampLimit(spec.rated_current);
+        const float rated_limit = ClampLimit(MotorType::rated_current());
         if (rated_limit > 0.0f) {
-            return motor_.GetSpec().torque_constant > 0.0f
-                ? rated_limit * motor_.GetSpec().torque_constant * output_ratio
+            return MotorType::torque_constant() > 0.0f
+                ? rated_limit * MotorType::torque_constant() * output_ratio
                 : rated_limit;
         }
-        const float legacy_limit = ClampLimit(spec.max_current);
+        const float legacy_limit = ClampLimit(MotorType::peak_current());
         if (legacy_limit > 0.0f) {
-            return motor_.GetSpec().torque_constant > 0.0f
-                ? legacy_limit * motor_.GetSpec().torque_constant * output_ratio
+            return MotorType::torque_constant() > 0.0f
+                ? legacy_limit * MotorType::torque_constant() * output_ratio
                 : legacy_limit;
         }
     }
 
     return 0.0f;
 }
+
+template class MotorControllerT<mrobot::motor::DmJ4310Motor>;
 
 } // namespace mrobot::motor

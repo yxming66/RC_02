@@ -10,6 +10,7 @@
 #include "device/dr16.h"
 #include "module/chassis.h"
 #include "module/armpos.h"
+#include "module/pole_auto.h"
 /* USER INCLUDE END */
 
 /* Private typedef ---------------------------------------------------------- */
@@ -54,6 +55,7 @@ void Task_rc_main(void *argument) {
       DR16_Offline(&dr16);
     }
       ArmPos_CMD_t armpos_cmd;
+      Pole_AutoCmd_t pole_auto_cmd;
       
       
       
@@ -67,6 +69,12 @@ void Task_rc_main(void *argument) {
       armpos_cmd.dm_delta = 0.0f;
       armpos_cmd.lz_delta = 0.0f;
       armpos_cmd.rm_delta = 0.0f;
+<<<<<<< HEAD
+=======
+      pole_auto_cmd.enable = false;
+      pole_auto_cmd.restart = false;
+      pole_auto_cmd.step_type = POLE_AUTO_STEP_NONE;
+>>>>>>> d09953c (feat(armpos): 移除自动控制相关代码，简化命令结构)
       
     } else if (dr16.data.sw_l == DR16_SW_MID) {
       chassis_cmd.mode = CHASSIS_MODE_INDEPENDENT;
@@ -78,6 +86,12 @@ void Task_rc_main(void *argument) {
       armpos_cmd.dm_delta = 0.0f;
       armpos_cmd.lz_delta = 0.0f;
       armpos_cmd.rm_delta = 0.0f;
+<<<<<<< HEAD
+=======
+      pole_auto_cmd.enable = false;
+      pole_auto_cmd.restart = false;
+      pole_auto_cmd.step_type = POLE_AUTO_STEP_NONE;
+>>>>>>> d09953c (feat(armpos): 移除自动控制相关代码，简化命令结构)
 
     } else if (dr16.data.sw_l == DR16_SW_DOWN) {
       chassis_cmd.mode = CHASSIS_MODE_INDEPENDENT;
@@ -89,17 +103,37 @@ void Task_rc_main(void *argument) {
       armpos_cmd.dm_delta = dr16.data.ch_l_y;
       armpos_cmd.lz_delta = dr16.data.ch_r_y;
       armpos_cmd.rm_delta = dr16.data.ch_l_x;
+<<<<<<< HEAD
+=======
+      pole_auto_cmd.enable = (dr16.data.sw_r == DR16_SW_UP);
+      pole_auto_cmd.restart =
+          (dr16.data.sw_r == DR16_SW_UP) && (last_sw_r != DR16_SW_UP);
+      pole_auto_cmd.step_type =
+          (dr16.data.sw_r == DR16_SW_UP) ? POLE_AUTO_STEP_200MM : POLE_AUTO_STEP_NONE;
+>>>>>>> d09953c (feat(armpos): 移除自动控制相关代码，简化命令结构)
     } else {
       chassis_cmd.mode = CHASSIS_MODE_RELAX;
       chassis_cmd.ctrl_vec.vx = 0.0f;
       chassis_cmd.ctrl_vec.vy = 0.0f;
       chassis_cmd.ctrl_vec.wz = 0.0f;
+<<<<<<< HEAD
+=======
+      armpos_cmd.mode = ARMPOS_MODE_RELAX;
+      armpos_cmd.dm_delta = 0.0f;
+      armpos_cmd.lz_delta = 0.0f;
+      armpos_cmd.rm_delta = 0.0f;
+      pole_auto_cmd.enable = false;
+      pole_auto_cmd.restart = false;
+      pole_auto_cmd.step_type = POLE_AUTO_STEP_NONE;
+>>>>>>> d09953c (feat(armpos): 移除自动控制相关代码，简化命令结构)
     }
 
     osMessageQueueReset(task_runtime.msgq.chassis.cmd);
     osMessageQueuePut(task_runtime.msgq.chassis.cmd, &chassis_cmd, 0, 0);
     osMessageQueueReset(task_runtime.msgq.armpos.cmd);
     osMessageQueuePut(task_runtime.msgq.armpos.cmd, &armpos_cmd, 0, 0);
+    osMessageQueueReset(task_runtime.msgq.pole.auto_cmd);
+    osMessageQueuePut(task_runtime.msgq.pole.auto_cmd, &pole_auto_cmd, 0, 0);
 
         /* 检测左拨杆切换到UP位置时触发软件复位 */
     if (dr16.header.online) {

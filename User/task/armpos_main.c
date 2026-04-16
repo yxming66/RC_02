@@ -9,7 +9,12 @@
 
 static ArmPos_t armpos;
 static ArmPos_CMD_t armpos_cmd;
+<<<<<<< HEAD
 bool setzero1=0;
+=======
+bool setzero1 = 0;
+
+>>>>>>> d09953c (feat(armpos): 移除自动控制相关代码，简化命令结构)
 void Task_armpos(void *argument) {
   (void)argument;
 
