@@ -62,12 +62,12 @@ float MotorProtocol<MotorKind::RM, Model>::TotalRatio() const {
 template <MotorModel Model>
 float MotorProtocol<MotorKind::RM, Model>::ToTorqueCurrent(float output_torque_nm) const {
     const float signed_torque = install_.reverse_output ? -output_torque_nm : output_torque_nm;
-    const float ratio = TotalRatio();
     const float torque_constant = (MotorTraits<MotorKind::RM, Model>::kTorqueConstant > 0.0f) ? MotorTraits<MotorKind::RM, Model>::kTorqueConstant : 0.0f;
-    if (torque_constant <= 0.0f || ratio <= 0.0f) {
+    const float total_ratio = TotalRatio();
+    if (torque_constant <= 0.0f || total_ratio <= 0.0f) {
         return 0.0f;
     }
-    return signed_torque / (torque_constant * ratio);
+    return signed_torque / (torque_constant * total_ratio);
 }
 
 template <MotorModel Model>

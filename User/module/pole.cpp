@@ -5,17 +5,57 @@
 #include "module/pole.h"
 
 #include <math.h>
+#include <new>
 #include <string.h>
 
 #include "bsp/can.h"
-#include "device/motor_rm.h"
+#include "device/motor.h"
+#include "device/motor/factory/motor_factory.hpp"
+#include "device/motor/packages/controller/motor_controller.hpp"
+
+using mrobot::motor::MotorControllerConfig;
+using mrobot::motor::MotorControllerT;
+using mrobot::motor::MotorFactory;
+using mrobot::motor::MotorInstallSpec;
+using mrobot::motor::MotorInstanceConfig;
+using mrobot::motor::MotorState;
+using mrobot::motor::RmM3508Motor;
+
+using PoleMotor = RmM3508Motor;
+using PoleMotorController = MotorControllerT<PoleMotor>;
+
+namespace {
+
+constexpr float kPoleVelFeedbackLpfDefaultHz = 10.0f;
+
+alignas(PoleMotorController) static unsigned char g_pole_controller_storage[POLE_MOTOR_NUM][sizeof(PoleMotorController)];
+
+static PoleMotor *& PoleMotorHandle(Pole_t *c, uint8_t idx) {
+  return *reinterpret_cast<PoleMotor **>(&c->motors[idx]);
+}
+
+static PoleMotorController *& PoleController(Pole_t *c, uint8_t idx) {
+  return *reinterpret_cast<PoleMotorController **>(&c->controllers[idx]);
+}
+
+static MotorInstallSpec PoleInstallSpec(const Pole_t *c, uint8_t idx) {
+  MotorInstallSpec spec {};
+  spec.external_ratio = c->param->motor_install[idx].external_ratio;
+  spec.reverse_output = c->param->motor_install[idx].reverse_output;
+  return spec;
+}
+
+static void PoleStoreMotorState(Pole_t *c, uint8_t idx, const MotorState& state) {
+  c->feedback.motor[idx].rotor_abs_angle = state.position_single_turn_rad;
+  c->feedback.motor[idx].rotor_speed = state.velocity_rad_s;
+  c->feedback.motor[idx].torque_current = state.torque_nm;
+  c->feedback.motor[idx].temp = state.temperature_c;
+}
+
+}
 
 static float Pole_GetSupportAngle(const Pole_t *c, uint8_t idx) {
-  float angle = c->motors[idx]->gearbox_total_angle;
-  if (c->param->motor_param[idx].reverse) {
-    angle = -angle;
-  }
-  return angle;
+  return PoleController(const_cast<Pole_t *>(c), idx)->GetState().position_rad;
 }
 
 static float Pole_Clipf(float val, float min, float max) {
@@ -33,10 +73,30 @@ static float Pole_MoveTowards(float current, float target, float max_step) {
   return target;
 }
 
+static float Pole_GetVelFeedbackLpfCutoffHz(const Pole_t *c) {
+  if (c == NULL || c->param == NULL) return kPoleVelFeedbackLpfDefaultHz;
+  const float dedicated_cutoff_hz = c->param->filter.support_vel_feedback_cutoff_hz;
+  if (dedicated_cutoff_hz > 0.0f) {
+    return dedicated_cutoff_hz;
+  }
+
+  const float legacy_cutoff_hz = c->param->pid.support_vel_pid.d_cutoff_freq;
+  return (legacy_cutoff_hz > 0.0f) ? legacy_cutoff_hz : kPoleVelFeedbackLpfDefaultHz;
+}
+
+static float Pole_GetSupportSpeedFeedbackFiltered(Pole_t *c, uint8_t idx) {
+  if (c == NULL || idx >= POLE_SUPPORT_MOTOR_NUM) return 0.0f;
+  c->feedback.support_vel_filtered[idx] = LowPassFilter2p_Apply(
+      &c->filter.support_vel_in[idx], c->feedback.motor[idx].rotor_speed);
+  return c->feedback.support_vel_filtered[idx];
+}
+
 static void Pole_ResetControllers(Pole_t *c) {
   for (uint8_t i = 0; i < POLE_SUPPORT_MOTOR_NUM; i++) {
     PID_Reset(&c->pid.support_pos[i]);
     PID_Reset(&c->pid.support_vel[i]);
+    LowPassFilter2p_Reset(&c->filter.support_vel_in[i], c->feedback.motor[i].rotor_speed);
+    c->feedback.support_vel_filtered[i] = c->feedback.motor[i].rotor_speed;
   }
 }
 
@@ -49,6 +109,8 @@ static int8_t Pole_SetMode(Pole_t *c, Pole_Mode_t mode) {
   return POLE_OK;
 }
 
+extern "C" {
+
 int8_t Pole_Init(Pole_t *c, const Pole_Params_t *param, float target_freq) {
   if (c == NULL || param == NULL) return POLE_ERR_NULL;
 
@@ -58,15 +120,42 @@ int8_t Pole_Init(Pole_t *c, const Pole_Params_t *param, float target_freq) {
   c->param = param;
   c->mode = POLE_MODE_RELAX;
 
-  for (uint8_t i = 0; i < POLE_SUPPORT_MOTOR_NUM; i++) {
-    PID_Init(&c->pid.support_pos[i], KPID_MODE_CALC_D, target_freq,
+  const float vel_fb_cutoff_hz = Pole_GetVelFeedbackLpfCutoffHz(c);
+
+  for (uint8_t i = 0; i < POLE_MOTOR_NUM; i++) {
+    PoleMotorHandle(c, i) = nullptr;
+    PoleController(c, i) = nullptr;
+    c->out.motor[i] = 0.0f;
+    c->feedback.motor[i] = {};
+
+    PID_Init(&c->pid.support_pos[i], KPID_MODE_NO_D, target_freq,
              &param->pid.support_pos_pid);
     PID_Init(&c->pid.support_vel[i], KPID_MODE_NO_D, target_freq,
              &param->pid.support_vel_pid);
-  }
+    LowPassFilter2p_Init(&c->filter.support_vel_in[i], target_freq, vel_fb_cutoff_hz);
+    LowPassFilter2p_Reset(&c->filter.support_vel_in[i], 0.0f);
 
-  for (uint8_t i = 0; i < POLE_MOTOR_NUM; i++) {
-    MOTOR_RM_Register((MOTOR_RM_Param_t *)&param->motor_param[i]);
+    const auto motor_config = MotorInstanceConfig<mrobot::motor::MotorKind::RM>::FromVendorParam(c->param->motor_param[i]);
+    PoleMotorHandle(c, i) = MotorFactory::Create<mrobot::motor::MotorKind::RM, mrobot::motor::MotorModel::M3508>(motor_config, PoleInstallSpec(c, i));
+    if (PoleMotorHandle(c, i) == nullptr) {
+      return POLE_ERR;
+    }
+
+    const MotorControllerConfig controller_config = {
+      .velocity_pid = &param->pid.support_vel_pid,
+      .position_pid = &param->pid.support_pos_pid,
+      .sample_freq = target_freq,
+      .position_to_velocity_limit = param->limit.support_lift_speed,
+      .velocity_to_torque_limit = param->limit.max_current,
+    };
+
+    PoleController(c, i) = new (g_pole_controller_storage[i]) PoleMotorController(*PoleMotorHandle(c, i), controller_config);
+    if (PoleController(c, i)->Register() != DEVICE_OK) {
+      return POLE_ERR;
+    }
+    if (PoleController(c, i)->Enable() != DEVICE_OK) {
+      return POLE_ERR;
+    }
   }
 
   return POLE_OK;
@@ -77,11 +166,10 @@ int8_t Pole_UpdateFeedback(Pole_t *c) {
 
   float sum = 0.0f;
   for (uint8_t i = 0; i < POLE_MOTOR_NUM; i++) {
-    MOTOR_RM_Update((MOTOR_RM_Param_t *)&c->param->motor_param[i]);
-    c->motors[i] = MOTOR_RM_GetMotor((MOTOR_RM_Param_t *)&c->param->motor_param[i]);
-    if (c->motors[i] == NULL) return POLE_ERR;
+    if (PoleController(c, i) == nullptr) return POLE_ERR;
+    if (PoleController(c, i)->Update() != DEVICE_OK) return POLE_ERR;
 
-    c->feedback.motor[i] = c->motors[i]->feedback;
+    PoleStoreMotorState(c, i, PoleController(c, i)->GetState());
     if (i < POLE_SUPPORT_MOTOR_NUM) {
       sum += Pole_GetSupportAngle(c, i);
     }
@@ -153,10 +241,12 @@ int8_t Pole_Control(Pole_t *c, const Pole_CMD_t *c_cmd, uint32_t now) {
   float out[4];
   for (uint8_t i = 0; i < POLE_SUPPORT_MOTOR_NUM; i++) {
     float fb_angle = Pole_GetSupportAngle(c, i);
+    float fb_speed = Pole_GetSupportSpeedFeedbackFiltered(c, i);
+
      vel[i] = PID_Calc(&c->pid.support_pos[i], c->setpoint.support_target_angle[i],
                          fb_angle, 0.0f, c->dt);
-     out[i] = PID_Calc(&c->pid.support_vel[i], vel[i], 
-                        c->feedback.motor[i].rotor_speed, 0.0f, c->dt);
+     out[i] = PID_Calc(&c->pid.support_vel[i], vel[i],
+                        fb_speed, 0.0f, c->dt);
     c->out.motor[i] = Pole_Clipf(out[i], -c->param->limit.max_current,
                                  c->param->limit.max_current);
   }
@@ -189,17 +279,20 @@ void Pole_Output(Pole_t *c) {
   if (c == NULL || c->param == NULL) return;
 
   for (uint8_t i = 0; i < POLE_MOTOR_NUM; i++) {
-    MOTOR_RM_SetOutput((MOTOR_RM_Param_t *)&c->param->motor_param[i], c->out.motor[i]);
+    if (PoleController(c, i) == nullptr) continue;
+    PoleController(c, i)->SetTorque(c->out.motor[i]);
+    PoleController(c, i)->CommitCommand();
   }
-
-  MOTOR_RM_Ctrl(&c->param->motor_param[0]);
 }
 
 void Pole_ResetOutput(Pole_t *c) {
   if (c == NULL || c->param == NULL) return;
 
   for (uint8_t i = 0; i < POLE_MOTOR_NUM; i++) {
-    MOTOR_RM_Relax((MOTOR_RM_Param_t *)&c->param->motor_param[i]);
+    if (PoleController(c, i) != nullptr) {
+      PoleController(c, i)->Relax();
+      PoleController(c, i)->CommitCommand();
+    }
     c->out.motor[i] = 0.0f;
   }
 }
@@ -211,5 +304,7 @@ void Pole_Power_Control(Pole_t *c, float max_power) {
   for (uint8_t i = 0; i < POLE_MOTOR_NUM; i++) {
     c->out.motor[i] = Pole_Clipf(c->out.motor[i], -limit, limit);
   }
+}
+
 }
 

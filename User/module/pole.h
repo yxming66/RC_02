@@ -11,7 +11,17 @@ extern "C" {
 #include <stdint.h>
 
 #include "component/pid.h"
+#include "component/filter.h"
+#include "device/motor.h"
 #include "device/motor_rm.h"
+
+#ifdef __cplusplus
+}
+#endif
+
+#ifdef __cplusplus
+#include "device/motor/packages/controller/motor_controller.hpp"
+#endif
 
 #define POLE_OK (0)
 #define POLE_ERR (-1)
@@ -36,9 +46,16 @@ typedef struct {
 typedef struct {
   MOTOR_RM_Param_t motor_param[POLE_MOTOR_NUM];
   struct {
+    float external_ratio;
+    bool reverse_output;
+  } motor_install[POLE_MOTOR_NUM];
+  struct {
     KPID_Params_t support_pos_pid;
     KPID_Params_t support_vel_pid;
   } pid;
+  struct {
+    float support_vel_feedback_cutoff_hz;   /* Hz, <=0 means fallback */
+  } filter;
   struct {
     float step_200_all_extend[2];      /* 200mm台阶-四撑杆全伸: [0]前两杆, [1]后两杆 */
     float step_200_front_retract[2];   /* 200mm台阶-前两撑杆收: [0]前两杆, [1]后两杆 */
@@ -56,6 +73,7 @@ typedef struct {
 
 typedef struct {
   MOTOR_Feedback_t motor[POLE_MOTOR_NUM];
+  float support_vel_filtered[POLE_SUPPORT_MOTOR_NUM];
   float support_angle_avg;
 } Pole_Feedback_t;
 
@@ -69,7 +87,8 @@ typedef struct {
 
   const Pole_Params_t *param;
   Pole_Mode_t mode;
-  MOTOR_RM_t *motors[POLE_MOTOR_NUM];
+  void *motors[POLE_MOTOR_NUM];
+  void *controllers[POLE_MOTOR_NUM];
 
   struct {
     bool calibrated;
@@ -88,9 +107,17 @@ typedef struct {
     KPID_t support_vel[POLE_SUPPORT_MOTOR_NUM];
   } pid;
 
+  struct {
+    LowPassFilter2p_t support_vel_in[POLE_SUPPORT_MOTOR_NUM];
+  } filter;
+
   Pole_Output_t out;
   Pole_Feedback_t feedback;
 } Pole_t;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 int8_t Pole_Init(Pole_t *c, const Pole_Params_t *param, float target_freq);
 int8_t Pole_UpdateFeedback(Pole_t *c);

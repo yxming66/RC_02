@@ -78,7 +78,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     User/device/motor/packages/controller/motor_controller.cpp
     # User/module sources
     User/module/chassis.cpp
-    User/module/pole.c
+    User/module/pole.cpp
     User/module/arm.cpp
     User/module/rod.c
     User/module/autoCtrlAPI/api/auto_ctrl_api.c

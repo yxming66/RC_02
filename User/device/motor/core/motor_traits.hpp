@@ -51,7 +51,7 @@ template <MotorKind KindValue, MotorModel ModelValue>
 struct MotorTraitsBase {
     static constexpr MotorKind kKind = KindValue;                    // 电机种类（协议类别），如 RM / DM / LZ。
     static constexpr MotorModel kModel = ModelValue;                // 电机型号，如 M3508 / J4310 / RSO3。
-    static constexpr float kGearRatio = 1.0f;                       // 电机内部减速比；若按输出轴语义建模且无减速，可为 1.0。
+    static constexpr float kGearRatio = 1.0f;                       // 电机内部减速比；输出轴物理量换算时会与外部减速比共同参与计算，无减速时为 1.0。
     static constexpr bool kSupportsMit = false;                     // 是否支持 MIT（位置/速度/Kp/Kd/前馈力矩）复合控制接口。
     static constexpr bool kSupportsTorque = false;                  // 是否支持力矩/电流控制接口。
     static constexpr bool kSupportsVelocity = false;                // 是否支持速度控制接口。
@@ -76,7 +76,7 @@ struct MotorTraitsBase {
     static constexpr float kNoLoadVelocity = 0.0f;                  // 空载最大角速度，单位 rad/s。
     static constexpr float kRatedTorque = 0.0f;                     // 额定输出力矩，单位 N·m。
     static constexpr float kPeakTorque = 0.0f;                      // 峰值输出力矩，单位 N·m。
-    static constexpr float kTorqueConstant = 0.0f;                  // 力矩常数；通常表示电流到力矩的换算系数。
+    static constexpr float kTorqueConstant = 0.0f;                  // 电机轴（转子轴）力矩常数，单位通常为 N·m/A；输出轴力矩需再乘内部/外部减速比。
     static constexpr uint16_t kEncoderCpr = 0;                      // 编码器每圈计数（counts per revolution）；未知时为 0。
     static constexpr MotorCapability kCapabilities = MotorCapability::None; // 编译期能力位掩码，汇总支持的控制能力。
     static constexpr const char* kName = "Unknown";                // 人类可读型号名，便于调试输出。
@@ -100,7 +100,7 @@ struct MotorTraits<MotorKind::RM, MotorModel::M2006> : MotorTraitsBase<MotorKind
     static constexpr float kNoLoadVelocity = 52.36f;
     static constexpr float kRatedTorque = 1.0f;
     static constexpr float kPeakTorque = 1.8f;
-    static constexpr float kTorqueConstant = 0.18f;
+    static constexpr float kTorqueConstant = 0.005f;
     static constexpr uint16_t kEncoderCpr = 8192;
     static constexpr MotorCapability kCapabilities = MotorCapability::Current;
     static constexpr const char* kName = "RM-M2006";
@@ -124,7 +124,7 @@ struct MotorTraits<MotorKind::RM, MotorModel::M3508> : MotorTraitsBase<MotorKind
     static constexpr float kNoLoadVelocity = 50.47f;
     static constexpr float kRatedTorque = 3.0f;
     static constexpr float kPeakTorque = 4.5f;
-    static constexpr float kTorqueConstant = 0.30f;
+    static constexpr float kTorqueConstant = 0.015622389f;
     static constexpr uint16_t kEncoderCpr = 8192;
     static constexpr MotorCapability kCapabilities = MotorCapability::Current;
     static constexpr const char* kName = "RM-M3508";

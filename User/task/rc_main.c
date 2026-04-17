@@ -53,13 +53,15 @@ static void Rc_SetPoleManual(float left, float right) {
 }
 
 static void Rc_SetPoleAuto(float left_target, float right_target) {
-  pole_cmd.mode = POLE_MODE_ACTIVE;
+  (void)left_target;
+  (void)right_target;
+  pole_cmd.mode = POLE_MODE_RELAX;
   pole_cmd.lift[0] = 0.0f;
   pole_cmd.lift[1] = 0.0f;
-  pole_cmd.auto_target_enable[0] = true;
-  pole_cmd.auto_target_enable[1] = true;
-  pole_cmd.auto_target_lift[0] = left_target;
-  pole_cmd.auto_target_lift[1] = right_target;
+  pole_cmd.auto_target_enable[0] = false;
+  pole_cmd.auto_target_enable[1] = false;
+  pole_cmd.auto_target_lift[0] = 0.0f;
+  pole_cmd.auto_target_lift[1] = 0.0f;
   pole_cmd.auto_lift_speed[0] = 0.0f;
   pole_cmd.auto_lift_speed[1] = 0.0f;
 }
@@ -119,9 +121,9 @@ void Task_rc_main(void *argument) {
       switch (dr16.data.sw_r) {
         case DR16_SW_UP:
           chassis_cmd.mode = CHASSIS_MODE_INDEPENDENT;
-          chassis_cmd.ctrl_vec.vx = dr16.data.ch_r_x;
-          chassis_cmd.ctrl_vec.vy = dr16.data.ch_r_y;
-          chassis_cmd.ctrl_vec.wz = dr16.data.ch_l_x;
+          chassis_cmd.ctrl_vec.vx = 2.0f * dr16.data.ch_r_x;
+          chassis_cmd.ctrl_vec.vy = 2.0f * dr16.data.ch_r_y;
+          chassis_cmd.ctrl_vec.wz = 2.0f * dr16.data.ch_l_x;
           Rc_SetPoleManual(dr16.data.ch_l_y, dr16.data.ch_l_y);
           break;
         case DR16_SW_MID:
