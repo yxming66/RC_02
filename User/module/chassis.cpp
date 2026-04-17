@@ -11,29 +11,32 @@
 #include "device/motor.h"
 #include "device/motor/factory/motor_factory.hpp"
 #include "device/motor/packages/controller/motor_controller.hpp"
-#include "device/motor_rm.h"
 #include "module/chassis.h"
 #include "config.h"
 #include "math.h"
 
-using mrobot::motor::MotorController;
 using mrobot::motor::MotorControllerConfig;
 using mrobot::motor::MotorFactory;
-using mrobot::motor::MotorHandle;
 using mrobot::motor::MotorInstallSpec;
 using mrobot::motor::MotorState;
-using mrobot::motor::specs::kRm3508;
+using mrobot::motor::MotorInstanceConfig;
+using mrobot::motor::MotorControllerT;
+using mrobot::motor::RmM3508Motor;
+using mrobot::motor::RmProtocolDebugSnapshot;
+
+using ChassisMotor = RmM3508Motor;
+using ChassisMotorController = MotorControllerT<ChassisMotor>;
 
 namespace {
 
-alignas(MotorController) static unsigned char g_chassis_controller_storage[4][sizeof(MotorController)];
+alignas(ChassisMotorController) static unsigned char g_chassis_controller_storage[4][sizeof(ChassisMotorController)];
 
-static MotorHandle& ChassisMotorHandle(Chassis_t *c, uint8_t idx) {
-  return *reinterpret_cast<MotorHandle *>(&c->motors[idx]);
+static ChassisMotor *& ChassisMotorHandle(Chassis_t *c, uint8_t idx) {
+  return *reinterpret_cast<ChassisMotor **>(&c->motors[idx]);
 }
 
-static MotorController *& ChassisController(Chassis_t *c, uint8_t idx) {
-  return *reinterpret_cast<MotorController **>(&c->controllers[idx]);
+static ChassisMotorController *& ChassisController(Chassis_t *c, uint8_t idx) {
+  return *reinterpret_cast<ChassisMotorController **>(&c->controllers[idx]);
 }
 
 static MotorInstallSpec ChassisInstallSpec(const Chassis_t *c, uint8_t idx) {
@@ -43,9 +46,11 @@ static MotorInstallSpec ChassisInstallSpec(const Chassis_t *c, uint8_t idx) {
   return spec;
 }
 
-static MOTOR_RM_Param_t *ChassisRmParam(Chassis_t *c, uint8_t idx) {
-  if (!c || !c->param || idx >= c->num_wheel) return nullptr;
-  return &c->param->motor_param[idx];
+static float ChassisFilterObservedTorque(Chassis_t *c, uint8_t idx, float torque_nm) {
+  if (!c || idx >= c->num_wheel) {
+    return torque_nm;
+  }
+  return LowPassFilter2p_Apply(&c->filter.torque[idx], torque_nm);
 }
 
 static void ChassisStoreMotorState(Chassis_t *c, uint8_t idx, const MotorState& state) {
@@ -54,6 +59,22 @@ static void ChassisStoreMotorState(Chassis_t *c, uint8_t idx, const MotorState& 
   c->feedback.motor[idx].torque_nm = state.torque_nm;
   c->feedback.motor[idx].temperature_c = state.temperature_c;
   c->feedback.motor[idx].online = state.online;
+  c->debug.wheel_motor_velocity_rad_s[idx] = state.velocity_rad_s;
+  c->debug.wheel_motor_torque_nm[idx] = ChassisFilterObservedTorque(c, idx, state.torque_nm);
+}
+
+static void ChassisStoreProtocolDebug(Chassis_t *c, uint8_t idx) {
+  if (!c || idx >= c->num_wheel || ChassisMotorHandle(c, idx) == nullptr) {
+    return;
+  }
+
+  const RmProtocolDebugSnapshot& dbg = ChassisMotorHandle(c, idx)->ProtocolDebug();
+  c->debug.wheel_pending_valid[idx] = dbg.pending_valid;
+  c->debug.wheel_pending_torque_current[idx] = dbg.pending_torque_current;
+  c->debug.wheel_last_set_torque_nm[idx] = dbg.last_set_torque_nm;
+  c->debug.wheel_last_set_torque_ret[idx] = dbg.last_set_torque_ret;
+  c->debug.wheel_last_commit_ret[idx] = dbg.last_commit_ret;
+  c->debug.wheel_last_commit_skipped[idx] = dbg.last_commit_skipped;
 }
 
 }
@@ -74,10 +95,20 @@ static void Chassis_LimitMoveVector(Chassis_t *c) {
   Clip(&c->move_vec.wz, -c->param->limit.max_wz, c->param->limit.max_wz);
 }
 
+static float Chassis_GetMecanumWzScale(const Chassis_t *c) {
+  if (!c) return 1.0f;
+  return c->param->physical.wheelbase_m + c->param->physical.trackwidth_m;
+}
+
 static float Chassis_GetWheelSpeedFeedback(const Chassis_t *c, uint8_t idx) {
   if (!c || idx >= c->num_wheel) return 0.0f;
   const float wheel_radius = fmaxf(c->param->physical.wheel_radius_m, 1e-4f);
   return c->feedback.motor[idx].velocity_rad_s * wheel_radius;
+}
+
+static float Chassis_GetWheelSpeedFeedbackFiltered(Chassis_t *c, uint8_t idx) {
+  if (!c || idx >= c->num_wheel) return 0.0f;
+  return LowPassFilter2p_Apply(&c->filter.in[idx], Chassis_GetWheelSpeedFeedback(c, idx));
 }
 
 static void Chassis_UpdateBodyVelocityFeedback(Chassis_t *c) {
@@ -98,6 +129,10 @@ static void Chassis_UpdateBodyVelocityFeedback(Chassis_t *c) {
   if (fabsf(k) > 1e-4f) {
     raw_wz = -0.25f * (v0 + v1 + v2 + v3) / k;
   }
+
+  c->debug.body_vel_raw_vx = raw_vx;
+  c->debug.body_vel_raw_vy = raw_vy;
+  c->debug.body_vel_raw_wz = raw_wz;
 
   /*
    * 当前 MIXER_MECANUM 采用的逆运动学是：
@@ -139,6 +174,7 @@ static int8_t Chassis_SetMode(Chassis_t *c, Chassis_Mode_t mode, uint32_t now) {
         PID_Reset(&c->pid.motor[i]);
         LowPassFilter2p_Reset(&c->filter.in[i], 0.0f);
         LowPassFilter2p_Reset(&c->filter.out[i], 0.0f);
+      LowPassFilter2p_Reset(&c->filter.torque[i], c->feedback.motor[i].torque_nm);
     }
     LowPassFilter2p_Reset(&c->filter.chassis_vel[0], 0.0f);
     LowPassFilter2p_Reset(&c->filter.chassis_vel[1], 0.0f);
@@ -170,6 +206,8 @@ static float Chassis_CalcWz(const float min, const float max, uint32_t now) {
 int8_t Chassis_Init(Chassis_t *c, const Chassis_Params_t *param,
                     float target_freq) {
     if (!c) return CHASSIS_ERR_NULL;
+
+		c->debug = {};
 										
       // 初始化 CAN 通信
 		BSP_CAN_Init();
@@ -213,6 +251,7 @@ int8_t Chassis_Init(Chassis_t *c, const Chassis_Params_t *param,
         PID_Init(&c->pid.motor[i], KPID_MODE_NO_D, target_freq, &param->pid.motor_pid_param);
         LowPassFilter2p_Init(&c->filter.in[i], target_freq, param->low_pass_cutoff_freq.in);
         LowPassFilter2p_Init(&c->filter.out[i], target_freq, param->low_pass_cutoff_freq.out);
+      LowPassFilter2p_Init(&c->filter.torque[i], target_freq, param->low_pass_cutoff_freq.in);
     // 清零电机反馈缓存
 				c->feedback.motor[i] = {};
         c->setpoint.wheel_speed[i] = 0.0f;
@@ -223,19 +262,29 @@ int8_t Chassis_Init(Chassis_t *c, const Chassis_Params_t *param,
         c->out.command_pending[i] = false;
         c->out.last_commit_ok[i] = false;
       ChassisController(c, i) = nullptr;
-        ChassisMotorHandle(c, i) = MotorHandle{};
+      ChassisMotorHandle(c, i) = nullptr;
+      c->debug.wheel_speed_ref_mps[i] = 0.0f;
+      c->debug.wheel_speed_fdb_mps[i] = 0.0f;
+      c->debug.wheel_speed_fdb_filtered_mps[i] = 0.0f;
+      c->debug.wheel_torque_pid_out[i] = 0.0f;
+      c->debug.wheel_torque_cmd_nm[i] = 0.0f;
+      c->debug.wheel_motor_velocity_rad_s[i] = 0.0f;
+      c->debug.wheel_motor_torque_nm[i] = 0.0f;
+      c->debug.wheel_pending_valid[i] = false;
+      c->debug.wheel_pending_torque_current[i] = 0.0f;
+      c->debug.wheel_last_set_torque_nm[i] = 0.0f;
+      c->debug.wheel_last_set_torque_ret[i] = DEVICE_ERR;
+      c->debug.wheel_last_commit_ret[i] = DEVICE_ERR;
+      c->debug.wheel_last_commit_skipped[i] = false;
+      LowPassFilter2p_Reset(&c->filter.torque[i], 0.0f);
     }
     LowPassFilter2p_Init(&c->filter.chassis_vel[0], target_freq, param->low_pass_cutoff_freq.in);
     LowPassFilter2p_Init(&c->filter.chassis_vel[1], target_freq, param->low_pass_cutoff_freq.in);
     LowPassFilter2p_Init(&c->filter.chassis_vel[2], target_freq, param->low_pass_cutoff_freq.in);
     // 初始化跟随 PID 与混控器
-    Mixer_Config_t mixer_config = {0};
-    mixer_config.mecanum.wheelbase_m = c->param->physical.wheelbase_m;
-    mixer_config.mecanum.trackwidth_m = c->param->physical.trackwidth_m;
-    mixer_config.output_scale = 1.0f;
-    mixer_config.normalize_output = (mixer_mode == MIXER_MECANUM) ? false : true;
     PID_Init(&c->pid.follow, KPID_MODE_CALC_D, target_freq, &param->pid.follow_pid_param);
-    Mixer_Init(&c->mixer, mixer_mode, &mixer_config);
+    Mixer_Init(&c->mixer, mixer_mode);
+    c->mixer.mecanum_wz_scale = Chassis_GetMecanumWzScale(c);
     // 清零车体速度命令与输出
     c->move_vec.vx = c->move_vec.vy = c->move_vec.wz = 0.0f;
     ResetMoveVector(&c->feedback.chassis_vel);
@@ -244,8 +293,9 @@ int8_t Chassis_Init(Chassis_t *c, const Chassis_Params_t *param,
 		}
   // 注册底盘 RM 电机
     for (int i = 0; i < c->num_wheel; i++) {
-      ChassisMotorHandle(c, i) = MotorFactory::CreateRm(c->param->motor_param[i], kRm3508, ChassisInstallSpec(c, i));
-      if (!ChassisMotorHandle(c, i)) {
+      const auto motor_config = MotorInstanceConfig<mrobot::motor::MotorKind::RM>::FromVendorParam(c->param->motor_param[i]);
+      ChassisMotorHandle(c, i) = MotorFactory::Create<mrobot::motor::MotorKind::RM, mrobot::motor::MotorModel::M3508>(motor_config, ChassisInstallSpec(c, i));
+      if (ChassisMotorHandle(c, i) == nullptr) {
         return CHASSIS_ERR_NULL;
       }
 
@@ -257,7 +307,7 @@ int8_t Chassis_Init(Chassis_t *c, const Chassis_Params_t *param,
         .velocity_to_torque_limit = param->controller.velocity_to_torque_limit,
       };
 
-      ChassisController(c, i) = new (g_chassis_controller_storage[i]) MotorController(*ChassisMotorHandle(c, i), controller_config);
+      ChassisController(c, i) = new (g_chassis_controller_storage[i]) ChassisMotorController(*ChassisMotorHandle(c, i), controller_config);
       if (ChassisController(c, i)->Register() != DEVICE_OK) {
         return CHASSIS_ERR_NULL;
       }
@@ -307,6 +357,8 @@ int8_t Chassis_Control(Chassis_t *c, const Chassis_CMD_t *c_cmd, uint32_t now) {
 		}
 		if (c->dt < 0.0005f) c->dt = 0.0005f;   
 		if (c->dt > 0.050f)  c->dt = 0.050f;    
+    c->debug.dt_s = c->dt;
+    c->debug.cmd_vec_raw = c_cmd->ctrl_vec;
     // 设置工作模式
     Chassis_SetMode(c, c_cmd->mode, now);
     // 计算车体平移速度命令
@@ -322,17 +374,20 @@ int8_t Chassis_Control(Chassis_t *c, const Chassis_CMD_t *c_cmd, uint32_t now) {
             float beta = c->feedback.encoder_gimbalYawMotor - c->mech_zero;
             float cosb = cosf(beta);
             float sinb = sinf(beta);
+          c->debug.gimbal_beta_rad = beta;
             c->move_vec.vx = cosb * c_cmd->ctrl_vec.vx - sinb * c_cmd->ctrl_vec.vy;
             c->move_vec.vy = sinb * c_cmd->ctrl_vec.vx + cosb * c_cmd->ctrl_vec.vy;
             break;
         }
     }
+      c->debug.cmd_vec_body.vx = c->move_vec.vx;
+      c->debug.cmd_vec_body.vy = c->move_vec.vy;
     // 计算车体角速度命令
     switch (c->mode) {
         case CHASSIS_MODE_RELAX:
         case CHASSIS_MODE_BREAK:
         case CHASSIS_MODE_INDEPENDENT:
-						c->move_vec.wz = c_cmd->ctrl_vec.wz;
+						c->move_vec.wz = (c->mode == CHASSIS_MODE_BREAK) ? 0.0f : c_cmd->ctrl_vec.wz;
             break;
         case CHASSIS_MODE_OPEN:
 						c->move_vec.wz = c_cmd->ctrl_vec.wz;
@@ -350,19 +405,26 @@ int8_t Chassis_Control(Chassis_t *c, const Chassis_CMD_t *c_cmd, uint32_t now) {
             c->move_vec.wz = c->wz_multi * Chassis_CalcWz(CHASSIS_ROTOR_WZ_MIN,CHASSIS_ROTOR_WZ_MAX, now);
             break;
     }
+      c->debug.cmd_vec_body.wz = c->move_vec.wz;
+      c->debug.rotor_wz_cmd = (c->mode == CHASSIS_MODE_ROTOR) ? c->move_vec.wz : 0.0f;
       Chassis_LimitMoveVector(c);
+      c->debug.cmd_vec_limited = c->move_vec;
 
       // 统一通过 Mixer_Apply 输出；麦轮真实单位逆解已收敛到 mixer 内部
       if (Mixer_Apply(&c->mixer, &c->move_vec, c->setpoint.wheel_speed,
-                      c->num_wheel) != 0) {
+              c->num_wheel, 1.0f) != 0) {
         return CHASSIS_ERR_TYPE;
       }
 
 
     for (uint8_t i = 0; i < c->num_wheel; i++) {
         float rf = c->setpoint.wheel_speed[i]; /* 目标轮线速度，单位 m/s */
-        float fb = LowPassFilter2p_Apply(&c->filter.in[i], Chassis_GetWheelSpeedFeedback(c, i));
+				float raw_fb = Chassis_GetWheelSpeedFeedback(c, i);
+        float fb = Chassis_GetWheelSpeedFeedbackFiltered(c, i);
 				float out_torque;
+        c->debug.wheel_speed_ref_mps[i] = rf;
+        c->debug.wheel_speed_fdb_mps[i] = raw_fb;
+        c->debug.wheel_speed_fdb_filtered_mps[i] = fb;
         switch (c->mode) {
             case CHASSIS_MODE_BREAK:
             case CHASSIS_MODE_FOLLOW_GIMBAL:
@@ -380,38 +442,36 @@ int8_t Chassis_Control(Chassis_t *c, const Chassis_CMD_t *c_cmd, uint32_t now) {
                 break;
         }
 
+				c->debug.wheel_torque_pid_out[i] = out_torque;
 
-       // 当前底盘发送链路走的是 MOTOR_RM_SetOutput()，因此这里的 out.motor
-       // 实际语义应视为归一化输出指令，而不是物理力矩 N·m。
+
+       // 当前 out.motor 在新链路下表示目标输出力矩，单位 N·m。
          c->out.motor[i] = LowPassFilter2p_Apply(&c->filter.out[i], out_torque);
-				 Clip(&c->out.motor[i], -c->param->limit.max_current, c->param->limit.max_current);
+         Clip(&c->out.motor[i], -c->param->limit.max_torque_cmd, c->param->limit.max_torque_cmd);
+				 c->debug.wheel_torque_cmd_nm[i] = c->out.motor[i];
     }
 
-    /*
-     * 第二阶段：当前 chassis 已经自行完成速度环，直接把结果写到底层 RM 输出缓存。
-     * 不再在这里调用 MotorController::Update()，否则会再次尝试取新反馈，
-     * 在无新报文的周期上返回 DEVICE_ERR / DEVICE_ERR_NO_DEV，导致控制链抖动。
-     */
     for (uint8_t i = 0; i < c->num_wheel; i++) {
-      if (ChassisController(c, i) == nullptr || ChassisRmParam(c, i) == nullptr) {
+      if (ChassisController(c, i) == nullptr) {
         continue;
       }
 
       if (c->mode == CHASSIS_MODE_RELAX) {
-        ChassisController(c, i)->Relax();
-        c->out.motor[i] = 0.0f;
-        c->out.set_torque_ret[i] = DEVICE_OK;
+        c->out.set_torque_ret[i] = ChassisController(c, i)->Relax();
+        ChassisStoreProtocolDebug(c, i);
         c->out.controller_update_ret[i] = DEVICE_OK;
+        c->out.motor[i] = 0.0f;
         c->out.command_pending[i] = false;
         continue;
       }
 
-      c->out.set_torque_ret[i] = DEVICE_OK;
-      c->out.controller_update_ret[i] = MOTOR_RM_SetOutput(ChassisRmParam(c, i), c->out.motor[i]);
-      if (c->out.controller_update_ret[i] != DEVICE_OK) {
+      c->out.set_torque_ret[i] = ChassisController(c, i)->SetTorque(c->out.motor[i]);
+      ChassisStoreProtocolDebug(c, i);
+      if (c->out.set_torque_ret[i] != DEVICE_OK) {
         return CHASSIS_ERR;
       }
-      c->out.command_pending[i] = true;
+      c->out.controller_update_ret[i] = DEVICE_OK;
+      c->out.command_pending[i] = ChassisController(c, i)->HasPendingCommand();
     }
 
 		
@@ -426,15 +486,18 @@ void Chassis_Output(Chassis_t *c) {
     if (!c) 
 			return;
 
-    int8_t commit_ret = DEVICE_ERR_NULL;
-    if (c->num_wheel > 0 && ChassisRmParam(c, 0) != nullptr) {
-      commit_ret = MOTOR_RM_Ctrl(ChassisRmParam(c, 0));
-    }
-
     for (uint8_t i = 0; i < c->num_wheel; i++) {
-      c->out.commit_ret[i] = commit_ret;
-      c->out.command_pending[i] = false;
-      c->out.last_commit_ok[i] = (commit_ret == DEVICE_OK);
+      if (ChassisController(c, i) == nullptr) {
+        c->out.commit_ret[i] = DEVICE_ERR_NULL;
+        c->out.command_pending[i] = false;
+        c->out.last_commit_ok[i] = false;
+        continue;
+      }
+
+      c->out.commit_ret[i] = ChassisController(c, i)->CommitCommand();
+      c->out.command_pending[i] = ChassisController(c, i)->HasPendingCommand();
+      c->out.last_commit_ok[i] = (c->out.commit_ret[i] == DEVICE_OK);
+      ChassisStoreProtocolDebug(c, i);
     }
 }
 

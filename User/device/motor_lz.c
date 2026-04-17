@@ -79,6 +79,61 @@ static int8_t MOTOR_LZ_CreateCANManager(BSP_CAN_t can) {
     return DEVICE_OK;
 }
 
+static int8_t MOTOR_LZ_BindMotor(MOTOR_LZ_CANManager_t *manager, MOTOR_LZ_Param_t *param, MOTOR_LZ_t *motor) {
+    if (manager == NULL || param == NULL || motor == NULL) return DEVICE_ERR_NULL;
+    for (int i = 0; i < manager->motor_count; i++) {
+        if (manager->motors[i] && manager->motors[i]->param.motor_id == param->motor_id) {
+            return DEVICE_ERR;
+        }
+    }
+    if (manager->motor_count >= MOTOR_LZ_MAX_MOTORS) return DEVICE_ERR;
+    memset(motor, 0, sizeof(MOTOR_LZ_t));
+    memcpy(&motor->param, param, sizeof(MOTOR_LZ_Param_t));
+    motor->motor.reverse = param->reverse;
+    uint32_t original_feedback_id = MOTOR_LZ_BuildExtID(MOTOR_LZ_CMD_FEEDBACK, param->motor_id, param->host_id);
+    uint32_t parsed_feedback_id = MOTOR_LZ_IdParser(original_feedback_id, BSP_CAN_FRAME_EXT_DATA);
+    if (BSP_CAN_RegisterId(param->can, parsed_feedback_id, 3) != BSP_OK) {
+        return DEVICE_ERR;
+    }
+    manager->motors[manager->motor_count] = motor;
+    manager->motor_count++;
+    return DEVICE_OK;
+}
+
+static MOTOR_LZ_t* MOTOR_LZ_FindMotorById(const MOTOR_LZ_CANManager_t *manager, uint8_t motor_id) {
+    if (manager == NULL) return NULL;
+    for (int i = 0; i < manager->motor_count; i++) {
+        MOTOR_LZ_t *motor = manager->motors[i];
+        if (motor && motor->param.motor_id == motor_id) {
+            return motor;
+        }
+    }
+    for (int i = 0; i < manager->external_motor_count; i++) {
+        MOTOR_LZ_t *motor = manager->external_motors[i];
+        if (motor && motor->param.motor_id == motor_id) {
+            return motor;
+        }
+    }
+    return NULL;
+}
+
+static int8_t MOTOR_LZ_BindExternalMotor(MOTOR_LZ_CANManager_t *manager, MOTOR_LZ_Param_t *param, MOTOR_LZ_t *motor) {
+    if (manager == NULL || param == NULL || motor == NULL) return DEVICE_ERR_NULL;
+    if (MOTOR_LZ_FindMotorById(manager, param->motor_id) != NULL) return DEVICE_ERR;
+    if (manager->external_motor_count >= MOTOR_LZ_MAX_MOTORS) return DEVICE_ERR;
+    memset(motor, 0, sizeof(MOTOR_LZ_t));
+    memcpy(&motor->param, param, sizeof(MOTOR_LZ_Param_t));
+    motor->motor.reverse = param->reverse;
+    uint32_t original_feedback_id = MOTOR_LZ_BuildExtID(MOTOR_LZ_CMD_FEEDBACK, param->motor_id, param->host_id);
+    uint32_t parsed_feedback_id = MOTOR_LZ_IdParser(original_feedback_id, BSP_CAN_FRAME_EXT_DATA);
+    if (BSP_CAN_RegisterId(param->can, parsed_feedback_id, 3) != BSP_OK) {
+        return DEVICE_ERR;
+    }
+    manager->external_motors[manager->external_motor_count] = motor;
+    manager->external_motor_count++;
+    return DEVICE_OK;
+}
+
 /**
  * @brief 构建扩展ID
  */
@@ -188,46 +243,18 @@ static void MOTOR_LZ_Decode(MOTOR_LZ_t *motor, BSP_CAN_Message_t *msg) {
     uint8_t fault_info = (id_data2 >> 8) & 0x3F;
     uint8_t mode_state = (id_data2 >> 14) & 0x03;
     motor->lz_feedback.motor_can_id = motor_can_id;
-    motor->lz_feedback.fault.under_voltage = (fault_info & 0x01) != 0;
-    motor->lz_feedback.fault.driver_fault = (fault_info & 0x02) != 0;
-    motor->lz_feedback.fault.over_temp = (fault_info & 0x04) != 0;
-    motor->lz_feedback.fault.encoder_fault = (fault_info & 0x08) != 0;
-    motor->lz_feedback.fault.stall_overload = (fault_info & 0x10) != 0;
-    motor->lz_feedback.fault.uncalibrated = (fault_info & 0x20) != 0;
-    motor->lz_feedback.state = (MOTOR_LZ_State_t)mode_state;
+    motor->lz_feedback.fault_bits = fault_info;
+    motor->lz_feedback.state_bits = mode_state;
 
-    // 反馈解码并自动反向
     uint16_t raw_angle = (uint16_t)((msg->data[0] << 8) | msg->data[1]);
-    float angle = MOTOR_LZ_RawToFloat(raw_angle, LZ_ANGLE_RANGE_RAD);
     uint16_t raw_velocity = (uint16_t)((msg->data[2] << 8) | msg->data[3]);
-    float velocity = MOTOR_LZ_RawToFloat(raw_velocity, LZ_VELOCITY_RANGE_RAD_S);
     uint16_t raw_torque = (uint16_t)((msg->data[4] << 8) | msg->data[5]);
-    float torque = MOTOR_LZ_RawToFloat(raw_torque, LZ_TORQUE_RANGE_NM);
-
-    // while (angle <0){
-    //     angle += M_2PI;
-    // }
-    // while (angle > M_2PI){
-    //     angle -= M_2PI;
-    // }
-    // 自动反向
-    if (motor->param.reverse) {
-        angle =  - angle;
-        velocity = -velocity;
-        torque = -torque;
-    }
-
-    motor->lz_feedback.current_angle = angle;
-    motor->lz_feedback.current_velocity = velocity;
-    motor->lz_feedback.current_torque = torque;
-
     uint16_t raw_temp = (uint16_t)((msg->data[6] << 8) | msg->data[7]);
-    motor->lz_feedback.temperature = (float)raw_temp / LZ_TEMP_SCALE;
 
-    motor->motor.feedback.rotor_abs_angle = angle;
-    motor->motor.feedback.rotor_speed = velocity; 
-    motor->motor.feedback.torque_current = torque;
-    motor->motor.feedback.temp = (int8_t)motor->lz_feedback.temperature;
+    motor->motor.raw_feedback.raw_angle = raw_angle;
+    motor->motor.raw_feedback.raw_speed = (int16_t)raw_velocity;
+    motor->motor.raw_feedback.raw_current = (int16_t)raw_torque;
+    motor->motor.raw_feedback.raw_temp = (uint8_t)(raw_temp / LZ_TEMP_SCALE);
     motor->motor.header.online = true;
     motor->motor.header.last_online_time = BSP_TIME_Get();
 }
@@ -251,41 +278,13 @@ int8_t MOTOR_LZ_Register(MOTOR_LZ_Param_t *param) {
     MOTOR_LZ_CANManager_t *manager = MOTOR_LZ_GetCANManager(param->can);
     if (manager == NULL) return DEVICE_ERR;
     
-    // 检查是否已注册
-    for (int i = 0; i < manager->motor_count; i++) {
-        if (manager->motors[i] && manager->motors[i]->param.motor_id == param->motor_id) {
-            return DEVICE_ERR; // 已注册
-        }
-    }
-    
-    // 检查数量
-    if (manager->motor_count >= MOTOR_LZ_MAX_MOTORS) return DEVICE_ERR;
-    
-    // 创建新电机实例
     MOTOR_LZ_t *new_motor = (MOTOR_LZ_t*)BSP_Malloc(sizeof(MOTOR_LZ_t));
     if (new_motor == NULL) return DEVICE_ERR;
-    
-    memcpy(&new_motor->param, param, sizeof(MOTOR_LZ_Param_t));
-    memset(&new_motor->motor, 0, sizeof(MOTOR_t));
-    memset(&new_motor->lz_feedback, 0, sizeof(MOTOR_LZ_Feedback_t));
-    memset(&new_motor->motion_param, 0, sizeof(MOTOR_LZ_MotionParam_t));
-    
-    new_motor->motor.reverse = param->reverse;
-    
-    // 注册CAN接收ID - 使用解析后的反馈数据ID
-    // 构建反馈数据的原始扩展ID
-    // 反馈数据：data2包含电机ID(bit8~15)，target_id是主机ID
-    uint32_t original_feedback_id = MOTOR_LZ_BuildExtID(MOTOR_LZ_CMD_FEEDBACK, param->motor_id, param->host_id);
-    // 通过ID解析器得到解析后的ID
-    uint32_t parsed_feedback_id = MOTOR_LZ_IdParser(original_feedback_id, BSP_CAN_FRAME_EXT_DATA);
-    
-    if (BSP_CAN_RegisterId(param->can, parsed_feedback_id, 3) != BSP_OK) {
+    const int8_t ret = MOTOR_LZ_BindMotor(manager, param, new_motor);
+    if (ret != DEVICE_OK) {
         BSP_Free(new_motor);
-        return DEVICE_ERR;
+        return ret;
     }
-    
-    manager->motors[manager->motor_count] = new_motor;
-    manager->motor_count++;
     return DEVICE_OK;
 }
 
@@ -295,21 +294,15 @@ int8_t MOTOR_LZ_Update(MOTOR_LZ_Param_t *param) {
     MOTOR_LZ_CANManager_t *manager = MOTOR_LZ_GetCANManager(param->can);
     if (manager == NULL) return DEVICE_ERR_NO_DEV;
     
-    for (int i = 0; i < manager->motor_count; i++) {
-        MOTOR_LZ_t *motor = manager->motors[i];
-        if (motor && motor->param.motor_id == param->motor_id) {
-            // 获取反馈数据 - 使用解析后的ID
-            uint32_t original_feedback_id = MOTOR_LZ_BuildExtID(MOTOR_LZ_CMD_FEEDBACK, param->motor_id, param->host_id);
-            uint32_t parsed_feedback_id = MOTOR_LZ_IdParser(original_feedback_id, BSP_CAN_FRAME_EXT_DATA);
-            BSP_CAN_Message_t msg;
-            
-            while (BSP_CAN_GetMessage(param->can, parsed_feedback_id, &msg, 0) == BSP_OK) {
-                MOTOR_LZ_Decode(motor, &msg);
-            }
-            return DEVICE_OK;
-        }
+    MOTOR_LZ_t *motor = MOTOR_LZ_FindMotorById(manager, param->motor_id);
+    if (motor == NULL) return DEVICE_ERR_NO_DEV;
+    uint32_t original_feedback_id = MOTOR_LZ_BuildExtID(MOTOR_LZ_CMD_FEEDBACK, param->motor_id, param->host_id);
+    uint32_t parsed_feedback_id = MOTOR_LZ_IdParser(original_feedback_id, BSP_CAN_FRAME_EXT_DATA);
+    BSP_CAN_Message_t msg;
+    while (BSP_CAN_GetMessage(param->can, parsed_feedback_id, &msg, 0) == BSP_OK) {
+        MOTOR_LZ_Decode(motor, &msg);
     }
-    return DEVICE_ERR_NO_DEV;
+    return DEVICE_OK;
 }
 
 int8_t MOTOR_LZ_UpdateAll(void) {
@@ -320,6 +313,14 @@ int8_t MOTOR_LZ_UpdateAll(void) {
         
         for (int i = 0; i < manager->motor_count; i++) {
             MOTOR_LZ_t *motor = manager->motors[i];
+            if (motor) {
+                if (MOTOR_LZ_Update(&motor->param) != DEVICE_OK) {
+                    ret = DEVICE_ERR;
+                }
+            }
+        }
+        for (int i = 0; i < manager->external_motor_count; i++) {
+            MOTOR_LZ_t *motor = manager->external_motors[i];
             if (motor) {
                 if (MOTOR_LZ_Update(&motor->param) != DEVICE_OK) {
                     ret = DEVICE_ERR;
@@ -409,13 +410,7 @@ MOTOR_LZ_t* MOTOR_LZ_GetMotor(MOTOR_LZ_Param_t *param) {
     MOTOR_LZ_CANManager_t *manager = MOTOR_LZ_GetCANManager(param->can);
     if (manager == NULL) return NULL;
     
-    for (int i = 0; i < manager->motor_count; i++) {
-        MOTOR_LZ_t *motor = manager->motors[i];
-        if (motor && motor->param.motor_id == param->motor_id) {
-            return motor;
-        }
-    }
-    return NULL;
+    return MOTOR_LZ_FindMotorById(manager, param->motor_id);
 }
 
 int8_t MOTOR_LZ_Relax(MOTOR_LZ_Param_t *param) {
@@ -437,4 +432,26 @@ static MOTOR_LZ_Feedback_t* MOTOR_LZ_GetFeedback(MOTOR_LZ_Param_t *param) {
         return &motor->lz_feedback;
     }
     return NULL;
+}
+
+/* -------------------------------------------------------------------------- */
+/* 为 C++ motor 封装层提供服务的 C 接口函数（当前主路径为 protocol/motor_t） */
+/* -------------------------------------------------------------------------- */
+
+/* C++ 驱动层将外部持有的 vendor instance 绑定到 C 管理器。 */
+int8_t MOTOR_LZ_AttachExternal(MOTOR_LZ_Param_t *param, MOTOR_LZ_t *external_motor) {
+    if (param == NULL || external_motor == NULL) return DEVICE_ERR_NULL;
+    if (MOTOR_LZ_CreateCANManager(param->can) != DEVICE_OK) return DEVICE_ERR;
+    MOTOR_LZ_CANManager_t *manager = MOTOR_LZ_GetCANManager(param->can);
+    if (manager == NULL) return DEVICE_ERR;
+    return MOTOR_LZ_BindExternalMotor(manager, param, external_motor);
+}
+
+/* C++ 驱动层读取底层原始反馈缓存。 */
+const MOTOR_LZ_RawFeedback_t* MOTOR_LZ_GetRawFeedback(MOTOR_LZ_Param_t *param) {
+    MOTOR_LZ_t *motor = MOTOR_LZ_GetMotor(param);
+    if (motor == NULL) {
+        return NULL;
+    }
+    return &motor->motor.raw_feedback;
 }

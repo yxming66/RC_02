@@ -49,6 +49,28 @@ auto_ctrl_step_status_e AutoCtrlStep_Run(auto_ctrl_t *ctrl,
       }
       return AUTO_CTRL_STEP_STATUS_RUNNING;
 
+    case AUTO_CTRL_STEP_WAIT_FRONT_PHOTO:
+      if (ctrl->feedback.front_photo_triggered) {
+        return AUTO_CTRL_STEP_STATUS_DONE;
+      }
+      if (step->timeout_ms > 0u &&
+          (now_ms - runtime->enter_time_ms) >= step->timeout_ms) {
+        ctrl->fault = AUTO_CTRL_FAULT_SENSOR_INVALID;
+        return AUTO_CTRL_STEP_STATUS_FAIL;
+      }
+      return AUTO_CTRL_STEP_STATUS_RUNNING;
+
+    case AUTO_CTRL_STEP_WAIT_REAR_PHOTO:
+      if (ctrl->feedback.rear_photo_triggered) {
+        return AUTO_CTRL_STEP_STATUS_DONE;
+      }
+      if (step->timeout_ms > 0u &&
+          (now_ms - runtime->enter_time_ms) >= step->timeout_ms) {
+        ctrl->fault = AUTO_CTRL_FAULT_SENSOR_INVALID;
+        return AUTO_CTRL_STEP_STATUS_FAIL;
+      }
+      return AUTO_CTRL_STEP_STATUS_RUNNING;
+
     case AUTO_CTRL_STEP_NONE:
     default:
       return AUTO_CTRL_STEP_STATUS_FAIL;

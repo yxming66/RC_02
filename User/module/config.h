@@ -15,11 +15,27 @@ extern "C" {
 #include "module/chassis.h"
 #include "module/pole.h"
 #include "module/cmd/cmd.h"
-#include "module/arm.h"
 #include "module/rod.h"
+#ifdef __cplusplus
+}
+#include "module/arm.h"
+extern "C" {
+#else
+#include "module/arm.h"
+#endif
 typedef struct {
     Chassis_Params_t chassis_param;
     Pole_Params_t pole_param;
+    struct {
+        float climb_forward_speed;
+        float climb_forward_kick_speed;
+        float climb_rear_retract_speed;
+        uint32_t pole_extend_settle_ms;
+        uint32_t front_photo_timeout_ms;
+        uint32_t front_retract_settle_ms;
+        uint32_t rear_photo_timeout_ms;
+        uint32_t rear_retract_move_ms;
+    } auto_ctrl_param;
     CMD_Config_t cmd_param;
     Arm_Params_t arm_param;
     Rod_Params_t rod_param;

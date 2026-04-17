@@ -16,10 +16,19 @@ extern "C" {
 #include "device/motor_dm.h"
 
 #ifdef __cplusplus
-#include "device/motors/motor.hpp"
-#include "device/motors/motor_packages/self_test/motor_self_test.hpp"
-#include "device/motors/motor_packages/limit_selfLearning/dual_limit/motor_dual_limit_calibration.hpp"
-#include "device/motors/motor_packages/limit_selfLearning/single_limit/motor_single_limit_calibration.hpp"
+}
+
+#include "device/motor/motor.hpp"
+
+namespace mrobot {
+namespace motor {
+template <MotorKind Kind, MotorModel Model>
+class MotorT;
+using RmM3508Motor = MotorT<MotorKind::RM, MotorModel::M3508>;
+}
+}
+
+extern "C" {
 #endif
 
 
@@ -151,21 +160,12 @@ typedef struct {
 
   struct {
     bool cilibrate;
-    bool self_test_started;
-    bool soft_limit_started;
     Arm_Joint3CaliMode_t cali_mode;
-    bool zero_limit_travel_started;
     float user_travel_rad;
     float rmmotor_min;
     float rmmotor_max;
 #ifdef __cplusplus
-    mrobot::Motor *motor;
-    void *self_test_storage;
-    void *dual_limit_storage;
-    void *single_limit_storage;
-    mrobot::MotorSelfTest *self_test;
-    mrobot::MotorDualLimitCalibration *dual_limit;
-    mrobot::MotorSingleLimitCalibration *single_limit;
+  mrobot::motor::RmM3508Motor *motor;
 #endif
   } joint3cil;
 

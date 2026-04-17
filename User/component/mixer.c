@@ -17,6 +17,7 @@ int8_t Mixer_Init(Mixer_t *mixer, Mixer_Mode_t mode) {
   if (mixer == NULL) return -1;
 
   mixer->mode = mode;
+  mixer->mecanum_wz_scale = 1.0f;
   return 0;
 }
 
@@ -37,10 +38,11 @@ int8_t Mixer_Apply(Mixer_t *mixer, MoveVector_t *move_vec, float *out,
   switch (mixer->mode) {
     case MIXER_MECANUM:
       if (len == 4) {
-        out[0] = move_vec->vx - move_vec->vy + move_vec->wz;
-        out[1] = move_vec->vx + move_vec->vy + move_vec->wz;
-        out[2] = -move_vec->vx + move_vec->vy + move_vec->wz;
-        out[3] = -move_vec->vx - move_vec->vy + move_vec->wz;
+        const float wz = mixer->mecanum_wz_scale * move_vec->wz;
+        out[0] = move_vec->vx - move_vec->vy + wz;
+        out[1] = move_vec->vx + move_vec->vy + wz;
+        out[2] = -move_vec->vx + move_vec->vy + wz;
+        out[3] = -move_vec->vx - move_vec->vy + wz;
       } else {
         goto error;
       }
@@ -73,16 +75,6 @@ int8_t Mixer_Apply(Mixer_t *mixer, MoveVector_t *move_vec, float *out,
       goto error;
   }
 
-  float abs_max = 0.f;
-  for (int8_t i = 0; i < len; i++) {
-    const float abs_val = fabsf(out[i]);
-    abs_max = (abs_val > abs_max) ? abs_val : abs_max;
-  }
-  if (abs_max > 1.f) {
-    for (int8_t i = 0; i < len; i++) {
-      out[i] /= abs_max;
-    }
-  }
   for (int8_t i = 0; i < len; i++) {
     out[i] *= scale;
   }

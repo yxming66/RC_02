@@ -25,7 +25,7 @@ typedef struct {
 
 /* Private variables -------------------------------------------------------- */
 static const BSP_PWM_Config_t PWM_Map[BSP_PWM_NUM] = {
-  {&htim4, TIM_CHANNEL_3},
+  {&htim12, TIM_CHANNEL_2},
 };
 
 /* Private function  -------------------------------------------------------- */

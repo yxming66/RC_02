@@ -39,6 +39,7 @@ typedef enum {
 
 typedef struct {
   Mixer_Mode_t mode;
+  float mecanum_wz_scale;
 } Mixer_t; /* 混合器主结构体 */
 
 /* USER STRUCT BEGIN */

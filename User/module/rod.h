@@ -10,6 +10,7 @@ extern "C" {
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "main.h"
 #include "device/motor_dm.h"
 
 #define ROD_OK (0)
@@ -21,6 +22,9 @@ extern "C" {
 #define ROD_PIT_COM_DISTANCE_M (0.10f)
 #define ROD_PIT_GRAVITY_DIFF_RAD (0.001f)
 #define ROD_PIT_GRAVITY_SIGN (1.0f)
+#define ROD_PIT_I_GAIN (0.35f)
+#define ROD_PIT_I_LIMIT (1.2f)
+#define ROD_PIT_I_ACTIVE_ERR_RAD (0.25f)
 
 typedef enum {
   ROD_MODE_RELAX = 0,
@@ -31,7 +35,10 @@ typedef enum {
 typedef enum {
   ROD_POSE_DOWN = 0,
   ROD_POSE_UP,
+  ROD_POSE_GRIP,
+  ROD_POSE_LIFT,
   ROD_POSE_FLIP,
+  ROD_POSE_READY,
   ROD_POSE_NONE,
 } Rod_Pose_t;
 
@@ -48,6 +55,8 @@ typedef struct {
   struct {
     float pit_down_angle;
     float pit_up_angle;
+    float pit_grip_angle;
+    float pit_lift_angle;
     float rol_home_angle;
     float rol_flip_angle;
   } pose;
@@ -55,12 +64,17 @@ typedef struct {
     float pit_arrive_threshold;
     float rol_arrive_threshold;
     float sequence_timeout;
+    float grip_open_wait_time;
     float grip_wait_time;
+    float rol_flip_wait_time;
     float pit_kp;
     float pit_kd;
     float rol_kp;
     float rol_kd;
-    float max_vel;
+    float pit_max_vel;
+    float pit_max_acc;
+    float rol_max_vel;
+    float rol_max_acc;
   } limit;
 } Rod_Params_t;
 
@@ -81,11 +95,24 @@ typedef struct {
   const Rod_Params_t *param;
   Rod_Mode_t mode;
   Rod_Pose_t pose;
+  Rod_Pose_t setpoint_pose;
 
   struct {
     float pit_angle;
     float rol_angle;
   } setpoint;
+
+  struct {
+    float pit_angle;
+    float rol_angle;
+    float pit_vel;
+    float rol_vel;
+    bool initialized;
+  } traj;
+
+  struct {
+    float pit_err_i;
+  } comp;
 
   struct {
     bool initialized;

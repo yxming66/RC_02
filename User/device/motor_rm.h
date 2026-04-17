@@ -50,6 +50,8 @@ typedef struct {
 
 typedef MOTOR_Feedback_t MOTOR_RM_Feedback_t;
 
+typedef MOTOR_RawFeedback_t MOTOR_RM_RawFeedback_t;
+
 typedef struct {
     MOTOR_RM_Param_t param;
     MOTOR_RM_Feedback_t feedback;
@@ -66,7 +68,31 @@ typedef struct {
     MOTOR_RM_MsgOutput_t output_msg;
     MOTOR_RM_t *motors[MOTOR_RM_MAX_MOTORS];
     uint8_t motor_count;
+  MOTOR_RM_t *external_motors[MOTOR_RM_MAX_MOTORS];
+  uint8_t external_motor_count;
 } MOTOR_RM_CANManager_t;
+
+typedef struct {
+    uint8_t valid;
+    BSP_CAN_t can;
+    uint16_t source_motor_id;
+    uint16_t tx_frame_id;
+    int8_t logical_index;
+    int16_t requested_current;
+    int16_t grouped_output[MOTOR_RM_MAX_MOTORS];
+    uint8_t tx_data[8];
+} MOTOR_RM_TxDebug_t;
+
+  typedef struct {
+    uint8_t valid;
+    BSP_CAN_t can;
+    uint16_t tx_frame_id;
+    int8_t logical_index;
+    int16_t output_value;
+    uint8_t tx_data[8];
+  } MOTOR_RM_SlotTxDebug_t;
+
+  extern MOTOR_RM_SlotTxDebug_t g_motor_rm_slot_tx_debug[MOTOR_RM_MAX_MOTORS];
 
 /* Exported functions prototypes -------------------------------------------- */
 
@@ -78,6 +104,14 @@ typedef struct {
 int8_t MOTOR_RM_Register(MOTOR_RM_Param_t *param);
 
 /**
+ * @brief 将外部分配的 RM 电机实例附着到底层驱动
+ * @param param 电机参数
+ * @param external_motor 外部实例存储，生命周期需覆盖整个使用期
+ * @return 设备状态码
+ */
+int8_t MOTOR_RM_AttachExternal(MOTOR_RM_Param_t *param, MOTOR_RM_t *external_motor);
+
+/**
  * @brief 更新指定电机数据
  * @param param 电机参数
  * @return 
@@ -85,12 +119,25 @@ int8_t MOTOR_RM_Register(MOTOR_RM_Param_t *param);
 int8_t MOTOR_RM_Update(MOTOR_RM_Param_t *param);
 
 /**
- * @brief 设置一个电机的输出
+ * @brief 设置一个电机的归一化输出（底层兼容接口）
  * @param param 电机参数
  * @param value 输出值，范围[-1.0, 1.0]
+ * @note 这是底层发送接口，保留给旧代码或直接比例输出场景使用。
+ *       C++ 电机驱动的力矩控制链路不应直接调用它，而应优先使用
+ *       MOTOR_RM_SetTorqueCurrent()，先完成“输出轴力矩 -> 转子侧电流”的物理量换算。
  * @return 
  */
 int8_t MOTOR_RM_SetOutput(MOTOR_RM_Param_t *param, float value);
+
+/**
+ * @brief 设置一个电机的转子侧电流命令（C++ 力矩控制主入口）
+ * @param param 电机参数
+ * @param current_a 转子侧目标电流，单位 A
+ * @note C++ RM 驱动会先将目标输出轴力矩按转矩常数、减速比、外部传动比
+ *       换算为转子侧电流（A），本接口再统一完成 A -> RM raw 指令值 的换算。
+ * @return
+ */
+int8_t MOTOR_RM_SetTorqueCurrent(MOTOR_RM_Param_t *param, float current_a);
 
 /**
  * @brief 发送控制命令到电机，注意一个CAN可以控制多个电机，所以只需要发送一次即可
@@ -126,6 +173,12 @@ int8_t MOTOR_RM_Offine(MOTOR_RM_Param_t *param);
  * @return 
  */
 int8_t MOTOR_RM_UpdateAll(void);
+
+const MOTOR_RM_RawFeedback_t* MOTOR_RM_GetRawFeedback(MOTOR_RM_Param_t *param);
+
+const MOTOR_RM_TxDebug_t* MOTOR_RM_GetTxDebug(void);
+
+const MOTOR_RM_SlotTxDebug_t* MOTOR_RM_GetSlotTxDebug(uint8_t logical_index);
 
 #ifdef __cplusplus
 }

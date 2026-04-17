@@ -49,7 +49,7 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user sources here
     # User/bsp sources
-    User/bsp/can.c
+    User/bsp/fdcan.c
     User/bsp/mm.c
     User/bsp/time.c
     User/bsp/uart.c
@@ -71,15 +71,23 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     User/device/motor_rm.c
     User/device/motor_dm.c
     User/device/motor_lz.c
-    User/device/motors/motor.cpp
-    User/device/motors/motor_packages/self_test/motor_self_test.cpp
-    User/device/motors/motor_packages/limit_selfLearning/dual_limit/motor_dual_limit_calibration.cpp
-    User/device/motors/motor_packages/limit_selfLearning/single_limit/motor_single_limit_calibration.cpp
+    User/device/motor/factory/motor_factory.cpp
+    User/device/motor/protocol/rm_protocol.cpp
+    User/device/motor/protocol/dm_protocol.cpp
+    User/device/motor/protocol/lz_protocol.cpp
+    User/device/motor/packages/controller/motor_controller.cpp
     # User/module sources
-    User/module/chassis.c
+    User/module/chassis.cpp
     User/module/pole.c
     User/module/arm.cpp
     User/module/rod.c
+    User/module/autoCtrlAPI/api/auto_ctrl_api.c
+    User/module/autoCtrlAPI/core/auto_ctrl_math.c
+    User/module/autoCtrlAPI/primitive/auto_ctrl_primitive.c
+    User/module/autoCtrlAPI/step/auto_ctrl_step.c
+    User/module/autoCtrlAPI/template/auto_ctrl_template_runner.c
+    User/module/autoCtrlAPI/transition/auto_ctrl_transition.c
+    User/module/autoCtrlAPI/transition/auto_ctrl_zone.c
     # User/module/cmd sources
     User/module/cmd/cmd.c
     User/module/cmd/cmd_adapter.c

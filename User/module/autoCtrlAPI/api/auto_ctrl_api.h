@@ -19,6 +19,8 @@ typedef struct {
   float sick_right_cm;
   float sick_rear_cm;
   bool bottom_photo_triggered;
+  bool front_photo_triggered;
+  bool rear_photo_triggered;
 } auto_ctrl_feedback_t;
 
 typedef struct {

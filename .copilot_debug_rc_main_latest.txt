@@ -1,0 +1,255 @@
+﻿/*
+    rc_main Task
+    
+*/
+
+/* Includes ----------------------------------------------------------------- */
+#include "task/user_task.h"
+/* USER INCLUDE BEGIN */
+#include "bsp/uart.h"
+#include "device/dr16.h"
+#include "module/chassis.h"
+#include "module/pole.h"
+#include "module/arm.h"
+#include "module/rod.h"
+#include "module/config.h"
+/* USER INCLUDE END */
+
+/* Private typedef ---------------------------------------------------------- */
+/* Private define ----------------------------------------------------------- */
+/* Private macro ------------------------------------------------------------ */
+/* Private variables -------------------------------------------------------- */
+/* USER STRUCT BEGIN */
+DR16_t dr16;
+static Chassis_CMD_t chassis_cmd;
+static Pole_CMD_t pole_cmd;
+static DR16_SwitchPos_t last_sw_l = DR16_SW_ERR;  /* 璁板綍宸︽嫧鏉嗕笂涓€娆＄姸鎬?*/
+static DR16_SwitchPos_t last_sw_r = DR16_SW_ERR;  /* 璁板綍鍙虫嫧鏉嗕笂涓€娆＄姸鎬?*/
+static Arm_CMD_t arm_cmd;
+static Rod_CMD_t rod_cmd;
+extern bool reset; 
+
+static void Rc_SetRodRelax(void) {
+  rod_cmd.mode = ROD_MODE_RELAX;
+  rod_cmd.pose = ROD_POSE_DOWN;
+  rod_cmd.sequence_trigger = false;
+  rod_cmd.grip_done = false;
+}
+
+static void Rc_SetPoleManual(float left, float right) {
+  pole_cmd.mode = POLE_MODE_ACTIVE;
+  pole_cmd.lift[0] = left;
+  pole_cmd.lift[1] = right;
+  pole_cmd.auto_target_enable[0] = false;
+  pole_cmd.auto_target_enable[1] = false;
+  pole_cmd.auto_target_lift[0] = 0.0f;
+  pole_cmd.auto_target_lift[1] = 0.0f;
+  pole_cmd.auto_lift_speed[0] = 0.0f;
+  pole_cmd.auto_lift_speed[1] = 0.0f;
+}
+
+static void Rc_SetPoleAuto(float left_target, float right_target) {
+  pole_cmd.mode = POLE_MODE_ACTIVE;
+  pole_cmd.lift[0] = 0.0f;
+  pole_cmd.lift[1] = 0.0f;
+  pole_cmd.auto_target_enable[0] = true;
+  pole_cmd.auto_target_enable[1] = true;
+  pole_cmd.auto_target_lift[0] = left_target;
+  pole_cmd.auto_target_lift[1] = right_target;
+  pole_cmd.auto_lift_speed[0] = 0.0f;
+  pole_cmd.auto_lift_speed[1] = 0.0f;
+}
+/* USER STRUCT END */
+
+/* Private function --------------------------------------------------------- */
+/* Exported functions ------------------------------------------------------- */
+void Task_rc_main(void *argument) {
+  (void)argument; /* 鏈娇鐢╝rgument锛屾秷闄よ鍛?*/
+
+  
+  /* 璁＄畻浠诲姟杩愯鍒版寚瀹氶鐜囬渶瑕佺瓑寰呯殑tick鏁?*/
+  const uint32_t delay_tick = osKernelGetTickFreq() / RC_MAIN_FREQ;
+
+  osDelay(RC_MAIN_INIT_DELAY); /* 寤舵椂涓€娈垫椂闂村啀寮€鍚换鍔?*/
+
+  uint32_t tick = osKernelGetTickCount(); /* 鎺у埗浠诲姟杩愯棰戠巼鐨勮鏃?*/
+  /* USER CODE INIT BEGIN */
+  DR16_Init(&dr16);
+  DR16_StartDmaRecv(&dr16);  // 绔嬪嵆鍚姩绗竴娆℃帴鏀?  /* USER CODE INIT END */
+  
+  while (1) {
+    tick += delay_tick; /* 璁＄畻涓嬩竴涓敜閱掓椂鍒?*/
+    /* USER CODE BEGIN */
+        // 鍚姩涓嬩竴娆MA鎺ユ敹
+    DR16_StartDmaRecv(&dr16);
+    // 绛夊緟DMA鎺ユ敹瀹屾垚
+    if (DR16_WaitDmaCplt(100)) {
+      DR16_ParseData(&dr16);
+    } else {
+      DR16_Offline(&dr16);
+    }
+
+    if (!dr16.header.online || dr16.data.sw_l == DR16_SW_UP) {
+      pole_cmd.mode = POLE_MODE_RELAX;
+      pole_cmd.lift[0] = 0.0f;
+      pole_cmd.lift[1] = 0.0f;
+      pole_cmd.auto_target_enable[0] = false;
+      pole_cmd.auto_target_enable[1] = false;
+      pole_cmd.auto_target_lift[0] = 0.0f;
+      pole_cmd.auto_target_lift[1] = 0.0f;
+      pole_cmd.auto_lift_speed[0] = 0.0f;
+      pole_cmd.auto_lift_speed[1] = 0.0f;
+
+      switch (dr16.data.sw_r) {
+        case DR16_SW_UP:
+          chassis_cmd.mode = CHASSIS_MODE_INDEPENDENT;
+          chassis_cmd.ctrl_vec.vx = dr16.data.ch_r_x;
+          chassis_cmd.ctrl_vec.vy = dr16.data.ch_r_y;
+          chassis_cmd.ctrl_vec.wz = dr16.data.ch_l_x;
+          Rc_SetPoleManual(dr16.data.ch_l_y, dr16.data.ch_l_y);
+          break;
+        case DR16_SW_MID:
+          chassis_cmd.mode = CHASSIS_MODE_INDEPENDENT;
+          chassis_cmd.ctrl_vec.vx = dr16.data.ch_r_x;
+          chassis_cmd.ctrl_vec.vy = dr16.data.ch_r_y;
+          chassis_cmd.ctrl_vec.wz = 0.0f;
+          Rc_SetPoleManual(dr16.data.ch_l_y, dr16.data.ch_l_x);
+          break;
+        case DR16_SW_DOWN:
+          chassis_cmd.mode = CHASSIS_MODE_RELAX;
+          chassis_cmd.ctrl_vec.vx = 0.0f;
+          chassis_cmd.ctrl_vec.vy = 0.0f;
+          chassis_cmd.ctrl_vec.wz = 0.0f;
+          Rc_SetPoleManual(0.0f, 0.0f);
+          break;
+        default:
+          chassis_cmd.mode = CHASSIS_MODE_RELAX;
+          chassis_cmd.ctrl_vec.vx = 0.0f;
+          chassis_cmd.ctrl_vec.vy = 0.0f;
+          chassis_cmd.ctrl_vec.wz = 0.0f;
+          Rc_SetPoleManual(0.0f, 0.0f);
+          break;
+      }
+
+      arm_cmd.mode = ARM_MODE_RELAX;
+      arm_cmd.point2point_mode = ARM_POINT_SLEEP;
+
+      rod_cmd.mode = ROD_MODE_RELAX;
+      rod_cmd.pose = ROD_POSE_DOWN;
+      rod_cmd.sequence_trigger = false;
+      rod_cmd.grip_done = false;
+    } else if (dr16.data.sw_l == DR16_SW_MID) {
+      chassis_cmd.mode = CHASSIS_MODE_INDEPENDENT;
+      chassis_cmd.ctrl_vec.vx = dr16.data.ch_r_x;
+      chassis_cmd.ctrl_vec.vy = dr16.data.ch_r_y;
+      chassis_cmd.ctrl_vec.wz = dr16.data.ch_l_x;
+
+      switch (dr16.data.sw_r) {
+        case DR16_SW_UP:
+          Rc_SetPoleAuto(
+              Config_GetRobotParam()->pole_param.preset.step_200_all_extend[0],
+              Config_GetRobotParam()->pole_param.preset.step_200_all_extend[1]);
+          // Rc_SetPoleManual(0.0f, 0.0f);
+          break;
+        case DR16_SW_MID: 
+           Rc_SetPoleAuto(
+              Config_GetRobotParam()->pole_param.preset.step_200_front_retract[0],
+              Config_GetRobotParam()->pole_param.preset.step_200_front_retract[1]);
+          // Rc_SetPoleManual(dr16.data.ch_l_y, dr16.data.ch_l_y);
+          break;
+        case DR16_SW_DOWN:
+        default:
+          //
+          Rc_SetPoleAuto(
+              Config_GetRobotParam()->pole_param.preset.step_200_all_retract[0],
+              Config_GetRobotParam()->pole_param.preset.step_200_all_retract[1]);
+          // Rc_SetPoleManual(dr16.data.ch_l_y, dr16.data.ch_l_x);
+          chassis_cmd.ctrl_vec.wz = 0.0f;  // 鍙虫嫧鏉咲OWN鏃跺叧闂簳鐩樻棆杞帶鍒?          break;
+      }
+
+      switch (dr16.data.sw_r) {
+        case DR16_SW_UP:
+          arm_cmd.point2point_mode = ARM_POINT_SLEEP;
+          break;
+        case DR16_SW_MID:
+          arm_cmd.point2point_mode = ARM_POINT_PLUS_20CM;
+          break;
+        case DR16_SW_DOWN:
+          arm_cmd.point2point_mode = ARM_POINT_MINUS_20CM;
+          break;
+        default:
+          arm_cmd.point2point_mode = ARM_POINT_SLEEP;
+          break;
+      }
+       arm_cmd.mode = ARM_MODE_POINT2POINT;
+
+      Rc_SetRodRelax();
+    
+    } else if (dr16.data.sw_l == DR16_SW_DOWN) {
+      chassis_cmd.ctrl_vec.vx = dr16.data.ch_r_x;
+      chassis_cmd.ctrl_vec.vy = dr16.data.ch_r_y;
+      chassis_cmd.ctrl_vec.wz = dr16.data.ch_l_x;
+
+      switch (dr16.data.sw_r) {
+        case DR16_SW_UP:
+          Rc_SetPoleAuto(
+              Config_GetRobotParam()->pole_param.preset.step_400_all_extend[0],
+              Config_GetRobotParam()->pole_param.preset.step_400_all_extend[1]);
+          break;
+        case DR16_SW_MID:
+          Rc_SetPoleAuto(
+              Config_GetRobotParam()->pole_param.preset.step_400_front_retract[0],
+              Config_GetRobotParam()->pole_param.preset.step_400_front_retract[1]);
+          break;
+        case DR16_SW_DOWN:
+        default:
+          Rc_SetPoleAuto(
+              Config_GetRobotParam()->pole_param.preset.step_400_all_retract[0],
+              Config_GetRobotParam()->pole_param.preset.step_400_all_retract[1]);
+          break;
+      }
+
+      switch (dr16.data.sw_r) {
+        case DR16_SW_UP:
+          arm_cmd.point2point_mode = ARM_POINT_PLUS_40CM;
+          break;
+        case DR16_SW_MID:
+          arm_cmd.point2point_mode = ARM_POINT_SAVE_LOW;
+          break;
+        case DR16_SW_DOWN:
+          arm_cmd.point2point_mode = ARM_POINT_SAVE_HIGH;
+          break;
+        default:
+          arm_cmd.point2point_mode = ARM_POINT_SLEEP;
+          break;
+      }
+        arm_cmd.mode = ARM_MODE_POINT2POINT;
+
+      Rc_SetRodRelax();
+    }
+
+    osMessageQueueReset(task_runtime.msgq.chassis.cmd);
+    osMessageQueuePut(task_runtime.msgq.chassis.cmd, &chassis_cmd, 0, 0);
+    osMessageQueueReset(task_runtime.msgq.pole.cmd);
+    osMessageQueuePut(task_runtime.msgq.pole.cmd, &pole_cmd, 0, 0);
+    osMessageQueueReset(task_runtime.msgq.arm.cmd);
+    osMessageQueuePut(task_runtime.msgq.arm.cmd, &arm_cmd, 0, 0);
+    osMessageQueueReset(task_runtime.msgq.rod.cmd);
+    osMessageQueuePut(task_runtime.msgq.rod.cmd, &rod_cmd, 0, 0);
+        /* 妫€娴嬪乏鎷ㄦ潌鍒囨崲鍒癠P浣嶇疆鏃惰Е鍙戣蒋浠跺浣?*/
+    if (dr16.header.online) {
+      /* 鎷ㄦ潌浠庨潪UP鐘舵€佸垏鎹㈠埌UP鐘舵€侊紝涓斿浣嶅姛鑳藉凡浣胯兘锛岃Е鍙戠郴缁熷浣?*/
+      if (
+         dr16.data.sw_l == DR16_SW_UP &&
+          dr16.data.sw_r == DR16_SW_DOWN &&
+          last_sw_r != DR16_SW_DOWN && last_sw_r != DR16_SW_ERR) {
+          reset=!reset; 
+      }
+      last_sw_l = dr16.data.sw_l;  /* 鏇存柊鎷ㄦ潌鐘舵€?*/
+      last_sw_r = dr16.data.sw_r;  /* 鏇存柊鍙虫嫧鏉嗙姸鎬?*/
+    }
+    /* USER CODE END */
+    osDelayUntil(tick); /* 杩愯缁撴潫锛岀瓑寰呬笅涓€娆″敜閱?*/
+  }
+  
+}
