@@ -9,8 +9,9 @@
 #include "bsp/uart.h"
 #include "device/dr16.h"
 #include "module/chassis.h"
-#include "module/armpos.h"
-#include "module/pole_auto.h"
+#include "module/pole.h"
+#include "module/arm.h"
+#include "module/rod.h"
 /* USER INCLUDE END */
 
 /* Private typedef ---------------------------------------------------------- */
@@ -20,10 +21,11 @@
 /* USER STRUCT BEGIN */
 DR16_t dr16;
 static Chassis_CMD_t chassis_cmd;
+static Pole_CMD_t pole_cmd;
 static DR16_SwitchPos_t last_sw_l = DR16_SW_ERR;  /* 记录左拨杆上一次状态 */
-static DR16_SwitchPos_t last_sw_r = DR16_SW_ERR;  /* 记录右拨杆上一次状态 */
+static Arm_CMD_t arm_cmd;
+static Rod_CMD_t rod_cmd;
 extern bool reset; 
-
 /* USER STRUCT END */
 
 /* Private function --------------------------------------------------------- */
@@ -54,98 +56,127 @@ void Task_rc_main(void *argument) {
     } else {
       DR16_Offline(&dr16);
     }
-      ArmPos_CMD_t armpos_cmd;
-      Pole_AutoCmd_t pole_auto_cmd;
-      
-      
-      
+
     if (!dr16.header.online || dr16.data.sw_l == DR16_SW_UP) {
       chassis_cmd.mode = CHASSIS_MODE_RELAX;
       chassis_cmd.ctrl_vec.vx = 0.0f;
       chassis_cmd.ctrl_vec.vy = 0.0f;
       chassis_cmd.ctrl_vec.wz = 0.0f;
 
-      armpos_cmd.mode = ARMPOS_MODE_RELAX;
-      armpos_cmd.dm_delta = 0.0f;
-      armpos_cmd.lz_delta = 0.0f;
-      armpos_cmd.rm_delta = 0.0f;
-<<<<<<< HEAD
-=======
-      pole_auto_cmd.enable = false;
-      pole_auto_cmd.restart = false;
-      pole_auto_cmd.step_type = POLE_AUTO_STEP_NONE;
->>>>>>> d09953c (feat(armpos): 移除自动控制相关代码，简化命令结构)
-      
+      pole_cmd.mode = POLE_MODE_RELAX;
+      pole_cmd.lift[0] = 0.0f;
+      pole_cmd.lift[1] = 0.0f;
+      pole_cmd.drive = 0.0f;
+
+      arm_cmd.mode = ARM_MODE_RELAX;
+      arm_cmd.point2point_mode = ARM_POINT_SLEEP;
+
+      rod_cmd.mode = ROD_MODE_RELAX;
+      rod_cmd.pose = ROD_POSE_DOWN;
+      rod_cmd.sequence_trigger = false;
+      rod_cmd.grip_done = false;
     } else if (dr16.data.sw_l == DR16_SW_MID) {
       chassis_cmd.mode = CHASSIS_MODE_INDEPENDENT;
-      chassis_cmd.ctrl_vec.vx = dr16.data.ch_r_x;
+      chassis_cmd.ctrl_vec.vx = -dr16.data.ch_r_x;
       chassis_cmd.ctrl_vec.vy = dr16.data.ch_r_y;
       chassis_cmd.ctrl_vec.wz = dr16.data.ch_l_x;
-          
-      armpos_cmd.mode = ARMPOS_MODE_ACTIVE;
-      armpos_cmd.dm_delta = 0.0f;
-      armpos_cmd.lz_delta = 0.0f;
-      armpos_cmd.rm_delta = 0.0f;
-<<<<<<< HEAD
-=======
-      pole_auto_cmd.enable = false;
-      pole_auto_cmd.restart = false;
-      pole_auto_cmd.step_type = POLE_AUTO_STEP_NONE;
->>>>>>> d09953c (feat(armpos): 移除自动控制相关代码，简化命令结构)
 
+      pole_cmd.mode = POLE_MODE_ACTIVE;
+      pole_cmd.lift[0] = dr16.data.ch_l_y;
+      pole_cmd.lift[1] = dr16.data.ch_l_y;
+      pole_cmd.drive = dr16.data.ch_r_y;
+
+      switch (dr16.data.sw_r) {
+        case DR16_SW_UP:
+          arm_cmd.point2point_mode = ARM_POINT_SLEEP;
+          break;
+        case DR16_SW_MID:
+          arm_cmd.point2point_mode = ARM_POINT_PLUS_20CM;
+          break;
+        case DR16_SW_DOWN:
+          arm_cmd.point2point_mode = ARM_POINT_MINUS_20CM;
+          break;
+        default:
+          arm_cmd.point2point_mode = ARM_POINT_SLEEP;
+          break;
+      }
+       arm_cmd.mode = ARM_MODE_POINT2POINT;
+
+      rod_cmd.mode = ROD_MODE_ACTIVE;
+      rod_cmd.pose = ROD_POSE_DOWN;
+      rod_cmd.sequence_trigger = false;
+      rod_cmd.grip_done = false;
+    
     } else if (dr16.data.sw_l == DR16_SW_DOWN) {
-      chassis_cmd.mode = CHASSIS_MODE_INDEPENDENT;
-      chassis_cmd.ctrl_vec.vx = 0;
-      chassis_cmd.ctrl_vec.vy = 0;
-      chassis_cmd.ctrl_vec.wz = 0;
-
-      armpos_cmd.mode = ARMPOS_MODE_ACTIVE;
-      armpos_cmd.dm_delta = dr16.data.ch_l_y;
-      armpos_cmd.lz_delta = dr16.data.ch_r_y;
-      armpos_cmd.rm_delta = dr16.data.ch_l_x;
-<<<<<<< HEAD
-=======
-      pole_auto_cmd.enable = (dr16.data.sw_r == DR16_SW_UP);
-      pole_auto_cmd.restart =
-          (dr16.data.sw_r == DR16_SW_UP) && (last_sw_r != DR16_SW_UP);
-      pole_auto_cmd.step_type =
-          (dr16.data.sw_r == DR16_SW_UP) ? POLE_AUTO_STEP_200MM : POLE_AUTO_STEP_NONE;
->>>>>>> d09953c (feat(armpos): 移除自动控制相关代码，简化命令结构)
-    } else {
-      chassis_cmd.mode = CHASSIS_MODE_RELAX;
       chassis_cmd.ctrl_vec.vx = 0.0f;
       chassis_cmd.ctrl_vec.vy = 0.0f;
       chassis_cmd.ctrl_vec.wz = 0.0f;
-<<<<<<< HEAD
-=======
-      armpos_cmd.mode = ARMPOS_MODE_RELAX;
-      armpos_cmd.dm_delta = 0.0f;
-      armpos_cmd.lz_delta = 0.0f;
-      armpos_cmd.rm_delta = 0.0f;
-      pole_auto_cmd.enable = false;
-      pole_auto_cmd.restart = false;
-      pole_auto_cmd.step_type = POLE_AUTO_STEP_NONE;
->>>>>>> d09953c (feat(armpos): 移除自动控制相关代码，简化命令结构)
+
+      pole_cmd.mode = POLE_MODE_ACTIVE;
+      pole_cmd.lift[0] = dr16.data.ch_l_y;
+      pole_cmd.lift[1] = dr16.data.ch_l_x;
+      pole_cmd.drive = dr16.data.ch_r_y;
+      switch (dr16.data.sw_r) {
+        case DR16_SW_UP:
+          arm_cmd.point2point_mode = ARM_POINT_PLUS_40CM;
+          break;
+        case DR16_SW_MID:
+          arm_cmd.point2point_mode = ARM_POINT_SAVE_LOW;
+          break;
+        case DR16_SW_DOWN:
+          arm_cmd.point2point_mode = ARM_POINT_SAVE_HIGH;
+          break;
+        default:
+          arm_cmd.point2point_mode = ARM_POINT_SLEEP;
+          break;
+      }
+        arm_cmd.mode = ARM_MODE_POINT2POINT;
+
+      switch (dr16.data.sw_r) {
+        case DR16_SW_UP:
+          rod_cmd.mode = ROD_MODE_ACTIVE;
+          rod_cmd.pose = ROD_POSE_UP;
+          rod_cmd.sequence_trigger = false;
+          rod_cmd.grip_done = false;
+          break;
+        case DR16_SW_MID:
+          rod_cmd.mode = ROD_MODE_SEQUENCE;
+          rod_cmd.pose = ROD_POSE_FLIP;
+          rod_cmd.sequence_trigger = true;
+          rod_cmd.grip_done = false;
+          break;
+        case DR16_SW_DOWN:
+          rod_cmd.mode = ROD_MODE_ACTIVE;
+          rod_cmd.pose = ROD_POSE_DOWN;
+          rod_cmd.sequence_trigger = false;
+          rod_cmd.grip_done = false;
+          break;
+        default:
+          rod_cmd.mode = ROD_MODE_RELAX;
+          rod_cmd.pose = ROD_POSE_DOWN;
+          rod_cmd.sequence_trigger = false;
+          rod_cmd.grip_done = false;
+          break;
+      }
     }
 
     osMessageQueueReset(task_runtime.msgq.chassis.cmd);
     osMessageQueuePut(task_runtime.msgq.chassis.cmd, &chassis_cmd, 0, 0);
-    osMessageQueueReset(task_runtime.msgq.armpos.cmd);
-    osMessageQueuePut(task_runtime.msgq.armpos.cmd, &armpos_cmd, 0, 0);
-    osMessageQueueReset(task_runtime.msgq.pole.auto_cmd);
-    osMessageQueuePut(task_runtime.msgq.pole.auto_cmd, &pole_auto_cmd, 0, 0);
-
+    osMessageQueueReset(task_runtime.msgq.pole.cmd);
+    osMessageQueuePut(task_runtime.msgq.pole.cmd, &pole_cmd, 0, 0);
+    osMessageQueueReset(task_runtime.msgq.arm.cmd);
+    osMessageQueuePut(task_runtime.msgq.arm.cmd, &arm_cmd, 0, 0);
+    osMessageQueueReset(task_runtime.msgq.rod.cmd);
+    osMessageQueuePut(task_runtime.msgq.rod.cmd, &rod_cmd, 0, 0);
         /* 检测左拨杆切换到UP位置时触发软件复位 */
     if (dr16.header.online) {
       /* 拨杆从非UP状态切换到UP状态，且复位功能已使能，触发系统复位 */
       if (
          dr16.data.sw_l == DR16_SW_UP &&
-          dr16.data.sw_r == DR16_SW_DOWN &&
-          last_sw_r != DR16_SW_DOWN && last_sw_r != DR16_SW_ERR) {
+          last_sw_l != DR16_SW_UP && last_sw_l != DR16_SW_ERR) {
           reset=!reset; 
       }
       last_sw_l = dr16.data.sw_l;  /* 更新拨杆状态 */
-      last_sw_r = dr16.data.sw_r;  /* 更新右拨杆状态 */
     }
     /* USER CODE END */
     osDelayUntil(tick); /* 运行结束，等待下一次唤醒 */

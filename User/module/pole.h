@@ -1,5 +1,5 @@
 /*
- * Pole module: 4x3508 support motors.
+ * Pole module: 4x3508 support motors + 2x2006 drive-wheel motors.
  */
 #pragma once
 
@@ -18,7 +18,8 @@ extern "C" {
 #define POLE_ERR_NULL (-2)
 
 #define POLE_SUPPORT_MOTOR_NUM (4)
-#define POLE_MOTOR_NUM (POLE_SUPPORT_MOTOR_NUM)
+#define POLE_DRIVE_MOTOR_NUM (2)
+#define POLE_MOTOR_NUM (POLE_SUPPORT_MOTOR_NUM + POLE_DRIVE_MOTOR_NUM)
 
 typedef enum {
   POLE_MODE_RELAX = 0,
@@ -28,9 +29,7 @@ typedef enum {
 typedef struct {
   Pole_Mode_t mode;
   float lift[2];   /* [-1, 1], >0 means up */
-  bool auto_target_enable[2];
-  float auto_target_lift[2];   /* rad, relative to calibrated lower limit */
-  float auto_lift_speed[2];    /* rad/s, <=0 means use default support_lift_speed */
+  float drive;  /* [-1, 1], drive wheel speed command */
 } Pole_CMD_t;
 
 typedef struct {
@@ -38,19 +37,14 @@ typedef struct {
   struct {
     KPID_Params_t support_pos_pid;
     KPID_Params_t support_vel_pid;
+    KPID_Params_t drive_spd_pid;
   } pid;
-  struct {
-    float step_200_all_extend[2];      /* 200mm台阶-四撑杆全伸: [0]前两杆, [1]后两杆 */
-    float step_200_front_retract[2];   /* 200mm台阶-前两撑杆收: [0]前两杆, [1]后两杆 */
-    float step_200_all_retract[2];     /* 200mm台阶-四撑杆全收: [0]前两杆, [1]后两杆 */
-    float step_400_all_extend[2];      /* 400mm台阶-四撑杆全伸: [0]前两杆, [1]后两杆 */
-    float step_400_front_retract[2];   /* 400mm台阶-前两撑杆收: [0]前两杆, [1]后两杆 */
-    float step_400_all_retract[2];     /* 400mm台阶-四撑杆全收: [0]前两杆, [1]后两杆 */
-  } preset;
   struct {
     float max_current;
     float support_total_travel;   /* rad */
     float support_lift_speed;     /* rad/s */
+    float drive_enable_angle;     /* rad, from lower limit */
+    float drive_max_rpm;
   } limit;
 } Pole_Params_t;
 
@@ -75,17 +69,18 @@ typedef struct {
     bool calibrated;
     float lower[POLE_SUPPORT_MOTOR_NUM];
     float upper[POLE_SUPPORT_MOTOR_NUM];
-    float final_target_lift[2];
-    float tracked_target_lift[2];
+    float target_lift[2];
   } support_angle;
 
   struct {
     float support_target_angle[POLE_SUPPORT_MOTOR_NUM];
+    float drive_target_rpm[POLE_DRIVE_MOTOR_NUM];
   } setpoint;
 
   struct {
     KPID_t support_pos[POLE_SUPPORT_MOTOR_NUM];
     KPID_t support_vel[POLE_SUPPORT_MOTOR_NUM];
+    KPID_t drive_spd[POLE_DRIVE_MOTOR_NUM];
   } pid;
 
   Pole_Output_t out;
@@ -95,8 +90,6 @@ typedef struct {
 int8_t Pole_Init(Pole_t *c, const Pole_Params_t *param, float target_freq);
 int8_t Pole_UpdateFeedback(Pole_t *c);
 int8_t Pole_Control(Pole_t *c, const Pole_CMD_t *c_cmd, uint32_t now);
-bool Pole_IsGroupAtTarget(const Pole_t *c, uint8_t group, float threshold_rad);
-bool Pole_IsAllAtTarget(const Pole_t *c, float threshold_rad);
 void Pole_Output(Pole_t *c);
 void Pole_ResetOutput(Pole_t *c);
 void Pole_Power_Control(Pole_t *c, float max_power);

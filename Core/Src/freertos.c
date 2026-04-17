@@ -25,6 +25,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+
 #include "task/user_task.h"
 /* USER CODE END Includes */
 
@@ -95,6 +96,7 @@ void MX_FREERTOS_Init(void) {
   defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
+  /* add threads, ... */
    osThreadNew(Task_Init, NULL, &attr_init); // 创建初始化任务
   /* USER CODE END RTOS_THREADS */
 
@@ -114,11 +116,7 @@ void MX_FREERTOS_Init(void) {
 void StartDefaultTask(void *argument)
 {
   /* USER CODE BEGIN StartDefaultTask */
-  /* Infinite loop */
-  for(;;)
-  {
-    osDelay(1);
-  }
+    osThreadTerminate(osThreadGetId());
   /* USER CODE END StartDefaultTask */
 }
 

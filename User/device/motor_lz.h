@@ -88,8 +88,6 @@ typedef struct {
     uint8_t motor_can_id;       /* 当前电机CAN ID */
 } MOTOR_LZ_Feedback_t;
 
-typedef MOTOR_RawFeedback_t MOTOR_LZ_RawFeedback_t;
-
 /*电机实例*/
 typedef struct {
     MOTOR_LZ_Param_t param;
@@ -208,13 +206,6 @@ int8_t MOTOR_LZ_Relax(MOTOR_LZ_Param_t *param);
  * @return 设备状态码
  */
 int8_t MOTOR_LZ_Offline(MOTOR_LZ_Param_t *param);
-
-const MOTOR_LZ_RawFeedback_t* MOTOR_LZ_GetRawFeedback(MOTOR_LZ_Param_t *param);
-// 返回转子侧单圈角度；当前协议为对称区间角度，多圈累计由上层完成。
-float MOTOR_LZ_GetRotorPositionRad(MOTOR_LZ_Param_t *param);
-float MOTOR_LZ_GetRotorVelocityRadS(MOTOR_LZ_Param_t *param);
-float MOTOR_LZ_GetTorqueCurrent(MOTOR_LZ_Param_t *param);
-float MOTOR_LZ_GetMotorTemperatureC(MOTOR_LZ_Param_t *param);
 
 #ifdef __cplusplus
 }

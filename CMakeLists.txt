@@ -11,6 +11,9 @@ cmake_minimum_required(VERSION 3.22)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS ON)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS ON)
 
 
 # Define the build type
@@ -29,7 +32,7 @@ project(${CMAKE_PROJECT_NAME})
 message("Build type: " ${CMAKE_BUILD_TYPE})
 
 # Enable CMake support for ASM and C languages
-enable_language(C ASM)
+enable_language(C CXX ASM)
 
 # Create an executable object type
 add_executable(${CMAKE_PROJECT_NAME})
@@ -41,12 +44,12 @@ add_subdirectory(cmake/stm32cubemx)
 target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined library search paths
 )
-file(GLOB SINGLE_CHAR_FILES "User/module/cmd/*.c")
+
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user sources here
     # User/bsp sources
-    User/bsp/fdcan.c
+    User/bsp/can.c
     User/bsp/mm.c
     User/bsp/time.c
     User/bsp/uart.c
@@ -68,19 +71,14 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     User/device/motor_rm.c
     User/device/motor_dm.c
     User/device/motor_lz.c
-    User/device/motor/factory/motor_factory.cpp
-    User/device/motor/packages/controller/motor_controller.cpp
-    User/device/motor/drivers/motor_driver_base.cpp
-    User/device/motor/drivers/rm_motor_driver.cpp
-    User/device/motor/drivers/dm_motor_driver.cpp
-    User/device/motor/drivers/lz_motor_driver.cpp
-
+    User/device/motors/motor.cpp
+    User/device/motors/motor_packages/self_test/motor_self_test.cpp
+    User/device/motors/motor_packages/limit_selfLearning/dual_limit/motor_dual_limit_calibration.cpp
+    User/device/motors/motor_packages/limit_selfLearning/single_limit/motor_single_limit_calibration.cpp
     # User/module sources
     User/module/chassis.c
     User/module/pole.c
-    User/module/pole_auto.c
     User/module/arm.cpp
-    User/module/armpos.cpp
     User/module/rod.c
     # User/module/cmd sources
     User/module/cmd/cmd.c
@@ -101,13 +99,12 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     User/task/sick.c
     User/task/arm_main.c
     User/task/rod_main.c
-    User/task/armpos_main.c
 )
 
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined include paths
-        User
+    User
 )
 
 # Add project symbols (macros)

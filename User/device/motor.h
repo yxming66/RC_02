@@ -25,13 +25,6 @@ typedef struct {
     float temp; /* 温度 */
 } MOTOR_Feedback_t;
 
-typedef struct {
-    uint16_t raw_angle;      /* 原始编码器角度 */
-    int16_t raw_speed;       /* 原始转速反馈 */
-    int16_t raw_current;     /* 原始电流反馈 */
-    uint8_t raw_temp;        /* 原始温度反馈 */
-} MOTOR_RawFeedback_t;
-
 /**
  * @brief mit电机输出参数结构体
  */
@@ -53,7 +46,6 @@ typedef struct {
 typedef struct {
     DEVICE_Header_t header;
     bool reverse; /* 是否反装 true表示反装 */
-    MOTOR_RawFeedback_t raw_feedback;
     MOTOR_Feedback_t feedback;
 } MOTOR_t;
 
@@ -66,7 +58,6 @@ float MOTOR_GetRotorAbsAngle(const MOTOR_t *motor);
 float MOTOR_GetRotorSpeed(const MOTOR_t *motor);
 float MOTOR_GetTorqueCurrent(const MOTOR_t *motor);
 float MOTOR_GetTemp(const MOTOR_t *motor);
-const MOTOR_RawFeedback_t* MOTOR_GetRawFeedback(const MOTOR_t *motor);
 
 /* USER FUNCTION BEGIN */
 

@@ -39,11 +39,6 @@ const osThreadAttr_t attr_arm = {
     .priority = osPriorityNormal,
     .stack_size = 256 * 4,
 };
-const osThreadAttr_t attr_armpos = {
-    .name = "armpos",
-    .priority = osPriorityNormal,
-    .stack_size = 256 * 4,
-};
 const osThreadAttr_t attr_rod = {
     .name = "rod",
     .priority = osPriorityNormal,

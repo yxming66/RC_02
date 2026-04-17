@@ -50,8 +50,6 @@ typedef struct {
 
 typedef MOTOR_Feedback_t MOTOR_RM_Feedback_t;
 
-typedef MOTOR_RawFeedback_t MOTOR_RM_RawFeedback_t;
-
 typedef struct {
     MOTOR_RM_Param_t param;
     MOTOR_RM_Feedback_t feedback;
@@ -87,25 +85,12 @@ int8_t MOTOR_RM_Register(MOTOR_RM_Param_t *param);
 int8_t MOTOR_RM_Update(MOTOR_RM_Param_t *param);
 
 /**
- * @brief 设置一个电机的归一化输出（底层兼容接口）
+ * @brief 设置一个电机的输出
  * @param param 电机参数
  * @param value 输出值，范围[-1.0, 1.0]
- * @note 这是底层发送接口，保留给旧代码或直接比例输出场景使用。
- *       C++ 电机驱动的力矩控制链路不应直接调用它，而应优先使用
- *       MOTOR_RM_SetTorqueCurrent()，先完成“输出轴力矩 -> 转子侧电流”的物理量换算。
  * @return 
  */
 int8_t MOTOR_RM_SetOutput(MOTOR_RM_Param_t *param, float value);
-
-/**
- * @brief 设置一个电机的转子侧等效电流命令（C++ 力矩控制主入口）
- * @param param 电机参数
- * @param current 转子侧电流/等效电流，单位与反馈 GetTorqueCurrent 一致
- * @note C++ RM 驱动会先将目标输出力矩按转矩常数、减速比、外部传动比
- *       换算为转子侧电流，再通过本接口下发到底层。
- * @return
- */
-int8_t MOTOR_RM_SetTorqueCurrent(MOTOR_RM_Param_t *param, float current);
 
 /**
  * @brief 发送控制命令到电机，注意一个CAN可以控制多个电机，所以只需要发送一次即可
@@ -141,13 +126,6 @@ int8_t MOTOR_RM_Offine(MOTOR_RM_Param_t *param);
  * @return 
  */
 int8_t MOTOR_RM_UpdateAll(void);
-
-const MOTOR_RM_RawFeedback_t* MOTOR_RM_GetRawFeedback(MOTOR_RM_Param_t *param);
-// 返回转子侧单圈角度，范围约 [0, 2pi)。多圈累计由上层完成。
-float MOTOR_RM_GetRotorPositionRad(MOTOR_RM_Param_t *param);
-float MOTOR_RM_GetRotorVelocityRadS(MOTOR_RM_Param_t *param);
-float MOTOR_RM_GetTorqueCurrent(MOTOR_RM_Param_t *param);
-float MOTOR_RM_GetMotorTemperatureC(MOTOR_RM_Param_t *param);
 
 #ifdef __cplusplus
 }

@@ -74,16 +74,10 @@ static int8_t MOTOR_DM_ParseFeedbackFrame(MOTOR_DM_t *motor, const uint8_t *data
         return DEVICE_ERR_NULL;
     }
     uint16_t p_int=(data[1]<<8)|data[2];
-    uint16_t v_int=(data[3]<<4)|(data[4]>>4);
-    uint16_t t_int=((data[4]&0xF)<<8)|data[5];
-
-    motor->motor.raw_feedback.raw_angle = p_int;
-    motor->motor.raw_feedback.raw_speed = (int16_t)v_int;
-    motor->motor.raw_feedback.raw_current = (int16_t)t_int;
-    motor->motor.raw_feedback.raw_temp = data[6];
-
     motor->motor.feedback.rotor_abs_angle = uint_to_float(p_int, DM_P_MIN, DM_P_MAX, 16); // (-12.5,12.5)
+    uint16_t v_int=(data[3]<<4)|(data[4]>>4);
     motor->motor.feedback.rotor_speed = uint_to_float(v_int, DM_V_MIN, DM_V_MAX, 12); // (-30.0,30.0)
+    uint16_t t_int=((data[4]&0xF)<<8)|data[5];
     motor->motor.feedback.torque_current = uint_to_float(t_int, DM_T_MIN, DM_T_MAX, 12);  // (-12.0,12.0)
     motor->motor.feedback.temp = (float)(data[6]);
 
@@ -461,6 +455,7 @@ MOTOR_DM_t* MOTOR_DM_GetMotor(MOTOR_DM_Param_t *param) {
     return NULL;
 }
 
+
 int8_t MOTOR_DM_Enable(MOTOR_DM_Param_t *param){
     if (param == NULL) {
         return DEVICE_ERR_NULL;
@@ -482,31 +477,6 @@ int8_t MOTOR_DM_Enable(MOTOR_DM_Param_t *param){
     frame.data[5] = 0xFF;
     frame.data[6] = 0xFF;
     frame.data[7] = 0xFC;
-
-    return BSP_CAN_TransmitStdDataFrame(motor->param.can, &frame) == BSP_OK ? DEVICE_OK : DEVICE_ERR;
-}
-
-int8_t MOTOR_DM_Disable(MOTOR_DM_Param_t *param) {
-    if (param == NULL) {
-        return DEVICE_ERR_NULL;
-    }
-
-    MOTOR_DM_t *motor = MOTOR_DM_GetMotor(param);
-    if (motor == NULL) {
-        return DEVICE_ERR_NO_DEV;
-    }
-
-    BSP_CAN_StdDataFrame_t frame;
-    frame.id = motor->param.can_id;
-    frame.dlc = 8;
-    frame.data[0] = 0xFF;
-    frame.data[1] = 0xFF;
-    frame.data[2] = 0xFF;
-    frame.data[3] = 0xFF;
-    frame.data[4] = 0xFF;
-    frame.data[5] = 0xFF;
-    frame.data[6] = 0xFF;
-    frame.data[7] = 0xFD;
 
     return BSP_CAN_TransmitStdDataFrame(motor->param.can, &frame) == BSP_OK ? DEVICE_OK : DEVICE_ERR;
 }
@@ -568,72 +538,4 @@ int8_t MOTOR_DM_Offine(MOTOR_DM_Param_t *param) {
     
     motor->motor.header.online = false;
     return DEVICE_OK;
-}
-
-/* -------------------------------------------------------------------------- */
-/* 为 C++ 电机驱动层（User/device/motor/drivers/*.cpp）提供服务的 C 接口函数 */
-/* -------------------------------------------------------------------------- */
-
-/* C++ 驱动层读取底层原始反馈缓存。 */
-const MOTOR_DM_RawFeedback_t* MOTOR_DM_GetRawFeedback(MOTOR_DM_Param_t *param) {
-    MOTOR_DM_t* motor = MOTOR_DM_GetMotor(param);
-    if (motor == NULL) {
-        return NULL;
-    }
-    return &motor->motor.raw_feedback;
-}
-
-/* C++ 驱动层读取转子侧单圈角度，后续由 C++ 层完成多圈累计与输出侧换算。 */
-float MOTOR_DM_GetRotorPositionRad(MOTOR_DM_Param_t *param) {
-    const MOTOR_DM_RawFeedback_t* raw = MOTOR_DM_GetRawFeedback(param);
-    if (raw == NULL) {
-        return 0.0f;
-    }
-
-    float angle = uint_to_float(raw->raw_angle, DM_P_MIN, DM_P_MAX, 16);
-    while (angle < 0.0f) {
-        angle += M_2PI;
-    }
-    while (angle >= M_2PI) {
-        angle -= M_2PI;
-    }
-
-    if (param->reverse) {
-        angle = M_2PI - angle;
-    }
-    return angle;
-}
-
-/* C++ 驱动层读取转子侧角速度。 */
-float MOTOR_DM_GetRotorVelocityRadS(MOTOR_DM_Param_t *param) {
-    const MOTOR_DM_RawFeedback_t* raw = MOTOR_DM_GetRawFeedback(param);
-    if (raw == NULL) {
-        return 0.0f;
-    }
-
-    float velocity = uint_to_float((uint16_t)raw->raw_speed, DM_V_MIN, DM_V_MAX, 12);
-    if (param->reverse) {
-        velocity = -velocity;
-    }
-    return velocity;
-}
-
-/* C++ 驱动层读取转子侧等效电流/力矩通道量，用于换算输出侧力矩反馈。 */
-float MOTOR_DM_GetTorqueCurrent(MOTOR_DM_Param_t *param) {
-    const MOTOR_DM_RawFeedback_t* raw = MOTOR_DM_GetRawFeedback(param);
-    if (raw == NULL) {
-        return 0.0f;
-    }
-
-    float current = uint_to_float((uint16_t)raw->raw_current, DM_T_MIN, DM_T_MAX, 12);
-    if (param->reverse) {
-        current = -current;
-    }
-    return current;
-}
-
-/* C++ 驱动层读取温度反馈。 */
-float MOTOR_DM_GetMotorTemperatureC(MOTOR_DM_Param_t *param) {
-    const MOTOR_DM_RawFeedback_t* raw = MOTOR_DM_GetRawFeedback(param);
-    return (raw != NULL) ? (float)raw->raw_temp : 0.0f;
 }

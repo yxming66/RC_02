@@ -21,8 +21,8 @@ typedef enum {
 /*每个电机需要的参数*/
 typedef struct {
     BSP_CAN_t can;
-    uint16_t master_id;    /* 反馈ID，用于接收电机反馈 */
-    uint16_t can_id;       /* 主站ID，用于发送控制命令 */
+    uint16_t master_id;    /* 主站ID，用于发送控制命令 */
+    uint16_t can_id;       /* 反馈ID，用于接收电机反馈 */
     MOTOR_DM_Module_t module;
     bool reverse;
 } MOTOR_DM_Param_t;
@@ -32,8 +32,6 @@ typedef struct{
     MOTOR_DM_Param_t param;
     MOTOR_t motor;
 } MOTOR_DM_t;
-
-typedef MOTOR_RawFeedback_t MOTOR_DM_RawFeedback_t;
 
 /*CAN管理器，管理一个CAN总线上所有的电机*/
 typedef struct {
@@ -79,8 +77,6 @@ MOTOR_DM_t* MOTOR_DM_GetMotor(MOTOR_DM_Param_t *param);
 
 int8_t MOTOR_DM_Enable(MOTOR_DM_Param_t *param);
 
-int8_t MOTOR_DM_Disable(MOTOR_DM_Param_t *param);
-
 /**
  * @brief 使电机松弛（设置输出为0）
  * @param param 
@@ -101,13 +97,6 @@ int8_t MOTOR_DM_Offine(MOTOR_DM_Param_t *param);
  * @return DEVICE_OK 成功，DEVICE_ERR 失败
  */
 int8_t MOTOR_DM_SetZero(MOTOR_DM_Param_t *param);
-
-const MOTOR_DM_RawFeedback_t* MOTOR_DM_GetRawFeedback(MOTOR_DM_Param_t *param);
-// 返回转子侧单圈角度，范围约 [0, 2pi)。多圈累计由上层完成。
-float MOTOR_DM_GetRotorPositionRad(MOTOR_DM_Param_t *param);
-float MOTOR_DM_GetRotorVelocityRadS(MOTOR_DM_Param_t *param);
-float MOTOR_DM_GetTorqueCurrent(MOTOR_DM_Param_t *param);
-float MOTOR_DM_GetMotorTemperatureC(MOTOR_DM_Param_t *param);
 
 
 

@@ -50,8 +50,3 @@ float MOTOR_GetTemp(const MOTOR_t *motor) {
   if (motor == NULL) return DEVICE_ERR_NULL;
   return motor->feedback.temp;
 }
-
-const MOTOR_RawFeedback_t* MOTOR_GetRawFeedback(const MOTOR_t *motor) {
-  if (motor == NULL) return NULL;
-  return &motor->raw_feedback;
-}

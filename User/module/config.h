@@ -16,14 +16,12 @@ extern "C" {
 #include "module/pole.h"
 #include "module/cmd/cmd.h"
 #include "module/arm.h"
-#include "module/armpos.h"
 #include "module/rod.h"
 typedef struct {
     Chassis_Params_t chassis_param;
     Pole_Params_t pole_param;
     CMD_Config_t cmd_param;
     Arm_Params_t arm_param;
-    ArmPos_Params_t armpos_param;
     Rod_Params_t rod_param;
 } Config_RobotParam_t;
 

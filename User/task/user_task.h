@@ -43,7 +43,6 @@ typedef struct {
         osThreadId_t cmd_main;
         osThreadId_t sick;
         osThreadId_t arm;
-        osThreadId_t armpos;
         osThreadId_t rod;
 
     } thread;
@@ -59,7 +58,6 @@ typedef struct {
         }chassis;
         struct {
             osMessageQueueId_t cmd;
-            osMessageQueueId_t auto_cmd;
         } pole;
 		    struct{
 			      osMessageQueueId_t rc; 
@@ -68,9 +66,6 @@ typedef struct {
         struct {
             osMessageQueueId_t cmd;
         } arm;
-        struct {
-            osMessageQueueId_t cmd;
-        } armpos;
         struct {
             osMessageQueueId_t cmd;
         } rod;
@@ -131,7 +126,6 @@ extern const osThreadAttr_t attr_rc_main;
 extern const osThreadAttr_t attr_cmd_main;
 extern const osThreadAttr_t attr_sick;
 extern const osThreadAttr_t attr_arm;
-extern const osThreadAttr_t attr_armpos;
 extern const osThreadAttr_t attr_rod;
 /* 任务函数声明 */
 void Task_Init(void *argument);
@@ -141,7 +135,6 @@ void Task_rc_main(void *argument);
 void Task_cmd_main(void *argument);
 void Task_sick(void *argument);
 void Task_arm(void *argument);
-void Task_armpos(void *argument);
 void Task_rod(void *argument);
 #ifdef __cplusplus
 }
