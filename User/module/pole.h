@@ -56,6 +56,7 @@ typedef struct {
   struct {
     float support_vel_feedback_cutoff_hz;   /* Hz, <=0 means fallback */
     float support_output_cutoff_hz;         /* Hz, <=0 means fallback */
+    float support_vel_feedback_spike_rad_s; /* rad/s, per-cycle spike clamp, <=0 disable */
   } filter;
   struct {
     bool use_legacy_normalized_output; /* true: map output to [-1,1] and use MOTOR_RM_SetOutput */
@@ -69,12 +70,15 @@ typedef struct {
     float step_400_all_retract[2];     /* 400mm台阶-四撑杆全收: [0]前两杆, [1]后两杆 */
   } preset;
   struct {
-    float max_current;
+    float max_torque_nm; /* Nm, <=0 means fallback to max_current */
+    float max_current;   /* legacy fallback */
     float support_total_travel;   /* rad */
     float support_lift_speed;     /* rad/s */
     float support_limit_soft_zone; /* rad, slow down near lower/upper limit */
     float support_hold_zone;      /* rad, near lower limit hold target */
     float support_hold_speed_threshold; /* rad/s, low-speed condition for hold */
+    float support_hold_release_zone; /* rad, release hold only after moving away from lower limit */
+    float support_output_slew_rate; /* output unit/s, <=0 disable */
   } limit;
 } Pole_Params_t;
 
@@ -103,6 +107,7 @@ typedef struct {
     float upper[POLE_SUPPORT_MOTOR_NUM];
     float final_target_lift[2];
     float tracked_target_lift[2];
+    bool lower_hold_latched[POLE_SUPPORT_MOTOR_NUM];
   } support_angle;
 
   struct {

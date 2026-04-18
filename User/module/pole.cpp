@@ -104,17 +104,42 @@ static float Pole_GetSoftLimitedSpeed(const Pole_t *c, uint8_t idx, float desire
   return Pole_Clipf(desired_speed, -allow_down, base_limit);
 }
 
-static bool Pole_ShouldHoldLowerLimit(const Pole_t *c, uint8_t idx, float fb_angle, float fb_speed) {
-  if (c == NULL || c->param == NULL) return false;
+static float Pole_GetLowerHoldReleaseZone(const Pole_t *c) {
+  if (c == NULL || c->param == NULL) return 0.0f;
 
   const float hold_zone = fmaxf(c->param->limit.support_hold_zone, 0.0f);
-  const float speed_threshold = fmaxf(c->param->limit.support_hold_speed_threshold, 0.0f);
-  if (hold_zone <= 0.0f) return false;
+  const float configured_release = fmaxf(c->param->limit.support_hold_release_zone, 0.0f);
+  if (configured_release > hold_zone) return configured_release;
 
+  return fmaxf(hold_zone * 1.8f, hold_zone + 0.08f);
+}
+
+static bool Pole_UpdateLowerHoldLatch(Pole_t *c, uint8_t idx, bool request_lower, float fb_angle, float fb_speed) {
+  if (c == NULL || c->param == NULL || idx >= POLE_SUPPORT_MOTOR_NUM) return false;
+
+  const float hold_zone = fmaxf(c->param->limit.support_hold_zone, 0.0f);
+  if (hold_zone <= 0.0f) {
+    c->support_angle.lower_hold_latched[idx] = false;
+    return false;
+  }
+
+  const float speed_threshold = fmaxf(c->param->limit.support_hold_speed_threshold, 0.0f);
+  const float release_zone = Pole_GetLowerHoldReleaseZone(c);
   const float dist_to_lower = fb_angle - c->support_angle.lower[idx];
-  if (dist_to_lower > hold_zone) return false;
-  if (fabsf(fb_speed) > speed_threshold) return false;
-  return true;
+
+  bool latched = c->support_angle.lower_hold_latched[idx];
+  if (!request_lower) {
+    latched = false;
+  } else if (!latched) {
+    if (dist_to_lower <= hold_zone && fabsf(fb_speed) <= speed_threshold) {
+      latched = true;
+    }
+  } else if (dist_to_lower > release_zone) {
+    latched = false;
+  }
+
+  c->support_angle.lower_hold_latched[idx] = latched;
+  return latched;
 }
 
 static float Pole_GetVelFeedbackLpfCutoffHz(const Pole_t *c) {
@@ -134,10 +159,24 @@ static float Pole_GetOutputLpfCutoffHz(const Pole_t *c) {
   return (dedicated_cutoff_hz > 0.0f) ? dedicated_cutoff_hz : kPoleOutputLpfDefaultHz;
 }
 
+static float Pole_GetMaxOutputTorqueNm(const Pole_t *c) {
+  if (c == NULL || c->param == NULL) return 0.0f;
+  if (c->param->limit.max_torque_nm > 0.0f) return c->param->limit.max_torque_nm;
+  return fmaxf(c->param->limit.max_current, 0.0f);
+}
+
 static float Pole_GetSupportSpeedFeedbackFiltered(Pole_t *c, uint8_t idx) {
   if (c == NULL || idx >= POLE_SUPPORT_MOTOR_NUM) return 0.0f;
+
+  float raw_speed = c->feedback.motor[idx].rotor_speed;
+  const float spike_limit = fmaxf(c->param->filter.support_vel_feedback_spike_rad_s, 0.0f);
+  if (spike_limit > 0.0f) {
+    const float filtered_prev = c->feedback.support_vel_filtered[idx];
+    raw_speed = Pole_Clipf(raw_speed, filtered_prev - spike_limit, filtered_prev + spike_limit);
+  }
+
   c->feedback.support_vel_filtered[idx] = LowPassFilter2p_Apply(
-      &c->filter.support_vel_in[idx], c->feedback.motor[idx].rotor_speed);
+      &c->filter.support_vel_in[idx], raw_speed);
   return c->feedback.support_vel_filtered[idx];
 }
 
@@ -148,7 +187,7 @@ static bool Pole_UseLegacyNormalizedOutput(const Pole_t *c) {
 static float Pole_ToLegacyNormalizedOutput(const Pole_t *c, float output_value) {
   if (c == NULL || c->param == NULL) return 0.0f;
 
-  const float full_scale = fmaxf(c->param->limit.max_current, 1e-6f);
+  const float full_scale = fmaxf(Pole_GetMaxOutputTorqueNm(c), 1e-6f);
   return Pole_Clipf(output_value / full_scale, -1.0f, 1.0f);
 }
 
@@ -159,6 +198,7 @@ static void Pole_ResetControllers(Pole_t *c) {
     LowPassFilter2p_Reset(&c->filter.support_vel_in[i], c->feedback.motor[i].rotor_speed);
     LowPassFilter2p_Reset(&c->filter.support_out[i], 0.0f);
     c->feedback.support_vel_filtered[i] = c->feedback.motor[i].rotor_speed;
+    c->support_angle.lower_hold_latched[i] = false;
   }
 }
 
@@ -211,7 +251,7 @@ int8_t Pole_Init(Pole_t *c, const Pole_Params_t *param, float target_freq) {
       .position_pid = &param->pid.support_pos_pid,
       .sample_freq = target_freq,
       .position_to_velocity_limit = param->limit.support_lift_speed,
-      .velocity_to_torque_limit = param->limit.max_current,
+      .velocity_to_torque_limit = Pole_GetMaxOutputTorqueNm(c),
     };
 
     PoleController(c, i) = new (g_pole_controller_storage[i]) PoleMotorController(*PoleMotorHandle(c, i), controller_config);
@@ -304,24 +344,43 @@ int8_t Pole_Control(Pole_t *c, const Pole_CMD_t *c_cmd, uint32_t now) {
   }
   float vel[4];
   float out[4];
+  const float max_torque_nm = Pole_GetMaxOutputTorqueNm(c);
   for (uint8_t i = 0; i < POLE_SUPPORT_MOTOR_NUM; i++) {
+    const float out_prev = c->out.motor[i];
     float fb_angle = Pole_GetSupportAngle(c, i);
     float fb_speed = Pole_GetSupportSpeedFeedbackFiltered(c, i);
 
-    if (Pole_ShouldHoldLowerLimit(c, i, fb_angle, fb_speed) &&
-        c->setpoint.support_target_angle[i] <= (c->support_angle.lower[i] + c->param->limit.support_hold_zone)) {
-      c->setpoint.support_target_angle[i] = c->support_angle.lower[i];
+    const bool request_lower =
+        (c->setpoint.support_target_angle[i] <= (c->support_angle.lower[i] + c->param->limit.support_hold_zone));
+    const bool was_latched = c->support_angle.lower_hold_latched[i];
+    const bool hold_latched = Pole_UpdateLowerHoldLatch(c, i, request_lower, fb_angle, fb_speed);
+    if (hold_latched) {
+      c->setpoint.support_target_angle[i] = fb_angle;
+      if (!was_latched) {
+        PID_Reset(&c->pid.support_vel[i]);
+      }
       PID_Reset(&c->pid.support_pos[i]);
+      LowPassFilter2p_Reset(&c->filter.support_out[i], 0.0f);
+      vel[i] = 0.0f;
+      out[i] = 0.0f;
+      c->out.motor[i] = 0.0f;
+      continue;
     }
 
-     vel[i] = PID_Calc(&c->pid.support_pos[i], c->setpoint.support_target_angle[i],
-                         fb_angle, 0.0f, c->dt);
-     vel[i] = Pole_GetSoftLimitedSpeed(c, i, vel[i], fb_angle);
-     out[i] = PID_Calc(&c->pid.support_vel[i], vel[i],
-                        fb_speed, 0.0f, c->dt);
-    c->out.motor[i] = LowPassFilter2p_Apply(&c->filter.support_out[i], out[i]);
-    c->out.motor[i] = Pole_Clipf(c->out.motor[i], -c->param->limit.max_current,
-                                 c->param->limit.max_current);
+    vel[i] = PID_Calc(&c->pid.support_pos[i], c->setpoint.support_target_angle[i],
+                      fb_angle, 0.0f, c->dt);
+    vel[i] = Pole_GetSoftLimitedSpeed(c, i, vel[i], fb_angle);
+    out[i] = PID_Calc(&c->pid.support_vel[i], vel[i],
+                      fb_speed, 0.0f, c->dt);
+
+    float out_cmd = LowPassFilter2p_Apply(&c->filter.support_out[i], out[i]);
+    out_cmd = Pole_Clipf(out_cmd, -max_torque_nm, max_torque_nm);
+
+    const float slew_rate = fmaxf(c->param->limit.support_output_slew_rate, 0.0f);
+    if (slew_rate > 0.0f) {
+      out_cmd = Pole_MoveTowards(out_prev, out_cmd, slew_rate * c->dt);
+    }
+    c->out.motor[i] = out_cmd;
   }
 
   return POLE_OK;
@@ -353,15 +412,27 @@ void Pole_Output(Pole_t *c) {
 
   const bool use_legacy_output = Pole_UseLegacyNormalizedOutput(c);
 
-  for (uint8_t i = 0; i < POLE_MOTOR_NUM; i++) {
-    if (use_legacy_output) {
+  if (use_legacy_output) {
+    bool ctrl_sent[BSP_CAN_NUM][2] = {};
+    for (uint8_t i = 0; i < POLE_MOTOR_NUM; i++) {
       MOTOR_RM_Param_t *rm_param = const_cast<MOTOR_RM_Param_t *>(&c->param->motor_param[i]);
       const float normalized = Pole_ToLegacyNormalizedOutput(c, c->out.motor[i]);
       (void)MOTOR_RM_SetOutput(rm_param, normalized);
-      (void)MOTOR_RM_Ctrl(rm_param);
-      continue;
     }
 
+    for (uint8_t i = 0; i < POLE_MOTOR_NUM; i++) {
+      MOTOR_RM_Param_t *rm_param = const_cast<MOTOR_RM_Param_t *>(&c->param->motor_param[i]);
+      const uint8_t can = (uint8_t)rm_param->can;
+      const uint8_t group = (rm_param->id >= 0x205u && rm_param->id <= 0x208u) ? 1u : 0u;
+      if (can >= BSP_CAN_NUM) continue;
+      if (ctrl_sent[can][group]) continue;
+      (void)MOTOR_RM_Ctrl(rm_param);
+      ctrl_sent[can][group] = true;
+    }
+    return;
+  }
+
+  for (uint8_t i = 0; i < POLE_MOTOR_NUM; i++) {
     if (PoleController(c, i) == nullptr) continue;
     PoleController(c, i)->SetTorque(c->out.motor[i]);
     PoleController(c, i)->CommitCommand();
@@ -383,7 +454,7 @@ void Pole_ResetOutput(Pole_t *c) {
 void Pole_Power_Control(Pole_t *c, float max_power) {
   if (c == NULL || c->param == NULL) return;
 
-  float limit = Pole_Clipf(max_power, 0.0f, c->param->limit.max_current);
+  float limit = Pole_Clipf(max_power, 0.0f, Pole_GetMaxOutputTorqueNm(c));
   for (uint8_t i = 0; i < POLE_MOTOR_NUM; i++) {
     c->out.motor[i] = Pole_Clipf(c->out.motor[i], -limit, limit);
   }
