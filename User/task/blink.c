@@ -35,7 +35,7 @@ void Task_blink(void *argument) {
   uint32_t tick = osKernelGetTickCount(); /* 控制任务运行频率的计时 */
   /* USER CODE INIT BEGIN */
   BUZZER_Init(&buzzer, BSP_PWM_BUZZER);
-    BUZZER_PlayMusic(&buzzer, MUSIC_NOKIA);
+    // BUZZER_PlayMusic(&buzzer, MUSIC_NOKIA);
 
   /* USER CODE INIT END */
   

@@ -139,6 +139,7 @@ void Task_rc_main(void *argument) {
           chassis_cmd.ctrl_vec.vy = 0.0f;
           chassis_cmd.ctrl_vec.wz = 0.0f;
           Rc_SetPoleManual(0.0f, 0.0f);
+          pole_cmd.mode = POLE_MODE_RELAX;
           break;
         default:
           chassis_cmd.mode = CHASSIS_MODE_RELAX;
@@ -146,6 +147,7 @@ void Task_rc_main(void *argument) {
           chassis_cmd.ctrl_vec.vy = 0.0f;
           chassis_cmd.ctrl_vec.wz = 0.0f;
           Rc_SetPoleManual(0.0f, 0.0f);
+          pole_cmd.mode = POLE_MODE_RELAX;
           break;
       }
 

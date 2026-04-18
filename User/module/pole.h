@@ -55,7 +55,11 @@ typedef struct {
   } pid;
   struct {
     float support_vel_feedback_cutoff_hz;   /* Hz, <=0 means fallback */
+    float support_output_cutoff_hz;         /* Hz, <=0 means fallback */
   } filter;
+  struct {
+    bool use_legacy_normalized_output; /* true: map output to [-1,1] and use MOTOR_RM_SetOutput */
+  } output;
   struct {
     float step_200_all_extend[2];      /* 200mm台阶-四撑杆全伸: [0]前两杆, [1]后两杆 */
     float step_200_front_retract[2];   /* 200mm台阶-前两撑杆收: [0]前两杆, [1]后两杆 */
@@ -68,6 +72,9 @@ typedef struct {
     float max_current;
     float support_total_travel;   /* rad */
     float support_lift_speed;     /* rad/s */
+    float support_limit_soft_zone; /* rad, slow down near lower/upper limit */
+    float support_hold_zone;      /* rad, near lower limit hold target */
+    float support_hold_speed_threshold; /* rad/s, low-speed condition for hold */
   } limit;
 } Pole_Params_t;
 
@@ -109,6 +116,7 @@ typedef struct {
 
   struct {
     LowPassFilter2p_t support_vel_in[POLE_SUPPORT_MOTOR_NUM];
+    LowPassFilter2p_t support_out[POLE_SUPPORT_MOTOR_NUM];
   } filter;
 
   Pole_Output_t out;
