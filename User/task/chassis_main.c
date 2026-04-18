@@ -53,7 +53,7 @@ void Task_chassis_main(void *argument) {
     
 	  Chassis_UpdateFeedback(&chassis);
     Chassis_Control(&chassis, &chassis_cmd, osKernelGetTickCount());
-    // Chassis_Output(&chassis);
+    Chassis_Output(&chassis);
     
 		osMessageQueueGet(task_runtime.msgq.pole.cmd, &pole_cmd, NULL, 0);
     Pole_UpdateFeedback(&pole);

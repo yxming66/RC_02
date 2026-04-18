@@ -62,6 +62,21 @@ typedef struct {
     bool use_legacy_normalized_output; /* true: map output to [-1,1] and use MOTOR_RM_SetOutput */
   } output;
   struct {
+    float load_enter_nm;      /* Nm, 侧平均载荷高于该阈值判定“接地”（离地->接地切换） */
+    float load_exit_nm;       /* Nm, 侧平均载荷低于该阈值判定“离地”（接地->离地切换，需小于进入阈值） */
+    float speed_gate_rad_s;   /* rad/s, 速度门限；速度过高时冻结载荷采样，减少动态工况误判 */
+    uint8_t debounce_cycles;  /* control cycles, 状态切换去抖计数 */
+    float load_lpf_hz;        /* Hz, 载荷估计低通频率，越小越稳但响应更慢 */
+  } off_ground;
+  struct {
+    bool enable;                                   /* 总开关：true 启用离地重力补偿 */
+    float torque_ff_nm[POLE_SUPPORT_MOTOR_NUM];   /* Nm, 每根撑杆的基础重力前馈（带符号） */
+    float descending_scale;                        /* 0~1, 下压方向补偿缩放，防止下行发硬 */
+    float err_deadband_rad;                        /* rad, 目标-反馈误差死区，用于判断上抬/下压方向 */
+    float rise_rate;                               /* 1/s, 检测到离地时补偿混合系数上升斜率 */
+    float fall_rate;                               /* 1/s, 回到接地时补偿混合系数下降斜率 */
+  } gravity_comp;
+  struct {
     float step_200_all_extend[2];      /* 200mm台阶-四撑杆全伸: [0]前两杆, [1]后两杆 */
     float step_200_front_retract[2];   /* 200mm台阶-前两撑杆收: [0]前两杆, [1]后两杆 */
     float step_200_all_retract[2];     /* 200mm台阶-四撑杆全收: [0]前两杆, [1]后两杆 */
@@ -89,6 +104,19 @@ typedef struct {
 } Pole_Feedback_t;
 
 typedef struct {
+  float motor_load_nm[POLE_SUPPORT_MOTOR_NUM];   /* 每根撑杆载荷估计（低通后绝对值） */
+  float side_load_nm[2];                         /* 每侧载荷估计（2根撑杆平均值） */
+  uint8_t side_off_ground[2];                    /* 每侧离地状态：0接地，1离地 */
+  float gravity_scale[2];                        /* 每侧重力补偿混合系数 [0,1] */
+  float gravity_ff_nm[POLE_SUPPORT_MOTOR_NUM];   /* 每根撑杆当前实际重力前馈扭矩 */
+  float torque_pid_nm[POLE_SUPPORT_MOTOR_NUM];   /* 每根撑杆 PID 扭矩（未加重力前馈） */
+  float torque_cmd_nm[POLE_SUPPORT_MOTOR_NUM];   /* 每根撑杆最终输出扭矩（已限幅） */
+  float target_angle_rad[POLE_SUPPORT_MOTOR_NUM];    /* 每根撑杆目标角度 */
+  float feedback_angle_rad[POLE_SUPPORT_MOTOR_NUM];  /* 每根撑杆反馈角度 */
+  float feedback_speed_rad_s[POLE_SUPPORT_MOTOR_NUM];/* 每根撑杆反馈角速度 */
+} Pole_Debug_t;
+
+typedef struct {
   float motor[POLE_MOTOR_NUM];
 } Pole_Output_t;
 
@@ -111,6 +139,15 @@ typedef struct {
   } support_angle;
 
   struct {
+    float motor_load_nm[POLE_SUPPORT_MOTOR_NUM];
+    float side_load_nm[2];
+    float gravity_scale[2];
+    bool side_off_ground[2];
+    uint8_t side_enter_count[2];
+    uint8_t side_exit_count[2];
+  } off_ground;
+
+  struct {
     float support_target_angle[POLE_SUPPORT_MOTOR_NUM];
   } setpoint;
 
@@ -126,6 +163,7 @@ typedef struct {
 
   Pole_Output_t out;
   Pole_Feedback_t feedback;
+  Pole_Debug_t debug;
 } Pole_t;
 
 #ifdef __cplusplus
@@ -137,6 +175,9 @@ int8_t Pole_UpdateFeedback(Pole_t *c);
 int8_t Pole_Control(Pole_t *c, const Pole_CMD_t *c_cmd, uint32_t now);
 bool Pole_IsGroupAtTarget(const Pole_t *c, uint8_t group, float threshold_rad);
 bool Pole_IsAllAtTarget(const Pole_t *c, float threshold_rad);
+bool Pole_IsSideOffGround(const Pole_t *c, uint8_t side);
+bool Pole_IsAnyOffGround(const Pole_t *c);
+const Pole_Debug_t *Pole_GetDebug(const Pole_t *c);
 void Pole_Output(Pole_t *c);
 void Pole_ResetOutput(Pole_t *c);
 void Pole_Power_Control(Pole_t *c, float max_power);

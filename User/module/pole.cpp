@@ -28,6 +28,14 @@ namespace {
 
 constexpr float kPoleVelFeedbackLpfDefaultHz = 10.0f;
 constexpr float kPoleOutputLpfDefaultHz = 18.0f;
+constexpr float kPoleOffGroundLoadLpfDefaultHz = 10.0f;
+constexpr float kPoleOffGroundSpeedGateDefaultRadS = 3.0f;
+constexpr uint8_t kPoleOffGroundDebounceDefaultCycles = 5u;
+
+constexpr float kPoleGravityDescendingScaleDefault = 0.25f;
+constexpr float kPoleGravityErrDeadbandDefaultRad = 0.03f;
+constexpr float kPoleGravityRiseRateDefault = 6.0f;
+constexpr float kPoleGravityFallRateDefault = 10.0f;
 
 alignas(PoleMotorController) static unsigned char g_pole_controller_storage[POLE_MOTOR_NUM][sizeof(PoleMotorController)];
 
@@ -165,6 +173,214 @@ static float Pole_GetMaxOutputTorqueNm(const Pole_t *c) {
   return fmaxf(c->param->limit.max_current, 0.0f);
 }
 
+static uint8_t Pole_GetOffGroundDebounceCycles(const Pole_t *c) {
+  if (c == NULL || c->param == NULL) return kPoleOffGroundDebounceDefaultCycles;
+
+  const uint8_t configured = c->param->off_ground.debounce_cycles;
+  return (configured > 0u) ? configured : kPoleOffGroundDebounceDefaultCycles;
+}
+
+static float Pole_GetOffGroundLoadLpfHz(const Pole_t *c) {
+  if (c == NULL || c->param == NULL) return kPoleOffGroundLoadLpfDefaultHz;
+
+  const float configured = c->param->off_ground.load_lpf_hz;
+  return (configured > 0.0f) ? configured : kPoleOffGroundLoadLpfDefaultHz;
+}
+
+static float Pole_GetOffGroundLoadEnterNm(const Pole_t *c) {
+  if (c == NULL || c->param == NULL) return 0.8f;
+
+  if (c->param->off_ground.load_enter_nm > 0.0f) {
+    return c->param->off_ground.load_enter_nm;
+  }
+
+  return fmaxf(Pole_GetMaxOutputTorqueNm(c) * 0.22f, 0.8f);
+}
+
+static float Pole_GetOffGroundLoadExitNm(const Pole_t *c) {
+  if (c == NULL || c->param == NULL) return 0.5f;
+
+  const float enter_nm = Pole_GetOffGroundLoadEnterNm(c);
+  if (c->param->off_ground.load_exit_nm > 0.0f) {
+    return Pole_Clipf(c->param->off_ground.load_exit_nm, 0.0f, enter_nm * 0.95f);
+  }
+
+  return enter_nm * 0.65f;
+}
+
+static float Pole_GetOffGroundSpeedGateRadS(const Pole_t *c) {
+  if (c == NULL || c->param == NULL) return kPoleOffGroundSpeedGateDefaultRadS;
+
+  const float configured = c->param->off_ground.speed_gate_rad_s;
+  return (configured > 0.0f) ? configured : kPoleOffGroundSpeedGateDefaultRadS;
+}
+
+static bool Pole_UseGravityComp(const Pole_t *c) {
+  return (c != NULL && c->param != NULL && c->param->gravity_comp.enable);
+}
+
+static float Pole_GetGravityDescendingScale(const Pole_t *c) {
+  if (c == NULL || c->param == NULL) return kPoleGravityDescendingScaleDefault;
+
+  const float configured = c->param->gravity_comp.descending_scale;
+  if (configured >= 0.0f && configured <= 1.0f) return configured;
+  return kPoleGravityDescendingScaleDefault;
+}
+
+static float Pole_GetGravityErrDeadbandRad(const Pole_t *c) {
+  if (c == NULL || c->param == NULL) return kPoleGravityErrDeadbandDefaultRad;
+
+  const float configured = c->param->gravity_comp.err_deadband_rad;
+  return (configured > 0.0f) ? configured : kPoleGravityErrDeadbandDefaultRad;
+}
+
+static float Pole_GetGravityRiseRate(const Pole_t *c) {
+  if (c == NULL || c->param == NULL) return kPoleGravityRiseRateDefault;
+
+  const float configured = c->param->gravity_comp.rise_rate;
+  return (configured > 0.0f) ? configured : kPoleGravityRiseRateDefault;
+}
+
+static float Pole_GetGravityFallRate(const Pole_t *c) {
+  if (c == NULL || c->param == NULL) return kPoleGravityFallRateDefault;
+
+  const float configured = c->param->gravity_comp.fall_rate;
+  return (configured > 0.0f) ? configured : kPoleGravityFallRateDefault;
+}
+
+static void Pole_ResetOffGroundState(Pole_t *c) {
+  if (c == NULL) return;
+
+  for (uint8_t i = 0; i < POLE_SUPPORT_MOTOR_NUM; i++) {
+    c->off_ground.motor_load_nm[i] = fabsf(c->feedback.motor[i].torque_current);
+  }
+
+  for (uint8_t side = 0; side < 2u; side++) {
+    const uint8_t i0 = (side == 0u) ? 0u : 2u;
+    const uint8_t i1 = i0 + 1u;
+    c->off_ground.side_load_nm[side] =
+        0.5f * (c->off_ground.motor_load_nm[i0] + c->off_ground.motor_load_nm[i1]);
+    c->off_ground.gravity_scale[side] = 0.0f;
+    c->off_ground.side_off_ground[side] = false;
+    c->off_ground.side_enter_count[side] = 0u;
+    c->off_ground.side_exit_count[side] = 0u;
+  }
+}
+
+static void Pole_SyncOffGroundDebug(Pole_t *c) {
+  if (c == NULL) return;
+
+  for (uint8_t i = 0; i < POLE_SUPPORT_MOTOR_NUM; i++) {
+    c->debug.motor_load_nm[i] = c->off_ground.motor_load_nm[i];
+  }
+
+  for (uint8_t side = 0; side < 2u; side++) {
+    c->debug.side_load_nm[side] = c->off_ground.side_load_nm[side];
+    c->debug.side_off_ground[side] = c->off_ground.side_off_ground[side] ? 1u : 0u;
+    c->debug.gravity_scale[side] = c->off_ground.gravity_scale[side];
+  }
+}
+
+static void Pole_UpdateOffGroundState(Pole_t *c, const float fb_speed[POLE_SUPPORT_MOTOR_NUM]) {
+  if (c == NULL || c->param == NULL) return;
+
+  const float dt = fmaxf(c->dt, 0.0005f);
+  const float load_lpf_hz = Pole_GetOffGroundLoadLpfHz(c);
+  const float alpha = Pole_Clipf(6.2831853f * load_lpf_hz * dt, 0.0f, 1.0f);
+  const float speed_gate = Pole_GetOffGroundSpeedGateRadS(c);
+  const float load_enter_nm = Pole_GetOffGroundLoadEnterNm(c);
+  const float load_exit_nm = Pole_GetOffGroundLoadExitNm(c);
+  const uint8_t debounce_cycles = Pole_GetOffGroundDebounceCycles(c);
+
+  for (uint8_t i = 0; i < POLE_SUPPORT_MOTOR_NUM; i++) {
+    const float speed_abs = fabsf(fb_speed[i]);
+    const float measured_load_nm = fabsf(c->feedback.motor[i].torque_current);
+    float sampled_load_nm = measured_load_nm;
+
+    if (speed_gate > 0.0f && speed_abs > speed_gate) {
+      sampled_load_nm = c->off_ground.motor_load_nm[i];
+    }
+
+    c->off_ground.motor_load_nm[i] += alpha * (sampled_load_nm - c->off_ground.motor_load_nm[i]);
+  }
+
+  for (uint8_t side = 0; side < 2u; side++) {
+    const uint8_t i0 = (side == 0u) ? 0u : 2u;
+    const uint8_t i1 = i0 + 1u;
+
+    c->off_ground.side_load_nm[side] =
+        0.5f * (c->off_ground.motor_load_nm[i0] + c->off_ground.motor_load_nm[i1]);
+
+    const bool exceed_enter = (c->off_ground.side_load_nm[side] >= load_enter_nm);
+    const bool below_exit = (c->off_ground.side_load_nm[side] <= load_exit_nm);
+
+    if (!c->off_ground.side_off_ground[side]) {
+      if (below_exit) {
+        if (c->off_ground.side_enter_count[side] < debounce_cycles) {
+          c->off_ground.side_enter_count[side]++;
+        }
+      } else {
+        c->off_ground.side_enter_count[side] = 0u;
+      }
+      c->off_ground.side_exit_count[side] = 0u;
+
+      if (c->off_ground.side_enter_count[side] >= debounce_cycles) {
+        c->off_ground.side_off_ground[side] = true;
+        c->off_ground.side_enter_count[side] = 0u;
+      }
+    } else {
+      if (exceed_enter) {
+        if (c->off_ground.side_exit_count[side] < debounce_cycles) {
+          c->off_ground.side_exit_count[side]++;
+        }
+      } else {
+        c->off_ground.side_exit_count[side] = 0u;
+      }
+      c->off_ground.side_enter_count[side] = 0u;
+
+      if (c->off_ground.side_exit_count[side] >= debounce_cycles) {
+        c->off_ground.side_off_ground[side] = false;
+        c->off_ground.side_exit_count[side] = 0u;
+      }
+    }
+
+    float target_scale = c->off_ground.side_off_ground[side] ? 0.0f : 1.0f;
+    if (!Pole_UseGravityComp(c)) {
+      target_scale = 0.0f;
+    }
+
+    const float rate = target_scale > c->off_ground.gravity_scale[side]
+                           ? Pole_GetGravityRiseRate(c)
+                           : Pole_GetGravityFallRate(c);
+    c->off_ground.gravity_scale[side] = Pole_MoveTowards(
+        c->off_ground.gravity_scale[side], target_scale, fmaxf(rate, 0.0f) * dt);
+    c->off_ground.gravity_scale[side] = Pole_Clipf(c->off_ground.gravity_scale[side], 0.0f, 1.0f);
+  }
+
+  Pole_SyncOffGroundDebug(c);
+}
+
+static float Pole_GetGravityFeedforwardNm(const Pole_t *c, uint8_t idx,
+                                          float target_angle, float fb_angle) {
+  if (c == NULL || c->param == NULL) return 0.0f;
+  if (idx >= POLE_SUPPORT_MOTOR_NUM) return 0.0f;
+  if (!Pole_UseGravityComp(c)) return 0.0f;
+
+  const uint8_t side = (idx < 2u) ? 0u : 1u;
+  const float side_scale = Pole_Clipf(c->off_ground.gravity_scale[side], 0.0f, 1.0f);
+  if (side_scale <= 0.0f) return 0.0f;
+
+  const float ff_nominal = c->param->gravity_comp.torque_ff_nm[idx];
+  float motion_scale = 1.0f;
+  const float err = target_angle - fb_angle;
+  const float deadband = Pole_GetGravityErrDeadbandRad(c);
+  if (err < -deadband) {
+    motion_scale = Pole_GetGravityDescendingScale(c);
+  }
+
+  return ff_nominal * side_scale * motion_scale;
+}
+
 static float Pole_GetSupportSpeedFeedbackFiltered(Pole_t *c, uint8_t idx) {
   if (c == NULL || idx >= POLE_SUPPORT_MOTOR_NUM) return 0.0f;
 
@@ -199,7 +415,16 @@ static void Pole_ResetControllers(Pole_t *c) {
     LowPassFilter2p_Reset(&c->filter.support_out[i], 0.0f);
     c->feedback.support_vel_filtered[i] = c->feedback.motor[i].rotor_speed;
     c->support_angle.lower_hold_latched[i] = false;
+    c->debug.gravity_ff_nm[i] = 0.0f;
+    c->debug.torque_pid_nm[i] = 0.0f;
+    c->debug.torque_cmd_nm[i] = 0.0f;
+    c->debug.target_angle_rad[i] = 0.0f;
+    c->debug.feedback_angle_rad[i] = 0.0f;
+    c->debug.feedback_speed_rad_s[i] = 0.0f;
   }
+
+  Pole_ResetOffGroundState(c);
+  Pole_SyncOffGroundDebug(c);
 }
 
 static int8_t Pole_SetMode(Pole_t *c, Pole_Mode_t mode) {
@@ -263,6 +488,9 @@ int8_t Pole_Init(Pole_t *c, const Pole_Params_t *param, float target_freq) {
     }
   }
 
+  Pole_ResetOffGroundState(c);
+  Pole_SyncOffGroundDebug(c);
+
   return POLE_OK;
 }
 
@@ -296,8 +524,16 @@ int8_t Pole_Control(Pole_t *c, const Pole_CMD_t *c_cmd, uint32_t now) {
   Pole_SetMode(c, c_cmd->mode);
 
   if (c->mode == POLE_MODE_RELAX) {
+    Pole_ResetOffGroundState(c);
+    Pole_SyncOffGroundDebug(c);
     for (uint8_t i = 0; i < POLE_MOTOR_NUM; i++) {
       c->out.motor[i] = 0.0f;
+      c->debug.gravity_ff_nm[i] = 0.0f;
+      c->debug.torque_pid_nm[i] = 0.0f;
+      c->debug.torque_cmd_nm[i] = 0.0f;
+      c->debug.target_angle_rad[i] = 0.0f;
+      c->debug.feedback_angle_rad[i] = Pole_GetSupportAngle(c, i);
+      c->debug.feedback_speed_rad_s[i] = c->feedback.motor[i].rotor_speed;
     }
     return POLE_OK;
   }
@@ -341,14 +577,24 @@ int8_t Pole_Control(Pole_t *c, const Pole_CMD_t *c_cmd, uint32_t now) {
     float target = c->support_angle.lower[i] + c->support_angle.tracked_target_lift[side];
     c->setpoint.support_target_angle[i] = Pole_Clipf(target, c->support_angle.lower[i],
                                                      c->support_angle.upper[i]);
+    c->debug.target_angle_rad[i] = c->setpoint.support_target_angle[i];
   }
+
+  float fb_speed_buf[POLE_SUPPORT_MOTOR_NUM] = {};
+  for (uint8_t i = 0; i < POLE_SUPPORT_MOTOR_NUM; i++) {
+    fb_speed_buf[i] = Pole_GetSupportSpeedFeedbackFiltered(c, i);
+  }
+  Pole_UpdateOffGroundState(c, fb_speed_buf);
+
   float vel[4];
   float out[4];
   const float max_torque_nm = Pole_GetMaxOutputTorqueNm(c);
   for (uint8_t i = 0; i < POLE_SUPPORT_MOTOR_NUM; i++) {
     const float out_prev = c->out.motor[i];
     float fb_angle = Pole_GetSupportAngle(c, i);
-    float fb_speed = Pole_GetSupportSpeedFeedbackFiltered(c, i);
+    float fb_speed = fb_speed_buf[i];
+    c->debug.feedback_angle_rad[i] = fb_angle;
+    c->debug.feedback_speed_rad_s[i] = fb_speed;
 
     const bool request_lower =
         (c->setpoint.support_target_angle[i] <= (c->support_angle.lower[i] + c->param->limit.support_hold_zone));
@@ -364,6 +610,9 @@ int8_t Pole_Control(Pole_t *c, const Pole_CMD_t *c_cmd, uint32_t now) {
       vel[i] = 0.0f;
       out[i] = 0.0f;
       c->out.motor[i] = 0.0f;
+      c->debug.gravity_ff_nm[i] = 0.0f;
+      c->debug.torque_pid_nm[i] = 0.0f;
+      c->debug.torque_cmd_nm[i] = 0.0f;
       continue;
     }
 
@@ -373,7 +622,9 @@ int8_t Pole_Control(Pole_t *c, const Pole_CMD_t *c_cmd, uint32_t now) {
     out[i] = PID_Calc(&c->pid.support_vel[i], vel[i],
                       fb_speed, 0.0f, c->dt);
 
-    float out_cmd = LowPassFilter2p_Apply(&c->filter.support_out[i], out[i]);
+    float out_cmd_pid = LowPassFilter2p_Apply(&c->filter.support_out[i], out[i]);
+    const float gravity_ff_nm = Pole_GetGravityFeedforwardNm(c, i, c->setpoint.support_target_angle[i], fb_angle);
+    float out_cmd = out_cmd_pid + gravity_ff_nm;
     out_cmd = Pole_Clipf(out_cmd, -max_torque_nm, max_torque_nm);
 
     const float slew_rate = fmaxf(c->param->limit.support_output_slew_rate, 0.0f);
@@ -381,6 +632,9 @@ int8_t Pole_Control(Pole_t *c, const Pole_CMD_t *c_cmd, uint32_t now) {
       out_cmd = Pole_MoveTowards(out_prev, out_cmd, slew_rate * c->dt);
     }
     c->out.motor[i] = out_cmd;
+    c->debug.gravity_ff_nm[i] = gravity_ff_nm;
+    c->debug.torque_pid_nm[i] = out_cmd_pid;
+    c->debug.torque_cmd_nm[i] = out_cmd;
   }
 
   return POLE_OK;
@@ -405,6 +659,21 @@ bool Pole_IsGroupAtTarget(const Pole_t *c, uint8_t group, float threshold_rad) {
 bool Pole_IsAllAtTarget(const Pole_t *c, float threshold_rad) {
   return Pole_IsGroupAtTarget(c, 0u, threshold_rad) &&
          Pole_IsGroupAtTarget(c, 1u, threshold_rad);
+}
+
+bool Pole_IsSideOffGround(const Pole_t *c, uint8_t side) {
+  if (c == NULL || c->param == NULL) return false;
+  if (side >= 2u) return false;
+  return c->off_ground.side_off_ground[side];
+}
+
+bool Pole_IsAnyOffGround(const Pole_t *c) {
+  return Pole_IsSideOffGround(c, 0u) || Pole_IsSideOffGround(c, 1u);
+}
+
+const Pole_Debug_t *Pole_GetDebug(const Pole_t *c) {
+  if (c == NULL) return NULL;
+  return &c->debug;
 }
 
 void Pole_Output(Pole_t *c) {
@@ -448,6 +717,9 @@ void Pole_ResetOutput(Pole_t *c) {
       PoleController(c, i)->CommitCommand();
     }
     c->out.motor[i] = 0.0f;
+    c->debug.gravity_ff_nm[i] = 0.0f;
+    c->debug.torque_pid_nm[i] = 0.0f;
+    c->debug.torque_cmd_nm[i] = 0.0f;
   }
 }
 
@@ -457,6 +729,7 @@ void Pole_Power_Control(Pole_t *c, float max_power) {
   float limit = Pole_Clipf(max_power, 0.0f, Pole_GetMaxOutputTorqueNm(c));
   for (uint8_t i = 0; i < POLE_MOTOR_NUM; i++) {
     c->out.motor[i] = Pole_Clipf(c->out.motor[i], -limit, limit);
+    c->debug.torque_cmd_nm[i] = c->out.motor[i];
   }
 }
 

@@ -109,6 +109,21 @@ Config_RobotParam_t robot_config = {
       .output = {
         .use_legacy_normalized_output = false,
       },
+      .off_ground = {
+        .load_enter_nm = 1.45f,      /* 接地进入阈值：载荷高于该值，判定为接地 */
+        .load_exit_nm = 0.95f,       /* 离地进入阈值：载荷低于该值，判定为离地（应小于 load_enter_nm） */
+        .speed_gate_rad_s = 2.4f,    /* 速度门限：速度过高时不更新载荷估计，抗动态扰动 */
+        .debounce_cycles = 6u,       /* 状态去抖周期数：越大越稳，越小响应越快 */
+        .load_lpf_hz = 10.0f,        /* 载荷估计低通频率：越小越平滑，越大越灵敏 */
+      },
+      .gravity_comp = {
+        .enable = true,                                 /* 重力补偿总开关 */
+        .torque_ff_nm = {1.50f, 1.50f, 1.50f, 1.50f},  /* 25kg测试起步值：每根撑杆基础重力补偿扭矩（Nm） */
+        .descending_scale = 0.25f,                     /* 下压时补偿缩放：减小可避免下行发硬 */
+        .err_deadband_rad = 0.040f,                    /* 上抬/下压判定死区：过小易抖，过大易迟滞 */
+        .rise_rate = 7.0f,                             /* 接地后补偿混合上升斜率 (1/s) */
+        .fall_rate = 16.0f,                            /* 离地后补偿混合下降斜率 (1/s)，快退补偿防止悬空带动 */
+      },
     .preset = {
         .step_200_all_extend = {12.7912035f, 12.7912035f},
         .step_200_front_retract = {0.0f, 12.7912035f},
