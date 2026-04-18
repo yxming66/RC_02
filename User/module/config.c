@@ -81,17 +81,17 @@ Config_RobotParam_t robot_config = {
     },
     .pid = {
         .support_pos_pid = {
-            .k = 1.0f,
-      .p = 13.0f,
+            .k = 5.0f,
+      .p = 2.0f,
         .i = 0.0f,
             .d = 0.0f,
         .i_limit = 0.0f,
-      .out_limit = 23.0f,
+      .out_limit =30.0f,
             .d_cutoff_freq = -1.0f,
             .range = 0.0f,
         },
         .support_vel_pid = {
-            .k = 1.0f,
+            .k = 0.75f,
       .p = 0.26f,
       .i = 0.045f,
             .d = 0.0f,
