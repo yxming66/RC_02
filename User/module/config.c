@@ -67,83 +67,64 @@ Config_RobotParam_t robot_config = {
       .type = CHASSIS_TYPE_MECANUM,
   },
 .pole_param = {
-    .motor_param = {
-        [0] = {.can = BSP_CAN_1, .id = 0x201, .module = MOTOR_M3508, .reverse = false, .gear = true},
-        [1] = {.can = BSP_CAN_1, .id = 0x202, .module = MOTOR_M3508, .reverse = true,  .gear = true},
-        [2] = {.can = BSP_CAN_1, .id = 0x203, .module = MOTOR_M3508, .reverse = false, .gear = true},
-        [3] = {.can = BSP_CAN_1, .id = 0x204, .module = MOTOR_M3508, .reverse = true,  .gear = true},
-    },
-    .motor_install = {
-        [0] = {.external_ratio = 1.0f, .reverse_output = false},
-        [1] = {.external_ratio = 1.0f, .reverse_output = false},
-        [2] = {.external_ratio = 1.0f, .reverse_output = false},
-        [3] = {.external_ratio = 1.0f, .reverse_output = false},
-    },
-    .pid = {
-        .support_pos_pid = {
-            .k = 5.0f,
-      .p = 2.0f,
-        .i = 0.0f,
-            .d = 0.0f,
-        .i_limit = 0.0f,
-      .out_limit =30.0f,
-            .d_cutoff_freq = -1.0f,
-            .range = 0.0f,
+        .motor_param = {
+            [0] = {.can = BSP_CAN_1, .id = 0x201, .module = MOTOR_M3508, .reverse = false, .gear = true},
+            [1] = {.can = BSP_CAN_1, .id = 0x202, .module = MOTOR_M3508, .reverse = true, .gear = true},
+            [2] = {.can = BSP_CAN_1, .id = 0x203, .module = MOTOR_M3508, .reverse = false, .gear = true},
+            [3] = {.can = BSP_CAN_1, .id = 0x204, .module = MOTOR_M3508, .reverse = true, .gear = true},
         },
-        .support_vel_pid = {
-            .k = 0.75f,
-      .p = 0.26f,
-      .i = 0.045f,
-            .d = 0.0f,
-      .i_limit = 2.2f,
-          .out_limit = 6.0f,
-            .d_cutoff_freq = -1.0f,
-            .range = 0.0f,
+        .pid = {
+            .support_pos_pid = {
+                .k = 25.0f,
+                .p = 10.0f,
+                .i = 0.0f,
+                .d = 0.0f,
+                .i_limit = 0.15f,
+                .out_limit = 425.0f,
+                .d_cutoff_freq = -1.0f,
+                .range = 0.0f,
+            },
+              .support_vel_pid = {
+                .k = 0.1f,
+                .p = 0.1f,
+                .i = 0.0f,
+                .d = 0.0f,
+                .i_limit = 0.0f,
+                .out_limit = 1.0f,
+                .d_cutoff_freq = -1.0f,
+                .range = 0.0f,
+            },
+        },
+            .preset = {
+              .step_200_all_extend = {12.7912035f, 12.7912035f},      // 200mm台阶，右拨杆UP：前两杆/后两杆
+              .step_200_front_retract = {0.0f, 12.7912035f},   // 200mm台阶，右拨杆MID：前两杆收，后两杆位置
+              .step_200_all_retract = {0.0f, 0.0f},     // 200mm台阶，右拨杆DOWN：前两杆/后两杆
+              .step_400_all_extend = {26.0381184f, 26.0315285f},      // 400mm台阶，右拨杆UP：前两杆/后两杆
+              .step_400_front_retract = {0.0f, 26.0381184f},   // 400mm台阶，右拨杆MID：前两杆收，后两杆位置
+              .step_400_all_retract = {0.0f, 0.0f},     // 400mm台阶，右拨杆DOWN：前两杆/后两杆
+            },
+        .limit = {
+            .max_current = 1.0f,
+            .support_total_travel = 27.0f,
+            .support_lift_speed = 50.0f,
         },
     },
-        .filter = {
-        .support_vel_feedback_cutoff_hz = 16.0f,
-      .support_output_cutoff_hz = 22.0f,
-      .support_vel_feedback_spike_rad_s = 4.0f,
-        },
-      .output = {
-        .use_legacy_normalized_output = false,
-      },
-      .off_ground = {
-        .load_enter_nm = 1.45f,      /* 接地进入阈值：载荷高于该值，判定为接地 */
-        .load_exit_nm = 0.95f,       /* 离地进入阈值：载荷低于该值，判定为离地（应小于 load_enter_nm） */
-        .speed_gate_rad_s = 2.4f,    /* 速度门限：速度过高时不更新载荷估计，抗动态扰动 */
-        .debounce_cycles = 6u,       /* 状态去抖周期数：越大越稳，越小响应越快 */
-        .load_lpf_hz = 10.0f,        /* 载荷估计低通频率：越小越平滑，越大越灵敏 */
-      },
-      .gravity_comp = {
-        .enable = true,                                 /* 重力补偿总开关 */
-        .torque_ff_nm = {1.50f, 1.50f, 1.50f, 1.50f},  /* 25kg测试起步值：每根撑杆基础重力补偿扭矩（Nm） */
-        .descending_scale = 0.25f,                     /* 下压时补偿缩放：减小可避免下行发硬 */
-        .err_deadband_rad = 0.040f,                    /* 上抬/下压判定死区：过小易抖，过大易迟滞 */
-        .rise_rate = 7.0f,                             /* 接地后补偿混合上升斜率 (1/s) */
-        .fall_rate = 16.0f,                            /* 离地后补偿混合下降斜率 (1/s)，快退补偿防止悬空带动 */
-      },
-    .preset = {
-        .step_200_all_extend = {12.7912035f, 12.7912035f},
-        .step_200_front_retract = {0.0f, 12.7912035f},
-        .step_200_all_retract = {0.0f, 0.0f},
-        .step_400_all_extend = {26.0381184f, 26.0315285f},
-        .step_400_front_retract = {0.0f, 26.0381184f},
-        .step_400_all_retract = {0.0f, 0.0f},
+    .auto_ctrl_param = {
+      .climb_forward_speed = 0.25f,      // 跨越步骤中的常规前进速度 (m/s)
+      .climb_forward_kick_speed = 0.35f, // 起步短时冲刺速度，用于增加跨越动量 (m/s)
+      .climb_rear_retract_speed = 0.20f, // 后杆回收阶段的前进速度 (m/s)
+      .pole_extend_settle_ms = 900u,     // 四杆伸出后等待机构稳定的时间 (ms)
+      .front_photo_timeout_ms = 1800u,   // 等待前杆到位光电触发的超时时间 (ms)
+      .front_retract_settle_ms = 800u,   // 前杆回收后的稳定等待时间，当前模板预留参数 (ms)
+      .rear_photo_timeout_ms = 2200u,    // 等待后杆到位光电触发的超时时间 (ms)
+      .rear_retract_move_ms = 700u,      // 后杆回收后继续前进保持的时间 (ms)
+      .sick_valid_min_cm = 5.0f,         // SICK测距判定为有效的最小值 (cm)
+      .sick_valid_max_cm = 600.0f,       // SICK测距判定为有效的最大值 (cm)
+      .sick_norm_err_deadband = 0.03f,   // 左右SICK归一化差分误差死区 (无量纲)
+      .sick_norm_err_to_deg = 20.0f,     // 归一化误差映射到姿态辅助量的比例 (deg/ratio)
+      .sick_assist_gain = 0.25f,         // SICK辅助误差融合增益，越大修正越积极
+      .sick_assist_max_deg = 8.0f,       // SICK辅助误差的限幅上限 (deg)
     },
-    .limit = {
-          .max_torque_nm = 6.0f,
-          .max_current = 6.0f,
-        .support_total_travel = 27.0f,
-         .support_lift_speed = 24.0f,
-      .support_limit_soft_zone = 1.2f,
-      .support_hold_zone = 0.20f,
-      .support_hold_speed_threshold = 0.75f,
-      .support_hold_release_zone = 0.36f,
-      .support_output_slew_rate = 160.0f,
-    },
-},
     .arm_param = {
       .joint3_cali = {
         .mode = ARM_CALI_MODE_ZERO_LIMIT_TRAVEL,

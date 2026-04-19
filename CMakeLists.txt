@@ -54,7 +54,8 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     User/bsp/time.c
     User/bsp/uart.c
     User/bsp/pwm.c
-
+    User/bsp/gpio.c
+    User/bsp/spi.c
     # User/component sources
     User/component/crc16.c
     User/component/crc8.c
@@ -63,8 +64,9 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     User/component/mixer.c
     User/component/pid.c
     User/component/user_math.c
-
+    User/component/ahrs.c
     # User/device sources
+    User/device/bmi088.c
     User/device/buzzer.c
     User/device/dr16.c
     User/device/motor.c
@@ -78,7 +80,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     User/device/motor/packages/controller/motor_controller.cpp
     # User/module sources
     User/module/chassis.cpp
-    User/module/pole.cpp
+    User/module/pole.c
     User/module/arm.cpp
     User/module/rod.c
     User/module/autoCtrlAPI/api/auto_ctrl_api.c
@@ -103,10 +105,12 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     User/task/cmd_main.c
     User/task/init.c
     User/task/rc_main.c
+    User/task/auto_ctrl_feed.c
     User/task/user_task.c
     User/task/sick.c
     User/task/arm_main.c
     User/task/rod_main.c
+    User/task/atti_esti.c
 )
 
 # Add include paths

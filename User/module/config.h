@@ -35,6 +35,12 @@ typedef struct {
         uint32_t front_retract_settle_ms;
         uint32_t rear_photo_timeout_ms;
         uint32_t rear_retract_move_ms;
+        float sick_valid_min_cm;
+        float sick_valid_max_cm;
+        float sick_norm_err_deadband;
+        float sick_norm_err_to_deg;
+        float sick_assist_gain;
+        float sick_assist_max_deg;
     } auto_ctrl_param;
     CMD_Config_t cmd_param;
     Arm_Params_t arm_param;

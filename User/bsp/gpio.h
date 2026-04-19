@@ -6,13 +6,13 @@ extern "C" {
 
 /* Includes ----------------------------------------------------------------- */
 #include <stdint.h>
-#include "tim.h"
-#include "bsp.h"
+#include <stdbool.h>
+
+#include "bsp/bsp.h"
 
 /* USER INCLUDE BEGIN */
 
 /* USER INCLUDE END */
-
 
 /* Exported constants ------------------------------------------------------- */
 /* Exported macro ----------------------------------------------------------- */
@@ -21,24 +21,29 @@ extern "C" {
 /* USER DEFINE END */
 
 /* Exported types ----------------------------------------------------------- */
-/* PWM通道 */
 typedef enum {
-  BSP_PWM_BUZZER,
-  BSP_PWM_IMU_HEAT,
-  BSP_PWM_NUM,
-  BSP_PWM_ERR,
-} BSP_PWM_Channel_t;
+  BSP_GPIO_ACCL_CS,
+  BSP_GPIO_POWER_24V_2,
+  BSP_GPIO_POWER_24V_1,
+  BSP_GPIO_POWER_5V,
+  BSP_GPIO_GYRO_CS,
+  BSP_GPIO_USER_KEY,
+  BSP_GPIO_ACCL_INT,
+  BSP_GPIO_GYRO_INT,
+  BSP_GPIO_NUM,
+  BSP_GPIO_ERR,
+} BSP_GPIO_t;
 
 /* Exported functions prototypes -------------------------------------------- */
-int8_t BSP_PWM_Start(BSP_PWM_Channel_t ch);
-int8_t BSP_PWM_SetComp(BSP_PWM_Channel_t ch, float duty_cycle);
-int8_t BSP_PWM_SetFreq(BSP_PWM_Channel_t ch, float freq);
-int8_t BSP_PWM_Stop(BSP_PWM_Channel_t ch);
-uint32_t BSP_PWM_GetAutoReloadPreload(BSP_PWM_Channel_t ch);
-uint16_t BSP_PWM_GetChannel(BSP_PWM_Channel_t ch);
-TIM_HandleTypeDef* BSP_PWM_GetHandle(BSP_PWM_Channel_t ch);
-int8_t BSP_PWM_Start_DMA(BSP_PWM_Channel_t ch, uint32_t *pData, uint16_t Length);
-int8_t BSP_PWM_Stop_DMA(BSP_PWM_Channel_t ch);
+int8_t BSP_GPIO_RegisterCallback(BSP_GPIO_t gpio, void (*callback)(void));
+
+int8_t BSP_GPIO_EnableIRQ(BSP_GPIO_t gpio);
+int8_t BSP_GPIO_DisableIRQ(BSP_GPIO_t gpio);
+
+int8_t BSP_GPIO_WritePin(BSP_GPIO_t gpio, bool value);
+int8_t BSP_GPIO_TogglePin(BSP_GPIO_t gpio);
+
+bool BSP_GPIO_ReadPin(BSP_GPIO_t gpio);
 
 /* USER FUNCTION BEGIN */
 

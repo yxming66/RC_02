@@ -14,6 +14,11 @@ const osThreadAttr_t attr_blink = {
     .priority = osPriorityNormal,
     .stack_size = 256 * 4,
 };
+const osThreadAttr_t attr_atti_esti = {
+    .name = "atti_esti",
+    .priority = osPriorityNormal,
+    .stack_size = 512 * 4,
+};
 const osThreadAttr_t attr_chassis_main = {
     .name = "chassis_main",
     .priority = osPriorityNormal,
@@ -31,6 +36,11 @@ const osThreadAttr_t attr_cmd_main = {
 };
 const osThreadAttr_t attr_sick = {
     .name = "sick",
+    .priority = osPriorityNormal,
+    .stack_size = 256 * 4,
+};
+const osThreadAttr_t attr_auto_ctrl_feed = {
+    .name = "auto_ctrl_feed",
     .priority = osPriorityNormal,
     .stack_size = 256 * 4,
 };

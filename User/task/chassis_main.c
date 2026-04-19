@@ -48,8 +48,9 @@ void Task_chassis_main(void *argument) {
   while (1) {
     tick += delay_tick; /* 计算下一个唤醒时刻 */
     /* USER CODE BEGIN */
+		osMessageQueueGet(task_runtime.msgq.chassis.imu, &chassis_imu, NULL, 0);
 		osMessageQueueGet(task_runtime.msgq.chassis.cmd, &chassis_cmd, NULL, 0);
-    chassis.feedback.encoder_gimbalYawMotor = 0.0f;
+    chassis.feedback.encoder_gimbalYawMotor = chassis_imu.eulr.yaw;
     
 	  Chassis_UpdateFeedback(&chassis);
     Chassis_Control(&chassis, &chassis_cmd, osKernelGetTickCount());

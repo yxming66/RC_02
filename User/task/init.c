@@ -35,15 +35,18 @@ void Task_Init(void *argument) {
   
   /* 创建任务线程 */
   task_runtime.thread.blink = osThreadNew(Task_blink, NULL, &attr_blink);
+  task_runtime.thread.atti_esti = osThreadNew(Task_atti_esti, NULL, &attr_atti_esti);
   task_runtime.thread.chassis_main = osThreadNew(Task_chassis_main, NULL, &attr_chassis_main);
   task_runtime.thread.rc_main = osThreadNew(Task_rc_main, NULL, &attr_rc_main);
   task_runtime.thread.cmd_main = osThreadNew(Task_cmd_main, NULL, &attr_cmd_main);
   task_runtime.thread.sick = osThreadNew(Task_sick, NULL, &attr_sick);
+  task_runtime.thread.auto_ctrl_feed = osThreadNew(Task_auto_ctrl_feed, NULL, &attr_auto_ctrl_feed);
   task_runtime.thread.arm = osThreadNew(Task_arm, NULL, &attr_arm);
   // task_runtime.thread.rod = osThreadNew(Task_rod, NULL, &attr_rod);
   // 创建消息队列
   /* USER MESSAGE BEGIN */
   task_runtime.msgq.user_msg= osMessageQueueNew(2u, 10, NULL);
+  task_runtime.msgq.chassis.imu = osMessageQueueNew(1u, sizeof(Chassis_IMU_t), NULL);
   task_runtime.msgq.chassis.cmd = osMessageQueueNew(1u, sizeof(Chassis_CMD_t), NULL);
   task_runtime.msgq.pole.cmd = osMessageQueueNew(1u, sizeof(Pole_CMD_t), NULL);
   task_runtime.msgq.arm.cmd = osMessageQueueNew(1u, sizeof(Arm_CMD_t), NULL);

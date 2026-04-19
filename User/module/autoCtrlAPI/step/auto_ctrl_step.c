@@ -50,7 +50,11 @@ auto_ctrl_step_status_e AutoCtrlStep_Run(auto_ctrl_t *ctrl,
       return AUTO_CTRL_STEP_STATUS_RUNNING;
 
     case AUTO_CTRL_STEP_WAIT_FRONT_PHOTO:
-      if (ctrl->feedback.front_photo_triggered) {
+      if (ctrl->template_id != AUTO_CTRL_TEMPLATE_ASCEND_200 &&
+          ctrl->template_id != AUTO_CTRL_TEMPLATE_DESCEND_200) {
+        return AUTO_CTRL_STEP_STATUS_RUNNING;
+      }
+      if (ctrl->feedback.front_pole_retracted) {
         return AUTO_CTRL_STEP_STATUS_DONE;
       }
       if (step->timeout_ms > 0u &&
@@ -61,7 +65,11 @@ auto_ctrl_step_status_e AutoCtrlStep_Run(auto_ctrl_t *ctrl,
       return AUTO_CTRL_STEP_STATUS_RUNNING;
 
     case AUTO_CTRL_STEP_WAIT_REAR_PHOTO:
-      if (ctrl->feedback.rear_photo_triggered) {
+      if (ctrl->template_id != AUTO_CTRL_TEMPLATE_ASCEND_200 &&
+          ctrl->template_id != AUTO_CTRL_TEMPLATE_DESCEND_200) {
+        return AUTO_CTRL_STEP_STATUS_RUNNING;
+      }
+      if (ctrl->feedback.rear_pole_retracted) {
         return AUTO_CTRL_STEP_STATUS_DONE;
       }
       if (step->timeout_ms > 0u &&

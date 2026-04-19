@@ -2,7 +2,9 @@
 
 static const auto_ctrl_zone_info_t k_auto_ctrl_zone_table[] = {
     {AUTO_CTRL_ZONE_INVALID, "INVALID", 0, false},
-    {AUTO_CTRL_ZONE_R2_ENTRY, "R2_ENTRY", 0, false},
+  {AUTO_CTRL_ZONE_R2_ENTRY1, "R2_ENTRY1", 0, false},
+  {AUTO_CTRL_ZONE_R2_ENTRY2, "R2_ENTRY2", 0, false},
+  {AUTO_CTRL_ZONE_R2_ENTRY3, "R2_ENTRY3", 0, false},
     {AUTO_CTRL_ZONE_PLATFORM_1, "PLATFORM_1", 400, true},
     {AUTO_CTRL_ZONE_PLATFORM_2, "PLATFORM_2", 200, true},
     {AUTO_CTRL_ZONE_PLATFORM_3, "PLATFORM_3", 400, true},
@@ -15,7 +17,9 @@ static const auto_ctrl_zone_info_t k_auto_ctrl_zone_table[] = {
     {AUTO_CTRL_ZONE_PLATFORM_10, "PLATFORM_10", 200, true},
     {AUTO_CTRL_ZONE_PLATFORM_11, "PLATFORM_11", 400, true},
     {AUTO_CTRL_ZONE_PLATFORM_12, "PLATFORM_12", 200, true},
-    {AUTO_CTRL_ZONE_R2_EXIT, "R2_EXIT", 0, false},
+    {AUTO_CTRL_ZONE_R2_EXIT1, "R2_EXIT1", 0, false},
+    {AUTO_CTRL_ZONE_R2_EXIT2, "R2_EXIT2", 0, false},
+    {AUTO_CTRL_ZONE_R2_EXIT3, "R2_EXIT3", 0, false},
 };
 
 const auto_ctrl_zone_info_t *AutoCtrlZone_GetInfo(auto_ctrl_zone_e zone) {

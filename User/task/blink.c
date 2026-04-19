@@ -35,22 +35,26 @@ void Task_blink(void *argument) {
   uint32_t tick = osKernelGetTickCount(); /* 控制任务运行频率的计时 */
   /* USER CODE INIT BEGIN */
   BUZZER_Init(&buzzer, BSP_PWM_BUZZER);
-    // BUZZER_PlayMusic(&buzzer, MUSIC_NOKIA);
+    BUZZER_PlayMusic(&buzzer, MUSIC_NOKIA);
 
   /* USER CODE INIT END */
   
   while (1) {
     tick += delay_tick; /* 计算下一个唤醒时刻 */
     /* USER CODE BEGIN */
-    count++;
-    uint16_t phase = count % 1000;
-    if (count == 1001) count = 1;
-    if (phase == 0) {
-      /* 每秒开始播放C4音符 */
-      // BUZZER_Set(&buzzer, 800.63f, 0.5f); // C4音符频率约261.63Hz
-      // BUZZER_Start(&buzzer);
-    } else if (phase == 50) {
-      /* 播放100ms后停止 (50/500Hz = 0.1s) */
+    if (!g_buzzer_calib_active) {
+      count++;
+      uint16_t phase = count % 1000;
+      if (count == 1001) count = 1;
+      if (phase == 0) {
+        /* 每秒开始播放C4音符 */
+        BUZZER_Set(&buzzer, 800.63f, 0.5f); // C4音符频率约261.63Hz
+        BUZZER_Start(&buzzer);
+      } else if (phase == 50) {
+        /* 播放100ms后停止 (50/500Hz = 0.1s) */
+        BUZZER_Stop(&buzzer);
+      }
+    } else {
       BUZZER_Stop(&buzzer);
     }
     if (reset) {

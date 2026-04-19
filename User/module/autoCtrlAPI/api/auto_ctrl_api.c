@@ -1,14 +1,80 @@
 #include "module/autoCtrlAPI/api/auto_ctrl_api.h"
 
+#include <math.h>
 #include <string.h>
 
+#include "module/config.h"
 #include "module/autoCtrlAPI/primitive/auto_ctrl_primitive.h"
 #include "module/autoCtrlAPI/template/auto_ctrl_template_runner.h"
 #include "module/autoCtrlAPI/transition/auto_ctrl_transition.h"
 #include "module/autoCtrlAPI/transition/auto_ctrl_zone.h"
 
 #define AUTO_CTRL_PREALIGN_TIMEOUT_MS (2000u)
-#define AUTO_CTRL_TEMPLATE_TIMEOUT_MS (4000u)
+#define AUTO_CTRL_TEMPLATE_TIMEOUT_MS (10000u)
+
+static bool AutoCtrl_IsSickDistanceValid(float distance_cm,
+                float valid_min_cm,
+                float valid_max_cm) {
+  return isfinite(distance_cm) && distance_cm >= valid_min_cm &&
+    distance_cm <= valid_max_cm;
+}
+
+static bool AutoCtrl_TryGetSickAssistDeg(const auto_ctrl_t *ctrl,
+                                         float *assist_deg) {
+  const Config_RobotParam_t *robot_param;
+  float valid_min_cm;
+  float valid_max_cm;
+  float norm_err_deadband;
+  float norm_err_to_deg;
+  float assist_max_deg;
+  float left_cm;
+  float right_cm;
+  float norm_err;
+  float denom;
+
+  if (ctrl == 0 || assist_deg == 0 || ctrl->transition == 0) {
+    return false;
+  }
+
+  if (ctrl->transition->sensor_mode != AUTO_CTRL_SENSOR_MODE_SICK_FRONT_AND_BOTTOM) {
+    return false;
+  }
+
+  robot_param = Config_GetRobotParam();
+  if (robot_param == 0) {
+    return false;
+  }
+
+  valid_min_cm = robot_param->auto_ctrl_param.sick_valid_min_cm;
+  valid_max_cm = robot_param->auto_ctrl_param.sick_valid_max_cm;
+  norm_err_deadband = robot_param->auto_ctrl_param.sick_norm_err_deadband;
+  norm_err_to_deg = robot_param->auto_ctrl_param.sick_norm_err_to_deg;
+  assist_max_deg = robot_param->auto_ctrl_param.sick_assist_max_deg;
+
+  if (!AutoCtrl_IsSickDistanceValid(ctrl->feedback.sick_left_cm, valid_min_cm,
+                                    valid_max_cm) ||
+      !AutoCtrl_IsSickDistanceValid(ctrl->feedback.sick_right_cm, valid_min_cm,
+                                    valid_max_cm)) {
+    return false;
+  }
+
+  left_cm = ctrl->feedback.sick_left_cm;
+  right_cm = ctrl->feedback.sick_right_cm;
+  denom = fabsf(left_cm) + fabsf(right_cm);
+  if (denom < 1e-3f) {
+    return false;
+  }
+
+  norm_err = (left_cm - right_cm) / denom;
+  if (fabsf(norm_err) < norm_err_deadband) {
+    return false;
+  }
+
+  *assist_deg =
+      AutoCtrlPrimitive_Clamp(norm_err * norm_err_to_deg, -assist_max_deg,
+                              assist_max_deg);
+  return true;
+}
 
 static void AutoCtrl_EnterState(auto_ctrl_t *ctrl, auto_ctrl_run_state_e state,
                                 uint32_t now_ms) {
@@ -55,7 +121,7 @@ void AutoCtrl_SetFeedback(auto_ctrl_t *ctrl,
   if (ctrl == 0 || feedback == 0) return;
   ctrl->feedback = *feedback;
   ctrl->feedback.yaw_auto_deg =
-      AutoCtrlMath_WrapYawDeg(feedback->yaw_raw_deg - ctrl->yaw_zero_offset_deg);
+  AutoCtrlMath_WrapYawDeg(feedback->yaw_auto_deg - ctrl->yaw_zero_offset_deg);
 }
 
 bool AutoCtrl_StartTransition(auto_ctrl_t *ctrl, auto_ctrl_zone_e from,
@@ -93,10 +159,27 @@ bool AutoCtrl_StartTransition(auto_ctrl_t *ctrl, auto_ctrl_zone_e from,
 }
 
 void AutoCtrl_Update(auto_ctrl_t *ctrl, uint32_t now_ms) {
+  const Config_RobotParam_t *robot_param;
+  float sick_assist_gain;
+  float imu_yaw_error_deg;
+  float sick_assist_deg;
+
   if (ctrl == 0) return;
 
-  ctrl->yaw_error_deg = AutoCtrlMath_GetYawErrorDeg(ctrl->target_yaw_deg,
-                                                    ctrl->feedback.yaw_auto_deg);
+  robot_param = Config_GetRobotParam();
+  sick_assist_gain =
+      (robot_param == 0) ? 0.0f : robot_param->auto_ctrl_param.sick_assist_gain;
+
+  imu_yaw_error_deg = AutoCtrlMath_GetYawErrorDeg(ctrl->target_yaw_deg,
+                                                   ctrl->feedback.yaw_auto_deg);
+  ctrl->yaw_error_deg = imu_yaw_error_deg;
+
+  if (ctrl->state == AUTO_CTRL_STATE_PREALIGN &&
+      AutoCtrl_TryGetSickAssistDeg(ctrl, &sick_assist_deg)) {
+    ctrl->yaw_error_deg =
+        imu_yaw_error_deg - sick_assist_gain * sick_assist_deg;
+  }
+
   AutoCtrlPrimitive_ResetOutputs(ctrl);
 
   switch (ctrl->state) {
@@ -108,9 +191,7 @@ void AutoCtrl_Update(auto_ctrl_t *ctrl, uint32_t now_ms) {
 
     case AUTO_CTRL_STATE_PREALIGN:
       AutoCtrlPrimitive_ApplyPrealign(ctrl);
-      if (AutoCtrlMath_IsYawAligned(ctrl->target_yaw_deg,
-                                    ctrl->feedback.yaw_auto_deg,
-                                    ctrl->yaw_tolerance_deg)) {
+      if (fabsf(ctrl->yaw_error_deg) <= ctrl->yaw_tolerance_deg) {
         memset(&ctrl->template_ctx, 0, sizeof(ctrl->template_ctx));
         AutoCtrl_EnterState(ctrl, AUTO_CTRL_STATE_RUN_TEMPLATE, now_ms);
       } else if ((now_ms - ctrl->state_enter_time_ms) > ctrl->prealign_timeout_ms) {
@@ -132,9 +213,8 @@ void AutoCtrl_Update(auto_ctrl_t *ctrl, uint32_t now_ms) {
         ctrl->current_zone = ctrl->target_zone;
         AutoCtrl_Finish(ctrl, AUTO_CTRL_RESULT_SUCCESS, AUTO_CTRL_FAULT_NONE,
                         AUTO_CTRL_STATE_SUCCESS);
-      } else if (ctrl->fault == AUTO_CTRL_FAULT_TEMPLATE_UNSUPPORTED) {
-        AutoCtrl_Finish(ctrl, AUTO_CTRL_RESULT_FAIL,
-                        AUTO_CTRL_FAULT_TEMPLATE_UNSUPPORTED,
+      } else if (ctrl->fault != AUTO_CTRL_FAULT_NONE) {
+        AutoCtrl_Finish(ctrl, AUTO_CTRL_RESULT_FAIL, ctrl->fault,
                         AUTO_CTRL_STATE_FAIL);
       }
       return;
