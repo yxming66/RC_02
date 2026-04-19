@@ -300,7 +300,7 @@ void Task_atti_esti(void *argument) {
     chassis_to_send.gyro = bmi088.gyro;
     osMessageQueueReset(task_runtime.msgq.chassis.imu);
     osMessageQueuePut(task_runtime.msgq.chassis.imu, &chassis_to_send, 0, 0);
-    Atti_SendXYZToPc(eulr_chassis.roll, eulr_chassis.pitch, eulr_chassis.yaw);
+    // Atti_SendXYZToPc(eulr_chassis.roll, eulr_chassis.pitch, eulr_chassis.yaw);
     BSP_PWM_SetComp(BSP_PWM_IMU_HEAT, PID_Calc(&imu_temp_ctrl_pid, 40.0f, bmi088.temp, 0.0f, 0.0f));
     
     /* USER CODE END */
