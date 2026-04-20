@@ -1,14 +1,30 @@
 #include "module/autoCtrlAPI/step/auto_ctrl_step.h"
 
+/*
+ * auto_ctrl_step.c
+ *
+ * 作用：
+ * - 提供可复用的单步动作执行器；
+ * - 管理 step 首次进入、计时和超时；
+ * - 统一返回 RUNNING / DONE / FAIL，供上层模板编排。
+ */
+
 #include <string.h>
 
 #include "module/autoCtrlAPI/primitive/auto_ctrl_primitive.h"
 
+/* 清空 step 运行时状态。 */
 void AutoCtrlStep_Reset(auto_ctrl_step_runtime_t *runtime) {
   if (runtime == 0) return;
   memset(runtime, 0, sizeof(*runtime));
 }
 
+/*
+ * 执行单个 step。
+ * - 首次进入会刷新 enter_time 和 timeout；
+ * - 根据 step 类型调用对应 primitive；
+ * - 对光电等待类 step 内置超时故障上报。
+ */
 auto_ctrl_step_status_e AutoCtrlStep_Run(auto_ctrl_t *ctrl,
                                          auto_ctrl_step_runtime_t *runtime,
                                          const auto_ctrl_step_def_t *step,

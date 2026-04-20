@@ -1,7 +1,26 @@
 #include "module/autoCtrlAPI/transition/auto_ctrl_transition.h"
 
+/*
+ * auto_ctrl_transition.c
+ *
+ * 作用：
+ * - 维护区块转移表（from_zone -> to_zone）；
+ * - 对外提供“查找转移定义”和“是否合法”接口。
+ *
+ * 设计原则：
+ * - 只允许表中声明过的邻接转移；
+ * - 不允许通过本模块自动推导跨级/对角跳转；
+ * - 每条表项绑定模板、姿态要求和传感器模式。
+ */
+
 #include "module/autoCtrlAPI/transition/auto_ctrl_zone.h"
 
+/*
+ * 转移表：
+ * - Entry/Exit 与平台区块之间的上下台阶关系；
+ * - 平台网格内邻接移动关系；
+ * - 每条关系显式声明模板与传感器约束。
+ */
 static const auto_ctrl_transition_t k_auto_ctrl_transition_table[] = {
   /* Entry blocks to top row platforms. No entry-entry transitions. */
   {AUTO_CTRL_ZONE_R2_ENTRY1, AUTO_CTRL_ZONE_PLATFORM_1,
@@ -158,6 +177,7 @@ static const auto_ctrl_transition_t k_auto_ctrl_transition_table[] = {
    AUTO_CTRL_SENSOR_MODE_SICK_FRONT_AND_BOTTOM, 200},
 };
 
+/* 顺序扫描转移表，命中 from/to 则返回对应表项。 */
 const auto_ctrl_transition_t *AutoCtrlTransition_Find(auto_ctrl_zone_e from,
                                                       auto_ctrl_zone_e to) {
   if (!AutoCtrlZone_IsValid(from) || !AutoCtrlZone_IsValid(to)) {
@@ -177,6 +197,7 @@ const auto_ctrl_transition_t *AutoCtrlTransition_Find(auto_ctrl_zone_e from,
   return 0;
 }
 
+/* 转移合法性判定：查表成功即合法。 */
 bool AutoCtrlTransition_IsLegal(auto_ctrl_zone_e from, auto_ctrl_zone_e to) {
   return AutoCtrlTransition_Find(from, to) != 0;
 }

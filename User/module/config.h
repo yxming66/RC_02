@@ -27,14 +27,30 @@ typedef struct {
     Chassis_Params_t chassis_param;
     Pole_Params_t pole_param;
     struct {
-        float climb_forward_speed;
-        float climb_forward_kick_speed;
-        float climb_rear_retract_speed;
-        uint32_t pole_extend_settle_ms;
-        uint32_t front_photo_timeout_ms;
-        uint32_t front_retract_settle_ms;
-        uint32_t rear_photo_timeout_ms;
-        uint32_t rear_retract_move_ms;
+        /* 通用姿态修正参数：所有带自动矫正的模板都会用到 */
+        float prealign_kp;                  /* yaw误差映射到wz指令的比例系数 */
+        float prealign_wz_limit;            /* yaw自动矫正时wz限幅 (rad/s) */
+
+        /* 简单平移模板参数：AUTO_CTRL_TEMPLATE_FLAT_MOVE */
+        float flat_move_speed;              /* 简单平移模板默认前进速度 (m/s) */
+        uint32_t flat_move_hold_ms;         /* 简单平移模板默认保持时间 (ms) */
+
+        /* 200台阶/跨越前段参数：起步、撑杆、前段到位判定 */
+        float climb_forward_speed;          /* 前段并行动作时的基础前进速度 (m/s) */
+        float climb_forward_kick_speed;     /* 起步短促前冲速度，用于提高跨越动量 (m/s) */
+        uint32_t climb_forward_kick_ms;     /* 起步短促前冲持续时间 (ms) */
+        uint32_t pole_extend_settle_ms;     /* 四杆伸出后等待机构稳定的时间 (ms) */
+        uint32_t front_photo_timeout_ms;    /* 前段等待底部光电/前段反馈超时 (ms) */
+        uint32_t front_retract_settle_ms;   /* 前杆回收后的稳定等待时间 (ms) */
+
+        /* 200台阶/跨越中后段参数：中段纯前进、后杆回收与尾段脱离 */
+        uint32_t climb_mid_forward_ms;      /* 前杆收回后，中段纯前进保持时间 (ms) */
+        float climb_rear_retract_speed;     /* 后杆回收阶段的基础前进速度 (m/s) */
+        float climb_rear_retract_vy;        /* 后杆回收阶段附加横移速度vy (m/s) */
+        uint32_t rear_photo_timeout_ms;     /* 后段等待后杆/后段反馈超时 (ms) */
+        uint32_t rear_retract_move_ms;      /* 后杆回收完成后继续保持运动的时间 (ms) */
+
+        /* SICK辅助姿态修正参数 */
         float sick_valid_min_cm;
         float sick_valid_max_cm;
         float sick_norm_err_deadband;
