@@ -226,14 +226,12 @@ static bool AutoCtrlTemplate_RunAscend200(auto_ctrl_t *ctrl,
                                           const Config_RobotParam_t *robot_param) {
   switch (ctrl->template_ctx.step_index) {
     case 0:
-      /* 前段：一边矫正姿态+缓慢前进，一边将四杆撑到目标高度；
-         只有机构稳定、底部光电触发且yaw误差进入阈值后才允许切步。 */
+      /*
+       * autoctrltest 分支实验模式：
+       * 本模板不主动下发实际命令，只保留状态检测与切步。
+       * 前段切步条件：底部光电触发 + yaw 达标 + 稳定时间满足。
+       */
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      AutoCtrlPrimitive_ApplyPrealignWithForward(
-          ctrl, robot_param->auto_ctrl_param.climb_forward_speed);
-      AutoCtrlPrimitive_CommandPoleTarget(
-          ctrl, robot_param->pole_param.preset.step_200_all_extend[0],
-          robot_param->pole_param.preset.step_200_all_extend[1]);
       if (AutoCtrlTemplate_IsAscend200Ready(ctrl, now_ms, robot_param)) {
         AutoCtrlTemplate_NextStep(ctrl);
         return false;
@@ -246,10 +244,7 @@ static bool AutoCtrlTemplate_RunAscend200(auto_ctrl_t *ctrl,
       return false;
 
     case 1:
-      /* 前段结束：收前两杆，并给机构一个稳定时间，避免刚收杆就切后续动作。 */
-      AutoCtrlPrimitive_CommandPoleTarget(
-          ctrl, robot_param->pole_param.preset.step_200_front_retract[0],
-          robot_param->pole_param.preset.step_200_front_retract[1]);
+      /* 前杆阶段：仅按时间稳定窗口推进，不下发收杆命令。 */
       if (AutoCtrlTemplate_StepTimeout(
               ctrl, now_ms,
               robot_param->auto_ctrl_param.front_retract_settle_ms)) {
@@ -258,10 +253,8 @@ static bool AutoCtrlTemplate_RunAscend200(auto_ctrl_t *ctrl,
       return false;
 
     case 2:
-      /* 中段：底盘仅保持缓慢前进，等待进入后杆回收触发条件。 */
+      /* 中段：仅检测后杆回收触发条件，不下发底盘命令。 */
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      AutoCtrlPrimitive_CommandFlatMove(
-          ctrl, robot_param->auto_ctrl_param.climb_forward_speed);
       if (ctrl->feedback.rear_pole_retracted) {
         AutoCtrlTemplate_NextStep(ctrl);
         return false;
@@ -274,14 +267,8 @@ static bool AutoCtrlTemplate_RunAscend200(auto_ctrl_t *ctrl,
       return false;
 
     case 3:
-      /* 后段：边矫正边前进，同时叠加一个可调vy，配合后两杆回收。 */
+      /* 后段：仅检测后杆回收状态，不下发矫正/移动/收杆命令。 */
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      AutoCtrlPrimitive_ApplyPrealignWithMove(
-          ctrl, robot_param->auto_ctrl_param.climb_rear_retract_speed,
-        robot_param->auto_ctrl_param.climb_rear_retract_vy);
-      AutoCtrlPrimitive_CommandPoleTarget(
-          ctrl, robot_param->pole_param.preset.step_200_all_retract[0],
-          robot_param->pole_param.preset.step_200_all_retract[1]);
       if (ctrl->feedback.rear_pole_retracted) {
         AutoCtrlTemplate_NextStep(ctrl);
         return false;
@@ -294,10 +281,7 @@ static bool AutoCtrlTemplate_RunAscend200(auto_ctrl_t *ctrl,
       return false;
 
     case 4:
-      /* 尾段脱离：后杆完全收回后，再按设定速度继续走一小段时间，确保车体彻底脱离台阶。 */
-      AutoCtrlPrimitive_ApplyPrealignWithMove(
-          ctrl, robot_param->auto_ctrl_param.climb_rear_retract_speed,
-          robot_param->auto_ctrl_param.climb_rear_retract_vy);
+      /* 尾段：仅以时间窗结束模板，不下发脱离动作命令。 */
       if (AutoCtrlTemplate_StepTimeout(
               ctrl, now_ms,
               robot_param->auto_ctrl_param.rear_retract_move_ms)) {
