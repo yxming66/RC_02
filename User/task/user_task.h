@@ -11,6 +11,7 @@ extern "C" {
 /* USER INCLUDE BEGIN */
 #include <stdbool.h>
 #include "module/autoCtrlAPI/api/auto_ctrl_api.h"
+#include "device/buzzer.h"
 
 /* USER INCLUDE END */
 /* Exported constants ------------------------------------------------------- */
@@ -21,9 +22,10 @@ extern "C" {
 #define RC_MAIN_FREQ (500.0)
 #define CMD_MAIN_FREQ (500.0)
 #define SICK_FREQ (500.0)
-#define AUTO_CTRL_FEED_FREQ (500.0)
+#define AUTO_CTRL_FREQ (500.0)
 #define ARM_FREQ (500.0)
 #define ROD_FREQ (500.0)
+#define PC_UART_RX_FREQ (500.0)
 /* 任务初始化延时ms */
 #define TASK_INIT_DELAY (100u)
 #define BLINK_INIT_DELAY (0)
@@ -32,9 +34,10 @@ extern "C" {
 #define RC_MAIN_INIT_DELAY (0)
 #define CMD_MAIN_INIT_DELAY (0)
 #define SICK_INIT_DELAY (0)
-#define AUTO_CTRL_FEED_INIT_DELAY (0)
+#define AUTO_CTRL_INIT_DELAY (0)
 #define ARM_INIT_DELAY (0)
 #define ROD_INIT_DELAY (0)
+#define PC_UART_RX_INIT_DELAY (0)
 /* Exported defines --------------------------------------------------------- */
 /* Exported macro ----------------------------------------------------------- */
 /* Exported types ----------------------------------------------------------- */
@@ -49,9 +52,10 @@ typedef struct {
         osThreadId_t rc_main;
         osThreadId_t cmd_main;
         osThreadId_t sick;
-        osThreadId_t auto_ctrl_feed;
+        osThreadId_t auto_ctrl;
         osThreadId_t arm;
         osThreadId_t rod;
+        osThreadId_t pc_uart_rx;
 
     } thread;
 
@@ -100,9 +104,10 @@ typedef struct {
         UBaseType_t rc_main;
         UBaseType_t cmd_main;
         UBaseType_t sick;
-        UBaseType_t auto_ctrl_feed;
+        UBaseType_t auto_ctrl;
         UBaseType_t arm;
         UBaseType_t rod;
+        UBaseType_t pc_uart_rx;
 
     } stack_water_mark;
 
@@ -114,7 +119,8 @@ typedef struct {
         float rc_main;
         float cmd_main;
         float sick;
-        float auto_ctrl_feed;
+        float auto_ctrl;
+        float pc_uart_rx;
     } freq;
 
     /* 任务最近运行时间 */
@@ -125,7 +131,8 @@ typedef struct {
         float rc_main;
         float cmd_main;
         float sick;
-        float auto_ctrl_feed;
+        float auto_ctrl;
+        float pc_uart_rx;
     } last_up_time;
 
 } Task_Runtime_t;
@@ -135,6 +142,7 @@ extern Task_Runtime_t task_runtime;
 
 extern auto_ctrl_t auto_ctrl;
 extern bool auto_ctrl_inited;
+extern BUZZER_t buzzer;
 extern bool g_buzzer_calib_active;
 
 /* 初始化任务句柄 */
@@ -145,9 +153,10 @@ extern const osThreadAttr_t attr_chassis_main;
 extern const osThreadAttr_t attr_rc_main;
 extern const osThreadAttr_t attr_cmd_main;
 extern const osThreadAttr_t attr_sick;
-extern const osThreadAttr_t attr_auto_ctrl_feed;
+extern const osThreadAttr_t attr_auto_ctrl;
 extern const osThreadAttr_t attr_arm;
 extern const osThreadAttr_t attr_rod;
+extern const osThreadAttr_t attr_pc_uart_rx;
 /* 任务函数声明 */
 void Task_Init(void *argument);
 void Task_blink(void *argument);
@@ -156,9 +165,10 @@ void Task_chassis_main(void *argument);
 void Task_rc_main(void *argument);
 void Task_cmd_main(void *argument);
 void Task_sick(void *argument);
-void Task_auto_ctrl_feed(void *argument);
+void Task_auto_ctrl(void *argument);
 void Task_arm(void *argument);
 void Task_rod(void *argument);
+void Task_pc_uart_rx(void *argument);
 #ifdef __cplusplus
 }
 #endif

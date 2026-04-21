@@ -111,7 +111,7 @@ Config_RobotParam_t robot_config = {
     },
     .auto_ctrl_param = {
       /* 通用姿态修正参数 */
-      .prealign_kp = 0.03f,              // yaw误差到wz指令的比例系数，越大修正越激进
+      .prealign_kp = 6.0f,              // yaw误差到wz指令的比例系数，越大修正越激进
       .prealign_wz_limit = 1.5f,         // 自动矫正时wz最大输出限幅 (rad/s)
 
       /* 简单平移模板参数 */
@@ -119,27 +119,33 @@ Config_RobotParam_t robot_config = {
       .flat_move_hold_ms = 600u,         // 简单平移模板默认保持时间 (ms)
 
       /* 200台阶/跨越前段参数 */
-      .climb_forward_speed = 0.25f,      // 前段并行动作时的基础前进速度 (m/s)
-      .climb_forward_kick_speed = 0.35f, // 起步短促前冲速度，用于增加跨越动量 (m/s)
+      .climb_align_forward_speed = 0.30f, // 对正阶段同步慢速前进速度 (m/s)
+      .climb_forward_speed = 0.50f,      // 前段并行动作时的基础前进速度 (m/s)
+      .climb_forward_kick_speed = 0.50f, // 起步短促前冲速度，用于增加跨越动量 (m/s)
       .climb_forward_kick_ms = 80u,      // 起步短促前冲保持时间 (ms)
       .pole_extend_settle_ms = 900u,     // 四杆伸出后等待机构稳定的时间 (ms)
       .front_photo_timeout_ms = 1800u,   // 前段等待底部光电/前段反馈的超时时间 (ms)
+      .climb_front_retract_speed = 0.20f, // 前杆回收阶段基础前进速度 (m/s)
+      .climb_front_retract_vy = 0.04f,    // 前杆回收阶段附加横移速度vy (m/s)
+      .climb_front_retract_timeout_ms = 1500u, // 前杆回收阶段最长等待时间 (ms)
       .front_retract_settle_ms = 800u,   // 前杆回收后的稳定等待时间 (ms)
 
       /* 200台阶/跨越中后段参数 */
+      .climb_mid_forward_speed = 0.22f,   // 前杆收回后，中段继续前进速度 (m/s)
       .climb_mid_forward_ms = 80u,       // 前杆收回后，中段继续纯前进的保持时间 (ms)
       .climb_rear_retract_speed = 0.20f, // 后杆回收阶段的基础前进速度 (m/s)
       .climb_rear_retract_vy = 0.05f,    // 后杆回收阶段附加横移速度vy，便于边收杆边修正姿态 (m/s)
       .rear_photo_timeout_ms = 2200u,    // 后段等待后杆/后段反馈的超时时间 (ms)
+      .climb_rear_retract_timeout_ms = 1800u, // 后杆回收阶段最长等待时间 (ms)
       .rear_retract_move_ms = 700u,      // 后杆回收完成后继续保持运动的时间 (ms)
 
       /* SICK辅助姿态修正参数 */
-      .sick_valid_min_cm = 5.0f,         // SICK测距判定为有效的最小值 (cm)
-      .sick_valid_max_cm = 600.0f,       // SICK测距判定为有效的最大值 (cm)
+      .sick_valid_min_cm = 0.0f,         // SICK测距判定为有效的最小值 (cm)
+      .sick_valid_max_cm = 2.0f,       // SICK测距判定为有效的最大值 (cm)
       .sick_norm_err_deadband = 0.03f,   // 左右SICK归一化差分误差死区 (无量纲)
-      .sick_norm_err_to_deg = 20.0f,     // 归一化误差映射到姿态辅助量的比例 (deg/ratio)
-      .sick_assist_gain = 0.25f,         // SICK辅助误差融合增益，越大修正越积极
-      .sick_assist_max_deg = 8.0f,       // SICK辅助误差的限幅上限 (deg)
+      .sick_norm_err_to_rad = 0.34906585f, // 归一化误差映射到姿态辅助量的比例 (rad/ratio)
+      .sick_assist_gain = 0.75f,         // SICK辅助误差融合增益，越大修正越积极
+      .sick_assist_max_rad = 0.13962634f, // SICK辅助误差的限幅上限 (rad)
     },
     .arm_param = {
       .joint3_cali = {

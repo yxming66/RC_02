@@ -127,7 +127,7 @@ static void Chassis_UpdateBodyVelocityFeedback(Chassis_t *c) {
   const float raw_vy = 0.25f * (-v0 + v1 + v2 - v3);
   float raw_wz = 0.0f;
   if (fabsf(k) > 1e-4f) {
-    raw_wz = -0.25f * (v0 + v1 + v2 + v3) / k;
+    raw_wz = 0.25f * (v0 + v1 + v2 + v3) / k;
   }
 
   c->debug.body_vel_raw_vx = raw_vx;

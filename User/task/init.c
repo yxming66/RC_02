@@ -7,11 +7,13 @@
 #include "task/user_task.h"
 
 /* USER INCLUDE BEGIN */
+#include "device/buzzer.h"
 #include "device/dr16.h"
 #include "module/chassis.h"
 #include "module/pole.h"
 #include "module/arm.h"
 #include "module/rod.h"
+#include "bsp/gpio.h"
 /* USER INCLUDE END */
 
 /* Private typedef ---------------------------------------------------------- */
@@ -40,8 +42,9 @@ void Task_Init(void *argument) {
   task_runtime.thread.rc_main = osThreadNew(Task_rc_main, NULL, &attr_rc_main);
   task_runtime.thread.cmd_main = osThreadNew(Task_cmd_main, NULL, &attr_cmd_main);
   task_runtime.thread.sick = osThreadNew(Task_sick, NULL, &attr_sick);
-  task_runtime.thread.auto_ctrl_feed = osThreadNew(Task_auto_ctrl_feed, NULL, &attr_auto_ctrl_feed);
+  task_runtime.thread.auto_ctrl = osThreadNew(Task_auto_ctrl, NULL, &attr_auto_ctrl);
   task_runtime.thread.arm = osThreadNew(Task_arm, NULL, &attr_arm);
+  // task_runtime.thread.pc_uart_rx = osThreadNew(Task_pc_uart_rx, NULL, &attr_pc_uart_rx);
   // task_runtime.thread.rod = osThreadNew(Task_rod, NULL, &attr_rod);
   // 创建消息队列
   /* USER MESSAGE BEGIN */
@@ -51,6 +54,13 @@ void Task_Init(void *argument) {
   task_runtime.msgq.pole.cmd = osMessageQueueNew(1u, sizeof(Pole_CMD_t), NULL);
   task_runtime.msgq.arm.cmd = osMessageQueueNew(1u, sizeof(Arm_CMD_t), NULL);
   task_runtime.msgq.rod.cmd = osMessageQueueNew(1u, sizeof(Rod_CMD_t), NULL);
+  
+  
+  BUZZER_Init(&buzzer, BSP_PWM_BUZZER);
+  
+  BSP_GPIO_WritePin(BSP_GPIO_POWER_24V_1,1);
+  BSP_GPIO_WritePin(BSP_GPIO_POWER_24V_1,1);
+    BSP_GPIO_WritePin(BSP_GPIO_POWER_5V,1);
   /* USER MESSAGE END */
 
   osKernelUnlock(); // 解锁内核

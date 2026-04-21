@@ -32,16 +32,16 @@ float AutoCtrlPrimitive_Clamp(float value, float min_value, float max_value);
 /* 仅执行 yaw 对齐控制（vx/vy 置 0）。 */
 void AutoCtrlPrimitive_ApplyPrealign(auto_ctrl_t *ctrl);
 
-/* 在 yaw 对齐同时叠加前进速度 vx。 */
+/* 在 yaw 对齐同时叠加前进速度 vy。 */
 void AutoCtrlPrimitive_ApplyPrealignWithForward(auto_ctrl_t *ctrl,
-                                                float vx_mps);
+                                                float vy_mps);
 
 /* 在 yaw 对齐同时叠加 vx/vy 平移速度。 */
 void AutoCtrlPrimitive_ApplyPrealignWithMove(auto_ctrl_t *ctrl, float vx_mps,
                                              float vy_mps);
 
-/* 发送纯平移命令（wz=0）。 */
-void AutoCtrlPrimitive_CommandFlatMove(auto_ctrl_t *ctrl, float vx_mps);
+/* 发送纯前进命令（vx=0, wz=0）。 */
+void AutoCtrlPrimitive_CommandFlatMove(auto_ctrl_t *ctrl, float vy_mps);
 
 /* 发送前/后撑杆目标位。 */
 void AutoCtrlPrimitive_CommandPoleTarget(auto_ctrl_t *ctrl, float front_target,

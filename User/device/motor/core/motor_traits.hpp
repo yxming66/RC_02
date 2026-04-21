@@ -1,7 +1,8 @@
 #pragma once
 
 // 定义各电机 kind/model 组合的静态能力与参数表。
-// 这里集中描述减速比、控制能力、力矩常数、量程等编译期特性。
+// 这里集中描述减速比、控制能力、量程等编译期特性。
+// 具体型号只需要覆盖“确实有意义”的参数；未覆盖项沿用基类默认值。
 
 #include <stdint.h>
 #include <type_traits>
@@ -32,6 +33,10 @@ template <>
 struct MotorModelValid<MotorKind::RM, MotorModel::M6020> : std::true_type {};
 template <>
 struct MotorModelValid<MotorKind::DM, MotorModel::J4310> : std::true_type {};
+template <>
+struct MotorModelValid<MotorKind::DM, MotorModel::J4310P> : std::true_type {};
+template <>
+struct MotorModelValid<MotorKind::DM, MotorModel::J4340> : std::true_type {};
 template <>
 struct MotorModelValid<MotorKind::LZ, MotorModel::RSO0> : std::true_type {};
 template <>
@@ -76,7 +81,7 @@ struct MotorTraitsBase {
     static constexpr float kNoLoadVelocity = 0.0f;                  // 空载最大角速度，单位 rad/s。
     static constexpr float kRatedTorque = 0.0f;                     // 额定输出力矩，单位 N·m。
     static constexpr float kPeakTorque = 0.0f;                      // 峰值输出力矩，单位 N·m。
-    static constexpr float kTorqueConstant = 0.0f;                  // 电机轴（转子轴）力矩常数，单位通常为 N·m/A；输出轴力矩需再乘内部/外部减速比。
+    static constexpr float kTorqueConstant = 0.0f;                  // 电机轴（转子轴）力矩常数；仅适用于需要固定电流-力矩换算的型号。
     static constexpr uint16_t kEncoderCpr = 0;                      // 编码器每圈计数（counts per revolution）；未知时为 0。
     static constexpr MotorCapability kCapabilities = MotorCapability::None; // 编译期能力位掩码，汇总支持的控制能力。
     static constexpr const char* kName = "Unknown";                // 人类可读型号名，便于调试输出。
@@ -174,11 +179,62 @@ struct MotorTraits<MotorKind::DM, MotorModel::J4310> : MotorTraitsBase<MotorKind
     static constexpr float kRecommendedVelocity = 30.0f;
     static constexpr float kRatedVelocity = 30.0f;
     static constexpr float kNoLoadVelocity = 30.0f;
-    static constexpr float kRatedTorque = 0.0f;
     static constexpr float kPeakTorque = 12.0f;
-    static constexpr float kTorqueConstant = 1.2f;
     static constexpr MotorCapability kCapabilities = MotorCapability::Current | MotorCapability::Velocity | MotorCapability::Position | MotorCapability::MIT;
     static constexpr const char* kName = "DM-J4310";
+};
+
+template <>
+struct MotorTraits<MotorKind::DM, MotorModel::J4310P> : MotorTraitsBase<MotorKind::DM, MotorModel::J4310P> {
+    static constexpr MOTOR_DM_Module_t kVendorModule = MOTOR_DM_J4310P;
+    static constexpr float kGearRatio = 10.0f;
+    static constexpr bool kSupportsMit = true;
+    static constexpr bool kSupportsTorque = true;
+    static constexpr bool kSupportsVelocity = true;
+    static constexpr bool kSupportsPosition = true;
+    static constexpr bool kHasMasterId = true;
+    static constexpr float kDefaultKp = 0.0f;
+    static constexpr float kDefaultKd = 0.0f;
+    static constexpr float kMaxTorque = 12.5f;
+    static constexpr float kMaxVelocity = 200.0f * 2.0f * 3.14159265358979323846f / 60.0f;
+    static constexpr float kRecommendedCurrent = 3.1f;
+    static constexpr float kRatedCurrent = 4.9f;
+    static constexpr float kPeakCurrent = 20.0f;
+    static constexpr float kRecommendedVelocity = 120.0f * 2.0f * 3.14159265358979323846f / 60.0f;
+    static constexpr float kRatedVelocity = 120.0f * 2.0f * 3.14159265358979323846f / 60.0f;
+    static constexpr float kNoLoadVelocity = 200.0f * 2.0f * 3.14159265358979323846f / 60.0f;
+    static constexpr float kRatedTorque = 3.5f;
+    static constexpr float kPeakTorque = 12.5f;
+    static constexpr float kTorqueConstant = 3.5f / 4.9f / 10.0f;
+    static constexpr uint16_t kEncoderCpr = 65536;
+    static constexpr MotorCapability kCapabilities = MotorCapability::Current | MotorCapability::Velocity | MotorCapability::Position | MotorCapability::MIT;
+    static constexpr const char* kName = "DM-J4310P-24V";
+};
+
+template <>
+struct MotorTraits<MotorKind::DM, MotorModel::J4340> : MotorTraitsBase<MotorKind::DM, MotorModel::J4340> {
+    static constexpr MOTOR_DM_Module_t kVendorModule = MOTOR_DM_J4340;
+    static constexpr float kGearRatio = 40.0f;
+    static constexpr bool kSupportsMit = true;
+    static constexpr bool kSupportsTorque = true;
+    static constexpr bool kSupportsVelocity = true;
+    static constexpr bool kSupportsPosition = true;
+    static constexpr bool kHasMasterId = true;
+    static constexpr float kDefaultKp = 0.0f;
+    static constexpr float kDefaultKd = 0.0f;
+    static constexpr float kMaxTorque = 40.0f;
+    static constexpr float kMaxVelocity = 112.0f * 2.0f * 3.14159265358979323846f / 60.0f;
+    static constexpr float kRecommendedCurrent = 3.1f;
+    static constexpr float kRatedCurrent = 4.11f;
+    static constexpr float kPeakCurrent = 19.85f;
+    static constexpr float kRecommendedVelocity = 36.0f * 2.0f * 3.14159265358979323846f / 60.0f;
+    static constexpr float kRatedVelocity = 36.0f * 2.0f * 3.14159265358979323846f / 60.0f;
+    static constexpr float kNoLoadVelocity = 56.0f * 2.0f * 3.14159265358979323846f / 60.0f;
+    static constexpr float kRatedTorque = 14.0f;
+    static constexpr float kPeakTorque = 40.0f;
+    static constexpr float kEncoderCpr = 16384;
+    static constexpr MotorCapability kCapabilities = MotorCapability::Current | MotorCapability::Velocity | MotorCapability::Position | MotorCapability::MIT;
+    static constexpr const char* kName = "DM-J4340-2EC-24V";
 };
 
 template <MotorModel Model>
@@ -199,9 +255,7 @@ struct LzRsoTraits : MotorTraitsBase<MotorKind::LZ, Model> {
     static constexpr float kRecommendedVelocity = 20.0f;
     static constexpr float kRatedVelocity = 20.0f;
     static constexpr float kNoLoadVelocity = 20.0f;
-    static constexpr float kRatedTorque = 0.0f;
     static constexpr float kPeakTorque = 60.0f;
-    static constexpr float kTorqueConstant = 1.0f;
     static constexpr MotorCapability kCapabilities = MotorCapability::Current | MotorCapability::Velocity | MotorCapability::Position | MotorCapability::MIT;
 };
 

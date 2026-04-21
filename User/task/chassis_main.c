@@ -40,7 +40,6 @@ void Task_chassis_main(void *argument) {
 
   Config_RobotParam_t *cfg = Config_GetRobotParam();
   Chassis_Init(&chassis, &cfg->chassis_param, (float)CHASSIS_MAIN_FREQ);
-  chassis.mech_zero=0.57f;
 
   Pole_Init(&pole, &cfg->pole_param, (float)CHASSIS_MAIN_FREQ);
   /* USER CODE INIT END */

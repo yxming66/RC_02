@@ -7,10 +7,17 @@
 #include "task/user_task.h"
 /* USER INCLUDE BEGIN */
 #include "main.h"
+#include "device/dr16.h"
 #include "module/autoCtrlAPI/api/auto_ctrl_api.h"
+#include "module/autoCtrlAPI/transition/auto_ctrl_transition.h"
+#include "module/autoCtrlAPI/transition/auto_ctrl_zone.h"
 #include "module/chassis.h"
 
 /* USER INCLUDE END */
+
+#ifndef AUTO_CTRL_DEFAULT_START_ZONE
+#define AUTO_CTRL_DEFAULT_START_ZONE AUTO_CTRL_ZONE_R2_ENTRY2
+#endif
 
 /* Private typedef ---------------------------------------------------------- */
 /* Private define ----------------------------------------------------------- */
@@ -20,41 +27,124 @@
 extern Chassis_t chassis;
 extern Chassis_IMU_t chassis_imu;
 extern float distance_cm[4];
+extern DR16_t dr16;
+
 auto_ctrl_t auto_ctrl;
 bool auto_ctrl_inited = false;
+auto_ctrl_feedback_t feedback = {0};
+static DR16_SwitchPos_t auto_last_sw_r = DR16_SW_ERR;
+
+static auto_ctrl_zone_e AutoCtrlTask_FindZoneByHeight(
+    auto_ctrl_zone_e from_zone, int16_t target_height_mm) {
+  auto_ctrl_zone_e zone;
+
+  for (zone = (auto_ctrl_zone_e)0; zone < AUTO_CTRL_ZONE_COUNT;
+       zone = (auto_ctrl_zone_e)(zone + 1)) {
+    if (!AutoCtrlZone_IsPlatform(zone)) {
+      continue;
+    }
+    if (AutoCtrlZone_GetHeightMm(zone) != target_height_mm) {
+      continue;
+    }
+    if (!AutoCtrlTransition_IsLegal(from_zone, zone)) {
+      continue;
+    }
+    return zone;
+  }
+
+  return AUTO_CTRL_ZONE_INVALID;
+}
+
+static bool AutoCtrlTask_StartByDelta(auto_ctrl_t *ctrl, int16_t delta_height_mm,
+                                      uint32_t now_ms) {
+  auto_ctrl_zone_e from_zone = ctrl->current_zone;
+  int16_t current_height_mm;
+  auto_ctrl_zone_e to_zone;
+
+  if (!AutoCtrlZone_IsValid(from_zone)) {
+    return false;
+  }
+
+  current_height_mm = AutoCtrlZone_GetHeightMm(from_zone);
+  to_zone = AutoCtrlTask_FindZoneByHeight(
+      from_zone, (int16_t)(current_height_mm + delta_height_mm));
+  if (to_zone == AUTO_CTRL_ZONE_INVALID) {
+    return false;
+  }
+
+  return AutoCtrl_StartTransition(ctrl, from_zone, to_zone, now_ms);
+}
 /* USER STRUCT END */
 
 /* Private function --------------------------------------------------------- */
 /* Exported functions ------------------------------------------------------- */
-void Task_auto_ctrl_feed(void *argument) {
+void Task_auto_ctrl(void *argument) {
   (void)argument; /* 未使用argument，消除警告 */
 
-  const uint32_t delay_tick = osKernelGetTickFreq() / AUTO_CTRL_FEED_FREQ;
+  const uint32_t delay_tick = osKernelGetTickFreq() / AUTO_CTRL_FREQ;
 
-  osDelay(AUTO_CTRL_FEED_INIT_DELAY);
+  osDelay(AUTO_CTRL_INIT_DELAY);
 
   uint32_t tick = osKernelGetTickCount();
 
+  AutoCtrl_Init(&auto_ctrl);
+  if (auto_ctrl.current_zone == AUTO_CTRL_ZONE_INVALID) {
+    auto_ctrl.current_zone = AUTO_CTRL_DEFAULT_START_ZONE;
+  }
+  auto_ctrl_inited = true;
+
   while (1) {
+    uint32_t now_ms;
+
     tick += delay_tick;
 
     if (auto_ctrl_inited) {
-      auto_ctrl_feedback_t feedback = {0};
+      now_ms = osKernelGetTickCount();
 
-      feedback.yaw_auto_deg = chassis_imu.eulr.yaw;
-      /* distance_cm mapping: [0]=front, [1]=left, [2]=right, [3]=rear */
-      feedback.sick_front_cm = distance_cm[0];
-      feedback.sick_left_cm = distance_cm[1];
-      feedback.sick_right_cm = distance_cm[2];
-      feedback.sick_rear_cm = distance_cm[3];
+      feedback.yaw_auto_rad = chassis_imu.eulr.yaw;
+      /* 当前前侧两只 SICK：左侧 ID=0x123 -> distance_cm[2]，右侧 ID=0x124 -> distance_cm[3]。 */
+      feedback.sick_front_left_cm = distance_cm[2];
+      feedback.sick_front_right_cm = distance_cm[3];
 
       /* Optical gates are active-high: blocked path means pole retracted. */
-        feedback.front_pole_retracted =
+      feedback.front_pole_retracted =
           HAL_GPIO_ReadPin(GPIOE, GPIO_PIN_13) == GPIO_PIN_SET;
-        feedback.rear_pole_retracted =
+      feedback.rear_pole_retracted =
           HAL_GPIO_ReadPin(GPIOE, GPIO_PIN_9) == GPIO_PIN_SET;
 
+      /* Current H7 board exposes PE13/PE9 only, so either trigger serves as
+       * the bottom photo condition for Ascend200 step-0 readiness. */
+      feedback.bottom_photo_triggered =
+          feedback.front_pole_retracted || feedback.rear_pole_retracted;
+
       AutoCtrl_SetFeedback(&auto_ctrl, &feedback);
+
+      if (dr16.header.online) {
+        if ((dr16.data.sw_l == DR16_SW_MID || dr16.data.sw_l == DR16_SW_DOWN) &&
+            AutoCtrl_IsBusy(&auto_ctrl)) {
+          AutoCtrl_Update(&auto_ctrl, now_ms);
+        } else if ((dr16.data.sw_l == DR16_SW_MID ||
+                    dr16.data.sw_l == DR16_SW_DOWN) &&
+                   auto_last_sw_r == DR16_SW_MID) {
+          if (dr16.data.sw_l == DR16_SW_MID) {
+            if (dr16.data.sw_r == DR16_SW_UP) {
+              (void)AutoCtrlTask_StartByDelta(&auto_ctrl, 200, now_ms);
+            } else if (dr16.data.sw_r == DR16_SW_DOWN) {
+              (void)AutoCtrlTask_StartByDelta(&auto_ctrl, -200, now_ms);
+            }
+          } else {
+            if (dr16.data.sw_r == DR16_SW_UP) {
+              (void)AutoCtrlTask_StartByDelta(&auto_ctrl, 400, now_ms);
+            } else if (dr16.data.sw_r == DR16_SW_DOWN) {
+              (void)AutoCtrlTask_StartByDelta(&auto_ctrl, -400, now_ms);
+            }
+          }
+        }
+
+        auto_last_sw_r = dr16.data.sw_r;
+      } else {
+        auto_last_sw_r = DR16_SW_ERR;
+      }
     }
 
     osDelayUntil(tick);

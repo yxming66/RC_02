@@ -12,11 +12,13 @@
 #include "module/pole.h"
 #include "module/arm.h"
 #include "module/rod.h"
-#include "module/config.h"
 #include "module/autoCtrlAPI/api/auto_ctrl_api.h"
-#include "module/autoCtrlAPI/transition/auto_ctrl_zone.h"
 #include "main.h"
 /* USER INCLUDE END */
+
+#ifndef AUTO_CTRL_OUTPUT_ENABLE
+#define AUTO_CTRL_OUTPUT_ENABLE (1u)
+#endif
 
 /* Private typedef ---------------------------------------------------------- */
 /* Private define ----------------------------------------------------------- */
@@ -65,45 +67,21 @@ static void Rc_SetPoleAuto(float left_target, float right_target) {
   pole_cmd.auto_lift_speed[1] = 0.0f;
 }
 
-static auto_ctrl_zone_e Rc_FindZoneByHeight(auto_ctrl_zone_e from_zone,
-                                            int16_t target_height_mm) {
-  auto_ctrl_zone_e zone;
+static void Rc_SetAutoDryRunCommands(void) {
+  chassis_cmd.mode = CHASSIS_MODE_RELAX;
+  chassis_cmd.ctrl_vec.vx = 0.0f;
+  chassis_cmd.ctrl_vec.vy = 0.0f;
+  chassis_cmd.ctrl_vec.wz = 0.0f;
 
-  for (zone = (auto_ctrl_zone_e)0; zone < AUTO_CTRL_ZONE_COUNT;
-       zone = (auto_ctrl_zone_e)(zone + 1)) {
-    if (!AutoCtrlZone_IsPlatform(zone)) {
-      continue;
-    }
-    if (AutoCtrlZone_GetHeightMm(zone) != target_height_mm) {
-      continue;
-    }
-    if (!AutoCtrlTransition_IsLegal(from_zone, zone)) {
-      continue;
-    }
-    return zone;
-  }
-
-  return AUTO_CTRL_ZONE_INVALID;
+  Rc_SetPoleManual(0.0f, 0.0f);
+  pole_cmd.mode = POLE_MODE_RELAX;
 }
 
-static bool Rc_StartAutoCtrlByDelta(auto_ctrl_t *ctrl, int16_t delta_height_mm,
-                                    uint32_t now_ms) {
-  auto_ctrl_zone_e from_zone = ctrl->current_zone;
-  int16_t current_height_mm;
-  auto_ctrl_zone_e to_zone;
-
-  if (!AutoCtrlZone_IsPlatform(from_zone)) {
-    return false;
-  }
-
-  current_height_mm = AutoCtrlZone_GetHeightMm(from_zone);
-  to_zone = Rc_FindZoneByHeight(from_zone,
-                                (int16_t)(current_height_mm + delta_height_mm));
-  if (to_zone == AUTO_CTRL_ZONE_INVALID) {
-    return false;
-  }
-
-  return AutoCtrl_StartTransition(ctrl, from_zone, to_zone, now_ms);
+static bool Rc_ShouldExitAutoCtrlBySwitch(void) {
+  return dr16.header.online &&
+         (dr16.data.sw_l == DR16_SW_MID || dr16.data.sw_l == DR16_SW_DOWN) &&
+         last_sw_r == DR16_SW_UP &&
+         dr16.data.sw_r == DR16_SW_MID;
 }
 /* USER STRUCT END */
 
@@ -122,8 +100,6 @@ void Task_rc_main(void *argument) {
   /* USER CODE INIT BEGIN */
   DR16_Init(&dr16);
   DR16_StartDmaRecv(&dr16);  // 立即启动第一次接收
-  AutoCtrl_Init(&auto_ctrl);
-  auto_ctrl_inited = true;
   /* USER CODE INIT END */
   
   while (1) {
@@ -136,6 +112,11 @@ void Task_rc_main(void *argument) {
       DR16_ParseData(&dr16);
     } else {
       DR16_Offline(&dr16);
+    }
+
+    if (auto_ctrl_inited && AutoCtrl_IsBusy(&auto_ctrl) &&
+        Rc_ShouldExitAutoCtrlBySwitch()) {
+      AutoCtrl_Abort(&auto_ctrl);
     }
 
     if (!dr16.header.online || dr16.data.sw_l == DR16_SW_UP) {
@@ -154,14 +135,14 @@ void Task_rc_main(void *argument) {
           chassis_cmd.mode = CHASSIS_MODE_INDEPENDENT;
           chassis_cmd.ctrl_vec.vx = 2.0f * dr16.data.ch_r_x;
           chassis_cmd.ctrl_vec.vy = 2.0f * dr16.data.ch_r_y;
-          chassis_cmd.ctrl_vec.wz = 2.0f * dr16.data.ch_l_x;
+          chassis_cmd.ctrl_vec.wz = -2.0f * dr16.data.ch_l_x;
           Rc_SetPoleManual(dr16.data.ch_l_y, dr16.data.ch_l_y);
           break;
         case DR16_SW_MID:
           chassis_cmd.mode = CHASSIS_MODE_INDEPENDENT;
           chassis_cmd.ctrl_vec.vx = dr16.data.ch_r_x;
           chassis_cmd.ctrl_vec.vy = dr16.data.ch_r_y;
-          chassis_cmd.ctrl_vec.wz = dr16.data.ch_l_x;
+          chassis_cmd.ctrl_vec.wz = -dr16.data.ch_l_x;
           Rc_SetPoleManual(dr16.data.ch_l_y, dr16.data.ch_l_x);
           break;
         case DR16_SW_DOWN:
@@ -188,24 +169,17 @@ void Task_rc_main(void *argument) {
       Rc_SetRodRelax();
     } else if (dr16.data.sw_l == DR16_SW_MID) {
       if (auto_ctrl_inited && AutoCtrl_IsBusy(&auto_ctrl)) {
-        AutoCtrl_Update(&auto_ctrl, osKernelGetTickCount());
+#if AUTO_CTRL_OUTPUT_ENABLE
         chassis_cmd = auto_ctrl.chassis_cmd;
         pole_cmd = auto_ctrl.pole_cmd;
+#else
+        Rc_SetAutoDryRunCommands();
+#endif
       } else {
         chassis_cmd.mode = CHASSIS_MODE_INDEPENDENT;
         chassis_cmd.ctrl_vec.vx = dr16.data.ch_r_x;
         chassis_cmd.ctrl_vec.vy = dr16.data.ch_r_y;
-        chassis_cmd.ctrl_vec.wz = dr16.data.ch_l_x;
-
-        if (auto_ctrl_inited && last_sw_r == DR16_SW_MID) {
-          if (dr16.data.sw_r == DR16_SW_UP) {
-            (void)Rc_StartAutoCtrlByDelta(&auto_ctrl, 200,
-                                          osKernelGetTickCount());
-          } else if (dr16.data.sw_r == DR16_SW_DOWN) {
-            (void)Rc_StartAutoCtrlByDelta(&auto_ctrl, -200,
-                                          osKernelGetTickCount());
-          }
-        }
+        chassis_cmd.ctrl_vec.wz = -dr16.data.ch_l_x;
       }
 
       switch (dr16.data.sw_r) {
@@ -228,25 +202,18 @@ void Task_rc_main(void *argument) {
     
     } else if (dr16.data.sw_l == DR16_SW_DOWN) {
       if (auto_ctrl_inited && AutoCtrl_IsBusy(&auto_ctrl)) {
-        AutoCtrl_Update(&auto_ctrl, osKernelGetTickCount());
+#if AUTO_CTRL_OUTPUT_ENABLE
         chassis_cmd = auto_ctrl.chassis_cmd;
         pole_cmd = auto_ctrl.pole_cmd;
+#else
+        Rc_SetAutoDryRunCommands();
+#endif
       } else {
         chassis_cmd.mode = CHASSIS_MODE_INDEPENDENT;
         chassis_cmd.ctrl_vec.vx = dr16.data.ch_r_x;
         chassis_cmd.ctrl_vec.vy = dr16.data.ch_r_y;
-        chassis_cmd.ctrl_vec.wz = dr16.data.ch_l_x;
+        chassis_cmd.ctrl_vec.wz = -dr16.data.ch_l_x;
         Rc_SetPoleAuto(0.0f, 0.0f);
-
-        if (auto_ctrl_inited && last_sw_r == DR16_SW_MID) {
-          if (dr16.data.sw_r == DR16_SW_UP) {
-            (void)Rc_StartAutoCtrlByDelta(&auto_ctrl, 400,
-                                          osKernelGetTickCount());
-          } else if (dr16.data.sw_r == DR16_SW_DOWN) {
-            (void)Rc_StartAutoCtrlByDelta(&auto_ctrl, -400,
-                                          osKernelGetTickCount());
-          }
-        }
       }
 
       switch (dr16.data.sw_r) {

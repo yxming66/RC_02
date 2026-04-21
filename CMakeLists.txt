@@ -111,6 +111,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     User/task/arm_main.c
     User/task/rod_main.c
     User/task/atti_esti.c
+    User/task/pc_uart_tx.c
 )
 
 # Add include paths

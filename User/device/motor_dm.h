@@ -16,6 +16,8 @@ extern "C" {
 /* Exported types ----------------------------------------------------------- */
 typedef enum {
     MOTOR_DM_J4310,
+    MOTOR_DM_J4310P,
+    MOTOR_DM_J4340,
 } MOTOR_DM_Module_t;
 
 typedef enum {

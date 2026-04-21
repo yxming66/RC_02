@@ -103,8 +103,8 @@ typedef struct {
   auto_ctrl_zone_e from_zone;
   auto_ctrl_zone_e to_zone;
   auto_ctrl_template_e template_id;
-  float required_yaw_deg;
-  float yaw_tolerance_deg;
+  float required_yaw_rad;
+  float yaw_tolerance_rad;
   auto_ctrl_sensor_mode_e sensor_mode;
   int16_t height_delta_mm;
 } auto_ctrl_transition_t;

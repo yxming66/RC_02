@@ -12,6 +12,8 @@ using RmM3508Motor = MotorT<MotorKind::RM, MotorModel::M3508>;
 using RmM6020Motor = MotorT<MotorKind::RM, MotorModel::M6020>;
 
 using DmJ4310Motor = MotorT<MotorKind::DM, MotorModel::J4310>;
+using DmJ4310PMotor = MotorT<MotorKind::DM, MotorModel::J4310P>;
+using DmJ4340Motor = MotorT<MotorKind::DM, MotorModel::J4340>;
 
 using LzRso0Motor = MotorT<MotorKind::LZ, MotorModel::RSO0>;
 using LzRso1Motor = MotorT<MotorKind::LZ, MotorModel::RSO1>;

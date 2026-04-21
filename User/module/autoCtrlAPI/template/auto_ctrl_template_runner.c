@@ -47,7 +47,7 @@ static void AutoCtrlTemplate_NextStep(auto_ctrl_t *ctrl) {
 
 /* 判断当前 yaw 误差是否已经满足容差。 */
 static bool AutoCtrlTemplate_IsYawAligned(const auto_ctrl_t *ctrl) {
-  return fabsf(ctrl->yaw_error_deg) <= ctrl->yaw_tolerance_deg;
+  return fabsf(ctrl->yaw_error_rad) <= ctrl->yaw_tolerance_rad;
 }
 
 /* Ascend200 的首段切步条件：底部光电 + yaw 达标 + 撑杆稳定时间到。 */
@@ -226,12 +226,12 @@ static bool AutoCtrlTemplate_RunAscend200(auto_ctrl_t *ctrl,
                                           const Config_RobotParam_t *robot_param) {
   switch (ctrl->template_ctx.step_index) {
     case 0:
-      /*
-       * autoctrltest 分支实验模式：
-       * 本模板不主动下发实际命令，只保留状态检测与切步。
-       * 前段切步条件：底部光电触发 + yaw 达标 + 稳定时间满足。
-       */
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
+      AutoCtrlPrimitive_ApplyPrealignWithMove(
+        ctrl, 0.0f, robot_param->auto_ctrl_param.climb_align_forward_speed);
+      AutoCtrlPrimitive_CommandPoleTarget(
+          ctrl, robot_param->pole_param.preset.step_200_all_extend[0],
+          robot_param->pole_param.preset.step_200_all_extend[1]);
       if (AutoCtrlTemplate_IsAscend200Ready(ctrl, now_ms, robot_param)) {
         AutoCtrlTemplate_NextStep(ctrl);
         return false;
@@ -244,44 +244,58 @@ static bool AutoCtrlTemplate_RunAscend200(auto_ctrl_t *ctrl,
       return false;
 
     case 1:
-      /* 前杆阶段：仅按时间稳定窗口推进，不下发收杆命令。 */
-      if (AutoCtrlTemplate_StepTimeout(
-              ctrl, now_ms,
-              robot_param->auto_ctrl_param.front_retract_settle_ms)) {
-        AutoCtrlTemplate_NextStep(ctrl);
-      }
-      return false;
-
-    case 2:
-      /* 中段：仅检测后杆回收触发条件，不下发底盘命令。 */
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      if (ctrl->feedback.rear_pole_retracted) {
+      AutoCtrlPrimitive_ApplyPrealignWithMove(
+          ctrl, robot_param->auto_ctrl_param.climb_front_retract_speed,
+          robot_param->auto_ctrl_param.climb_front_retract_vy);
+      AutoCtrlPrimitive_CommandPoleTarget(
+          ctrl, robot_param->pole_param.preset.step_200_front_retract[0],
+          robot_param->pole_param.preset.step_200_front_retract[1]);
+      if (ctrl->feedback.front_pole_retracted &&
+          AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
+              robot_param->auto_ctrl_param.front_retract_settle_ms) {
         AutoCtrlTemplate_NextStep(ctrl);
         return false;
       }
-      if (robot_param->auto_ctrl_param.rear_photo_timeout_ms > 0u &&
+      if (robot_param->auto_ctrl_param.climb_front_retract_timeout_ms > 0u &&
           AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
-              robot_param->auto_ctrl_param.rear_photo_timeout_ms) {
+              robot_param->auto_ctrl_param.climb_front_retract_timeout_ms) {
         ctrl->fault = AUTO_CTRL_FAULT_SENSOR_INVALID;
       }
       return false;
 
+    case 2:
+      AutoCtrlPrimitive_CommandFlatMove(
+          ctrl, robot_param->auto_ctrl_param.climb_mid_forward_speed);
+      if (AutoCtrlTemplate_StepTimeout(
+              ctrl, now_ms,
+              robot_param->auto_ctrl_param.climb_mid_forward_ms)) {
+        AutoCtrlTemplate_NextStep(ctrl);
+      }
+      return false;
+
     case 3:
-      /* 后段：仅检测后杆回收状态，不下发矫正/移动/收杆命令。 */
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
+      AutoCtrlPrimitive_ApplyPrealignWithMove(
+          ctrl, robot_param->auto_ctrl_param.climb_rear_retract_speed,
+          robot_param->auto_ctrl_param.climb_rear_retract_vy);
+      AutoCtrlPrimitive_CommandPoleTarget(
+          ctrl, robot_param->pole_param.preset.step_200_all_retract[0],
+          robot_param->pole_param.preset.step_200_all_retract[1]);
       if (ctrl->feedback.rear_pole_retracted) {
         AutoCtrlTemplate_NextStep(ctrl);
         return false;
       }
-      if (robot_param->auto_ctrl_param.rear_photo_timeout_ms > 0u &&
+      if (robot_param->auto_ctrl_param.climb_rear_retract_timeout_ms > 0u &&
           AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
-              robot_param->auto_ctrl_param.rear_photo_timeout_ms) {
+              robot_param->auto_ctrl_param.climb_rear_retract_timeout_ms) {
         ctrl->fault = AUTO_CTRL_FAULT_SENSOR_INVALID;
       }
       return false;
 
     case 4:
-      /* 尾段：仅以时间窗结束模板，不下发脱离动作命令。 */
+      AutoCtrlPrimitive_CommandFlatMove(
+          ctrl, robot_param->auto_ctrl_param.climb_mid_forward_speed);
       if (AutoCtrlTemplate_StepTimeout(
               ctrl, now_ms,
               robot_param->auto_ctrl_param.rear_retract_move_ms)) {

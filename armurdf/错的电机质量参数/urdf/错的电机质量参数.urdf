@@ -1,0 +1,274 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- This URDF was automatically created by SolidWorks to URDF Exporter! Originally created by Stephen Brawner (brawner@gmail.com) 
+     Commit Version: 1.6.0-4-g7f85cfe  Build Version: 1.6.7995.38578
+     For more information, please see http://wiki.ros.org/sw_urdf_exporter -->
+<robot
+  name="错的电机质量参数">
+  <link
+    name="base_link">
+    <inertial>
+      <origin
+        xyz="0.044915 0.0026998 0.042656"
+        rpy="0 0 0" />
+      <mass
+        value="0.42918" />
+      <inertia
+        ixx="0.00069728"
+        ixy="-8.7472E-07"
+        ixz="-1.0088E-07"
+        iyy="0.0010776"
+        iyz="-1.9163E-07"
+        izz="0.0012634" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://错的电机质量参数/meshes/base_link.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.79216 0.81961 0.93333 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://错的电机质量参数/meshes/base_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <link
+    name="Link1">
+    <inertial>
+      <origin
+        xyz="-0.00039392 0.25177 -0.00092607"
+        rpy="0 0 0" />
+      <mass
+        value="0.33673" />
+      <inertia
+        ixx="0.0024164"
+        ixy="3.3204E-06"
+        ixz="-1.6929E-08"
+        iyy="0.0001052"
+        iyz="-2.8001E-11"
+        izz="0.0024809" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://错的电机质量参数/meshes/Link1.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://错的电机质量参数/meshes/Link1.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="j1"
+    type="revolute">
+    <origin
+      xyz="0 0 0.07"
+      rpy="1.5708 0 -1.5708" />
+    <parent
+      link="base_link" />
+    <child
+      link="Link1" />
+    <axis
+      xyz="0 0 -1" />
+    <limit
+      lower="-3.14"
+      upper="3.14"
+      effort="30"
+      velocity="3.14" />
+  </joint>
+  <link
+    name="Link2">
+    <inertial>
+      <origin
+        xyz="-0.00035563 0.20343 -0.00013617"
+        rpy="0 0 0" />
+      <mass
+        value="0.31686" />
+      <inertia
+        ixx="0.00080063"
+        ixy="1.0493E-06"
+        ixz="4.1483E-09"
+        iyy="9.0373E-05"
+        iyz="-1.6413E-08"
+        izz="0.00083029" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://错的电机质量参数/meshes/Link2.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.79216 0.81961 0.93333 0.25" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://错的电机质量参数/meshes/Link2.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="j2"
+    type="revolute">
+    <origin
+      xyz="-0.0005 0.35 0"
+      rpy="0 0 0" />
+    <parent
+      link="Link1" />
+    <child
+      link="Link2" />
+    <axis
+      xyz="0 0 -1" />
+    <limit
+      lower="-3.14"
+      upper="3.14"
+      effort="10"
+      velocity="3.14" />
+  </joint>
+  <link
+    name="Link3">
+    <inertial>
+      <origin
+        xyz="0.002693 0.11635 0.0019852"
+        rpy="0 0 0" />
+      <mass
+        value="0.24563" />
+      <inertia
+        ixx="0.00013404"
+        ixy="1.2628E-06"
+        ixz="6.3612E-09"
+        iyy="0.0001778"
+        iyz="-1.8653E-10"
+        izz="0.00013348" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://错的电机质量参数/meshes/Link3.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.79216 0.81961 0.93333 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://错的电机质量参数/meshes/Link3.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="j3"
+    type="revolute">
+    <origin
+      xyz="-0.00035714 0.25 -0.002625"
+      rpy="0 0 0" />
+    <parent
+      link="Link2" />
+    <child
+      link="Link3" />
+    <axis
+      xyz="0 0 -1" />
+    <limit
+      lower="-3.14"
+      upper="3.14"
+      effort="10"
+      velocity="3.14" />
+  </joint>
+  <link
+    name="tool_Link">
+    <inertial>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <mass
+        value="0.001" />
+      <inertia
+        ixx="1E-06"
+        ixy="1E-06"
+        ixz="0"
+        iyy="1E-06"
+        iyz="0"
+        izz="0" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://错的电机质量参数/meshes/tool_Link.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://错的电机质量参数/meshes/tool_Link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="j_tool"
+    type="fixed">
+    <origin
+      xyz="0.0034791 0.14696 -2.5E-05"
+      rpy="0 0 0" />
+    <parent
+      link="Link3" />
+    <child
+      link="tool_Link" />
+    <axis
+      xyz="0 0 0" />
+  </joint>
+</robot>

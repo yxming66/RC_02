@@ -45,7 +45,7 @@ void AutoCtrlPrimitive_ApplyPrealign(auto_ctrl_t *ctrl) {
   ctrl->chassis_cmd.ctrl_vec.vx = 0.0f;
   ctrl->chassis_cmd.ctrl_vec.vy = 0.0f;
   ctrl->chassis_cmd.ctrl_vec.wz = AutoCtrlPrimitive_Clamp(
-      ctrl->yaw_error_deg * robot_param->auto_ctrl_param.prealign_kp,
+      ctrl->yaw_error_rad * robot_param->auto_ctrl_param.prealign_kp,
       -robot_param->auto_ctrl_param.prealign_wz_limit,
       robot_param->auto_ctrl_param.prealign_wz_limit);
 }
@@ -58,17 +58,17 @@ void AutoCtrlPrimitive_ApplyPrealignWithMove(auto_ctrl_t *ctrl, float vx_mps,
   ctrl->chassis_cmd.ctrl_vec.vy = vy_mps;
 }
 
-/* 在 yaw 对齐基础上仅叠加前进速度 vx。 */
+/* 在 yaw 对齐基础上仅叠加前进速度 vy。 */
 void AutoCtrlPrimitive_ApplyPrealignWithForward(auto_ctrl_t *ctrl,
-                                                float vx_mps) {
-  AutoCtrlPrimitive_ApplyPrealignWithMove(ctrl, vx_mps, 0.0f);
+                                                float vy_mps) {
+  AutoCtrlPrimitive_ApplyPrealignWithMove(ctrl, 0.0f, vy_mps);
 }
 
-/* 下发纯平移命令：匀速 vx，vy/wz 清零。 */
-void AutoCtrlPrimitive_CommandFlatMove(auto_ctrl_t *ctrl, float vx_mps) {
+/* 下发纯前进命令：匀速 vy，vx/wz 清零。 */
+void AutoCtrlPrimitive_CommandFlatMove(auto_ctrl_t *ctrl, float vy_mps) {
   ctrl->chassis_cmd.mode = CHASSIS_MODE_INDEPENDENT;
-  ctrl->chassis_cmd.ctrl_vec.vx = vx_mps;
-  ctrl->chassis_cmd.ctrl_vec.vy = 0.0f;
+  ctrl->chassis_cmd.ctrl_vec.vx = 0.0f;
+  ctrl->chassis_cmd.ctrl_vec.vy = vy_mps;
   ctrl->chassis_cmd.ctrl_vec.wz = 0.0f;
 }
 

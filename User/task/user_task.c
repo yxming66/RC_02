@@ -39,8 +39,8 @@ const osThreadAttr_t attr_sick = {
     .priority = osPriorityNormal,
     .stack_size = 256 * 4,
 };
-const osThreadAttr_t attr_auto_ctrl_feed = {
-    .name = "auto_ctrl_feed",
+const osThreadAttr_t attr_auto_ctrl = {
+    .name = "auto_ctrl",
     .priority = osPriorityNormal,
     .stack_size = 256 * 4,
 };
@@ -51,6 +51,11 @@ const osThreadAttr_t attr_arm = {
 };
 const osThreadAttr_t attr_rod = {
     .name = "rod",
+    .priority = osPriorityNormal,
+    .stack_size = 256 * 4,
+};
+const osThreadAttr_t attr_pc_uart_rx = {
+    .name = "pc_uart_rx",
     .priority = osPriorityNormal,
     .stack_size = 256 * 4,
 };
