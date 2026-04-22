@@ -20,6 +20,8 @@ typedef struct {
   uint32_t step_enter_time_ms;   /* 当前 step 首次进入时刻（ms）。 */
   uint32_t template_start_time_ms; /* 当前模板开始时刻（ms）。 */
   bool step_entered;             /* 当前 step 是否已经执行过 enter 初始化。 */
+  bool front_pole_retracted_latched; /* 前杆收起信号在当前流程内是否曾触发。 */
+  bool rear_pole_retracted_latched;  /* 后杆收起信号在当前流程内是否曾触发。 */
 } auto_ctrl_template_ctx_t;
 
 #ifdef __cplusplus

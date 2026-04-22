@@ -45,6 +45,20 @@ static void AutoCtrlTemplate_NextStep(auto_ctrl_t *ctrl) {
   ctrl->template_ctx.step_entered = false;
 }
 
+static bool AutoCtrlTemplate_LatchFrontPoleRetracted(auto_ctrl_t *ctrl) {
+  if (ctrl->feedback.front_pole_retracted) {
+    ctrl->template_ctx.front_pole_retracted_latched = true;
+  }
+  return ctrl->template_ctx.front_pole_retracted_latched;
+}
+
+static bool AutoCtrlTemplate_LatchRearPoleRetracted(auto_ctrl_t *ctrl) {
+  if (ctrl->feedback.rear_pole_retracted) {
+    ctrl->template_ctx.rear_pole_retracted_latched = true;
+  }
+  return ctrl->template_ctx.rear_pole_retracted_latched;
+}
+
 /* 判断当前 yaw 误差是否已经满足容差。 */
 static bool AutoCtrlTemplate_IsYawAligned(const auto_ctrl_t *ctrl) {
   return fabsf(ctrl->yaw_error_rad) <= ctrl->yaw_tolerance_rad;
@@ -279,7 +293,7 @@ static bool AutoCtrlTemplate_RunAscend200(auto_ctrl_t *ctrl,
 
     case 2:
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      if (!ctrl->feedback.front_pole_retracted) {
+      if (!AutoCtrlTemplate_LatchFrontPoleRetracted(ctrl)) {
         if (robot_param->auto_ctrl_param.front_photo_timeout_ms > 0u &&
             AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
                 robot_param->auto_ctrl_param.front_photo_timeout_ms) {
@@ -302,7 +316,7 @@ static bool AutoCtrlTemplate_RunAscend200(auto_ctrl_t *ctrl,
           robot_param->pole_param.preset.step_200_front_retract[1],
           robot_param->auto_ctrl_param.pole_front_retract_lift_speed,
           robot_param->auto_ctrl_param.pole_rear_extend_lift_speed);
-      if (ctrl->feedback.front_pole_retracted &&
+        if (AutoCtrlTemplate_LatchFrontPoleRetracted(ctrl) &&
           AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
               robot_param->auto_ctrl_param.front_retract_settle_ms) {
         AutoCtrlTemplate_NextStep(ctrl);
@@ -332,7 +346,7 @@ static bool AutoCtrlTemplate_RunAscend200(auto_ctrl_t *ctrl,
 
     case 4:
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      if (!ctrl->feedback.rear_pole_retracted) {
+      if (!AutoCtrlTemplate_LatchRearPoleRetracted(ctrl)) {
         if (robot_param->auto_ctrl_param.climb_rear_retract_timeout_ms > 0u &&
             AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
                 robot_param->auto_ctrl_param.climb_rear_retract_timeout_ms) {

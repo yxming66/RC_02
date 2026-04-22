@@ -200,7 +200,7 @@ int8_t Arm_Init(Arm_t *a, Arm_Params_t *param, float target_freq) {
 
   return ARM_OK;
 }
-
+         
 int8_t Arm_UpdateFeedback(Arm_t *a) {
   if (a == NULL) return ARM_ERR_NULL;
 
