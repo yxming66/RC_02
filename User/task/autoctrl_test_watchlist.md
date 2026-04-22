@@ -38,12 +38,11 @@
 - auto_ctrl.feedback.sick_left_cm
 - auto_ctrl.feedback.sick_right_cm
 - auto_ctrl.feedback.sick_rear_cm
-- auto_ctrl.feedback.bottom_photo_triggered
 - auto_ctrl.feedback.front_pole_retracted
 - auto_ctrl.feedback.rear_pole_retracted
 
 通过判据：
-- Step0 依赖 bottom_photo_triggered、yaw 对齐和稳定时间。
+- Step0 依赖 front_pole_retracted、yaw 对齐和稳定时间。
 - Step2/Step3 依赖 rear_pole_retracted。
 
 ### D 输出命令组（确认“只切步不动作”）
@@ -102,13 +101,13 @@
 ### 场景 3：RUN_TEMPLATE Step0
 重点看：
 - auto_ctrl.template_ctx.step_index（应为 0）
-- auto_ctrl.feedback.bottom_photo_triggered
+- auto_ctrl.feedback.front_pole_retracted
 - abs(auto_ctrl.yaw_error_rad) <= auto_ctrl.yaw_tolerance_rad
 - step_elapsed 与 pole_extend_settle_ms
 - auto_ctrl.fault
 
 预期：
-- 三条件满足后切到 step1。
+- 前光电触发、yaw 对齐且稳定时间满足后切到 step1。
 - 超过 front_photo_timeout_ms 触发 SENSOR_INVALID。
 
 ### 场景 4：RUN_TEMPLATE Step1
@@ -158,11 +157,7 @@
 ## 3. 快速故障定位
 
 - 进不了 RUN_TEMPLATE：优先检查 yaw_error、yaw_tolerance、prealign 超时。
-- 卡在 Step0：优先检查 bottom_photo_triggered 是否变化、yaw 是否达标、step_elapsed 是否已超过 900ms。
+- 卡在 Step0：优先检查 front_pole_retracted 是否变化、yaw 是否达标、step_elapsed 是否已超过 900ms。
 - Step2/3 卡住：优先检查 rear_pole_retracted 是否变化。
 - 进入 FAIL：先看 auto_ctrl.fault，再回看对应 timeout 条件。
 - RUN_TEMPLATE 仍有明显动作命令：检查是否存在其它模块覆盖 chassis/pole 命令。
-
-## 4. 当前版本特别提醒
-
-当前工程里 bottom_photo_triggered 在模板里被使用，但在 auto_ctrl_feed 任务中未见赋值路径；若该量一直为 false，Ascend200 可能长期停在 Step0。

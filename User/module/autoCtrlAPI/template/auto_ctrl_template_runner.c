@@ -50,20 +50,26 @@ static bool AutoCtrlTemplate_IsYawAligned(const auto_ctrl_t *ctrl) {
   return fabsf(ctrl->yaw_error_rad) <= ctrl->yaw_tolerance_rad;
 }
 
-/* Ascend200 的首段切步条件：底部光电 + yaw 达标 + 撑杆稳定时间到。 */
-static bool AutoCtrlTemplate_IsAscend200Ready(const auto_ctrl_t *ctrl,
-                                              uint32_t now_ms,
-                                              const Config_RobotParam_t *robot_param) {
-  if (!ctrl->feedback.bottom_photo_triggered) {
-    return false;
-  }
+/* Ascend200 首段切步条件：yaw 达标。 */
+static bool AutoCtrlTemplate_IsAscend200PrealignReady(const auto_ctrl_t *ctrl) {
+  return AutoCtrlTemplate_IsYawAligned(ctrl);
+}
 
-  if (!AutoCtrlTemplate_IsYawAligned(ctrl)) {
-    return false;
-  }
-
+/* Ascend200 第二段切步条件：四杆伸出稳定时间到。 */
+static bool AutoCtrlTemplate_IsAscend200PoleExtendReady(
+    const auto_ctrl_t *ctrl, uint32_t now_ms,
+    const Config_RobotParam_t *robot_param) {
   return AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
          robot_param->auto_ctrl_param.pole_extend_settle_ms;
+}
+
+static void AutoCtrlTemplate_CommandPoleByStage(auto_ctrl_t *ctrl,
+                                                float front_target,
+                                                float rear_target,
+                                                float front_speed,
+                                                float rear_speed) {
+  AutoCtrlPrimitive_CommandPoleTargetWithSpeed(ctrl, front_target, rear_target,
+                                               front_speed, rear_speed);
 }
 
 /* 单目标撑杆模板：下发一次目标位并等待 hold_ms，适用于简化模板。 */
@@ -124,9 +130,11 @@ static bool AutoCtrlTemplate_RunCross200(auto_ctrl_t *ctrl,
                                          float move_sign) {
   switch (ctrl->template_ctx.step_index) {
     case 0:
-      AutoCtrlPrimitive_CommandPoleTarget(
+      AutoCtrlTemplate_CommandPoleByStage(
           ctrl, robot_param->pole_param.preset.step_200_all_extend[0],
-          robot_param->pole_param.preset.step_200_all_extend[1]);
+        robot_param->pole_param.preset.step_200_all_extend[1],
+        robot_param->auto_ctrl_param.pole_all_extend_lift_speed,
+        robot_param->auto_ctrl_param.pole_all_extend_lift_speed);
       if (AutoCtrlTemplate_StepTimeout(
               ctrl, now_ms, robot_param->auto_ctrl_param.pole_extend_settle_ms)) {
         AutoCtrlTemplate_NextStep(ctrl);
@@ -147,10 +155,11 @@ static bool AutoCtrlTemplate_RunCross200(auto_ctrl_t *ctrl,
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
       AutoCtrlPrimitive_ApplyPrealignWithForward(
           ctrl, move_sign * robot_param->auto_ctrl_param.climb_forward_speed);
-      AutoCtrlPrimitive_CommandPoleTarget(
+        AutoCtrlTemplate_CommandPoleByStage(
           ctrl, robot_param->pole_param.preset.step_200_front_retract[0],
-          robot_param->pole_param.preset.step_200_front_retract[1]);
-      /* PE13 active-high is interpreted only in this cross-200 state machine. */
+          robot_param->pole_param.preset.step_200_front_retract[1],
+          robot_param->auto_ctrl_param.pole_front_retract_lift_speed,
+          robot_param->auto_ctrl_param.pole_rear_extend_lift_speed);
       if (ctrl->feedback.front_pole_retracted &&
           AutoCtrlTemplate_IsYawAligned(ctrl)) {
         AutoCtrlTemplate_NextStep(ctrl);
@@ -177,10 +186,11 @@ static bool AutoCtrlTemplate_RunCross200(auto_ctrl_t *ctrl,
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
       AutoCtrlPrimitive_ApplyPrealignWithForward(
           ctrl, move_sign * robot_param->auto_ctrl_param.climb_forward_speed);
-      AutoCtrlPrimitive_CommandPoleTarget(
+        AutoCtrlTemplate_CommandPoleByStage(
           ctrl, robot_param->pole_param.preset.step_200_all_retract[0],
-          robot_param->pole_param.preset.step_200_all_retract[1]);
-      /* PE9 active-high is interpreted only in this cross-200 state machine. */
+          robot_param->pole_param.preset.step_200_all_retract[1],
+          robot_param->auto_ctrl_param.pole_front_retract_lift_speed,
+          robot_param->auto_ctrl_param.pole_rear_retract_lift_speed);
       if (ctrl->feedback.rear_pole_retracted &&
           AutoCtrlTemplate_IsYawAligned(ctrl)) {
         AutoCtrlTemplate_NextStep(ctrl);
@@ -200,7 +210,7 @@ static bool AutoCtrlTemplate_RunCross200(auto_ctrl_t *ctrl,
               ctrl, now_ms, robot_param->auto_ctrl_param.rear_retract_move_ms)) {
         AutoCtrlTemplate_NextStep(ctrl);
       }
-      return false;
+      return false; 
 
     case 6:
       return true;
@@ -214,12 +224,13 @@ static bool AutoCtrlTemplate_RunCross200(auto_ctrl_t *ctrl,
 /*
  * 专用 200 上台阶模板：按前/中/后段组织动作与切步条件。
  * step 时序：
- * 0 前段并行动作（撑杆+前进+对齐）
- * -> 1 前杆回收稳定
- * -> 2 中段慢速前移
- * -> 3 后段回收并叠加 vy
- * -> 4 尾段继续脱离
- * -> 5 完成。
+ * 0 姿态矫正阶段
+ * -> 1 对正成功后四杆伸起稳定
+ * -> 2 仅当前光电触发时回收前杆
+ * -> 3 中段慢速前移
+ * -> 4 仅当后光电触发时回收后杆
+ * -> 5 尾段继续脱离
+ * -> 6 完成。
  */
 static bool AutoCtrlTemplate_RunAscend200(auto_ctrl_t *ctrl,
                                           uint32_t now_ms,
@@ -228,11 +239,13 @@ static bool AutoCtrlTemplate_RunAscend200(auto_ctrl_t *ctrl,
     case 0:
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
       AutoCtrlPrimitive_ApplyPrealignWithMove(
-        ctrl, 0.0f, robot_param->auto_ctrl_param.climb_align_forward_speed);
-      AutoCtrlPrimitive_CommandPoleTarget(
-          ctrl, robot_param->pole_param.preset.step_200_all_extend[0],
-          robot_param->pole_param.preset.step_200_all_extend[1]);
-      if (AutoCtrlTemplate_IsAscend200Ready(ctrl, now_ms, robot_param)) {
+          ctrl, 0.0f, robot_param->auto_ctrl_param.climb_align_forward_speed);
+        AutoCtrlTemplate_CommandPoleByStage(
+          ctrl, robot_param->pole_param.preset.step_200_all_retract[0],
+          robot_param->pole_param.preset.step_200_all_retract[1],
+          robot_param->auto_ctrl_param.pole_front_retract_lift_speed,
+          robot_param->auto_ctrl_param.pole_rear_retract_lift_speed);
+      if (AutoCtrlTemplate_IsAscend200PrealignReady(ctrl)) {
         AutoCtrlTemplate_NextStep(ctrl);
         return false;
       }
@@ -246,11 +259,49 @@ static bool AutoCtrlTemplate_RunAscend200(auto_ctrl_t *ctrl,
     case 1:
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
       AutoCtrlPrimitive_ApplyPrealignWithMove(
-          ctrl, robot_param->auto_ctrl_param.climb_front_retract_speed,
-          robot_param->auto_ctrl_param.climb_front_retract_vy);
-      AutoCtrlPrimitive_CommandPoleTarget(
+          ctrl, 0.0f,
+          robot_param->auto_ctrl_param.climb_pole_extend_forward_speed);
+        AutoCtrlTemplate_CommandPoleByStage(
+          ctrl, robot_param->pole_param.preset.step_200_all_extend[0],
+          robot_param->pole_param.preset.step_200_all_extend[1],
+          robot_param->auto_ctrl_param.pole_all_extend_lift_speed,
+          robot_param->auto_ctrl_param.pole_all_extend_lift_speed);
+      if (AutoCtrlTemplate_IsAscend200PoleExtendReady(ctrl, now_ms, robot_param)) {
+        AutoCtrlTemplate_NextStep(ctrl);
+        return false;
+      }
+      if (robot_param->auto_ctrl_param.front_photo_timeout_ms > 0u &&
+          AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
+              robot_param->auto_ctrl_param.front_photo_timeout_ms) {
+        ctrl->fault = AUTO_CTRL_FAULT_SENSOR_INVALID;
+      }
+      return false;
+
+    case 2:
+      AutoCtrlTemplate_EnterStep(ctrl, now_ms);
+      if (!ctrl->feedback.front_pole_retracted) {
+        if (robot_param->auto_ctrl_param.front_photo_timeout_ms > 0u &&
+            AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
+                robot_param->auto_ctrl_param.front_photo_timeout_ms) {
+          ctrl->fault = AUTO_CTRL_FAULT_SENSOR_INVALID;
+        }
+        AutoCtrlPrimitive_ApplyPrealignWithMove(
+            ctrl, 0.0f, robot_param->auto_ctrl_param.climb_front_retract_vy);
+        AutoCtrlTemplate_CommandPoleByStage(
+            ctrl, robot_param->pole_param.preset.step_200_all_extend[0],
+          robot_param->pole_param.preset.step_200_all_extend[1],
+          robot_param->auto_ctrl_param.pole_front_extend_lift_speed,
+          robot_param->auto_ctrl_param.pole_rear_extend_lift_speed);
+        return false;
+      }
+      AutoCtrlPrimitive_ApplyPrealignWithMove(
+            ctrl, 0.0f,
+            robot_param->auto_ctrl_param.climb_front_retract_speed);
+        AutoCtrlTemplate_CommandPoleByStage(
           ctrl, robot_param->pole_param.preset.step_200_front_retract[0],
-          robot_param->pole_param.preset.step_200_front_retract[1]);
+          robot_param->pole_param.preset.step_200_front_retract[1],
+          robot_param->auto_ctrl_param.pole_front_retract_lift_speed,
+          robot_param->auto_ctrl_param.pole_rear_extend_lift_speed);
       if (ctrl->feedback.front_pole_retracted &&
           AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
               robot_param->auto_ctrl_param.front_retract_settle_ms) {
@@ -264,9 +315,14 @@ static bool AutoCtrlTemplate_RunAscend200(auto_ctrl_t *ctrl,
       }
       return false;
 
-    case 2:
+    case 3:
       AutoCtrlPrimitive_CommandFlatMove(
           ctrl, robot_param->auto_ctrl_param.climb_mid_forward_speed);
+        AutoCtrlTemplate_CommandPoleByStage(
+          ctrl, robot_param->pole_param.preset.step_200_front_retract[0],
+          robot_param->pole_param.preset.step_200_front_retract[1],
+          robot_param->auto_ctrl_param.pole_front_retract_lift_speed,
+          robot_param->auto_ctrl_param.pole_rear_extend_lift_speed);
       if (AutoCtrlTemplate_StepTimeout(
               ctrl, now_ms,
               robot_param->auto_ctrl_param.climb_mid_forward_ms)) {
@@ -274,15 +330,32 @@ static bool AutoCtrlTemplate_RunAscend200(auto_ctrl_t *ctrl,
       }
       return false;
 
-    case 3:
+    case 4:
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
+      if (!ctrl->feedback.rear_pole_retracted) {
+        if (robot_param->auto_ctrl_param.climb_rear_retract_timeout_ms > 0u &&
+            AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
+                robot_param->auto_ctrl_param.climb_rear_retract_timeout_ms) {
+          ctrl->fault = AUTO_CTRL_FAULT_SENSOR_INVALID;
+        }
+        AutoCtrlPrimitive_ApplyPrealignWithMove(
+          ctrl, 0.0f, robot_param->auto_ctrl_param.climb_mid_forward_speed);
+        AutoCtrlTemplate_CommandPoleByStage(
+            ctrl, robot_param->pole_param.preset.step_200_front_retract[0],
+          robot_param->pole_param.preset.step_200_front_retract[1],
+          robot_param->auto_ctrl_param.pole_front_retract_lift_speed,
+          robot_param->auto_ctrl_param.pole_rear_extend_lift_speed);
+        return false;
+      }
       AutoCtrlPrimitive_ApplyPrealignWithMove(
-          ctrl, robot_param->auto_ctrl_param.climb_rear_retract_speed,
-          robot_param->auto_ctrl_param.climb_rear_retract_vy);
-      AutoCtrlPrimitive_CommandPoleTarget(
+          ctrl, 0.0f, robot_param->auto_ctrl_param.climb_rear_retract_speed);
+        AutoCtrlTemplate_CommandPoleByStage(
           ctrl, robot_param->pole_param.preset.step_200_all_retract[0],
-          robot_param->pole_param.preset.step_200_all_retract[1]);
-      if (ctrl->feedback.rear_pole_retracted) {
+          robot_param->pole_param.preset.step_200_all_retract[1],
+          robot_param->auto_ctrl_param.pole_front_retract_lift_speed,
+          robot_param->auto_ctrl_param.pole_rear_retract_lift_speed);
+      if (AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
+          robot_param->auto_ctrl_param.rear_retract_move_ms) {
         AutoCtrlTemplate_NextStep(ctrl);
         return false;
       }
@@ -293,9 +366,14 @@ static bool AutoCtrlTemplate_RunAscend200(auto_ctrl_t *ctrl,
       }
       return false;
 
-    case 4:
+    case 5:
       AutoCtrlPrimitive_CommandFlatMove(
           ctrl, robot_param->auto_ctrl_param.climb_mid_forward_speed);
+      AutoCtrlTemplate_CommandPoleByStage(
+        ctrl, robot_param->pole_param.preset.step_200_all_retract[0],
+        robot_param->pole_param.preset.step_200_all_retract[1],
+        robot_param->auto_ctrl_param.pole_front_retract_lift_speed,
+        robot_param->auto_ctrl_param.pole_rear_retract_lift_speed);
       if (AutoCtrlTemplate_StepTimeout(
               ctrl, now_ms,
               robot_param->auto_ctrl_param.rear_retract_move_ms)) {
@@ -303,7 +381,7 @@ static bool AutoCtrlTemplate_RunAscend200(auto_ctrl_t *ctrl,
       }
       return false;
 
-    case 5:
+    case 6:
       return true;
 
     default:

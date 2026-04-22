@@ -33,6 +33,8 @@ auto_ctrl_t auto_ctrl;
 bool auto_ctrl_inited = false;
 auto_ctrl_feedback_t feedback = {0};
 static DR16_SwitchPos_t auto_last_sw_r = DR16_SW_ERR;
+static const GPIO_PinState front_pole_photo_active_state = GPIO_PIN_RESET;
+static const GPIO_PinState rear_pole_photo_active_state = GPIO_PIN_RESET;
 
 static auto_ctrl_zone_e AutoCtrlTask_FindZoneByHeight(
     auto_ctrl_zone_e from_zone, int16_t target_height_mm) {
@@ -102,20 +104,18 @@ void Task_auto_ctrl(void *argument) {
       now_ms = osKernelGetTickCount();
 
       feedback.yaw_auto_rad = chassis_imu.eulr.yaw;
-      /* 当前前侧两只 SICK：左侧 ID=0x123 -> distance_cm[2]，右侧 ID=0x124 -> distance_cm[3]。 */
+      /* 当前 AutoCtrl API 只消费前向两路 SICK。 */
       feedback.sick_front_left_cm = distance_cm[2];
       feedback.sick_front_right_cm = distance_cm[3];
 
-      /* Optical gates are active-high: blocked path means pole retracted. */
-      feedback.front_pole_retracted =
-          HAL_GPIO_ReadPin(GPIOE, GPIO_PIN_13) == GPIO_PIN_SET;
-      feedback.rear_pole_retracted =
-          HAL_GPIO_ReadPin(GPIOE, GPIO_PIN_9) == GPIO_PIN_SET;
+      GPIO_PinState front_pole_gpio_state =
+        HAL_GPIO_ReadPin(GPIOE, GPIO_PIN_13);
+      GPIO_PinState rear_pole_gpio_state = HAL_GPIO_ReadPin(GPIOE, GPIO_PIN_9);
 
-      /* Current H7 board exposes PE13/PE9 only, so either trigger serves as
-       * the bottom photo condition for Ascend200 step-0 readiness. */
-      feedback.bottom_photo_triggered =
-          feedback.front_pole_retracted || feedback.rear_pole_retracted;
+      feedback.front_pole_retracted =
+        (front_pole_gpio_state == front_pole_photo_active_state);
+      feedback.rear_pole_retracted =
+        (rear_pole_gpio_state == rear_pole_photo_active_state);
 
       AutoCtrl_SetFeedback(&auto_ctrl, &feedback);
 

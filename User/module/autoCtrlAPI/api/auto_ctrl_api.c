@@ -29,11 +29,8 @@
 #define AUTO_CTRL_TEMPLATE_TIMEOUT_MS (10000u)
 #define AUTO_CTRL_SICK_VALID_STABLE_MS (60u)
 #define AUTO_CTRL_SICK_ALIGN_STABLE_MS (120u)
+#define AUTO_CTRL_YAW_ALIGN_STABLE_MS (120u)
 #define AUTO_CTRL_SICK_ACCEPT_MAX_YAW_DIFF_RAD (1.57079632679f)
-#define AUTO_CTRL_SEARCH_FULL_TURN_RAD (6.28318530718f)
-
-static float g_auto_ctrl_search_progress_rad = 0.0f;
-static float g_auto_ctrl_last_search_yaw_rad = 0.0f;
 
 /* 判断模板是否属于 200 跨越类（上/下都按跨越逻辑处理）。 */
 static bool AutoCtrl_IsCross200Template(auto_ctrl_template_e template_id) {
@@ -84,54 +81,6 @@ static bool AutoCtrl_IsSickYawAcceptable(const auto_ctrl_t *ctrl) {
   yaw_diff_rad = AutoCtrlMath_GetYawErrorRad(ctrl->yaw_search_accept_center_rad,
                                              ctrl->feedback.yaw_auto_rad);
   return fabsf(yaw_diff_rad) <= accept_limit_rad;
-}
-
-static float AutoCtrl_GetSearchProgressRad(const auto_ctrl_t *ctrl) {
-  float delta_rad;
-
-  if (ctrl == 0) {
-    return 0.0f;
-  }
-
-  if (ctrl->yaw_search_dir == AUTO_CTRL_SEARCH_DIR_CCW) {
-    delta_rad = AutoCtrlMath_GetYawErrorRad(ctrl->feedback.yaw_auto_rad,
-                                            g_auto_ctrl_last_search_yaw_rad);
-  } else {
-    delta_rad = AutoCtrlMath_GetYawErrorRad(g_auto_ctrl_last_search_yaw_rad,
-                                            ctrl->feedback.yaw_auto_rad);
-  }
-
-  if (delta_rad > 0.0f) {
-    g_auto_ctrl_search_progress_rad += delta_rad;
-    if (g_auto_ctrl_search_progress_rad > AUTO_CTRL_SEARCH_FULL_TURN_RAD) {
-      g_auto_ctrl_search_progress_rad = AUTO_CTRL_SEARCH_FULL_TURN_RAD;
-    }
-  }
-
-  g_auto_ctrl_last_search_yaw_rad = ctrl->feedback.yaw_auto_rad;
-
-  return g_auto_ctrl_search_progress_rad;
-}
-
-static void AutoCtrl_UpdateSearchTarget(auto_ctrl_t *ctrl) {
-  float progress_rad;
-
-  if (ctrl == 0) {
-    return;
-  }
-
-  progress_rad = AutoCtrl_GetSearchProgressRad(ctrl);
-  if (progress_rad > AUTO_CTRL_SEARCH_FULL_TURN_RAD) {
-    progress_rad = AUTO_CTRL_SEARCH_FULL_TURN_RAD;
-  }
-
-  if (ctrl->yaw_search_dir == AUTO_CTRL_SEARCH_DIR_CCW) {
-    ctrl->yaw_search_target_rad = AutoCtrlMath_WrapYawRad(
-        ctrl->yaw_search_start_rad + progress_rad + ctrl->yaw_tolerance_rad);
-  } else {
-    ctrl->yaw_search_target_rad = AutoCtrlMath_WrapYawRad(
-        ctrl->yaw_search_start_rad - progress_rad - ctrl->yaw_tolerance_rad);
-  }
 }
 
 /*
@@ -192,22 +141,6 @@ static bool AutoCtrl_TryGetSickAssistRad(const auto_ctrl_t *ctrl,
   return true;
 }
 
-static void AutoCtrl_SetPrealignMode(auto_ctrl_t *ctrl,
-                                     auto_ctrl_prealign_mode_t mode,
-                                     uint32_t now_ms) {
-  if (ctrl == 0 || ctrl->prealign_mode == mode) {
-    return;
-  }
-
-  ctrl->prealign_mode = mode;
-  ctrl->sick_align_stable_since_ms = 0u;
-  if (mode == AUTO_CTRL_PREALIGN_BY_YAW) {
-    ctrl->sick_valid_stable_since_ms = 0u;
-  } else {
-    ctrl->sick_valid_stable_since_ms = now_ms;
-  }
-}
-
 static bool AutoCtrl_IsSickAlignedStable(auto_ctrl_t *ctrl, float sick_error_rad,
                                          uint32_t now_ms) {
   if (ctrl == 0) {
@@ -227,6 +160,26 @@ static bool AutoCtrl_IsSickAlignedStable(auto_ctrl_t *ctrl, float sick_error_rad
          AUTO_CTRL_SICK_ALIGN_STABLE_MS;
 }
 
+static bool AutoCtrl_IsYawAlignedStable(auto_ctrl_t *ctrl, float yaw_error_rad,
+                                        uint32_t now_ms) {
+  if (ctrl == 0) {
+    return false;
+  }
+
+  if (fabsf(yaw_error_rad) > ctrl->yaw_tolerance_rad) {
+    ctrl->yaw_align_stable_since_ms = 0u;
+    return false;
+  }
+
+  if (ctrl->yaw_align_stable_since_ms == 0u) {
+    ctrl->yaw_align_stable_since_ms = now_ms;
+    return false;
+  }
+
+  return (now_ms - ctrl->yaw_align_stable_since_ms) >=
+         AUTO_CTRL_YAW_ALIGN_STABLE_MS;
+}
+
 /* 进入指定运行状态并刷新状态进入时间戳。 */
 static void AutoCtrl_EnterState(auto_ctrl_t *ctrl, auto_ctrl_run_state_e state,
                                 uint32_t now_ms) {
@@ -234,14 +187,20 @@ static void AutoCtrl_EnterState(auto_ctrl_t *ctrl, auto_ctrl_run_state_e state,
   ctrl->state_enter_time_ms = now_ms;
 }
 
-/* 统一收敛结束态：写结果/故障并清空输出。 */
+/* 统一收敛结束态：写结果/故障并按结束类型处理输出。 */
 static void AutoCtrl_Finish(auto_ctrl_t *ctrl, auto_ctrl_result_e result,
                             auto_ctrl_fault_e fault,
                             auto_ctrl_run_state_e state) {
   ctrl->result = result;
   ctrl->fault = fault;
   ctrl->state = state;
-  AutoCtrlPrimitive_ResetOutputs(ctrl);
+
+  if (result == AUTO_CTRL_RESULT_SUCCESS || result == AUTO_CTRL_RESULT_NONE) {
+    AutoCtrlPrimitive_ResetOutputs(ctrl);
+    return;
+  }
+
+  AutoCtrlPrimitive_ResetChassis(ctrl);
 }
 
 /* 初始化控制器到可接收任务的空闲状态。 */
@@ -289,7 +248,6 @@ void AutoCtrl_SetFeedback(auto_ctrl_t *ctrl,
 bool AutoCtrl_StartTransition(auto_ctrl_t *ctrl, auto_ctrl_zone_e from,
                               auto_ctrl_zone_e to, uint32_t now_ms) {
   const auto_ctrl_transition_t *transition;
-  bool prefer_ccw;
 
   if (ctrl == 0) return false;
   if (!AutoCtrlZone_IsValid(from) || !AutoCtrlZone_IsValid(to)) {
@@ -316,20 +274,13 @@ bool AutoCtrl_StartTransition(auto_ctrl_t *ctrl, auto_ctrl_zone_e from,
   ctrl->yaw_error_rad = AutoCtrlMath_GetYawErrorRad(ctrl->target_yaw_rad,
                                                     ctrl->feedback.yaw_auto_rad);
   ctrl->prealign_mode = AUTO_CTRL_PREALIGN_BY_YAW;
-  ctrl->yaw_search_start_rad = ctrl->feedback.yaw_auto_rad;
   ctrl->yaw_search_accept_center_rad = ctrl->target_yaw_rad;
   ctrl->sick_accept_max_yaw_diff_rad = AUTO_CTRL_SICK_ACCEPT_MAX_YAW_DIFF_RAD;
-  ctrl->yaw_search_target_rad = ctrl->feedback.yaw_auto_rad;
-  g_auto_ctrl_search_progress_rad = 0.0f;
-  g_auto_ctrl_last_search_yaw_rad = ctrl->feedback.yaw_auto_rad;
-  prefer_ccw = ctrl->yaw_error_rad >= 0.0f;
-  ctrl->yaw_search_dir =
-      prefer_ccw ? AUTO_CTRL_SEARCH_DIR_CCW : AUTO_CTRL_SEARCH_DIR_CW;
-  AutoCtrl_UpdateSearchTarget(ctrl);
-  ctrl->sick_valid_now = false;
+  ctrl->sick_valid_now = AutoCtrl_IsSickYawAcceptable(ctrl);
   ctrl->prealign_done_by_sick = false;
-  ctrl->sick_valid_stable_since_ms = 0u;
+  ctrl->sick_valid_stable_since_ms = ctrl->sick_valid_now ? now_ms : 0u;
   ctrl->sick_align_stable_since_ms = 0u;
+  ctrl->yaw_align_stable_since_ms = 0u;
   ctrl->result = AUTO_CTRL_RESULT_RUNNING;
   ctrl->fault = AUTO_CTRL_FAULT_NONE;
   AutoCtrl_EnterState(ctrl, AUTO_CTRL_STATE_PREALIGN, now_ms);
@@ -345,6 +296,7 @@ bool AutoCtrl_StartTransition(auto_ctrl_t *ctrl, auto_ctrl_zone_e from,
 void AutoCtrl_Update(auto_ctrl_t *ctrl, uint32_t now_ms) {
   const Config_RobotParam_t *robot_param;
   float imu_yaw_error_rad;
+  float blended_yaw_error_rad;
   float sick_assist_rad;
   bool sick_usable;
 
@@ -377,38 +329,22 @@ void AutoCtrl_Update(auto_ctrl_t *ctrl, uint32_t now_ms) {
      */
     case AUTO_CTRL_STATE_PREALIGN:
       if (sick_usable) {
-        if (ctrl->prealign_mode != AUTO_CTRL_PREALIGN_BY_SICK) {
-          if (ctrl->sick_valid_stable_since_ms == 0u) {
-            ctrl->sick_valid_stable_since_ms = now_ms;
-          } else if ((now_ms - ctrl->sick_valid_stable_since_ms) >=
-                     AUTO_CTRL_SICK_VALID_STABLE_MS) {
-            AutoCtrl_SetPrealignMode(ctrl, AUTO_CTRL_PREALIGN_BY_SICK, now_ms);
-          }
-        } else {
+        if (ctrl->sick_valid_stable_since_ms == 0u) {
           ctrl->sick_valid_stable_since_ms = now_ms;
         }
       } else {
         ctrl->sick_valid_stable_since_ms = 0u;
-        if (ctrl->prealign_mode != AUTO_CTRL_PREALIGN_BY_YAW) {
-          AutoCtrl_SetPrealignMode(ctrl, AUTO_CTRL_PREALIGN_BY_YAW, now_ms);
-        }
-        AutoCtrl_UpdateSearchTarget(ctrl);
-        if (AutoCtrl_GetSearchProgressRad(ctrl) >= AUTO_CTRL_SEARCH_FULL_TURN_RAD) {
-          AutoCtrl_Finish(ctrl, AUTO_CTRL_RESULT_FAIL,
-                          AUTO_CTRL_FAULT_PREALIGN_TIMEOUT,
-                          AUTO_CTRL_STATE_FAIL);
-          return;
-        }
       }
 
-      if (ctrl->prealign_mode == AUTO_CTRL_PREALIGN_BY_SICK &&
+      blended_yaw_error_rad = imu_yaw_error_rad;
+      if (ctrl->sick_valid_stable_since_ms != 0u &&
+          (now_ms - ctrl->sick_valid_stable_since_ms) >=
+              AUTO_CTRL_SICK_VALID_STABLE_MS &&
           AutoCtrl_TryGetSickAssistRad(ctrl, &sick_assist_rad)) {
-        ctrl->yaw_error_rad = -sick_assist_rad;
-      } else {
-        AutoCtrl_UpdateSearchTarget(ctrl);
-        ctrl->yaw_error_rad = AutoCtrlMath_GetYawErrorRad(
-            ctrl->yaw_search_target_rad, ctrl->feedback.yaw_auto_rad);
+        blended_yaw_error_rad -=
+            sick_assist_rad * robot_param->auto_ctrl_param.sick_assist_gain;
       }
+      ctrl->yaw_error_rad = blended_yaw_error_rad;
 
       if (AutoCtrl_IsCross200Template(ctrl->template_id) && robot_param != 0) {
         const float move_sign =
@@ -419,12 +355,17 @@ void AutoCtrl_Update(auto_ctrl_t *ctrl, uint32_t now_ms) {
         AutoCtrlPrimitive_ApplyPrealign(ctrl);
       }
 
-      if (ctrl->prealign_mode == AUTO_CTRL_PREALIGN_BY_SICK &&
-          AutoCtrl_IsSickAlignedStable(ctrl, ctrl->yaw_error_rad, now_ms)) {
-        ctrl->prealign_done_by_sick = true;
+      if (sick_usable) {
+        ctrl->yaw_align_stable_since_ms = 0u;
+      }
+
+      if ((sick_usable &&
+           AutoCtrl_IsSickAlignedStable(ctrl, ctrl->yaw_error_rad, now_ms)) ||
+          (!sick_usable &&
+           AutoCtrl_IsYawAlignedStable(ctrl, imu_yaw_error_rad, now_ms))) {
+        ctrl->prealign_done_by_sick = sick_usable;
         ctrl->yaw_zero_offset_rad = ctrl->yaw_raw_rad;
         ctrl->feedback.yaw_auto_rad = 0.0f;
-        ctrl->yaw_search_target_rad = 0.0f;
         ctrl->target_yaw_rad = 0.0f;
         ctrl->yaw_error_rad = 0.0f;
         memset(&ctrl->template_ctx, 0, sizeof(ctrl->template_ctx));

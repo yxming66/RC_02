@@ -37,10 +37,16 @@ typedef struct {
 
         /* 200台阶/跨越前段参数：起步、撑杆、前段到位判定 */
         float climb_align_forward_speed;    /* 对正阶段同步慢速前进速度 (m/s) */
+            float climb_pole_extend_forward_speed; /* 对正成功后，四杆伸起稳定阶段的前进速度 (m/s) */
         float climb_forward_speed;          /* 前段并行动作时的基础前进速度 (m/s) */
         float climb_forward_kick_speed;     /* 起步短促前冲速度，用于提高跨越动量 (m/s) */
         uint32_t climb_forward_kick_ms;     /* 起步短促前冲持续时间 (ms) */
         uint32_t pole_extend_settle_ms;     /* 四杆伸出后等待机构稳定的时间 (ms) */
+            float pole_all_extend_lift_speed;   /* 四杆全伸阶段目标跟踪速度 (rad/s) */
+            float pole_front_retract_lift_speed; /* 前杆回收阶段目标跟踪速度 (rad/s) */
+            float pole_front_extend_lift_speed; /* 前杆放下/重新伸出阶段目标跟踪速度 (rad/s) */
+            float pole_rear_retract_lift_speed; /* 后杆回收阶段目标跟踪速度 (rad/s) */
+            float pole_rear_extend_lift_speed;  /* 后杆放下/重新伸出阶段目标跟踪速度 (rad/s) */
         uint32_t front_photo_timeout_ms;    /* 前段等待底部光电/前段反馈超时 (ms) */
         float climb_front_retract_speed;    /* 前杆回收阶段基础前进速度 (m/s) */
         float climb_front_retract_vy;       /* 前杆回收阶段附加横移速度vy (m/s) */

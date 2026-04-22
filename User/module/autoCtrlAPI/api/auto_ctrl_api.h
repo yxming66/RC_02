@@ -28,9 +28,8 @@ typedef struct {
   float yaw_auto_rad;  /* 输入 yaw（单位: rad），SetFeedback 内会扣零点并归一化。 */
   float sick_front_left_cm;  /* 左前测距传感器读数，单位: cm。 */
   float sick_front_right_cm; /* 右前测距传感器读数，单位: cm。 */
-  bool bottom_photo_triggered; /* 底部光电门状态，true 表示已触发。 */
-  bool front_pole_retracted; /* PE13 光电门状态，高电平表示前腿已收起。 */
-  bool rear_pole_retracted;  /* PE9 光电门状态，高电平表示后腿已收起。 */
+  bool front_pole_retracted; /* 前杆已收起判定结果，由底层光电输入映射得到。 */
+  bool rear_pole_retracted;  /* 后杆已收起判定结果，由底层光电输入映射得到。 */
 } auto_ctrl_feedback_t;
 
 typedef enum {
@@ -61,15 +60,13 @@ typedef struct {
   float yaw_error_rad;       /* 目标减当前的有符号朝向误差，单位: rad。 */
 
   auto_ctrl_prealign_mode_t prealign_mode; /* PREALIGN 当前使用的对正来源。 */
-  float yaw_search_target_rad;             /* SICK 无效时使用的局部 yaw 搜索目标。 */
-  float yaw_search_start_rad;              /* 本轮扫描起始 yaw。 */
   float yaw_search_accept_center_rad;      /* 允许接受 SICK 的目标姿态中心。 */
   float sick_accept_max_yaw_diff_rad;      /* 允许接受 SICK 时的最大 yaw 偏差。 */
-  auto_ctrl_search_dir_t yaw_search_dir;   /* 单向扫描方向。 */
   bool sick_valid_now;                     /* 当前周期 SICK 是否有效。 */
   bool prealign_done_by_sick;              /* PREALIGN 是否由 SICK 完成。 */
   uint32_t sick_valid_stable_since_ms;     /* SICK 连续有效起始时刻。 */
   uint32_t sick_align_stable_since_ms;     /* SICK 对正连续满足阈值起始时刻。 */
+  uint32_t yaw_align_stable_since_ms;      /* 纯 yaw 对正连续满足阈值起始时刻。 */
 
   uint32_t state_enter_time_ms; /* 进入当前 state 的时间戳，单位: ms。 */
   uint32_t prealign_timeout_ms; /* PREALIGN 阶段超时时间，单位: ms。 */

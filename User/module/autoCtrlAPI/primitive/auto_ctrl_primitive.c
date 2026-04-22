@@ -75,9 +75,31 @@ void AutoCtrlPrimitive_CommandFlatMove(auto_ctrl_t *ctrl, float vy_mps) {
 /* 下发撑杆目标位：同时使能前后杆自动目标。 */
 void AutoCtrlPrimitive_CommandPoleTarget(auto_ctrl_t *ctrl, float front_target,
                                          float rear_target) {
+  const Config_RobotParam_t *robot_param = Config_GetRobotParam();
+  const float front_speed =
+    (front_target >= 0.0f)
+      ? robot_param->auto_ctrl_param.pole_front_extend_lift_speed
+      : robot_param->auto_ctrl_param.pole_front_retract_lift_speed;
+  const float rear_speed =
+    (rear_target >= 0.0f)
+      ? robot_param->auto_ctrl_param.pole_rear_extend_lift_speed
+      : robot_param->auto_ctrl_param.pole_rear_retract_lift_speed;
+
+  AutoCtrlPrimitive_CommandPoleTargetWithSpeed(
+    ctrl, front_target, rear_target, front_speed, rear_speed);
+}
+
+/* 下发撑杆目标位，并指定前后杆目标跟踪速度。 */
+void AutoCtrlPrimitive_CommandPoleTargetWithSpeed(auto_ctrl_t *ctrl,
+                                                  float front_target,
+                                                  float rear_target,
+                                                  float front_speed,
+                                                  float rear_speed) {
   ctrl->pole_cmd.mode = POLE_MODE_ACTIVE;
   ctrl->pole_cmd.auto_target_enable[0] = true;
   ctrl->pole_cmd.auto_target_enable[1] = true;
   ctrl->pole_cmd.auto_target_lift[0] = front_target;
   ctrl->pole_cmd.auto_target_lift[1] = rear_target;
+  ctrl->pole_cmd.auto_lift_speed[0] = front_speed;
+  ctrl->pole_cmd.auto_lift_speed[1] = rear_speed;
 }

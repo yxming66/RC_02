@@ -47,6 +47,13 @@ void AutoCtrlPrimitive_CommandFlatMove(auto_ctrl_t *ctrl, float vy_mps);
 void AutoCtrlPrimitive_CommandPoleTarget(auto_ctrl_t *ctrl, float front_target,
                                          float rear_target);
 
+/* 发送前/后撑杆目标位，并指定前后杆各自目标跟踪速度。 */
+void AutoCtrlPrimitive_CommandPoleTargetWithSpeed(auto_ctrl_t *ctrl,
+                                                  float front_target,
+                                                  float rear_target,
+                                                  float front_speed,
+                                                  float rear_speed);
+
 #ifdef __cplusplus
 }
 #endif
