@@ -19,7 +19,6 @@ extern "C" {
 #include "module/autoCtrlAPI/core/auto_ctrl_def.h"
 #include "module/autoCtrlAPI/core/auto_ctrl_math.h"
 #include "module/autoCtrlAPI/template/auto_ctrl_template.h"
-#include "module/autoCtrlAPI/transition/auto_ctrl_transition.h"
 #include "module/chassis.h"
 #include "module/pole.h"
 
@@ -28,8 +27,10 @@ typedef struct {
   float yaw_auto_rad;  /* 输入 yaw（单位: rad），SetFeedback 内会扣零点并归一化。 */
   float sick_front_left_cm;  /* 左前测距传感器读数，单位: cm。 */
   float sick_front_right_cm; /* 右前测距传感器读数，单位: cm。 */
-  bool front_pole_retracted; /* 前杆已收起判定结果，由底层光电输入映射得到。 */
-  bool rear_pole_retracted;  /* 后杆已收起判定结果，由底层光电输入映射得到。 */
+  bool head_front_photo_triggered; /* 头向前光电触发结果，由底层光电输入映射得到。 */
+  bool head_rear_photo_triggered;  /* 头向后光电触发结果，由底层光电输入映射得到。 */
+  bool tail_front_photo_triggered; /* 尾向前光电触发结果，当前预留给未来新增光电输入。 */
+  bool tail_rear_photo_triggered;  /* 尾向后光电触发结果，当前预留给未来新增光电输入。 */
 } auto_ctrl_feedback_t;
 
 typedef enum {
@@ -48,14 +49,13 @@ typedef struct {
   auto_ctrl_result_e result;   /* 本次自动控制的高层结果。 */
   auto_ctrl_fault_e fault;     /* 失败/中止时记录的故障原因。 */
 
-  auto_ctrl_zone_e current_zone; /* AutoCtrl 当前认为所在的区块。 */
-  auto_ctrl_zone_e target_zone;  /* 当前转移任务的目标区块。 */
-  const auto_ctrl_transition_t *transition; /* 当前命中的转移表项指针。 */
-  auto_ctrl_template_e template_id; /* 由转移表选择出的动作模板。 */
+  auto_ctrl_template_e template_id; /* 当前执行的动作模板。 */
+  auto_ctrl_travel_dir_e travel_dir; /* 当前任务采用的前进方向语义。 */
+  auto_ctrl_sensor_mode_e sensor_mode; /* 当前任务使用的传感器约束模式。 */
 
   float yaw_raw_rad;         /* 最近一次输入的原始 yaw，未扣零点。 */
   float yaw_zero_offset_rad; /* 将 raw yaw 转为 auto yaw 使用的零点偏移。 */
-  float target_yaw_rad;      /* 本次转移要求的目标朝向，单位: rad。 */
+  float target_yaw_rad;      /* 本次模板要求的目标朝向，单位: rad。 */
   float yaw_tolerance_rad;   /* PREALIGN 通过阈值，单位: rad。 */
   float yaw_error_rad;       /* 目标减当前的有符号朝向误差，单位: rad。 */
 
@@ -85,7 +85,7 @@ typedef struct {
  * 2) 周期循环中：
  *    a. 采集传感器并组织 auto_ctrl_feedback_t；
  *    b. AutoCtrl_SetFeedback(&ctrl, &feedback);
- *    c. 满足任务触发条件时调用 AutoCtrl_StartTransition(...);
+ *    c. 满足任务触发条件时调用 AutoCtrl_StartTemplate(...);
  *    d. AutoCtrl_Update(&ctrl, now_ms);
  *    e. 下发 ctrl.chassis_cmd 与 ctrl.pole_cmd 到执行层。
  * 3) 通过 AutoCtrl_GetResult / AutoCtrl_GetFault 读取任务结果。
@@ -104,9 +104,14 @@ void AutoCtrl_SetYawZeroOffset(auto_ctrl_t *ctrl, float raw_yaw_rad);
 void AutoCtrl_SetFeedback(auto_ctrl_t *ctrl,
                           const auto_ctrl_feedback_t *feedback);
 
-/* 启动一次 from->to 转移任务。 */
-bool AutoCtrl_StartTransition(auto_ctrl_t *ctrl, auto_ctrl_zone_e from,
-                              auto_ctrl_zone_e to, uint32_t now_ms);
+/* 直接启动一次模板任务。 */
+bool AutoCtrl_StartTemplate(auto_ctrl_t *ctrl,
+                            auto_ctrl_template_e template_id,
+                            auto_ctrl_travel_dir_e travel_dir,
+                            float target_yaw_rad,
+                            float yaw_tolerance_rad,
+                            auto_ctrl_sensor_mode_e sensor_mode,
+                            uint32_t now_ms);
 
 /* 周期更新状态机并生成输出命令。 */
 void AutoCtrl_Update(auto_ctrl_t *ctrl, uint32_t now_ms);

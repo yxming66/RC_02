@@ -38,12 +38,12 @@
 - auto_ctrl.feedback.sick_left_cm
 - auto_ctrl.feedback.sick_right_cm
 - auto_ctrl.feedback.sick_rear_cm
-- auto_ctrl.feedback.front_pole_retracted
-- auto_ctrl.feedback.rear_pole_retracted
+- auto_ctrl.feedback.head_front_photo_triggered
+- auto_ctrl.feedback.head_rear_photo_triggered
 
 通过判据：
-- Step0 依赖 front_pole_retracted、yaw 对齐和稳定时间。
-- Step2/Step3 依赖 rear_pole_retracted。
+- Step0 依赖 head_front_photo_triggered、yaw 对齐和稳定时间。
+- Step2/Step3 依赖 head_rear_photo_triggered。
 
 ### D 输出命令组（确认“只切步不动作”）
 - auto_ctrl.chassis_cmd.mode
@@ -67,9 +67,9 @@
 
 对照参数：
 - pole_extend_settle_ms = 900
-- front_photo_timeout_ms = 1800
+- head_front_photo_timeout_ms = 1800
 - front_retract_settle_ms = 800
-- rear_photo_timeout_ms = 2200
+- head_rear_photo_timeout_ms = 2200
 - rear_retract_move_ms = 700
 - prealign_timeout_ms = 2000
 - template_timeout_ms = 10000
@@ -101,14 +101,14 @@
 ### 场景 3：RUN_TEMPLATE Step0
 重点看：
 - auto_ctrl.template_ctx.step_index（应为 0）
-- auto_ctrl.feedback.front_pole_retracted
+- auto_ctrl.feedback.head_front_photo_triggered
 - abs(auto_ctrl.yaw_error_rad) <= auto_ctrl.yaw_tolerance_rad
 - step_elapsed 与 pole_extend_settle_ms
 - auto_ctrl.fault
 
 预期：
 - 前光电触发、yaw 对齐且稳定时间满足后切到 step1。
-- 超过 front_photo_timeout_ms 触发 SENSOR_INVALID。
+- 超过 head_front_photo_timeout_ms 触发 SENSOR_INVALID。
 
 ### 场景 4：RUN_TEMPLATE Step1
 重点看：
@@ -121,21 +121,21 @@
 ### 场景 5：RUN_TEMPLATE Step2
 重点看：
 - step_index（应为 2）
-- auto_ctrl.feedback.rear_pole_retracted
-- step_elapsed 与 rear_photo_timeout_ms
+- auto_ctrl.feedback.head_rear_photo_triggered
+- step_elapsed 与 head_rear_photo_timeout_ms
 
 预期：
-- rear_pole_retracted=true 时切到 step3。
+- head_rear_photo_triggered=true 时切到 step3。
 - 超时触发 SENSOR_INVALID。
 
 ### 场景 6：RUN_TEMPLATE Step3
 重点看：
 - step_index（应为 3）
-- auto_ctrl.feedback.rear_pole_retracted
-- step_elapsed 与 rear_photo_timeout_ms
+- auto_ctrl.feedback.head_rear_photo_triggered
+- step_elapsed 与 head_rear_photo_timeout_ms
 
 预期：
-- rear_pole_retracted=true 时切到 step4。
+- head_rear_photo_triggered=true 时切到 step4。
 - 超时触发 SENSOR_INVALID。
 
 ### 场景 7：RUN_TEMPLATE Step4
@@ -157,7 +157,7 @@
 ## 3. 快速故障定位
 
 - 进不了 RUN_TEMPLATE：优先检查 yaw_error、yaw_tolerance、prealign 超时。
-- 卡在 Step0：优先检查 front_pole_retracted 是否变化、yaw 是否达标、step_elapsed 是否已超过 900ms。
-- Step2/3 卡住：优先检查 rear_pole_retracted 是否变化。
+- 卡在 Step0：优先检查 head_front_photo_triggered 是否变化、yaw 是否达标、step_elapsed 是否已超过 900ms。
+- Step2/3 卡住：优先检查 head_rear_photo_triggered 是否变化。
 - 进入 FAIL：先看 auto_ctrl.fault，再回看对应 timeout 条件。
 - RUN_TEMPLATE 仍有明显动作命令：检查是否存在其它模块覆盖 chassis/pole 命令。

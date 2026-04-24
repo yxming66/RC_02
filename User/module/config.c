@@ -130,7 +130,7 @@ Config_RobotParam_t robot_config = {
       .pole_front_extend_lift_speed = 20.0f, // 前杆放下/重新伸出阶段速度 (rad/s)
       .pole_rear_retract_lift_speed = 30.0f, // 后杆回收阶段速度 (rad/s)
       .pole_rear_extend_lift_speed = 18.0f, // 后杆放下/重新伸出阶段速度 (rad/s)
-      .front_photo_timeout_ms =5000u,   // 前段等待底部光电/前段反馈的超时时间 (ms)
+      .head_front_photo_timeout_ms =5000u,   // 头向前光电等待超时时间 (ms)
       .climb_front_retract_speed = 0.50f, // 前杆回收阶段基础前进速度 (m/s)
       .climb_front_retract_vy = 0.04f,    // 前杆回收阶段附加横移速度vy (m/s)
       .climb_front_retract_timeout_ms = 5000u, // 前杆回收阶段最长等待时间 (ms)
@@ -141,9 +141,62 @@ Config_RobotParam_t robot_config = {
       .climb_mid_forward_ms = 1500u,       // 前杆收回后，中段继续纯前进的保持时间 (ms)
       .climb_rear_retract_speed = 0.20f, // 后杆回收阶段的基础前进速度 (m/s)
       .climb_rear_retract_vy = 0.15f,    // 后杆回收阶段附加横移速度vy，便于边收杆边修正姿态 (m/s)
-      .rear_photo_timeout_ms = 10000u,    // 后段等待后杆/后段反馈的超时时间 (ms)
+      .head_rear_photo_timeout_ms = 10000u,    // 头向后光电等待超时时间 (ms)
       .climb_rear_retract_timeout_ms = 5000u, // 后杆回收阶段最长等待时间 (ms)
       .rear_retract_move_ms = 700u,      // 后杆回收完成后继续保持运动的时间 (ms)
+
+      /* 200下台阶逆流程参数 */
+      .descend_200_align_speed = 0.30f,             // 下台阶对正阶段速度 (m/s)
+      .descend_200_climb_forward_speed = 0.50f,     // 下台阶跨越时前进速度 (m/s)
+      .descend_200_pole_extend_settle_ms = 900u,    // 下台阶撑杆伸出稳定时间 (ms)
+      .descend_200_head_rear_photo_timeout_ms = 5000u, /* 下台阶头向后光电超时 (ms) */
+      .descend_200_climb_rear_retract_speed = 0.20f,      // 下台阶后杆回收速度 (m/s)
+      .descend_200_climb_rear_retract_timeout_ms = 5000u, // 下台阶后杆回收超时 (ms)
+      .descend_200_rear_retract_move_ms = 700u,           // 下台阶后杆回收后移动时长 (ms)
+      .descend_200_climb_front_retract_speed = 0.50f,     // 下台阶前杆回收速度 (m/s)
+      .descend_200_climb_front_retract_timeout_ms = 5000u, /* 下台阶前杆回收超时 (ms) */
+      .descend_200_front_retract_settle_ms = 800u,     // 下台阶前杆回收后稳定时长 (ms)
+      .descend_200_flat_move_ms = 600u,                // 下台阶脱离台阶平移时长 (ms)
+      .descend_200_pole_all_extend_lift_speed = 50.0f,     // 下台阶四杆全伸阶段速度 (rad/s)
+      .descend_200_pole_rear_retract_lift_speed = 30.0f,  // 下台阶后杆回收阶段速度 (rad/s)
+      .descend_200_pole_front_retract_lift_speed = 18.0f, // 下台阶前杆回收阶段速度 (rad/s)
+
+      /* 400上台阶逆流程参数 */
+      .ascend_400_align_forward_speed = 0.30f,  // 上台阶对正阶段同步前进速度 (m/s)
+      .ascend_400_pole_extend_forward_speed = 0.30f, // 上台阶四杆伸起稳定阶段前进速度 (m/s)
+      .ascend_400_forward_speed = 0.40f,       // 上台阶前杆回收阶段基础前进速度 (m/s)
+      .ascend_400_pole_extend_settle_ms = 1000u, // 上台阶四杆伸出后稳定时间 (ms)
+      .ascend_400_pole_all_extend_lift_speed = 40.0f, // 上台阶四杆全伸阶段速度 (rad/s)
+      .ascend_400_head_front_photo_timeout_ms = 6000u, /* 上台阶头向前光电超时 (ms) */
+      .ascend_400_front_retract_speed = 0.25f,  // 上台阶前杆回收速度 (m/s)
+      .ascend_400_front_retract_vy = 0.15f,     // 上台阶前杆回收附加横移速度vy (m/s)
+      .ascend_400_front_retract_timeout_ms = 5000u, // 上台阶前杆回收超时 (ms)
+      .ascend_400_front_retract_settle_ms = 800u, // 上台阶前杆回收后稳定时间 (ms)
+      .ascend_400_mid_forward_speed = 0.50f,     // 上台阶前杆收回后中段前进速度 (m/s)
+      .ascend_400_mid_forward_ms = 1500u,        // 上台阶中段前进保持时间 (ms)
+      .ascend_400_rear_retract_speed = 0.20f,  // 上台阶后杆回收速度 (m/s)
+      .ascend_400_rear_retract_vy = 0.15f,     // 上台阶后杆回收附加横移速度vy (m/s)
+      .ascend_400_head_rear_photo_timeout_ms = 6000u, /* 上台阶头向后光电超时 (ms) */
+      .ascend_400_rear_retract_timeout_ms = 5000u, // 上台阶后杆回收超时 (ms)
+      .ascend_400_rear_retract_move_ms = 800u,  // 上台阶后杆回收后移动时长 (ms)
+      .ascend_400_pole_rear_retract_lift_speed = 30.0f, // 上台阶后杆回收阶段速度 (rad/s)
+      .ascend_400_pole_front_retract_lift_speed = 18.0f, // 上台阶前杆回收阶段速度 (rad/s)
+
+      /* 400下台阶逆流程参数 */
+      .descend_400_align_speed = 0.30f,             // 下台阶对正阶段速度 (m/s)
+      .descend_400_climb_forward_speed = 0.40f,     // 下台阶跨越时前进速度 (m/s)
+      .descend_400_pole_extend_settle_ms = 1200u,  // 下台阶撑杆伸出稳定时间 (ms)
+      .descend_400_head_rear_photo_timeout_ms = 6000u, /* 下台阶头向后光电超时 (ms) */
+      .descend_400_climb_rear_retract_speed = 0.15f,     // 下台阶后杆回收速度 (m/s)
+      .descend_400_climb_rear_retract_timeout_ms = 6000u, // 下台阶后杆回收超时 (ms)
+      .descend_400_rear_retract_move_ms = 800u,           // 下台阶后杆回收后移动时长 (ms)
+      .descend_400_climb_front_retract_speed = 0.40f,     // 下台阶前杆回收速度 (m/s)
+      .descend_400_climb_front_retract_timeout_ms = 6000u, /* 下台阶前杆回收超时 (ms) */
+      .descend_400_front_retract_settle_ms = 1000u,     // 下台阶前杆回收后稳定时长 (ms)
+      .descend_400_flat_move_ms = 800u,                // 下台阶脱离台阶平移时长 (ms)
+      .descend_400_pole_all_extend_lift_speed = 40.0f,     // 下台阶四杆全伸阶段速度 (rad/s)
+      .descend_400_pole_rear_retract_lift_speed = 25.0f,  // 下台阶后杆回收阶段速度 (rad/s)
+      .descend_400_pole_front_retract_lift_speed = 15.0f, // 下台阶前杆回收阶段速度 (rad/s)
 
       /* SICK辅助姿态修正参数 */
       .sick_valid_min_cm = 0.0f,         // SICK测距判定为有效的最小值 (cm)

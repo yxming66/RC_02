@@ -166,6 +166,7 @@ struct MotorTraits<MotorKind::DM, MotorModel::J4310> : MotorTraitsBase<MotorKind
     static constexpr bool kSupportsTorque = true;
     static constexpr bool kSupportsVelocity = true;
     static constexpr bool kSupportsPosition = true;
+    static constexpr bool kIsMultiTurn = true;
     static constexpr bool kHasMasterId = true;
     static constexpr float kDefaultKp = 0.0f;
     static constexpr float kDefaultKd = 0.0f;
@@ -192,6 +193,7 @@ struct MotorTraits<MotorKind::DM, MotorModel::J4310P> : MotorTraitsBase<MotorKin
     static constexpr bool kSupportsTorque = true;
     static constexpr bool kSupportsVelocity = true;
     static constexpr bool kSupportsPosition = true;
+    static constexpr bool kIsMultiTurn = true;
     static constexpr bool kHasMasterId = true;
     static constexpr float kDefaultKp = 0.0f;
     static constexpr float kDefaultKd = 0.0f;
@@ -206,7 +208,7 @@ struct MotorTraits<MotorKind::DM, MotorModel::J4310P> : MotorTraitsBase<MotorKin
     static constexpr float kRatedTorque = 3.5f;
     static constexpr float kPeakTorque = 12.5f;
     static constexpr float kTorqueConstant = 3.5f / 4.9f / 10.0f;
-    static constexpr uint16_t kEncoderCpr = 65536;
+    static constexpr uint16_t kEncoderCpr = 65535;
     static constexpr MotorCapability kCapabilities = MotorCapability::Current | MotorCapability::Velocity | MotorCapability::Position | MotorCapability::MIT;
     static constexpr const char* kName = "DM-J4310P-24V";
 };
@@ -219,6 +221,7 @@ struct MotorTraits<MotorKind::DM, MotorModel::J4340> : MotorTraitsBase<MotorKind
     static constexpr bool kSupportsTorque = true;
     static constexpr bool kSupportsVelocity = true;
     static constexpr bool kSupportsPosition = true;
+    static constexpr bool kIsMultiTurn = true;
     static constexpr bool kHasMasterId = true;
     static constexpr float kDefaultKp = 0.0f;
     static constexpr float kDefaultKd = 0.0f;

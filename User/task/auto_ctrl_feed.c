@@ -9,15 +9,9 @@
 #include "main.h"
 #include "device/dr16.h"
 #include "module/autoCtrlAPI/api/auto_ctrl_api.h"
-#include "module/autoCtrlAPI/transition/auto_ctrl_transition.h"
-#include "module/autoCtrlAPI/transition/auto_ctrl_zone.h"
 #include "module/chassis.h"
 
 /* USER INCLUDE END */
-
-#ifndef AUTO_CTRL_DEFAULT_START_ZONE
-#define AUTO_CTRL_DEFAULT_START_ZONE AUTO_CTRL_ZONE_R2_ENTRY2
-#endif
 
 /* Private typedef ---------------------------------------------------------- */
 /* Private define ----------------------------------------------------------- */
@@ -32,50 +26,10 @@ extern DR16_t dr16;
 auto_ctrl_t auto_ctrl;
 bool auto_ctrl_inited = false;
 auto_ctrl_feedback_t feedback = {0};
-static DR16_SwitchPos_t auto_last_sw_r = DR16_SW_ERR;
-static const GPIO_PinState front_pole_photo_active_state = GPIO_PIN_RESET;
-static const GPIO_PinState rear_pole_photo_active_state = GPIO_PIN_RESET;
-
-static auto_ctrl_zone_e AutoCtrlTask_FindZoneByHeight(
-    auto_ctrl_zone_e from_zone, int16_t target_height_mm) {
-  auto_ctrl_zone_e zone;
-
-  for (zone = (auto_ctrl_zone_e)0; zone < AUTO_CTRL_ZONE_COUNT;
-       zone = (auto_ctrl_zone_e)(zone + 1)) {
-    if (!AutoCtrlZone_IsPlatform(zone)) {
-      continue;
-    }
-    if (AutoCtrlZone_GetHeightMm(zone) != target_height_mm) {
-      continue;
-    }
-    if (!AutoCtrlTransition_IsLegal(from_zone, zone)) {
-      continue;
-    }
-    return zone;
-  }
-
-  return AUTO_CTRL_ZONE_INVALID;
-}
-
-static bool AutoCtrlTask_StartByDelta(auto_ctrl_t *ctrl, int16_t delta_height_mm,
-                                      uint32_t now_ms) {
-  auto_ctrl_zone_e from_zone = ctrl->current_zone;
-  int16_t current_height_mm;
-  auto_ctrl_zone_e to_zone;
-
-  if (!AutoCtrlZone_IsValid(from_zone)) {
-    return false;
-  }
-
-  current_height_mm = AutoCtrlZone_GetHeightMm(from_zone);
-  to_zone = AutoCtrlTask_FindZoneByHeight(
-      from_zone, (int16_t)(current_height_mm + delta_height_mm));
-  if (to_zone == AUTO_CTRL_ZONE_INVALID) {
-    return false;
-  }
-
-  return AutoCtrl_StartTransition(ctrl, from_zone, to_zone, now_ms);
-}
+static const GPIO_PinState head_front_photo_active_state = GPIO_PIN_RESET;
+static const GPIO_PinState head_rear_photo_active_state = GPIO_PIN_RESET;
+static const GPIO_PinState tail_front_photo_active_state = GPIO_PIN_RESET;
+static const GPIO_PinState tail_rear_photo_active_state = GPIO_PIN_RESET;
 /* USER STRUCT END */
 
 /* Private function --------------------------------------------------------- */
@@ -90,9 +44,6 @@ void Task_auto_ctrl(void *argument) {
   uint32_t tick = osKernelGetTickCount();
 
   AutoCtrl_Init(&auto_ctrl);
-  if (auto_ctrl.current_zone == AUTO_CTRL_ZONE_INVALID) {
-    auto_ctrl.current_zone = AUTO_CTRL_DEFAULT_START_ZONE;
-  }
   auto_ctrl_inited = true;
 
   while (1) {
@@ -108,43 +59,24 @@ void Task_auto_ctrl(void *argument) {
       feedback.sick_front_left_cm = distance_cm[2];
       feedback.sick_front_right_cm = distance_cm[3];
 
-      GPIO_PinState front_pole_gpio_state =
+      GPIO_PinState head_front_photo_gpio_state =
         HAL_GPIO_ReadPin(GPIOE, GPIO_PIN_13);
-      GPIO_PinState rear_pole_gpio_state = HAL_GPIO_ReadPin(GPIOE, GPIO_PIN_9);
+      GPIO_PinState head_rear_photo_gpio_state = HAL_GPIO_ReadPin(GPIOE, GPIO_PIN_9);
+      const bool tail_front_photo_triggered = false;
+      const bool tail_rear_photo_triggered = false;
 
-      feedback.front_pole_retracted =
-        (front_pole_gpio_state == front_pole_photo_active_state);
-      feedback.rear_pole_retracted =
-        (rear_pole_gpio_state == rear_pole_photo_active_state);
+      feedback.head_front_photo_triggered =
+        (head_front_photo_gpio_state == head_front_photo_active_state);
+      feedback.head_rear_photo_triggered =
+        (head_rear_photo_gpio_state == head_rear_photo_active_state);
+      feedback.tail_front_photo_triggered =
+        (tail_front_photo_triggered == (tail_front_photo_active_state == GPIO_PIN_SET));
+      feedback.tail_rear_photo_triggered =
+        (tail_rear_photo_triggered == (tail_rear_photo_active_state == GPIO_PIN_SET));
 
       AutoCtrl_SetFeedback(&auto_ctrl, &feedback);
 
-      if (dr16.header.online) {
-        if ((dr16.data.sw_l == DR16_SW_MID || dr16.data.sw_l == DR16_SW_DOWN) &&
-            AutoCtrl_IsBusy(&auto_ctrl)) {
-          AutoCtrl_Update(&auto_ctrl, now_ms);
-        } else if ((dr16.data.sw_l == DR16_SW_MID ||
-                    dr16.data.sw_l == DR16_SW_DOWN) &&
-                   auto_last_sw_r == DR16_SW_MID) {
-          if (dr16.data.sw_l == DR16_SW_MID) {
-            if (dr16.data.sw_r == DR16_SW_UP) {
-              (void)AutoCtrlTask_StartByDelta(&auto_ctrl, 200, now_ms);
-            } else if (dr16.data.sw_r == DR16_SW_DOWN) {
-              (void)AutoCtrlTask_StartByDelta(&auto_ctrl, -200, now_ms);
-            }
-          } else {
-            if (dr16.data.sw_r == DR16_SW_UP) {
-              (void)AutoCtrlTask_StartByDelta(&auto_ctrl, 400, now_ms);
-            } else if (dr16.data.sw_r == DR16_SW_DOWN) {
-              (void)AutoCtrlTask_StartByDelta(&auto_ctrl, -400, now_ms);
-            }
-          }
-        }
-
-        auto_last_sw_r = dr16.data.sw_r;
-      } else {
-        auto_last_sw_r = DR16_SW_ERR;
-      }
+      AutoCtrl_Update(&auto_ctrl, now_ms);
     }
 
     osDelayUntil(tick);

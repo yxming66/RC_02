@@ -5,13 +5,13 @@
  *
  * 作用：
  * - 实现 AutoCtrl 主状态机（IDLE/PREALIGN/RUN_TEMPLATE/结束态）；
- * - 连接 transition、template 与 primitive 三层；
+ * - 连接 template 与 primitive 两层；
  * - 接收外部反馈并输出底盘/撑杆命令。
  *
  * 上层典型调用时序：
  * 1) 初始化阶段调用 AutoCtrl_Init；
  * 2) 每个控制周期先写入 AutoCtrl_SetFeedback，再调用 AutoCtrl_Update；
- * 3) 需要执行区块跳转时调用 AutoCtrl_StartTransition；
+ * 3) 需要执行模板时调用 AutoCtrl_StartTemplate；
  * 4) 周期读取 ctrl->chassis_cmd / ctrl->pole_cmd 并下发执行机构；
  * 5) 任务结束后通过 GetResult/GetFault 判定成功或故障原因。
  */
@@ -22,8 +22,6 @@
 #include "module/config.h"
 #include "module/autoCtrlAPI/primitive/auto_ctrl_primitive.h"
 #include "module/autoCtrlAPI/template/auto_ctrl_template_runner.h"
-#include "module/autoCtrlAPI/transition/auto_ctrl_transition.h"
-#include "module/autoCtrlAPI/transition/auto_ctrl_zone.h"
 
 #define AUTO_CTRL_PREALIGN_TIMEOUT_MS (2000u)
 #define AUTO_CTRL_TEMPLATE_TIMEOUT_MS (10000u)
@@ -51,11 +49,11 @@ static bool AutoCtrl_IsSickYawUsable(const auto_ctrl_t *ctrl,
   const float valid_min_cm = robot_param->auto_ctrl_param.sick_valid_min_cm;
   const float valid_max_cm = robot_param->auto_ctrl_param.sick_valid_max_cm;
 
-  if (ctrl == 0 || robot_param == 0 || ctrl->transition == 0) {
+  if (ctrl == 0 || robot_param == 0) {
     return false;
   }
 
-  if (ctrl->transition->sensor_mode != AUTO_CTRL_SENSOR_MODE_SICK_FRONT_AND_BOTTOM) {
+  if (ctrl->sensor_mode != AUTO_CTRL_SENSOR_MODE_SICK_FRONT_AND_BOTTOM) {
     return false;
   }
 
@@ -100,7 +98,7 @@ static bool AutoCtrl_TryGetSickAssistRad(const auto_ctrl_t *ctrl,
   float norm_err;
   float denom;
 
-  if (ctrl == 0 || assist_rad == 0 || ctrl->transition == 0) {
+  if (ctrl == 0 || assist_rad == 0) {
     return false;
   }
 
@@ -209,11 +207,12 @@ void AutoCtrl_Init(auto_ctrl_t *ctrl) {
   memset(ctrl, 0, sizeof(*ctrl));
   ctrl->prealign_timeout_ms = AUTO_CTRL_PREALIGN_TIMEOUT_MS;
   ctrl->template_timeout_ms = AUTO_CTRL_TEMPLATE_TIMEOUT_MS;
-  ctrl->current_zone = AUTO_CTRL_ZONE_INVALID;
-  ctrl->target_zone = AUTO_CTRL_ZONE_INVALID;
   ctrl->state = AUTO_CTRL_STATE_IDLE;
   ctrl->result = AUTO_CTRL_RESULT_NONE;
   ctrl->fault = AUTO_CTRL_FAULT_NONE;
+  ctrl->template_id = AUTO_CTRL_TEMPLATE_NONE;
+  ctrl->travel_dir = AUTO_CTRL_TRAVEL_DIR_HEAD_FORWARD;
+  ctrl->sensor_mode = AUTO_CTRL_SENSOR_MODE_NONE;
   AutoCtrlPrimitive_ResetOutputs(ctrl);
 }
 
@@ -242,35 +241,38 @@ void AutoCtrl_SetFeedback(auto_ctrl_t *ctrl,
 }
 
 /*
- * 启动一条 from->to 转移任务。
+ * 直接启动模板任务。
  * 时序位置：由上层在“空闲或结束态”发起，成功后立即进入 PREALIGN。
  */
-bool AutoCtrl_StartTransition(auto_ctrl_t *ctrl, auto_ctrl_zone_e from,
-                              auto_ctrl_zone_e to, uint32_t now_ms) {
-  const auto_ctrl_transition_t *transition;
-
+bool AutoCtrl_StartTemplate(auto_ctrl_t *ctrl,
+                            auto_ctrl_template_e template_id,
+                            auto_ctrl_travel_dir_e travel_dir,
+                            float target_yaw_rad,
+                            float yaw_tolerance_rad,
+                            auto_ctrl_sensor_mode_e sensor_mode,
+                            uint32_t now_ms) {
   if (ctrl == 0) return false;
-  if (!AutoCtrlZone_IsValid(from) || !AutoCtrlZone_IsValid(to)) {
-    AutoCtrl_Finish(ctrl, AUTO_CTRL_RESULT_FAIL, AUTO_CTRL_FAULT_INVALID_ZONE,
+  if (template_id <= AUTO_CTRL_TEMPLATE_NONE ||
+      template_id > AUTO_CTRL_TEMPLATE_DESCEND_400_STD) {
+    AutoCtrl_Finish(ctrl, AUTO_CTRL_RESULT_FAIL, AUTO_CTRL_FAULT_INVALID_TEMPLATE,
                     AUTO_CTRL_STATE_FAIL);
     return false;
   }
 
-  transition = AutoCtrlTransition_Find(from, to);
-  if (transition == 0) {
+  if (sensor_mode < AUTO_CTRL_SENSOR_MODE_NONE ||
+      sensor_mode > AUTO_CTRL_SENSOR_MODE_BOTTOM_ONLY) {
     AutoCtrl_Finish(ctrl, AUTO_CTRL_RESULT_FAIL,
-                    AUTO_CTRL_FAULT_INVALID_TRANSITION,
+                    AUTO_CTRL_FAULT_INVALID_TEMPLATE,
                     AUTO_CTRL_STATE_FAIL);
     return false;
   }
 
   memset(&ctrl->template_ctx, 0, sizeof(ctrl->template_ctx));
-  ctrl->current_zone = from;
-  ctrl->target_zone = to;
-  ctrl->transition = transition;
-  ctrl->template_id = transition->template_id;
-  ctrl->target_yaw_rad = transition->required_yaw_rad;
-  ctrl->yaw_tolerance_rad = transition->yaw_tolerance_rad;
+  ctrl->template_id = template_id;
+  ctrl->travel_dir = travel_dir;
+  ctrl->sensor_mode = sensor_mode;
+  ctrl->target_yaw_rad = target_yaw_rad;
+  ctrl->yaw_tolerance_rad = yaw_tolerance_rad;
   ctrl->yaw_error_rad = AutoCtrlMath_GetYawErrorRad(ctrl->target_yaw_rad,
                                                     ctrl->feedback.yaw_auto_rad);
   ctrl->prealign_mode = AUTO_CTRL_PREALIGN_BY_YAW;
@@ -314,7 +316,7 @@ void AutoCtrl_Update(auto_ctrl_t *ctrl, uint32_t now_ms) {
   AutoCtrlPrimitive_ResetOutputs(ctrl);
 
   switch (ctrl->state) {
-    /* 空闲和结束态不再产生命令，等待上层下一次 StartTransition。 */
+    /* 空闲和结束态不再产生命令，等待上层下一次 StartTemplate。 */
     case AUTO_CTRL_STATE_IDLE:
     case AUTO_CTRL_STATE_SUCCESS:
     case AUTO_CTRL_STATE_FAIL:
@@ -392,7 +394,6 @@ void AutoCtrl_Update(auto_ctrl_t *ctrl, uint32_t now_ms) {
       }
 
       if (AutoCtrlTemplate_Run(ctrl, now_ms)) {
-        ctrl->current_zone = ctrl->target_zone;
         AutoCtrl_Finish(ctrl, AUTO_CTRL_RESULT_SUCCESS, AUTO_CTRL_FAULT_NONE,
                         AUTO_CTRL_STATE_SUCCESS);
       } else if (ctrl->fault != AUTO_CTRL_FAULT_NONE) {
@@ -434,7 +435,7 @@ auto_ctrl_result_e AutoCtrl_GetResult(const auto_ctrl_t *ctrl) {
 
 /* 读取故障码。 */
 auto_ctrl_fault_e AutoCtrl_GetFault(const auto_ctrl_t *ctrl) {
-  return (ctrl == 0) ? AUTO_CTRL_FAULT_INVALID_ZONE : ctrl->fault;
+  return (ctrl == 0) ? AUTO_CTRL_FAULT_INVALID_TEMPLATE : ctrl->fault;
 }
 
 /* 读取当前模板 ID。 */

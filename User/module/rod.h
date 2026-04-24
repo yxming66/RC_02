@@ -3,15 +3,19 @@
  */
 #pragma once
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include <stdbool.h>
 #include <stdint.h>
 
 #include "main.h"
 #include "device/motor_dm.h"
+
+#ifdef __cplusplus
+#include "device/motor/motor.hpp"
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #define ROD_OK (0)
 #define ROD_ERR (-1)
@@ -122,8 +126,8 @@ typedef struct {
   } sequence;
 
   struct {
-    MOTOR_DM_t *pit_motor;
-    MOTOR_DM_t *rol_motor;
+    void *pit_motor;
+    void *rol_motor;
   } motor;
 
   Rod_Feedback_t feedback;

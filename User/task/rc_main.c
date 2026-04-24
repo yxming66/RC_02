@@ -13,8 +13,25 @@
 #include "module/arm.h"
 #include "module/rod.h"
 #include "module/autoCtrlAPI/api/auto_ctrl_api.h"
+#include "module/autoCtrlAPI/core/auto_ctrl_def.h"
 #include "main.h"
 /* USER INCLUDE END */
+
+#ifndef AUTO_CTRL_RC_YAW_POS_90_RAD
+#define AUTO_CTRL_RC_YAW_POS_90_RAD (1.57079632679f)
+#endif
+
+#ifndef AUTO_CTRL_RC_YAW_NEG_90_RAD
+#define AUTO_CTRL_RC_YAW_NEG_90_RAD (-1.57079632679f)
+#endif
+
+#ifndef AUTO_CTRL_RC_YAW_TOLERANCE_RAD
+#define AUTO_CTRL_RC_YAW_TOLERANCE_RAD (0.0872664626f)
+#endif
+
+#ifndef AUTO_CTRL_RC_DIR_THRESHOLD
+#define AUTO_CTRL_RC_DIR_THRESHOLD (0.35f)
+#endif
 
 #ifndef AUTO_CTRL_OUTPUT_ENABLE
 #define AUTO_CTRL_OUTPUT_ENABLE (1u)
@@ -33,6 +50,11 @@ static DR16_SwitchPos_t last_sw_r = DR16_SW_ERR;  /* 记录右拨杆上一次状
 static Arm_CMD_t arm_cmd;
 static Rod_CMD_t rod_cmd;
 extern bool reset; 
+extern auto_ctrl_t auto_ctrl;
+extern bool auto_ctrl_inited;
+
+static auto_ctrl_travel_dir_e auto_ctrl_requested_dir =
+  AUTO_CTRL_TRAVEL_DIR_HEAD_FORWARD;
 
 static void Rc_SetRodRelax(void) {
   rod_cmd.mode = ROD_MODE_RELAX;
@@ -83,6 +105,60 @@ static bool Rc_ShouldExitAutoCtrlBySwitch(void) {
          last_sw_r == DR16_SW_UP &&
          dr16.data.sw_r == DR16_SW_MID;
 }
+
+static auto_ctrl_travel_dir_e Rc_GetRequestedAutoCtrlDir(void) {
+  if (dr16.data.ch_r_x <= -AUTO_CTRL_RC_DIR_THRESHOLD) {
+    return AUTO_CTRL_TRAVEL_DIR_TAIL_FORWARD;
+  }
+  if (dr16.data.ch_r_x >= AUTO_CTRL_RC_DIR_THRESHOLD) {
+    return AUTO_CTRL_TRAVEL_DIR_HEAD_FORWARD;
+  }
+  return auto_ctrl_requested_dir;
+}
+
+static void Rc_TryStartAutoCtrlBySwitch(uint32_t now_ms) {
+  if (!dr16.header.online || !auto_ctrl_inited || AutoCtrl_IsBusy(&auto_ctrl)) {
+    return;
+  }
+
+  if (dr16.data.sw_l != DR16_SW_MID && dr16.data.sw_l != DR16_SW_DOWN) {
+    return;
+  }
+
+  if (last_sw_r != DR16_SW_MID) {
+    return;
+  }
+
+  auto_ctrl_requested_dir = Rc_GetRequestedAutoCtrlDir();
+
+  if (dr16.data.sw_l == DR16_SW_MID) {
+    if (dr16.data.sw_r == DR16_SW_UP) {
+      (void)AutoCtrl_StartTemplate(
+          &auto_ctrl, AUTO_CTRL_TEMPLATE_ASCEND_200, auto_ctrl_requested_dir,
+          AUTO_CTRL_RC_YAW_POS_90_RAD, AUTO_CTRL_RC_YAW_TOLERANCE_RAD,
+          AUTO_CTRL_SENSOR_MODE_SICK_FRONT_AND_BOTTOM, now_ms);
+    } else if (dr16.data.sw_r == DR16_SW_DOWN) {
+      (void)AutoCtrl_StartTemplate(
+          &auto_ctrl, AUTO_CTRL_TEMPLATE_DESCEND_200, auto_ctrl_requested_dir,
+          AUTO_CTRL_RC_YAW_NEG_90_RAD, AUTO_CTRL_RC_YAW_TOLERANCE_RAD,
+          AUTO_CTRL_SENSOR_MODE_SICK_FRONT_AND_BOTTOM, now_ms);
+    }
+  } else {
+    if (dr16.data.sw_r == DR16_SW_UP) {
+      (void)AutoCtrl_StartTemplate(
+          &auto_ctrl, AUTO_CTRL_TEMPLATE_ASCEND_400_STD,
+          auto_ctrl_requested_dir, AUTO_CTRL_RC_YAW_POS_90_RAD,
+          AUTO_CTRL_RC_YAW_TOLERANCE_RAD,
+          AUTO_CTRL_SENSOR_MODE_SICK_FRONT_AND_BOTTOM, now_ms);
+    } else if (dr16.data.sw_r == DR16_SW_DOWN) {
+      (void)AutoCtrl_StartTemplate(
+          &auto_ctrl, AUTO_CTRL_TEMPLATE_DESCEND_400_STD,
+          auto_ctrl_requested_dir, AUTO_CTRL_RC_YAW_NEG_90_RAD,
+          AUTO_CTRL_RC_YAW_TOLERANCE_RAD,
+          AUTO_CTRL_SENSOR_MODE_SICK_FRONT_AND_BOTTOM, now_ms);
+    }
+  }
+}
 /* USER STRUCT END */
 
 /* Private function --------------------------------------------------------- */
@@ -103,6 +179,7 @@ void Task_rc_main(void *argument) {
   /* USER CODE INIT END */
   
   while (1) {
+    uint32_t now_ms;
     tick += delay_tick; /* 计算下一个唤醒时刻 */
     /* USER CODE BEGIN */
         // 启动下一次DMA接收
@@ -113,6 +190,14 @@ void Task_rc_main(void *argument) {
     } else {
       DR16_Offline(&dr16);
     }
+
+    now_ms = osKernelGetTickCount();
+
+    if (auto_ctrl_inited && !AutoCtrl_IsBusy(&auto_ctrl)) {
+      auto_ctrl_requested_dir = Rc_GetRequestedAutoCtrlDir();
+    }
+
+    Rc_TryStartAutoCtrlBySwitch(now_ms);
 
     if (auto_ctrl_inited && AutoCtrl_IsBusy(&auto_ctrl) &&
         Rc_ShouldExitAutoCtrlBySwitch()) {
@@ -252,9 +337,9 @@ void Task_rc_main(void *argument) {
           last_sw_r != DR16_SW_DOWN && last_sw_r != DR16_SW_ERR) {
           reset=!reset; 
       }
-      last_sw_l = dr16.data.sw_l;  /* 更新拨杆状态 */
-      last_sw_r = dr16.data.sw_r;  /* 更新右拨杆状态 */
     }
+    last_sw_l = dr16.data.sw_l;  /* 更新拨杆状态 */
+    last_sw_r = dr16.data.sw_r;  /* 更新右拨杆状态 */
     /* USER CODE END */
     osDelayUntil(tick); /* 运行结束，等待下一次唤醒 */
   }

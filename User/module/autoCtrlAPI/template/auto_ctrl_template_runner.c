@@ -45,18 +45,60 @@ static void AutoCtrlTemplate_NextStep(auto_ctrl_t *ctrl) {
   ctrl->template_ctx.step_entered = false;
 }
 
-static bool AutoCtrlTemplate_LatchFrontPoleRetracted(auto_ctrl_t *ctrl) {
-  if (ctrl->feedback.front_pole_retracted) {
-    ctrl->template_ctx.front_pole_retracted_latched = true;
+static bool AutoCtrlTemplate_IsCurrentFrontPhotoTriggered(
+    const auto_ctrl_t *ctrl) {
+  if (ctrl->travel_dir == AUTO_CTRL_TRAVEL_DIR_TAIL_FORWARD) {
+    return ctrl->feedback.tail_front_photo_triggered;
   }
-  return ctrl->template_ctx.front_pole_retracted_latched;
+  return ctrl->feedback.head_front_photo_triggered;
 }
 
-static bool AutoCtrlTemplate_LatchRearPoleRetracted(auto_ctrl_t *ctrl) {
-  if (ctrl->feedback.rear_pole_retracted) {
-    ctrl->template_ctx.rear_pole_retracted_latched = true;
+static bool AutoCtrlTemplate_IsCurrentRearPhotoTriggered(
+    const auto_ctrl_t *ctrl) {
+  if (ctrl->travel_dir == AUTO_CTRL_TRAVEL_DIR_TAIL_FORWARD) {
+    return ctrl->feedback.tail_rear_photo_triggered;
   }
-  return ctrl->template_ctx.rear_pole_retracted_latched;
+  return ctrl->feedback.head_rear_photo_triggered;
+}
+
+static bool AutoCtrlTemplate_LatchCurrentFrontPhotoTriggered(auto_ctrl_t *ctrl) {
+  if (ctrl->travel_dir == AUTO_CTRL_TRAVEL_DIR_TAIL_FORWARD) {
+    if (ctrl->feedback.tail_front_photo_triggered) {
+      ctrl->template_ctx.tail_front_photo_triggered_latched = true;
+    }
+    return ctrl->template_ctx.tail_front_photo_triggered_latched;
+  }
+
+  if (ctrl->feedback.head_front_photo_triggered) {
+    ctrl->template_ctx.head_front_photo_triggered_latched = true;
+  }
+  return ctrl->template_ctx.head_front_photo_triggered_latched;
+}
+
+static bool AutoCtrlTemplate_LatchCurrentRearPhotoTriggered(auto_ctrl_t *ctrl) {
+  if (ctrl->travel_dir == AUTO_CTRL_TRAVEL_DIR_TAIL_FORWARD) {
+    if (ctrl->feedback.tail_rear_photo_triggered) {
+      ctrl->template_ctx.tail_rear_photo_triggered_latched = true;
+    }
+    return ctrl->template_ctx.tail_rear_photo_triggered_latched;
+  }
+
+  if (ctrl->feedback.head_rear_photo_triggered) {
+    ctrl->template_ctx.head_rear_photo_triggered_latched = true;
+  }
+  return ctrl->template_ctx.head_rear_photo_triggered_latched;
+}
+
+static uint32_t AutoCtrlTemplate_GetCurrentFrontPhotoTimeoutMs(
+    const auto_ctrl_t *ctrl, const Config_RobotParam_t *robot_param) {
+  (void)ctrl;
+  return robot_param->auto_ctrl_param.head_front_photo_timeout_ms;
+}
+
+static uint32_t AutoCtrlTemplate_GetCurrentRearPhotoTimeoutMs(
+    const auto_ctrl_t *ctrl, const Config_RobotParam_t *robot_param) {
+  (void)ctrl;
+  return robot_param->auto_ctrl_param.head_rear_photo_timeout_ms;
 }
 
 /* 判断当前 yaw 误差是否已经满足容差。 */
@@ -133,122 +175,22 @@ static bool AutoCtrlTemplate_RunFlatMove(auto_ctrl_t *ctrl, uint32_t now_ms) {
 }
 
 /*
- * 通用 200 跨越模板（move_sign=+1 上台阶，-1 下台阶）。
- * step 时序：
- * 0 全杆撑起稳定 -> 1 前向小冲程 -> 2 前杆回收并校正
- * -> 3 中段前移 -> 4 后杆回收并校正 -> 5 尾段脱离 -> 6 完成。
- */
-static bool AutoCtrlTemplate_RunCross200(auto_ctrl_t *ctrl,
-                                         uint32_t now_ms,
-                                         const Config_RobotParam_t *robot_param,
-                                         float move_sign) {
-  switch (ctrl->template_ctx.step_index) {
-    case 0:
-      AutoCtrlTemplate_CommandPoleByStage(
-          ctrl, robot_param->pole_param.preset.step_200_all_extend[0],
-        robot_param->pole_param.preset.step_200_all_extend[1],
-        robot_param->auto_ctrl_param.pole_all_extend_lift_speed,
-        robot_param->auto_ctrl_param.pole_all_extend_lift_speed);
-      if (AutoCtrlTemplate_StepTimeout(
-              ctrl, now_ms, robot_param->auto_ctrl_param.pole_extend_settle_ms)) {
-        AutoCtrlTemplate_NextStep(ctrl);
-      }
-      return false;
-
-    case 1:
-      AutoCtrlPrimitive_CommandFlatMove(
-          ctrl, move_sign * robot_param->auto_ctrl_param.climb_forward_kick_speed);
-      if (AutoCtrlTemplate_StepTimeout(
-              ctrl, now_ms,
-              robot_param->auto_ctrl_param.climb_forward_kick_ms)) {
-        AutoCtrlTemplate_NextStep(ctrl);
-      }
-      return false;
-
-    case 2:
-      AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      AutoCtrlPrimitive_ApplyPrealignWithForward(
-          ctrl, move_sign * robot_param->auto_ctrl_param.climb_forward_speed);
-        AutoCtrlTemplate_CommandPoleByStage(
-          ctrl, robot_param->pole_param.preset.step_200_front_retract[0],
-          robot_param->pole_param.preset.step_200_front_retract[1],
-          robot_param->auto_ctrl_param.pole_front_retract_lift_speed,
-          robot_param->auto_ctrl_param.pole_rear_extend_lift_speed);
-      if (ctrl->feedback.front_pole_retracted &&
-          AutoCtrlTemplate_IsYawAligned(ctrl)) {
-        AutoCtrlTemplate_NextStep(ctrl);
-        return false;
-      }
-      if (robot_param->auto_ctrl_param.front_photo_timeout_ms > 0u &&
-          AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
-              robot_param->auto_ctrl_param.front_photo_timeout_ms) {
-        ctrl->fault = AUTO_CTRL_FAULT_SENSOR_INVALID;
-      }
-      return false;
-
-    case 3:
-      AutoCtrlPrimitive_CommandFlatMove(
-          ctrl, move_sign * robot_param->auto_ctrl_param.climb_forward_speed);
-      if (AutoCtrlTemplate_StepTimeout(
-              ctrl, now_ms,
-              robot_param->auto_ctrl_param.climb_mid_forward_ms)) {
-        AutoCtrlTemplate_NextStep(ctrl);
-      }
-      return false;
-
-    case 4:
-      AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      AutoCtrlPrimitive_ApplyPrealignWithForward(
-          ctrl, move_sign * robot_param->auto_ctrl_param.climb_forward_speed);
-        AutoCtrlTemplate_CommandPoleByStage(
-          ctrl, robot_param->pole_param.preset.step_200_all_retract[0],
-          robot_param->pole_param.preset.step_200_all_retract[1],
-          robot_param->auto_ctrl_param.pole_front_retract_lift_speed,
-          robot_param->auto_ctrl_param.pole_rear_retract_lift_speed);
-      if (ctrl->feedback.rear_pole_retracted &&
-          AutoCtrlTemplate_IsYawAligned(ctrl)) {
-        AutoCtrlTemplate_NextStep(ctrl);
-        return false;
-      }
-      if (robot_param->auto_ctrl_param.rear_photo_timeout_ms > 0u &&
-          AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
-              robot_param->auto_ctrl_param.rear_photo_timeout_ms) {
-        ctrl->fault = AUTO_CTRL_FAULT_SENSOR_INVALID;
-      }
-      return false;
-
-    case 5:
-      AutoCtrlPrimitive_CommandFlatMove(
-          ctrl, move_sign * robot_param->auto_ctrl_param.climb_rear_retract_speed);
-      if (AutoCtrlTemplate_StepTimeout(
-              ctrl, now_ms, robot_param->auto_ctrl_param.rear_retract_move_ms)) {
-        AutoCtrlTemplate_NextStep(ctrl);
-      }
-      return false; 
-
-    case 6:
-      return true;
-
-    default:
-      ctrl->fault = AUTO_CTRL_FAULT_TEMPLATE_UNSUPPORTED;
-      return false;
-  }
-}
-
-/*
  * 专用 200 上台阶模板：按前/中/后段组织动作与切步条件。
  * step 时序：
  * 0 姿态矫正阶段
  * -> 1 对正成功后四杆伸起稳定
- * -> 2 仅当前光电触发时回收前杆
+ * -> 2 仅当头向前光电触发时回收前杆
  * -> 3 中段慢速前移
- * -> 4 仅当后光电触发时回收后杆
+ * -> 4 仅当头向后光电触发时回收后杆
  * -> 5 尾段继续脱离
  * -> 6 完成。
  */
 static bool AutoCtrlTemplate_RunAscend200(auto_ctrl_t *ctrl,
                                           uint32_t now_ms,
                                           const Config_RobotParam_t *robot_param) {
+  const uint32_t current_front_photo_timeout_ms =
+    AutoCtrlTemplate_GetCurrentFrontPhotoTimeoutMs(ctrl, robot_param);
+
   switch (ctrl->template_ctx.step_index) {
     case 0:
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
@@ -263,9 +205,9 @@ static bool AutoCtrlTemplate_RunAscend200(auto_ctrl_t *ctrl,
         AutoCtrlTemplate_NextStep(ctrl);
         return false;
       }
-      if (robot_param->auto_ctrl_param.front_photo_timeout_ms > 0u &&
+      if (current_front_photo_timeout_ms > 0u &&
           AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
-              robot_param->auto_ctrl_param.front_photo_timeout_ms) {
+              current_front_photo_timeout_ms) {
         ctrl->fault = AUTO_CTRL_FAULT_SENSOR_INVALID;
       }
       return false;
@@ -284,19 +226,19 @@ static bool AutoCtrlTemplate_RunAscend200(auto_ctrl_t *ctrl,
         AutoCtrlTemplate_NextStep(ctrl);
         return false;
       }
-      if (robot_param->auto_ctrl_param.front_photo_timeout_ms > 0u &&
+      if (current_front_photo_timeout_ms > 0u &&
           AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
-              robot_param->auto_ctrl_param.front_photo_timeout_ms) {
+              current_front_photo_timeout_ms) {
         ctrl->fault = AUTO_CTRL_FAULT_SENSOR_INVALID;
       }
       return false;
 
     case 2:
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      if (!AutoCtrlTemplate_LatchFrontPoleRetracted(ctrl)) {
-        if (robot_param->auto_ctrl_param.front_photo_timeout_ms > 0u &&
+      if (!AutoCtrlTemplate_LatchCurrentFrontPhotoTriggered(ctrl)) {
+        if (current_front_photo_timeout_ms > 0u &&
             AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
-                robot_param->auto_ctrl_param.front_photo_timeout_ms) {
+          current_front_photo_timeout_ms) {
           ctrl->fault = AUTO_CTRL_FAULT_SENSOR_INVALID;
         }
         AutoCtrlPrimitive_ApplyPrealignWithMove(
@@ -316,7 +258,7 @@ static bool AutoCtrlTemplate_RunAscend200(auto_ctrl_t *ctrl,
           robot_param->pole_param.preset.step_200_front_retract[1],
           robot_param->auto_ctrl_param.pole_front_retract_lift_speed,
           robot_param->auto_ctrl_param.pole_rear_extend_lift_speed);
-        if (AutoCtrlTemplate_LatchFrontPoleRetracted(ctrl) &&
+          if (AutoCtrlTemplate_LatchCurrentFrontPhotoTriggered(ctrl) &&
           AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
               robot_param->auto_ctrl_param.front_retract_settle_ms) {
         AutoCtrlTemplate_NextStep(ctrl);
@@ -346,7 +288,7 @@ static bool AutoCtrlTemplate_RunAscend200(auto_ctrl_t *ctrl,
 
     case 4:
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      if (!AutoCtrlTemplate_LatchRearPoleRetracted(ctrl)) {
+      if (!AutoCtrlTemplate_LatchCurrentRearPhotoTriggered(ctrl)) {
         if (robot_param->auto_ctrl_param.climb_rear_retract_timeout_ms > 0u &&
             AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
                 robot_param->auto_ctrl_param.climb_rear_retract_timeout_ms) {
@@ -404,11 +346,108 @@ static bool AutoCtrlTemplate_RunAscend200(auto_ctrl_t *ctrl,
   }
 }
 
-/* 200 下台阶复用通用跨越模板，方向取反。 */
+/* 200 下台阶模板：保留原通用跨越流程，但作为独立下台阶实现。 */
 static bool AutoCtrlTemplate_RunDescend200(auto_ctrl_t *ctrl,
                                            uint32_t now_ms,
                                            const Config_RobotParam_t *robot_param) {
-  return AutoCtrlTemplate_RunCross200(ctrl, now_ms, robot_param, -1.0f);
+  const uint32_t current_front_photo_timeout_ms =
+    AutoCtrlTemplate_GetCurrentFrontPhotoTimeoutMs(ctrl, robot_param);
+  const uint32_t current_rear_photo_timeout_ms =
+    AutoCtrlTemplate_GetCurrentRearPhotoTimeoutMs(ctrl, robot_param);
+
+  switch (ctrl->template_ctx.step_index) {
+    case 0:
+      AutoCtrlTemplate_CommandPoleByStage(
+          ctrl, robot_param->pole_param.preset.step_200_all_extend[0],
+          robot_param->pole_param.preset.step_200_all_extend[1],
+          robot_param->auto_ctrl_param.pole_all_extend_lift_speed,
+          robot_param->auto_ctrl_param.pole_all_extend_lift_speed);
+      if (AutoCtrlTemplate_StepTimeout(
+              ctrl, now_ms,
+              robot_param->auto_ctrl_param.pole_extend_settle_ms)) {
+        AutoCtrlTemplate_NextStep(ctrl);
+      }
+      return false;
+
+    case 1:
+      AutoCtrlPrimitive_CommandFlatMove(
+          ctrl, -robot_param->auto_ctrl_param.climb_forward_kick_speed);
+      if (AutoCtrlTemplate_StepTimeout(
+              ctrl, now_ms,
+              robot_param->auto_ctrl_param.climb_forward_kick_ms)) {
+        AutoCtrlTemplate_NextStep(ctrl);
+      }
+      return false;
+
+    case 2:
+      AutoCtrlTemplate_EnterStep(ctrl, now_ms);
+      AutoCtrlPrimitive_ApplyPrealignWithForward(
+          ctrl, -robot_param->auto_ctrl_param.climb_forward_speed);
+      AutoCtrlTemplate_CommandPoleByStage(
+          ctrl, robot_param->pole_param.preset.step_200_front_retract[0],
+          robot_param->pole_param.preset.step_200_front_retract[1],
+          robot_param->auto_ctrl_param.pole_front_retract_lift_speed,
+          robot_param->auto_ctrl_param.pole_rear_extend_lift_speed);
+        if (AutoCtrlTemplate_IsCurrentFrontPhotoTriggered(ctrl) &&
+          AutoCtrlTemplate_IsYawAligned(ctrl)) {
+        AutoCtrlTemplate_NextStep(ctrl);
+        return false;
+      }
+      if (current_front_photo_timeout_ms > 0u &&
+          AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
+              current_front_photo_timeout_ms) {
+        ctrl->fault = AUTO_CTRL_FAULT_SENSOR_INVALID;
+      }
+      return false;
+
+    case 3:
+      AutoCtrlPrimitive_CommandFlatMove(
+          ctrl, -robot_param->auto_ctrl_param.climb_forward_speed);
+      if (AutoCtrlTemplate_StepTimeout(
+              ctrl, now_ms,
+              robot_param->auto_ctrl_param.climb_mid_forward_ms)) {
+        AutoCtrlTemplate_NextStep(ctrl);
+      }
+      return false;
+
+    case 4:
+      AutoCtrlTemplate_EnterStep(ctrl, now_ms);
+      AutoCtrlPrimitive_ApplyPrealignWithForward(
+          ctrl, -robot_param->auto_ctrl_param.climb_forward_speed);
+      AutoCtrlTemplate_CommandPoleByStage(
+          ctrl, robot_param->pole_param.preset.step_200_all_retract[0],
+          robot_param->pole_param.preset.step_200_all_retract[1],
+          robot_param->auto_ctrl_param.pole_front_retract_lift_speed,
+          robot_param->auto_ctrl_param.pole_rear_retract_lift_speed);
+        if (AutoCtrlTemplate_IsCurrentRearPhotoTriggered(ctrl) &&
+          AutoCtrlTemplate_IsYawAligned(ctrl)) {
+        AutoCtrlTemplate_NextStep(ctrl);
+        return false;
+      }
+      if (current_rear_photo_timeout_ms > 0u &&
+          AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
+              current_rear_photo_timeout_ms) {
+        ctrl->fault = AUTO_CTRL_FAULT_SENSOR_INVALID;
+      }
+      return false;
+
+    case 5:
+      AutoCtrlPrimitive_CommandFlatMove(
+          ctrl, -robot_param->auto_ctrl_param.climb_rear_retract_speed);
+      if (AutoCtrlTemplate_StepTimeout(
+              ctrl, now_ms,
+              robot_param->auto_ctrl_param.rear_retract_move_ms)) {
+        AutoCtrlTemplate_NextStep(ctrl);
+      }
+      return false;
+
+    case 6:
+      return true;
+
+    default:
+      ctrl->fault = AUTO_CTRL_FAULT_TEMPLATE_UNSUPPORTED;
+      return false;
+  }
 }
 
 /* 标准 400 上台阶模板（当前实现为单次撑杆目标位动作）。 */
@@ -427,6 +466,387 @@ static bool AutoCtrlTemplate_RunDescend400Std(auto_ctrl_t *ctrl,
   return AutoCtrlTemplate_RunSinglePoleTarget(
       ctrl, now_ms, robot_param->pole_param.preset.step_400_all_extend[0],
       robot_param->pole_param.preset.step_400_all_extend[1], 1200u);
+}
+
+/*
+ * 200 下台阶逆流程模板：ASCEND_200 的完整逆动作。
+ *
+ * ASCEND_200 流程回顾（step 顺序）：
+ *   0: 姿态矫正阶段
+ *   1: 四杆伸起稳定
+ *   2: 等待头向前光电 -> 回收前杆
+ *   3: 中段慢速前移
+ *   4: 等待头向后光电 -> 回收后杆
+ *   5: 尾段继续脱离
+ *   6: 完成
+ *
+ * DESCEND_200_ALT 逆流程（step 顺序）：
+ *   0: 姿态矫正（对正）
+ *   1: 四杆全伸（撑住台阶边缘）
+ *   2: 等待头向后光电 -> 回收后杆（逆 step 4）
+ *   3: 跨越台阶中段（匀速前进）
+ *   4: 等待头向前光电 -> 回收前杆（逆 step 2）
+ *   5: 脱离台阶（匀速平移）
+ *   6: 完成
+ *
+ * step 时序：
+ * 0 姿态矫正阶段
+ * -> 1 四杆伸起稳定
+ * -> 2 仅当头向后光电触发时回收后杆
+ * -> 3 中段匀速跨越
+ * -> 4 仅当头向前光电触发时回收前杆
+ * -> 5 脱离台阶匀速平移
+ * -> 6 完成。
+ */
+static bool AutoCtrlTemplate_RunDescend200Alt(auto_ctrl_t *ctrl,
+                                             uint32_t now_ms,
+                                             const Config_RobotParam_t *robot_param) {
+  const uint32_t current_front_photo_timeout_ms =
+      AutoCtrlTemplate_GetCurrentFrontPhotoTimeoutMs(ctrl, robot_param);
+  const uint32_t current_rear_photo_timeout_ms =
+      AutoCtrlTemplate_GetCurrentRearPhotoTimeoutMs(ctrl, robot_param);
+
+  switch (ctrl->template_ctx.step_index) {
+    /* step 0: 姿态矫正（对正），同时保持四杆收回姿态。 */
+    case 0:
+      AutoCtrlTemplate_EnterStep(ctrl, now_ms);
+      AutoCtrlPrimitive_ApplyPrealignWithMove(
+          ctrl, 0.0f, robot_param->auto_ctrl_param.descend_200_align_speed);
+      AutoCtrlTemplate_CommandPoleByStage(
+          ctrl, robot_param->pole_param.preset.step_200_all_retract[0],
+          robot_param->pole_param.preset.step_200_all_retract[1],
+          robot_param->auto_ctrl_param.descend_200_pole_front_retract_lift_speed,
+          robot_param->auto_ctrl_param.descend_200_pole_rear_retract_lift_speed);
+      if (AutoCtrlTemplate_IsAscend200PrealignReady(ctrl)) {
+        AutoCtrlTemplate_NextStep(ctrl);
+        return false;
+      }
+      if (current_front_photo_timeout_ms > 0u &&
+          AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
+              current_front_photo_timeout_ms) {
+        ctrl->fault = AUTO_CTRL_FAULT_SENSOR_INVALID;
+      }
+      return false;
+
+    /* step 1: 对正成功后，四杆全伸撑住台阶边缘，等待机构稳定。 */
+    case 1:
+      AutoCtrlTemplate_EnterStep(ctrl, now_ms);
+      AutoCtrlPrimitive_ApplyPrealignWithMove(
+          ctrl, 0.0f, robot_param->auto_ctrl_param.descend_200_align_speed);
+      AutoCtrlTemplate_CommandPoleByStage(
+          ctrl, robot_param->pole_param.preset.step_200_all_extend[0],
+          robot_param->pole_param.preset.step_200_all_extend[1],
+          robot_param->auto_ctrl_param.descend_200_pole_all_extend_lift_speed,
+          robot_param->auto_ctrl_param.descend_200_pole_all_extend_lift_speed);
+      if (AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
+          robot_param->auto_ctrl_param.descend_200_pole_extend_settle_ms) {
+        AutoCtrlTemplate_NextStep(ctrl);
+        return false;
+      }
+      if (current_rear_photo_timeout_ms > 0u &&
+          AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
+              current_rear_photo_timeout_ms) {
+        ctrl->fault = AUTO_CTRL_FAULT_SENSOR_INVALID;
+      }
+      return false;
+
+    /* step 2: 跨越中段匀速前进，仅当头向后光电触发时开始回收后杆。 */
+    case 2:
+      AutoCtrlTemplate_EnterStep(ctrl, now_ms);
+      if (!AutoCtrlTemplate_LatchCurrentRearPhotoTriggered(ctrl)) {
+        AutoCtrlPrimitive_ApplyPrealignWithMove(
+            ctrl, 0.0f, robot_param->auto_ctrl_param.descend_200_climb_forward_speed);
+        AutoCtrlTemplate_CommandPoleByStage(
+            ctrl, robot_param->pole_param.preset.step_200_all_extend[0],
+            robot_param->pole_param.preset.step_200_all_extend[1],
+            robot_param->auto_ctrl_param.descend_200_pole_all_extend_lift_speed,
+            robot_param->auto_ctrl_param.descend_200_pole_all_extend_lift_speed);
+        if (current_rear_photo_timeout_ms > 0u &&
+            AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
+                current_rear_photo_timeout_ms) {
+          ctrl->fault = AUTO_CTRL_FAULT_SENSOR_INVALID;
+        }
+        return false;
+      }
+      /* 头向后光电已触发，开始匀速前进并回收后杆。 */
+      AutoCtrlPrimitive_ApplyPrealignWithMove(
+          ctrl, 0.0f, robot_param->auto_ctrl_param.descend_200_climb_rear_retract_speed);
+      AutoCtrlTemplate_CommandPoleByStage(
+          ctrl, robot_param->pole_param.preset.step_200_front_retract[0],
+          robot_param->pole_param.preset.step_200_front_retract[1],
+          robot_param->auto_ctrl_param.descend_200_pole_front_retract_lift_speed,
+          robot_param->auto_ctrl_param.descend_200_pole_rear_retract_lift_speed);
+      if (AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
+          robot_param->auto_ctrl_param.descend_200_rear_retract_move_ms) {
+        AutoCtrlTemplate_NextStep(ctrl);
+        return false;
+      }
+      if (robot_param->auto_ctrl_param.descend_200_climb_rear_retract_timeout_ms > 0u &&
+          AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
+              robot_param->auto_ctrl_param.descend_200_climb_rear_retract_timeout_ms) {
+        ctrl->fault = AUTO_CTRL_FAULT_SENSOR_INVALID;
+      }
+      return false;
+
+    /* step 3: 中段匀速跨越台阶，继续前进。 */
+    case 3:
+      AutoCtrlPrimitive_CommandFlatMove(
+          ctrl, robot_param->auto_ctrl_param.descend_200_climb_forward_speed);
+      AutoCtrlTemplate_CommandPoleByStage(
+          ctrl, robot_param->pole_param.preset.step_200_front_retract[0],
+          robot_param->pole_param.preset.step_200_front_retract[1],
+          robot_param->auto_ctrl_param.descend_200_pole_front_retract_lift_speed,
+          robot_param->auto_ctrl_param.descend_200_pole_rear_retract_lift_speed);
+      if (AutoCtrlTemplate_StepTimeout(
+              ctrl, now_ms,
+              robot_param->auto_ctrl_param.descend_200_rear_retract_move_ms)) {
+        AutoCtrlTemplate_NextStep(ctrl);
+      }
+      return false;
+
+    /* step 4: 跨越完成后，仅当头向前光电触发时回收前杆。 */
+    case 4:
+      AutoCtrlTemplate_EnterStep(ctrl, now_ms);
+      if (!AutoCtrlTemplate_LatchCurrentFrontPhotoTriggered(ctrl)) {
+        AutoCtrlPrimitive_ApplyPrealignWithMove(
+            ctrl, 0.0f, robot_param->auto_ctrl_param.descend_200_climb_forward_speed);
+        AutoCtrlTemplate_CommandPoleByStage(
+            ctrl, robot_param->pole_param.preset.step_200_front_retract[0],
+            robot_param->pole_param.preset.step_200_front_retract[1],
+            robot_param->auto_ctrl_param.descend_200_pole_front_retract_lift_speed,
+            robot_param->auto_ctrl_param.descend_200_pole_rear_retract_lift_speed);
+        if (current_front_photo_timeout_ms > 0u &&
+            AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
+                current_front_photo_timeout_ms) {
+          ctrl->fault = AUTO_CTRL_FAULT_SENSOR_INVALID;
+        }
+        return false;
+      }
+      /* 头向前光电已触发，开始匀速前进并回收前杆。 */
+      AutoCtrlPrimitive_ApplyPrealignWithMove(
+          ctrl, 0.0f, robot_param->auto_ctrl_param.descend_200_climb_front_retract_speed);
+      AutoCtrlTemplate_CommandPoleByStage(
+          ctrl, robot_param->pole_param.preset.step_200_all_retract[0],
+          robot_param->pole_param.preset.step_200_all_retract[1],
+          robot_param->auto_ctrl_param.descend_200_pole_front_retract_lift_speed,
+          robot_param->auto_ctrl_param.descend_200_pole_rear_retract_lift_speed);
+      if (AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
+          robot_param->auto_ctrl_param.descend_200_front_retract_settle_ms) {
+        AutoCtrlTemplate_NextStep(ctrl);
+        return false;
+      }
+      if (robot_param->auto_ctrl_param.descend_200_climb_front_retract_timeout_ms > 0u &&
+          AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
+              robot_param->auto_ctrl_param.descend_200_climb_front_retract_timeout_ms) {
+        ctrl->fault = AUTO_CTRL_FAULT_SENSOR_INVALID;
+      }
+      return false;
+
+    /* step 5: 脱离台阶，匀速平移一段时间。 */
+    case 5:
+      AutoCtrlPrimitive_CommandFlatMove(
+          ctrl, robot_param->auto_ctrl_param.descend_200_climb_forward_speed);
+      AutoCtrlTemplate_CommandPoleByStage(
+          ctrl, robot_param->pole_param.preset.step_200_all_retract[0],
+          robot_param->pole_param.preset.step_200_all_retract[1],
+          robot_param->auto_ctrl_param.descend_200_pole_front_retract_lift_speed,
+          robot_param->auto_ctrl_param.descend_200_pole_rear_retract_lift_speed);
+      if (AutoCtrlTemplate_StepTimeout(
+              ctrl, now_ms,
+              robot_param->auto_ctrl_param.descend_200_flat_move_ms)) {
+        AutoCtrlTemplate_NextStep(ctrl);
+      }
+      return false;
+
+    case 6:
+      return true;
+
+    default:
+      ctrl->fault = AUTO_CTRL_FAULT_TEMPLATE_UNSUPPORTED;
+      return false;
+  }
+}
+
+/*
+ * 400 下台阶逆流程模板：ASCEND_400_STD 的完整逆动作。
+ * 与 DESCEND_200_ALT 流程相同，仅使用 400mm 台阶对应参数。
+ *
+ * step 时序：
+ * 0 姿态矫正阶段（对正）
+ * -> 1 四杆伸起稳定
+ * -> 2 仅当头向后光电触发时回收后杆
+ * -> 3 中段匀速跨越
+ * -> 4 仅当头向前光电触发时回收前杆
+ * -> 5 脱离台阶匀速平移
+ * -> 6 完成。
+ */
+static bool AutoCtrlTemplate_RunDescend400Alt(auto_ctrl_t *ctrl,
+                                             uint32_t now_ms,
+                                             const Config_RobotParam_t *robot_param) {
+  const uint32_t current_front_photo_timeout_ms =
+      AutoCtrlTemplate_GetCurrentFrontPhotoTimeoutMs(ctrl, robot_param);
+  const uint32_t current_rear_photo_timeout_ms =
+      AutoCtrlTemplate_GetCurrentRearPhotoTimeoutMs(ctrl, robot_param);
+
+  switch (ctrl->template_ctx.step_index) {
+    /* step 0: 姿态矫正（对正），同时保持四杆收回姿态。 */
+    case 0:
+      AutoCtrlTemplate_EnterStep(ctrl, now_ms);
+      AutoCtrlPrimitive_ApplyPrealignWithMove(
+          ctrl, 0.0f, robot_param->auto_ctrl_param.descend_400_align_speed);
+      AutoCtrlTemplate_CommandPoleByStage(
+          ctrl, robot_param->pole_param.preset.step_400_all_retract[0],
+          robot_param->pole_param.preset.step_400_all_retract[1],
+          robot_param->auto_ctrl_param.descend_400_pole_front_retract_lift_speed,
+          robot_param->auto_ctrl_param.descend_400_pole_rear_retract_lift_speed);
+      if (AutoCtrlTemplate_IsAscend200PrealignReady(ctrl)) {
+        AutoCtrlTemplate_NextStep(ctrl);
+        return false;
+      }
+      if (current_front_photo_timeout_ms > 0u &&
+          AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
+              current_front_photo_timeout_ms) {
+        ctrl->fault = AUTO_CTRL_FAULT_SENSOR_INVALID;
+      }
+      return false;
+
+    /* step 1: 对正成功后，四杆全伸撑住台阶边缘，等待机构稳定。 */
+    case 1:
+      AutoCtrlTemplate_EnterStep(ctrl, now_ms);
+      AutoCtrlPrimitive_ApplyPrealignWithMove(
+          ctrl, 0.0f, robot_param->auto_ctrl_param.descend_400_align_speed);
+      AutoCtrlTemplate_CommandPoleByStage(
+          ctrl, robot_param->pole_param.preset.step_400_all_extend[0],
+          robot_param->pole_param.preset.step_400_all_extend[1],
+          robot_param->auto_ctrl_param.descend_400_pole_all_extend_lift_speed,
+          robot_param->auto_ctrl_param.descend_400_pole_all_extend_lift_speed);
+      if (AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
+          robot_param->auto_ctrl_param.descend_400_pole_extend_settle_ms) {
+        AutoCtrlTemplate_NextStep(ctrl);
+        return false;
+      }
+      if (current_rear_photo_timeout_ms > 0u &&
+          AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
+              current_rear_photo_timeout_ms) {
+        ctrl->fault = AUTO_CTRL_FAULT_SENSOR_INVALID;
+      }
+      return false;
+
+    /* step 2: 跨越中段匀速前进，仅当头向后光电触发时开始回收后杆。 */
+    case 2:
+      AutoCtrlTemplate_EnterStep(ctrl, now_ms);
+      if (!AutoCtrlTemplate_LatchCurrentRearPhotoTriggered(ctrl)) {
+        AutoCtrlPrimitive_ApplyPrealignWithMove(
+            ctrl, 0.0f, robot_param->auto_ctrl_param.descend_400_climb_forward_speed);
+        AutoCtrlTemplate_CommandPoleByStage(
+            ctrl, robot_param->pole_param.preset.step_400_all_extend[0],
+            robot_param->pole_param.preset.step_400_all_extend[1],
+            robot_param->auto_ctrl_param.descend_400_pole_all_extend_lift_speed,
+            robot_param->auto_ctrl_param.descend_400_pole_all_extend_lift_speed);
+        if (current_rear_photo_timeout_ms > 0u &&
+            AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
+                current_rear_photo_timeout_ms) {
+          ctrl->fault = AUTO_CTRL_FAULT_SENSOR_INVALID;
+        }
+        return false;
+      }
+      /* 头向后光电已触发，开始匀速前进并回收后杆。 */
+      AutoCtrlPrimitive_ApplyPrealignWithMove(
+          ctrl, 0.0f, robot_param->auto_ctrl_param.descend_400_climb_rear_retract_speed);
+      AutoCtrlTemplate_CommandPoleByStage(
+          ctrl, robot_param->pole_param.preset.step_400_front_retract[0],
+          robot_param->pole_param.preset.step_400_front_retract[1],
+          robot_param->auto_ctrl_param.descend_400_pole_front_retract_lift_speed,
+          robot_param->auto_ctrl_param.descend_400_pole_rear_retract_lift_speed);
+      if (AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
+          robot_param->auto_ctrl_param.descend_400_rear_retract_move_ms) {
+        AutoCtrlTemplate_NextStep(ctrl);
+        return false;
+      }
+      if (robot_param->auto_ctrl_param.descend_400_climb_rear_retract_timeout_ms > 0u &&
+          AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
+              robot_param->auto_ctrl_param.descend_400_climb_rear_retract_timeout_ms) {
+        ctrl->fault = AUTO_CTRL_FAULT_SENSOR_INVALID;
+      }
+      return false;
+
+    /* step 3: 中段匀速跨越台阶，继续前进。 */
+    case 3:
+      AutoCtrlPrimitive_CommandFlatMove(
+          ctrl, robot_param->auto_ctrl_param.descend_400_climb_forward_speed);
+      AutoCtrlTemplate_CommandPoleByStage(
+          ctrl, robot_param->pole_param.preset.step_400_front_retract[0],
+          robot_param->pole_param.preset.step_400_front_retract[1],
+          robot_param->auto_ctrl_param.descend_400_pole_front_retract_lift_speed,
+          robot_param->auto_ctrl_param.descend_400_pole_rear_retract_lift_speed);
+      if (AutoCtrlTemplate_StepTimeout(
+              ctrl, now_ms,
+              robot_param->auto_ctrl_param.descend_400_rear_retract_move_ms)) {
+        AutoCtrlTemplate_NextStep(ctrl);
+      }
+      return false;
+
+    /* step 4: 跨越完成后，仅当头向前光电触发时回收前杆。 */
+    case 4:
+      AutoCtrlTemplate_EnterStep(ctrl, now_ms);
+      if (!AutoCtrlTemplate_LatchCurrentFrontPhotoTriggered(ctrl)) {
+        AutoCtrlPrimitive_ApplyPrealignWithMove(
+            ctrl, 0.0f, robot_param->auto_ctrl_param.descend_400_climb_forward_speed);
+        AutoCtrlTemplate_CommandPoleByStage(
+            ctrl, robot_param->pole_param.preset.step_400_front_retract[0],
+            robot_param->pole_param.preset.step_400_front_retract[1],
+            robot_param->auto_ctrl_param.descend_400_pole_front_retract_lift_speed,
+            robot_param->auto_ctrl_param.descend_400_pole_rear_retract_lift_speed);
+        if (current_front_photo_timeout_ms > 0u &&
+            AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
+                current_front_photo_timeout_ms) {
+          ctrl->fault = AUTO_CTRL_FAULT_SENSOR_INVALID;
+        }
+        return false;
+      }
+      /* 头向前光电已触发，开始匀速前进并回收前杆。 */
+      AutoCtrlPrimitive_ApplyPrealignWithMove(
+          ctrl, 0.0f, robot_param->auto_ctrl_param.descend_400_climb_front_retract_speed);
+      AutoCtrlTemplate_CommandPoleByStage(
+          ctrl, robot_param->pole_param.preset.step_400_all_retract[0],
+          robot_param->pole_param.preset.step_400_all_retract[1],
+          robot_param->auto_ctrl_param.descend_400_pole_front_retract_lift_speed,
+          robot_param->auto_ctrl_param.descend_400_pole_rear_retract_lift_speed);
+      if (AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
+          robot_param->auto_ctrl_param.descend_400_front_retract_settle_ms) {
+        AutoCtrlTemplate_NextStep(ctrl);
+        return false;
+      }
+      if (robot_param->auto_ctrl_param.descend_400_climb_front_retract_timeout_ms > 0u &&
+          AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
+              robot_param->auto_ctrl_param.descend_400_climb_front_retract_timeout_ms) {
+        ctrl->fault = AUTO_CTRL_FAULT_SENSOR_INVALID;
+      }
+      return false;
+
+    /* step 5: 脱离台阶，匀速平移一段时间。 */
+    case 5:
+      AutoCtrlPrimitive_CommandFlatMove(
+          ctrl, robot_param->auto_ctrl_param.descend_400_climb_forward_speed);
+      AutoCtrlTemplate_CommandPoleByStage(
+          ctrl, robot_param->pole_param.preset.step_400_all_retract[0],
+          robot_param->pole_param.preset.step_400_all_retract[1],
+          robot_param->auto_ctrl_param.descend_400_pole_front_retract_lift_speed,
+          robot_param->auto_ctrl_param.descend_400_pole_rear_retract_lift_speed);
+      if (AutoCtrlTemplate_StepTimeout(
+              ctrl, now_ms,
+              robot_param->auto_ctrl_param.descend_400_flat_move_ms)) {
+        AutoCtrlTemplate_NextStep(ctrl);
+      }
+      return false;
+
+    case 6:
+      return true;
+
+    default:
+      ctrl->fault = AUTO_CTRL_FAULT_TEMPLATE_UNSUPPORTED;
+      return false;
+  }
 }
 
 /*
@@ -459,11 +879,17 @@ bool AutoCtrlTemplate_Run(auto_ctrl_t *ctrl, uint32_t now_ms) {
     case AUTO_CTRL_TEMPLATE_DESCEND_200:
       return AutoCtrlTemplate_RunDescend200(ctrl, now_ms, robot_param);
 
+    case AUTO_CTRL_TEMPLATE_DESCEND_200_ALT:
+      return AutoCtrlTemplate_RunDescend200Alt(ctrl, now_ms, robot_param);
+
     case AUTO_CTRL_TEMPLATE_ASCEND_400_STD:
       return AutoCtrlTemplate_RunAscend400Std(ctrl, now_ms, robot_param);
 
     case AUTO_CTRL_TEMPLATE_DESCEND_400_STD:
       return AutoCtrlTemplate_RunDescend400Std(ctrl, now_ms, robot_param);
+
+    case AUTO_CTRL_TEMPLATE_DESCEND_400_ALT:
+      return AutoCtrlTemplate_RunDescend400Alt(ctrl, now_ms, robot_param);
 
     case AUTO_CTRL_TEMPLATE_NONE:
     default:

@@ -15,6 +15,9 @@ constexpr float kPi = 3.14159265358979323846f;
 constexpr float kTwoPi = 6.28318530717958647692f;
 constexpr float kDmPositionMin = -12.56637f;
 constexpr float kDmPositionMax = 12.56637f;
+constexpr float kDmPositionSpan = kDmPositionMax - kDmPositionMin;
+constexpr float kDmPositionHalfSpan = 0.5f * kDmPositionSpan;
+constexpr float kDefaultResyncDeltaRad = 1.75f * kPi;
 constexpr float kDmVelocityMin = -30.0f;
 constexpr float kDmVelocityMax = 30.0f;
 constexpr float kDmTorqueMin = -12.0f;
@@ -33,6 +36,16 @@ float WrapToPi(float angle_rad) {
         angle_rad += kTwoPi;
     }
     return angle_rad;
+}
+
+float WrapDmAngleDiff(float diff_rad) {
+    while (diff_rad > kDmPositionHalfSpan) {
+        diff_rad -= kDmPositionSpan;
+    }
+    while (diff_rad < -kDmPositionHalfSpan) {
+        diff_rad += kDmPositionSpan;
+    }
+    return diff_rad;
 }
 
 uint32_t EncodeDmFault(MOTOR_DM_Status_t status) {
@@ -111,6 +124,43 @@ float MotorProtocol<MotorKind::DM, Model>::ToOutputTorque(float torque_current) 
 }
 
 template <MotorModel Model>
+void MotorProtocol<MotorKind::DM, Model>::ResetPositionTracker() {
+    rotor_position_initialized_ = false;
+    last_rotor_position_rad_ = 0.0f;
+    accumulated_rotor_position_rad_ = 0.0f;
+}
+
+template <MotorModel Model>
+void MotorProtocol<MotorKind::DM, Model>::SyncRotorPosition(float rotor_position_rad) {
+    rotor_position_initialized_ = true;
+    last_rotor_position_rad_ = rotor_position_rad;
+    accumulated_rotor_position_rad_ = rotor_position_rad;
+}
+
+template <MotorModel Model>
+float MotorProtocol<MotorKind::DM, Model>::AccumulateRotorPosition(float rotor_position_rad,
+                                                            float rotor_velocity_rad_s) {
+    if (!rotor_position_initialized_) {
+        SyncRotorPosition(rotor_position_rad);
+        return accumulated_rotor_position_rad_;
+    }
+
+    const float delta = WrapDmAngleDiff(rotor_position_rad - last_rotor_position_rad_);
+    const float delta_limit = (fabsf(rotor_velocity_rad_s) > 0.0f)
+        ? fabsf(rotor_velocity_rad_s) + kPi
+        : kDefaultResyncDeltaRad;
+
+    if (fabsf(delta) > delta_limit) {
+        SyncRotorPosition(rotor_position_rad);
+        return accumulated_rotor_position_rad_;
+    }
+
+    accumulated_rotor_position_rad_ += delta;
+    last_rotor_position_rad_ = rotor_position_rad;
+    return accumulated_rotor_position_rad_;
+}
+
+template <MotorModel Model>
 bool MotorProtocol<MotorKind::DM, Model>::TryGetRotorFeedback(float& rotor_position_rad,
                                                        float& rotor_velocity_rad_s,
                                                        float& torque_current,
@@ -141,8 +191,20 @@ bool MotorProtocol<MotorKind::DM, Model>::TryGetRotorFeedback(float& rotor_posit
 
 template <MotorModel Model>
 void MotorProtocol<MotorKind::DM, Model>::RefreshStateCache() {
-    if (instance_ == nullptr) {
+    MotorState next = state_;
+    const MOTOR_t* motor = instance_ ? &instance_->motor : nullptr;
+    if (motor == nullptr) {
+        ResetPositionTracker();
+        last_online_ = false;
         state_ = {};
+        return;
+    }
+
+    next.online = motor->header.online;
+    if (!next.online) {
+        ResetPositionTracker();
+        last_online_ = false;
+        state_ = next;
         return;
     }
 
@@ -151,20 +213,36 @@ void MotorProtocol<MotorKind::DM, Model>::RefreshStateCache() {
     float torque_current = 0.0f;
     float temperature_c = 0.0f;
     if (!TryGetRotorFeedback(rotor_position_rad, rotor_velocity_rad_s, torque_current, temperature_c)) {
-        state_.online = false;
+        ResetPositionTracker();
+        last_online_ = false;
+        next.online = false;
+        state_ = next;
         return;
     }
 
-    state_.position_rad = ToOutputPosition(rotor_position_rad);
-    state_.position_single_turn_rad = WrapToPi(state_.position_rad);
-    state_.velocity_rad_s = ToOutputVelocity(rotor_velocity_rad_s);
-    state_.torque_nm = ToOutputTorque(torque_current);
-    state_.temperature_c = temperature_c;
-    state_.device_temperature_c = static_cast<float>(instance_->rotor_temp);
-    state_.online = instance_->motor.header.online;
-    state_.protocol_status_code = instance_->status_raw;
-    state_.protocol_fault = EncodeDmFault(instance_->status);
-    state_.protocol_state = DecodeDmProtocolState(instance_->status);
+    if (!last_online_) {
+        SyncRotorPosition(rotor_position_rad);
+    }
+
+    next.position_rad = ToOutputPosition(AccumulateRotorPosition(rotor_position_rad, rotor_velocity_rad_s));
+    next.position_single_turn_rad = WrapToPi(next.position_rad);
+    next.velocity_rad_s = ToOutputVelocity(rotor_velocity_rad_s);
+    next.torque_nm = ToOutputTorque(torque_current);
+    next.temperature_c = temperature_c;
+    next.device_temperature_c = static_cast<float>(instance_->rotor_temp);
+    next.protocol_status_code = instance_->status_raw;
+    next.protocol_fault = EncodeDmFault(instance_->status);
+    next.protocol_state = DecodeDmProtocolState(instance_->status);
+
+    if (install_.reverse_output) {
+        next.position_rad = -next.position_rad;
+        next.position_single_turn_rad = WrapToPi(-next.position_single_turn_rad);
+        next.velocity_rad_s = -next.velocity_rad_s;
+        next.torque_nm = -next.torque_nm;
+    }
+
+    last_online_ = true;
+    state_ = next;
 }
 
 template <MotorModel Model>

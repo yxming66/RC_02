@@ -42,6 +42,9 @@ private:
     float ToOutputPosition(float rotor_position_rad) const;
     float ToOutputVelocity(float rotor_velocity_rad_s) const;
     float ToOutputTorque(float torque_current) const;
+    void ResetPositionTracker();
+    void SyncRotorPosition(float rotor_position_rad);
+    float AccumulateRotorPosition(float rotor_position_rad, float rotor_velocity_rad_s);
     void RefreshStateCache();
     bool TryGetRotorFeedback(float& rotor_position_rad,
                              float& rotor_velocity_rad_s,
@@ -59,6 +62,10 @@ private:
     MOTOR_DM_Param_t param_{};
     MOTOR_DM_t* instance_ = nullptr;
     MOTOR_DM_t vendor_instance_{};
+    bool rotor_position_initialized_ = false;
+    float last_rotor_position_rad_ = 0.0f;
+    float accumulated_rotor_position_rad_ = 0.0f;
+    bool last_online_ = false;
 };
 
 } // namespace mrobot::motor

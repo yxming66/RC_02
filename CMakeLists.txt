@@ -82,14 +82,13 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     User/module/chassis.cpp
     User/module/pole.c
     User/module/arm.cpp
-    User/module/rod.c
+    User/module/rod.cpp
     User/module/autoCtrlAPI/api/auto_ctrl_api.c
     User/module/autoCtrlAPI/core/auto_ctrl_math.c
     User/module/autoCtrlAPI/primitive/auto_ctrl_primitive.c
     User/module/autoCtrlAPI/step/auto_ctrl_step.c
     User/module/autoCtrlAPI/template/auto_ctrl_template_runner.c
-    User/module/autoCtrlAPI/transition/auto_ctrl_transition.c
-    User/module/autoCtrlAPI/transition/auto_ctrl_zone.c
+
     # User/module/cmd sources
     User/module/cmd/cmd.c
     User/module/cmd/cmd_adapter.c

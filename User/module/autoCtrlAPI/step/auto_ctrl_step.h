@@ -23,8 +23,8 @@ typedef enum {
   AUTO_CTRL_STEP_FLAT_MOVE_TIME,  /* 以给定 vx 行走一段时间。 */
   AUTO_CTRL_STEP_SET_POLE_TARGET, /* 发送前后杆目标位并等待稳定。 */
   AUTO_CTRL_STEP_WAIT_TIMEOUT,    /* 纯时间等待。 */
-  AUTO_CTRL_STEP_WAIT_FRONT_PHOTO, /* 等待前杆光电。 */
-  AUTO_CTRL_STEP_WAIT_REAR_PHOTO,  /* 等待后杆光电。 */
+  AUTO_CTRL_STEP_WAIT_HEAD_FRONT_PHOTO, /* 等待头向前光电。 */
+  AUTO_CTRL_STEP_WAIT_HEAD_REAR_PHOTO,  /* 等待头向后光电。 */
 } auto_ctrl_step_id_e;
 
 typedef enum {
