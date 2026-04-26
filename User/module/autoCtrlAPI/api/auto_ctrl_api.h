@@ -12,15 +12,15 @@
  * 上层模块通过本接口驱动自动控流程，不直接操作模板或原语层。
  */
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include "module/autoCtrlAPI/core/auto_ctrl_def.h"
 #include "module/autoCtrlAPI/core/auto_ctrl_math.h"
 #include "module/autoCtrlAPI/template/auto_ctrl_template.h"
 #include "module/chassis.h"
 #include "module/pole.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* 外部传感器反馈快照。 */
 typedef struct {

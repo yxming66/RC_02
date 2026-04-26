@@ -206,37 +206,6 @@ Config_RobotParam_t robot_config = {
       .sick_assist_gain = 0.75f,         // SICK辅助误差融合增益，越大修正越积极
       .sick_assist_max_rad = 0.13962634f, // SICK辅助误差的限幅上限 (rad)
     },
-    .arm_param = {
-      .joint3_cali = {
-        .mode = ARM_CALI_MODE_ZERO_LIMIT_TRAVEL,
-        .seek_velocity_rad_per_sec = 0.8f,
-        .seek_positive_direction = false,
-        .user_travel_rad = 1.57f,
-      },
-        .lzmotor_param = {.can = BSP_CAN_1, .motor_id = 127, .host_id = 0xff, .module = MOTOR_LZ_RSO3, .reverse = true,   .mode=MOTOR_LZ_MODE_MOTION},
-        .dmmotor_param = {.can = BSP_CAN_1, .master_id = 0x12,  .can_id = 0x02, .module = MOTOR_DM_J4310, .reverse = false},
-        .rmmotor_param = {.can = BSP_CAN_1, .id = 0x205, .module = MOTOR_M3508, .reverse = false, .gear = true},
-            .pid_rmmotor_pos = {
-                .k = 1.0f,
-                .p = 1.0f,
-                .i = 0.0f,
-                .d = 0.0f,
-                .i_limit = 0.0f,
-                .out_limit = 1.0f,
-                .d_cutoff_freq = -1.0f,
-                .range = 0.0f,
-            },
-            .pid_rmmotor_vel = {
-                .k = 0.1f,
-                .p = 0.1f,
-                .i = 0.0f,
-                .d = 0.0f,
-                .i_limit = 0.0f,
-                .out_limit = 1.0f,
-                .d_cutoff_freq = -1.0f,
-                .range = 0.0f,
-            },
-    },
           .rod_param = {
             .pit_motor_param = {.can = BSP_CAN_1, .master_id = 0x13, .can_id = 0x03, .module = MOTOR_DM_J4310, .reverse = false},
             .rol_motor_param = {.can = BSP_CAN_1, .master_id = 0x14, .can_id = 0x04, .module = MOTOR_DM_J4310, .reverse = false},

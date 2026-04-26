@@ -1,0 +1,68 @@
+#ifndef ARM_LIB_CONFIG_H
+#define ARM_LIB_CONFIG_H
+
+#ifndef ARM_LIB_PI
+#define ARM_LIB_PI 3.14159265358979323846f
+#endif
+
+#ifndef ARM_LIB_EPSILON
+#define ARM_LIB_EPSILON 1.0e-6f
+#endif
+
+#ifndef ARM_LIB_IK_MAX_ITER
+#define ARM_LIB_IK_MAX_ITER 50U
+#endif
+
+#ifndef ARM_LIB_IK_STEP_TOL
+#define ARM_LIB_IK_STEP_TOL 1.0e-5f
+#endif
+
+#ifndef ARM_LIB_IK_ERROR_TOL
+#define ARM_LIB_IK_ERROR_TOL 1.0e-4f
+#endif
+
+#ifndef ARM_LIB_LM_DAMPING
+#define ARM_LIB_LM_DAMPING 1.0e-3f
+#endif
+
+#ifndef ARM_LIB_NR_DAMPING
+#define ARM_LIB_NR_DAMPING 0.0f
+#endif
+
+#ifndef ARM_LIB_ENABLE_PARSER
+#define ARM_LIB_ENABLE_PARSER 1
+#endif
+
+#ifndef ARM_LIB_URDF_MAX_JOINTS
+#define ARM_LIB_URDF_MAX_JOINTS 32
+#endif
+
+#ifndef ARM_LIB_URDF_NAME_LENGTH
+#define ARM_LIB_URDF_NAME_LENGTH 64
+#endif
+
+#ifndef ARM_LIB_ENABLE_TRAJECTORY
+#define ARM_LIB_ENABLE_TRAJECTORY 1
+#endif
+
+#ifndef ARM_LIB_ENABLE_CONTROL
+#define ARM_LIB_ENABLE_CONTROL 1
+#endif
+
+#ifndef ARM_LIB_ENABLE_DYNAMICS
+#define ARM_LIB_ENABLE_DYNAMICS 1
+#endif
+
+#ifndef ARM_LIB_ENABLE_ANALYTIC_IK
+#define ARM_LIB_ENABLE_ANALYTIC_IK 1
+#endif
+
+#ifndef ARM_LIB_ANALYTIC_IK_MAX_SOLUTIONS
+#define ARM_LIB_ANALYTIC_IK_MAX_SOLUTIONS 4
+#endif
+
+#ifndef ARM_LIB_MAX_JOINT_COUPLINGS
+#define ARM_LIB_MAX_JOINT_COUPLINGS 4
+#endif
+
+#endif

@@ -1,7 +1,9 @@
 #pragma once
 
-// 电机控制器包装层。
-// 在单个 MotorT 之上叠加位置/速度 PID 串级能力，提供更高层的闭环控制接口。
+// 电机控制器包裹层。
+// 在单个 MotorT 之上提供统一的速度/位置/MIT 入口：
+// - 电机原生支持的能力优先走原生接口
+// - 电机原生不支持时，再退回软件 PID 闭环
 
 #include <stdint.h>
 
@@ -45,8 +47,11 @@ public:
 private:
     enum class ControlMode : uint8_t {
         Torque = 0,
-        Velocity,
-        Position,
+        NativeVelocity,
+        EmulatedVelocity,
+        NativePosition,
+        EmulatedPosition,
+        NativeMit,
     };
 
     int8_t ResetControllers();
@@ -65,6 +70,9 @@ private:
     float target_position_;
     float position_velocity_limit_;
     float velocity_torque_limit_;
+    float target_mit_kp_;
+    float target_mit_kd_;
+    float target_mit_torque_ff_;
 };
 
 using MotorController = MotorControllerT<mrobot::motor::RmM3508Motor>;

@@ -15,6 +15,7 @@
 #include "module/autoCtrlAPI/api/auto_ctrl_api.h"
 #include "module/autoCtrlAPI/core/auto_ctrl_def.h"
 #include "main.h"
+#include <string.h>
 /* USER INCLUDE END */
 
 #ifndef AUTO_CTRL_RC_YAW_POS_90_RAD
@@ -47,7 +48,6 @@ static Chassis_CMD_t chassis_cmd;
 static Pole_CMD_t pole_cmd;
 static DR16_SwitchPos_t last_sw_l = DR16_SW_ERR;  /* 记录左拨杆上一次状态 */
 static DR16_SwitchPos_t last_sw_r = DR16_SW_ERR;  /* 记录右拨杆上一次状态 */
-static Arm_CMD_t arm_cmd;
 static Rod_CMD_t rod_cmd;
 extern bool reset; 
 extern auto_ctrl_t auto_ctrl;
@@ -248,8 +248,6 @@ void Task_rc_main(void *argument) {
           break;
       }
 
-      arm_cmd.mode = ARM_MODE_RELAX;
-      arm_cmd.point2point_mode = ARM_POINT_SLEEP;
 
       Rc_SetRodRelax();
     } else if (dr16.data.sw_l == DR16_SW_MID) {
@@ -267,21 +265,7 @@ void Task_rc_main(void *argument) {
         chassis_cmd.ctrl_vec.wz = -dr16.data.ch_l_x;
       }
 
-      switch (dr16.data.sw_r) {
-        case DR16_SW_UP:
-          arm_cmd.point2point_mode = ARM_POINT_SLEEP;
-          break;
-        case DR16_SW_MID:
-          arm_cmd.point2point_mode = ARM_POINT_PLUS_20CM;
-          break;
-        case DR16_SW_DOWN:
-          arm_cmd.point2point_mode = ARM_POINT_MINUS_20CM;
-          break;
-        default:
-          arm_cmd.point2point_mode = ARM_POINT_SLEEP;
-          break;
-      }
-      arm_cmd.mode = ARM_MODE_POINT2POINT;
+          (last_sw_l == DR16_SW_UP || last_sw_r != dr16.data.sw_r);
 
       Rc_SetRodRelax();
     
@@ -301,21 +285,6 @@ void Task_rc_main(void *argument) {
         Rc_SetPoleAuto(0.0f, 0.0f);
       }
 
-      switch (dr16.data.sw_r) {
-        case DR16_SW_UP:
-          arm_cmd.point2point_mode = ARM_POINT_PLUS_40CM;
-          break;
-        case DR16_SW_MID:
-          arm_cmd.point2point_mode = ARM_POINT_SAVE_LOW;
-          break;
-        case DR16_SW_DOWN:
-          arm_cmd.point2point_mode = ARM_POINT_SAVE_HIGH;
-          break;
-        default:
-          arm_cmd.point2point_mode = ARM_POINT_SLEEP;
-          break;
-      }
-      arm_cmd.mode = ARM_MODE_POINT2POINT;
 
       Rc_SetRodRelax();
     }
@@ -324,8 +293,6 @@ void Task_rc_main(void *argument) {
     osMessageQueuePut(task_runtime.msgq.chassis.cmd, &chassis_cmd, 0, 0);
     osMessageQueueReset(task_runtime.msgq.pole.cmd);
     osMessageQueuePut(task_runtime.msgq.pole.cmd, &pole_cmd, 0, 0);
-    osMessageQueueReset(task_runtime.msgq.arm.cmd);
-    osMessageQueuePut(task_runtime.msgq.arm.cmd, &arm_cmd, 0, 0);
     osMessageQueueReset(task_runtime.msgq.rod.cmd);
     osMessageQueuePut(task_runtime.msgq.rod.cmd, &rod_cmd, 0, 0);
         /* 检测左拨杆切换到UP位置时触发软件复位 */

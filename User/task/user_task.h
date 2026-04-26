@@ -1,8 +1,5 @@
 #pragma once
 
-#ifdef __cplusplus
-extern "C" {
-#endif
 /* Includes ----------------------------------------------------------------- */
 #include <cmsis_os2.h>
 #include "FreeRTOS.h"
@@ -14,6 +11,10 @@ extern "C" {
 #include "device/buzzer.h"
 
 /* USER INCLUDE END */
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 /* Exported constants ------------------------------------------------------- */
 /* 任务运行频率 */
 #define BLINK_FREQ (500.0)

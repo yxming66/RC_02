@@ -20,6 +20,7 @@ extern "C" {
 #define DEVICE_ERR_NULL (-2)
 #define DEVICE_ERR_INITED (-3)
 #define DEVICE_ERR_NO_DEV (-4)
+#define DEVICE_ERR_UNSUPPORTED (-5)
 
 /* AUTO GENERATED SIGNALS BEGIN */
 #define SIGNAL_DR16_RAW_REDY (1u << 0)

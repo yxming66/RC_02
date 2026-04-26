@@ -43,7 +43,8 @@ void Task_Init(void *argument) {
   task_runtime.thread.cmd_main = osThreadNew(Task_cmd_main, NULL, &attr_cmd_main);
   task_runtime.thread.sick = osThreadNew(Task_sick, NULL, &attr_sick);
   task_runtime.thread.auto_ctrl = osThreadNew(Task_auto_ctrl, NULL, &attr_auto_ctrl);
-  task_runtime.thread.arm = osThreadNew(Task_arm, NULL, &attr_arm);
+  // TODO: arm_main.cpp is empty — implement Task_arm or remove this line
+  // task_runtime.thread.arm = osThreadNew(Task_arm, NULL, &attr_arm);
   // task_runtime.thread.pc_uart_rx = osThreadNew(Task_pc_uart_rx, NULL, &attr_pc_uart_rx);
   // task_runtime.thread.rod = osThreadNew(Task_rod, NULL, &attr_rod);
   // 创建消息队列
@@ -52,7 +53,6 @@ void Task_Init(void *argument) {
   task_runtime.msgq.chassis.imu = osMessageQueueNew(1u, sizeof(Chassis_IMU_t), NULL);
   task_runtime.msgq.chassis.cmd = osMessageQueueNew(1u, sizeof(Chassis_CMD_t), NULL);
   task_runtime.msgq.pole.cmd = osMessageQueueNew(1u, sizeof(Pole_CMD_t), NULL);
-  task_runtime.msgq.arm.cmd = osMessageQueueNew(1u, sizeof(Arm_CMD_t), NULL);
   task_runtime.msgq.rod.cmd = osMessageQueueNew(1u, sizeof(Rod_CMD_t), NULL);
   
   

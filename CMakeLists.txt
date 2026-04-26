@@ -37,6 +37,12 @@ enable_language(C CXX ASM)
 # Create an executable object type
 add_executable(${CMAKE_PROJECT_NAME})
 
+# Add compiler flags to fix CMSIS GCC header compatibility with C++
+# This is needed for ARM CMSIS 5.2.0 which has local types in extern declarations
+target_compile_options(${CMAKE_PROJECT_NAME} PRIVATE
+    -fpermissive
+)
+
 # Add STM32CubeMX generated sources
 add_subdirectory(cmake/stm32cubemx)
 
@@ -78,10 +84,34 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     User/device/motor/protocol/dm_protocol.cpp
     User/device/motor/protocol/lz_protocol.cpp
     User/device/motor/packages/controller/motor_controller.cpp
+    User/device/motor/packages/soft_limit_learning/soft_limit_learning.cpp
+    User/component/toolbox/matrix.cpp
+    User/component/toolbox/robotics.cpp
+    User/component/toolbox/utils.cpp
+    User/component/arm_lib/adapter/toolbox_adapter.cpp
+    User/component/arm_lib/model/joint.cpp
+    User/component/arm_lib/model/link.cpp
+    User/component/arm_lib/model/serial_chain.cpp
+    User/component/arm_lib/model/tool_frame.cpp
+    User/component/arm_lib/parser/chain_builder.cpp
+    User/component/arm_lib/parser/urdf_loader.cpp
+    User/component/arm_lib/kinematics/fk.cpp
+    User/component/arm_lib/kinematics/jacobian.cpp
+    User/component/arm_lib/kinematics/pose_error.cpp
+    User/component/arm_lib/kinematics/ik.cpp
+    User/component/arm_lib/kinematics/ik_analytic.cpp
+    User/component/arm_lib/kinematics/ik_3r_planar.cpp
+    User/component/arm_lib/kinematics/ik_numeric.cpp
+    User/component/arm_lib/solver/lm_solver.cpp
+    User/component/arm_lib/solver/nr_solver.cpp
+    User/component/arm_lib/solver/seed_policy.cpp
+    User/component/arm_lib/dynamics/gravity.cpp
+    User/component/arm_lib/trajectory/interpolation.cpp
+    User/component/arm_lib/trajectory/joint_traj.cpp
+    User/component/arm_lib/trajectory/cartesian_traj.cpp
     # User/module sources
     User/module/chassis.cpp
     User/module/pole.c
-    User/module/arm.cpp
     User/module/rod.cpp
     User/module/autoCtrlAPI/api/auto_ctrl_api.c
     User/module/autoCtrlAPI/core/auto_ctrl_math.c
@@ -107,7 +137,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     User/task/auto_ctrl_feed.c
     User/task/user_task.c
     User/task/sick.c
-    User/task/arm_main.c
+    User/task/arm_main.cpp
     User/task/rod_main.c
     User/task/atti_esti.c
     User/task/pc_uart_tx.c
@@ -117,11 +147,13 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined include paths
     User
+    Drivers/CMSIS/DSP/Include
 )
 
 # Add project symbols (macros)
 target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined symbols
+    ARM_MATH_CM7
 )
 
 # Remove wrong libob.a library dependency when using cpp files
@@ -130,6 +162,7 @@ list(REMOVE_ITEM CMAKE_C_IMPLICIT_LINK_LIBRARIES ob)
 # Add linked libraries
 target_link_libraries(${CMAKE_PROJECT_NAME}
     stm32cubemx
+    ${CMAKE_SOURCE_DIR}/Drivers/CMSIS/DSP/Lib/GCC/libarm_cortexM7lfdp_math.a
 
     # Add user defined libraries
 )

@@ -51,7 +51,7 @@ public:
         if constexpr (Traits::kSupportsTorque) {
             return protocol_.SetTorque(torque_nm);
         } else {
-            return DEVICE_ERR;
+            return DEVICE_ERR_UNSUPPORTED;
         }
     }
 
@@ -59,7 +59,7 @@ public:
         if constexpr (Traits::kSupportsVelocity) {
             return protocol_.SetVelocity(velocity);
         } else {
-            return DEVICE_ERR;
+            return DEVICE_ERR_UNSUPPORTED;
         }
     }
 
@@ -67,7 +67,7 @@ public:
         if constexpr (Traits::kSupportsPosition) {
             return protocol_.SetPosition(position, max_velocity);
         } else {
-            return DEVICE_ERR;
+            return DEVICE_ERR_UNSUPPORTED;
         }
     }
 
@@ -75,7 +75,7 @@ public:
         if constexpr (Traits::kSupportsMit) {
             return protocol_.SetMIT(position, velocity, kp, kd, torque_ff);
         } else {
-            return DEVICE_ERR;
+            return DEVICE_ERR_UNSUPPORTED;
         }
     }
 

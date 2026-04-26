@@ -4,10 +4,6 @@
 #pragma once
 
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 /* Includes ----------------------------------------------------------------- */
 #include <cmsis_os2.h>
 #include "bsp/can.h"
@@ -22,6 +18,8 @@ extern "C" {
 #include "device/motor.h"
 #include "device/motor/packages/controller/motor_controller.hpp"
 #include "device/motor/protocol/rm_protocol.hpp"
+
+extern "C" {
 #endif
 /* Exported constants ------------------------------------------------------- */
 #define CHASSIS_OK (0)        /* 运行正常 */

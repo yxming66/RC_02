@@ -124,7 +124,6 @@ typedef struct {
         float sick_assist_max_rad;
     } auto_ctrl_param;
     CMD_Config_t cmd_param;
-    Arm_Params_t arm_param;
     Rod_Params_t rod_param;
 } Config_RobotParam_t;
 
