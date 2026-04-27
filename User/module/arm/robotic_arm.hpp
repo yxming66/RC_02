@@ -6,25 +6,25 @@
 #include <stdint.h>
 
 #include "bsp/time.h"
-#include "arm_control_types.h"
-#include "arm_runtime_control_ops.hpp"
-#include "arm_runtime_kinematics.hpp"
-#include "arm_runtime_trajectory.hpp"
-#include "arm_runtime_utils.hpp"
+#include "module/arm/arm_control_types.h"
+#include "module/arm/detail/control_ops.hpp"
+#include "module/arm/detail/kinematics.hpp"
+#include "module/arm/detail/trajectory.hpp"
+#include "module/arm/detail/utils.hpp"
 #include "component/arm_lib/model/serial_chain.h"
 #include "component/arm_lib/dynamics/gravity.h"
-#include "joint.hpp"
+#include "device/joint/joint.hpp"
 
 namespace mrobot {
 
 enum class ControlMode {
-    IDLE = 0,
-    JOINT_POSITION,
-    CARTESIAN_POSITION,
-    CARTESIAN_ANALYTICAL,
-    TEACH,
-    GRAVITY_COMP,
-    JOINT_TRAJECTORY,
+    IDLE = 0,              // 空闲模式：关节放松，不跟踪目标。
+    JOINT_POSITION,        // 关节位置模式：直接使用各关节 target_angle 做位置控制。
+    CARTESIAN_POSITION,    // 笛卡尔轨迹模式：按末端目标生成轨迹，并用常规 IK 跟踪。
+    CARTESIAN_ANALYTICAL,  // 受约束笛卡尔模式：按末端目标生成轨迹，并优先使用 yz+pitch 约束 IK。
+    TEACH,                 // 示教模式：通常只保留重力补偿，方便手拖机械臂。
+    GRAVITY_COMP,          // 重力补偿模式：目标锁定当前关节角，仅持续输出重力前馈。
+    JOINT_TRAJECTORY,      // 关节轨迹模式：按关节空间轨迹插值后再跟踪。
 };
 
 enum class MotionState {
@@ -103,8 +103,8 @@ private:
             return;
         }
 
-        const arm_runtime::CartesianTrajectoryStepResult step =
-            arm_runtime::step_cartesian_trajectory(
+        const arm::CartesianTrajectoryStepResult step =
+            arm::step_cartesian_trajectory(
                 &traj_.trajectory,
                 &traj_.elapsed,
                 timer_.dt,
@@ -135,8 +135,8 @@ private:
             return;
         }
 
-        const arm_runtime::JointTrajectoryStepResult step =
-            arm_runtime::step_joint_trajectory(
+        const arm::JointTrajectoryStepResult step =
+            arm::step_joint_trajectory(
                 &joint_traj_.trajectory,
                 &joint_traj_.elapsed,
                 timer_.dt,
@@ -244,8 +244,8 @@ public:
         }
 
         ArmJointAngles_t q{};
-        arm_runtime::fill_current_joint_angles(joints_, &q);
-        end_effector_.current = arm_runtime::forward_pose(chain_, q);
+        arm::fill_current_joint_angles(joints_, &q);
+        end_effector_.current = arm::forward_pose(chain_, q);
 
         if (control_.gravity_comp_enable) {
             CalcGravityTorques(q);
@@ -272,7 +272,7 @@ public:
         if (pose == nullptr || q_out == nullptr) {
             return -1;
         }
-        return arm_runtime::solve_ik(
+        return arm::solve_ik(
             chain_, chain_configured_, joints_, *pose, q_out, q_seed, true);
     }
 
@@ -314,14 +314,14 @@ public:
         timer_.now = now_us / 1000000.0f;
 
         if (!control_.enable) {
-            arm_runtime::relax_all_joints(joints_);
+            arm::relax_all_joints(joints_);
             control_.state = MotionState::STOPPED;
             return 0;
         }
 
         switch (control_.mode) {
         case ControlMode::IDLE:
-            arm_runtime::relax_all_joints(joints_);
+            arm::relax_all_joints(joints_);
             control_.state = MotionState::STOPPED;
             break;
 
@@ -331,19 +331,19 @@ public:
         case ControlMode::JOINT_TRAJECTORY:
         case ControlMode::GRAVITY_COMP: {
             if (control_.state == MotionState::ERROR) {
-                arm_runtime::relax_all_joints(joints_);
+                arm::relax_all_joints(joints_);
                 control_.enable = false;
                 return -1;
             }
 
             if (control_.gravity_comp_enable) {
-                arm_runtime::apply_feedforward_torques(joints_, gravity_comp_.torques);
+                arm::apply_feedforward_torques(joints_, gravity_comp_.torques);
             }
 
             if (control_.mode == ControlMode::JOINT_POSITION) {
-                if (!arm_runtime::validate_and_copy_joint_targets(
+                if (!arm::validate_and_copy_joint_targets(
                         joints_, &inverse_kinematics_.angles)) {
-                    arm_runtime::relax_all_joints(joints_);
+                    arm::relax_all_joints(joints_);
                     control_.state = MotionState::ERROR;
                     return -1;
                 }
@@ -353,43 +353,52 @@ public:
             }
 
             if (control_.mode == ControlMode::GRAVITY_COMP) {
-                arm_runtime::set_joint_targets_to_current(joints_);
+                arm::set_joint_targets_to_current(joints_);
             }
 
             if (control_.mode == ControlMode::CARTESIAN_POSITION ||
                 control_.mode == ControlMode::CARTESIAN_ANALYTICAL) {
                 StepTrajectory(control_.mode == ControlMode::CARTESIAN_ANALYTICAL);
                 if (!traj_.valid) {
-                    arm_runtime::relax_all_joints(joints_);
+                    arm::relax_all_joints(joints_);
                     control_.state = MotionState::ERROR;
                     return -1;
                 }
 
-                arm_runtime::apply_joint_targets(joints_, traj_.angles);
+                arm::apply_joint_targets(joints_, traj_.angles);
             }
 
             if (control_.mode == ControlMode::JOINT_TRAJECTORY) {
                 StepJointTrajectory();
                 if (!joint_traj_.valid) {
-                    arm_runtime::relax_all_joints(joints_);
+                    arm::relax_all_joints(joints_);
                     control_.state = MotionState::ERROR;
                     return -1;
                 }
 
-                arm_runtime::apply_joint_targets(joints_, joint_traj_.angles);
+                arm::apply_joint_targets(joints_, joint_traj_.angles);
             }
 
-            const bool all_reached = arm_runtime::drive_position_targets_and_commit(
-                joints_, timer_.dt, control_.position_tolerance);
-            control_.state = all_reached ? MotionState::REACHED : MotionState::MOVING;
+            const arm::PositionDriveResult drive_result =
+                arm::drive_position_targets_and_commit(
+                    joints_, timer_.dt, control_.position_tolerance);
+            if (!drive_result.all_online || !drive_result.command_ok) {
+                arm::relax_all_joints(joints_);
+                control_.state = MotionState::ERROR;
+                return -1;
+            }
+
+            control_.state = drive_result.all_reached
+                                 ? MotionState::REACHED
+                                 : MotionState::MOVING;
             break;
         }
 
         case ControlMode::TEACH:
             if (control_.gravity_comp_enable) {
-                arm_runtime::drive_torque_targets_and_commit(joints_, gravity_comp_.torques);
+                arm::drive_torque_targets_and_commit(joints_, gravity_comp_.torques);
             } else {
-                arm_runtime::relax_all_joints(joints_);
+                arm::relax_all_joints(joints_);
             }
             control_.state = MotionState::MOVING;
             break;
@@ -423,7 +432,7 @@ public:
             for (size_t i = 0; i < JOINT_NUM; ++i) {
                 gravity_comp_.torques[i] = 0.0f;
             }
-            arm_runtime::clear_feedforward_torques(joints_);
+            arm::clear_feedforward_torques(joints_);
         }
     }
 
@@ -519,9 +528,9 @@ public:
         }
 
         ArmJointAngles_t q_seed{};
-        arm_runtime::fill_current_joint_angles(joints_, &q_seed);
+        arm::fill_current_joint_angles(joints_, &q_seed);
         ArmJointAngles_t q_goal{};
-        if (arm_runtime::solve_ik(
+        if (arm::solve_ik(
                 chain_, chain_configured_, joints_, goal, &q_goal, &q_seed, false) != 0) {
             control_.state = MotionState::ERROR;
             return -1;
@@ -672,8 +681,8 @@ public:
         traj_.elapsed = 0.0f;
 
         ArmJointAngles_t q{};
-        arm_runtime::fill_current_joint_angles(joints_, &q);
-        arm_runtime::set_joint_targets_to_current(joints_);
+        arm::fill_current_joint_angles(joints_, &q);
+        arm::set_joint_targets_to_current(joints_);
         inverse_kinematics_.angles = q;
         traj_.angles = q;
         traj_.goal = end_effector_.current;

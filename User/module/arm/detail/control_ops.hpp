@@ -3,11 +3,20 @@
 #include <array>
 #include <cmath>
 
-#include "arm_control_types.h"
-#include "joint.hpp"
+#include "module/arm/arm_control_types.h"
+#include "device/joint/joint.hpp"
 
 namespace mrobot {
-namespace arm_runtime {
+namespace arm {
+
+struct PositionDriveResult {
+    bool all_reached;
+    bool all_online;
+    bool command_ok;
+
+    PositionDriveResult()
+        : all_reached(true), all_online(true), command_ok(true) {}
+};
 
 inline void relax_all_joints(
     const std::array<IJoint*, ARM_JOINT_COUNT>& joints) {
@@ -83,25 +92,35 @@ inline void apply_joint_targets(
     }
 }
 
-inline bool drive_position_targets_and_commit(
+inline PositionDriveResult drive_position_targets_and_commit(
     const std::array<IJoint*, ARM_JOINT_COUNT>& joints,
     float dt,
     float position_tolerance) {
-    bool all_reached = true;
+    PositionDriveResult result;
     for (IJoint* joint : joints) {
         if (joint != nullptr) {
-            joint->PositionControl(joint->GetTargetAngle(), dt);
+            if (!joint->IsOnline()) {
+                result.all_online = false;
+                result.command_ok = false;
+                continue;
+            }
+
+            if (joint->PositionControl(joint->GetTargetAngle(), dt) != 0) {
+                result.command_ok = false;
+            }
             if (!joint->IsReached(position_tolerance)) {
-                all_reached = false;
+                result.all_reached = false;
             }
         }
     }
     for (IJoint* joint : joints) {
         if (joint != nullptr) {
-            joint->CommitControl();
+            if (joint->CommitControl() != 0) {
+                result.command_ok = false;
+            }
         }
     }
-    return all_reached;
+    return result;
 }
 
 inline void drive_torque_targets_and_commit(
@@ -122,5 +141,5 @@ inline void drive_torque_targets_and_commit(
     }
 }
 
-}  // namespace arm_runtime
+}  // namespace arm
 }  // namespace mrobot

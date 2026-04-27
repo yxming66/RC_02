@@ -30,6 +30,9 @@
 #define LZ_MAX_RECOVER_DIFF_RAD    (0.28f)
 #define MOTOR_TX_BUF_SIZE           (8)
 #define MOTOR_RX_BUF_SIZE           (8)
+#define LZ_POSITION_CTRL_KP         (40.0f)
+#define LZ_POSITION_CTRL_KD         (1.5f)
+#define LZ_VELOCITY_CTRL_KD         (3.0f)
 
 /* Private macro ------------------------------------------------------------ */
 
@@ -362,6 +365,39 @@ int8_t MOTOR_LZ_MotionControl(MOTOR_LZ_Param_t *param, MOTOR_LZ_MotionParam_t *m
     data[6] = (raw_kd >> 8) & 0xFF;
     data[7] = raw_kd & 0xFF;
     return MOTOR_LZ_SendExtFrame(param->can, ext_id, data, 8);
+}
+
+int8_t MOTOR_LZ_TorqueControl(MOTOR_LZ_Param_t *param, float torque) {
+    MOTOR_LZ_MotionParam_t motion_param = {
+        .target_angle = 0.0f,
+        .target_velocity = 0.0f,
+        .kp = 0.0f,
+        .kd = 0.0f,
+        .torque = torque,
+    };
+    return MOTOR_LZ_MotionControl(param, &motion_param);
+}
+
+int8_t MOTOR_LZ_PositionControl(MOTOR_LZ_Param_t *param, float target_angle, float max_velocity) {
+    MOTOR_LZ_MotionParam_t motion_param = {
+        .target_angle = target_angle,
+        .target_velocity = max_velocity,
+        .kp = LZ_POSITION_CTRL_KP,
+        .kd = LZ_POSITION_CTRL_KD,
+        .torque = 0.0f,
+    };
+    return MOTOR_LZ_MotionControl(param, &motion_param);
+}
+
+int8_t MOTOR_LZ_VelocityControl(MOTOR_LZ_Param_t *param, float target_velocity) {
+    MOTOR_LZ_MotionParam_t motion_param = {
+        .target_angle = 0.0f,
+        .target_velocity = target_velocity,
+        .kp = 0.0f,
+        .kd = LZ_VELOCITY_CTRL_KD,
+        .torque = 0.0f,
+    };
+    return MOTOR_LZ_MotionControl(param, &motion_param);
 }
 
 

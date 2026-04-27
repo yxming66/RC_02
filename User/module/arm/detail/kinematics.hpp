@@ -2,16 +2,16 @@
 
 #include <array>
 
-#include "arm_control_types.h"
-#include "arm_runtime_utils.hpp"
+#include "module/arm/arm_control_types.h"
+#include "module/arm/detail/utils.hpp"
 #include "component/arm_lib/kinematics/fk.h"
 #include "component/arm_lib/kinematics/ik_dispatch.h"
 #include "component/arm_lib/kinematics/task_constraints.h"
 #include "component/arm_lib/model/serial_chain.h"
-#include "joint.hpp"
+#include "device/joint/joint.hpp"
 
 namespace mrobot {
-namespace arm_runtime {
+namespace arm {
 
 inline void fill_current_joint_angles(
     const std::array<IJoint*, ARM_JOINT_COUNT>& joints,
@@ -92,5 +92,5 @@ inline int8_t solve_ik(
     return 0;
 }
 
-}  // namespace arm_runtime
+}  // namespace arm
 }  // namespace mrobot

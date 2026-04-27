@@ -126,6 +126,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     User/module/cmd/cmd_example.c
 
     # User/module sources
+    User/module/arm/arm.cpp
     User/module/config.c
 
     # User/task sources

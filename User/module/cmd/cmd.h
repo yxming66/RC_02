@@ -22,7 +22,7 @@
   #include "module/track.h"
 #endif
 #if CMD_ENABLE_MODULE_ARM
-  #include "component/arm_kinematics/arm6dof.h"
+  #include "module/arm/arm_control_types.h"
 #endif
 
 #include <stdint.h>

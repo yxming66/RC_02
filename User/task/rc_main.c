@@ -1,6 +1,5 @@
 /*
     rc_main Task
-    
 */
 
 /* Includes ----------------------------------------------------------------- */
@@ -10,7 +9,7 @@
 #include "device/dr16.h"
 #include "module/chassis.h"
 #include "module/pole.h"
-#include "module/arm.h"
+#include "module/arm/arm_control_types.h"
 #include "module/rod.h"
 #include "module/autoCtrlAPI/api/auto_ctrl_api.h"
 #include "module/autoCtrlAPI/core/auto_ctrl_def.h"
@@ -38,23 +37,32 @@
 #define AUTO_CTRL_OUTPUT_ENABLE (1u)
 #endif
 
-/* Private typedef ---------------------------------------------------------- */
-/* Private define ----------------------------------------------------------- */
-/* Private macro ------------------------------------------------------------ */
-/* Private variables -------------------------------------------------------- */
+#ifndef ARM_RC_Y_SPEED_MPS
+#define ARM_RC_Y_SPEED_MPS (0.08f)
+#endif
+
+#ifndef ARM_RC_Z_SPEED_MPS
+#define ARM_RC_Z_SPEED_MPS (0.08f)
+#endif
+
+#ifndef ARM_RC_PITCH_RATE_RAD_S
+#define ARM_RC_PITCH_RATE_RAD_S (0.45f)
+#endif
+
 /* USER STRUCT BEGIN */
 DR16_t dr16;
 static Chassis_CMD_t chassis_cmd;
 static Pole_CMD_t pole_cmd;
-static DR16_SwitchPos_t last_sw_l = DR16_SW_ERR;  /* 记录左拨杆上一次状态 */
-static DR16_SwitchPos_t last_sw_r = DR16_SW_ERR;  /* 记录右拨杆上一次状态 */
+static Arm_CMD_t arm_cmd;
+static DR16_SwitchPos_t last_sw_l = DR16_SW_ERR;
+static DR16_SwitchPos_t last_sw_r = DR16_SW_ERR;
 static Rod_CMD_t rod_cmd;
-extern bool reset; 
+extern bool reset;
 extern auto_ctrl_t auto_ctrl;
 extern bool auto_ctrl_inited;
 
 static auto_ctrl_travel_dir_e auto_ctrl_requested_dir =
-  AUTO_CTRL_TRAVEL_DIR_HEAD_FORWARD;
+    AUTO_CTRL_TRAVEL_DIR_HEAD_FORWARD;
 
 static void Rc_SetRodRelax(void) {
   rod_cmd.mode = ROD_MODE_RELAX;
@@ -89,6 +97,25 @@ static void Rc_SetPoleAuto(float left_target, float right_target) {
   pole_cmd.auto_lift_speed[1] = 0.0f;
 }
 
+static void Rc_SetArmDisabled(void) {
+  memset(&arm_cmd, 0, sizeof(arm_cmd));
+  arm_cmd.ctrl_type = ARM_CTRL_REMOTE_CARTESIAN;
+  arm_cmd.frame = ARM_CTRL_FRAME_WORLD;
+}
+
+static void Rc_SetArmRemoteCartesian(ArmControlFrame_t frame,
+                                     bool sync_target) {
+  memset(&arm_cmd.joy_vel, 0, sizeof(arm_cmd.joy_vel));
+  memset(&arm_cmd.target_delta, 0, sizeof(arm_cmd.target_delta));
+  arm_cmd.enable = true;
+  arm_cmd.set_target_as_current = sync_target;
+  arm_cmd.ctrl_type = ARM_CTRL_REMOTE_CARTESIAN;
+  arm_cmd.frame = frame;
+  arm_cmd.joy_vel.y = ARM_RC_Y_SPEED_MPS * dr16.data.ch_r_y;
+  arm_cmd.joy_vel.z = ARM_RC_Z_SPEED_MPS * dr16.data.ch_l_y;
+  arm_cmd.joy_vel.pitch = -ARM_RC_PITCH_RATE_RAD_S * dr16.data.ch_l_x;
+}
+
 static void Rc_SetAutoDryRunCommands(void) {
   chassis_cmd.mode = CHASSIS_MODE_RELAX;
   chassis_cmd.ctrl_vec.vx = 0.0f;
@@ -102,8 +129,7 @@ static void Rc_SetAutoDryRunCommands(void) {
 static bool Rc_ShouldExitAutoCtrlBySwitch(void) {
   return dr16.header.online &&
          (dr16.data.sw_l == DR16_SW_MID || dr16.data.sw_l == DR16_SW_DOWN) &&
-         last_sw_r == DR16_SW_UP &&
-         dr16.data.sw_r == DR16_SW_MID;
+         last_sw_r == DR16_SW_UP && dr16.data.sw_r == DR16_SW_MID;
 }
 
 static auto_ctrl_travel_dir_e Rc_GetRequestedAutoCtrlDir(void) {
@@ -121,7 +147,7 @@ static void Rc_TryStartAutoCtrlBySwitch(uint32_t now_ms) {
     return;
   }
 
-  if (dr16.data.sw_l != DR16_SW_MID && dr16.data.sw_l != DR16_SW_DOWN) {
+  if (dr16.data.sw_l != DR16_SW_DOWN) {
     return;
   }
 
@@ -131,60 +157,39 @@ static void Rc_TryStartAutoCtrlBySwitch(uint32_t now_ms) {
 
   auto_ctrl_requested_dir = Rc_GetRequestedAutoCtrlDir();
 
-  if (dr16.data.sw_l == DR16_SW_MID) {
-    if (dr16.data.sw_r == DR16_SW_UP) {
-      (void)AutoCtrl_StartTemplate(
-          &auto_ctrl, AUTO_CTRL_TEMPLATE_ASCEND_200, auto_ctrl_requested_dir,
-          AUTO_CTRL_RC_YAW_POS_90_RAD, AUTO_CTRL_RC_YAW_TOLERANCE_RAD,
-          AUTO_CTRL_SENSOR_MODE_SICK_FRONT_AND_BOTTOM, now_ms);
-    } else if (dr16.data.sw_r == DR16_SW_DOWN) {
-      (void)AutoCtrl_StartTemplate(
-          &auto_ctrl, AUTO_CTRL_TEMPLATE_DESCEND_200, auto_ctrl_requested_dir,
-          AUTO_CTRL_RC_YAW_NEG_90_RAD, AUTO_CTRL_RC_YAW_TOLERANCE_RAD,
-          AUTO_CTRL_SENSOR_MODE_SICK_FRONT_AND_BOTTOM, now_ms);
-    }
-  } else {
-    if (dr16.data.sw_r == DR16_SW_UP) {
-      (void)AutoCtrl_StartTemplate(
-          &auto_ctrl, AUTO_CTRL_TEMPLATE_ASCEND_400_STD,
-          auto_ctrl_requested_dir, AUTO_CTRL_RC_YAW_POS_90_RAD,
-          AUTO_CTRL_RC_YAW_TOLERANCE_RAD,
-          AUTO_CTRL_SENSOR_MODE_SICK_FRONT_AND_BOTTOM, now_ms);
-    } else if (dr16.data.sw_r == DR16_SW_DOWN) {
-      (void)AutoCtrl_StartTemplate(
-          &auto_ctrl, AUTO_CTRL_TEMPLATE_DESCEND_400_STD,
-          auto_ctrl_requested_dir, AUTO_CTRL_RC_YAW_NEG_90_RAD,
-          AUTO_CTRL_RC_YAW_TOLERANCE_RAD,
-          AUTO_CTRL_SENSOR_MODE_SICK_FRONT_AND_BOTTOM, now_ms);
-    }
+  if (dr16.data.sw_r == DR16_SW_UP) {
+    (void)AutoCtrl_StartTemplate(
+        &auto_ctrl, AUTO_CTRL_TEMPLATE_ASCEND_400_STD,
+        auto_ctrl_requested_dir, AUTO_CTRL_RC_YAW_POS_90_RAD,
+        AUTO_CTRL_RC_YAW_TOLERANCE_RAD,
+        AUTO_CTRL_SENSOR_MODE_SICK_FRONT_AND_BOTTOM, now_ms);
+  } else if (dr16.data.sw_r == DR16_SW_DOWN) {
+    (void)AutoCtrl_StartTemplate(
+        &auto_ctrl, AUTO_CTRL_TEMPLATE_DESCEND_400_STD,
+        auto_ctrl_requested_dir, AUTO_CTRL_RC_YAW_NEG_90_RAD,
+        AUTO_CTRL_RC_YAW_TOLERANCE_RAD,
+        AUTO_CTRL_SENSOR_MODE_SICK_FRONT_AND_BOTTOM, now_ms);
   }
 }
 /* USER STRUCT END */
 
-/* Private function --------------------------------------------------------- */
 /* Exported functions ------------------------------------------------------- */
 void Task_rc_main(void *argument) {
-  (void)argument; /* 未使用argument，消除警告 */
+  (void)argument;
 
-  
-  /* 计算任务运行到指定频率需要等待的tick数 */
   const uint32_t delay_tick = osKernelGetTickFreq() / RC_MAIN_FREQ;
+  osDelay(RC_MAIN_INIT_DELAY);
 
-  osDelay(RC_MAIN_INIT_DELAY); /* 延时一段时间再开启任务 */
-
-  uint32_t tick = osKernelGetTickCount(); /* 控制任务运行频率的计时 */
-  /* USER CODE INIT BEGIN */
+  uint32_t tick = osKernelGetTickCount();
   DR16_Init(&dr16);
-  DR16_StartDmaRecv(&dr16);  // 立即启动第一次接收
-  /* USER CODE INIT END */
-  
+  DR16_StartDmaRecv(&dr16);
+  Rc_SetArmDisabled();
+
   while (1) {
     uint32_t now_ms;
-    tick += delay_tick; /* 计算下一个唤醒时刻 */
-    /* USER CODE BEGIN */
-        // 启动下一次DMA接收
+    tick += delay_tick;
+
     DR16_StartDmaRecv(&dr16);
-    // 等待DMA接收完成
     if (DR16_WaitDmaCplt(100)) {
       DR16_ParseData(&dr16);
     } else {
@@ -248,27 +253,40 @@ void Task_rc_main(void *argument) {
           break;
       }
 
-
+      Rc_SetArmDisabled();
       Rc_SetRodRelax();
     } else if (dr16.data.sw_l == DR16_SW_MID) {
+      ArmControlFrame_t frame = ARM_CTRL_FRAME_WORLD;
+
       if (auto_ctrl_inited && AutoCtrl_IsBusy(&auto_ctrl)) {
-#if AUTO_CTRL_OUTPUT_ENABLE
-        chassis_cmd = auto_ctrl.chassis_cmd;
-        pole_cmd = auto_ctrl.pole_cmd;
-#else
-        Rc_SetAutoDryRunCommands();
-#endif
-      } else {
-        chassis_cmd.mode = CHASSIS_MODE_INDEPENDENT;
-        chassis_cmd.ctrl_vec.vx = dr16.data.ch_r_x;
-        chassis_cmd.ctrl_vec.vy = dr16.data.ch_r_y;
-        chassis_cmd.ctrl_vec.wz = -dr16.data.ch_l_x;
+        AutoCtrl_Abort(&auto_ctrl);
       }
 
-          (last_sw_l == DR16_SW_UP || last_sw_r != dr16.data.sw_r);
+      chassis_cmd.mode = CHASSIS_MODE_RELAX;
+      chassis_cmd.ctrl_vec.vx = 0.0f;
+      chassis_cmd.ctrl_vec.vy = 0.0f;
+      chassis_cmd.ctrl_vec.wz = 0.0f;
+      Rc_SetPoleManual(0.0f, 0.0f);
+      pole_cmd.mode = POLE_MODE_RELAX;
 
+      switch (dr16.data.sw_r) {
+        case DR16_SW_UP:
+          frame = ARM_CTRL_FRAME_WORLD;
+          break;
+        case DR16_SW_MID:
+          frame = ARM_CTRL_FRAME_TOOL;
+          break;
+        case DR16_SW_DOWN:
+          frame = ARM_CTRL_FRAME_HEADING;
+          break;
+        default:
+          frame = ARM_CTRL_FRAME_WORLD;
+          break;
+      }
+
+      Rc_SetArmRemoteCartesian(
+          frame, last_sw_l != DR16_SW_MID || last_sw_r != dr16.data.sw_r);
       Rc_SetRodRelax();
-    
     } else if (dr16.data.sw_l == DR16_SW_DOWN) {
       if (auto_ctrl_inited && AutoCtrl_IsBusy(&auto_ctrl)) {
 #if AUTO_CTRL_OUTPUT_ENABLE
@@ -285,7 +303,7 @@ void Task_rc_main(void *argument) {
         Rc_SetPoleAuto(0.0f, 0.0f);
       }
 
-
+      Rc_SetArmDisabled();
       Rc_SetRodRelax();
     }
 
@@ -293,22 +311,20 @@ void Task_rc_main(void *argument) {
     osMessageQueuePut(task_runtime.msgq.chassis.cmd, &chassis_cmd, 0, 0);
     osMessageQueueReset(task_runtime.msgq.pole.cmd);
     osMessageQueuePut(task_runtime.msgq.pole.cmd, &pole_cmd, 0, 0);
+    osMessageQueueReset(task_runtime.msgq.arm.cmd);
+    osMessageQueuePut(task_runtime.msgq.arm.cmd, &arm_cmd, 0, 0);
     osMessageQueueReset(task_runtime.msgq.rod.cmd);
     osMessageQueuePut(task_runtime.msgq.rod.cmd, &rod_cmd, 0, 0);
-        /* 检测左拨杆切换到UP位置时触发软件复位 */
+
     if (dr16.header.online) {
-      /* 拨杆从非UP状态切换到UP状态，且复位功能已使能，触发系统复位 */
-      if (
-         dr16.data.sw_l == DR16_SW_UP &&
-          dr16.data.sw_r == DR16_SW_DOWN &&
+      if (dr16.data.sw_l == DR16_SW_UP && dr16.data.sw_r == DR16_SW_DOWN &&
           last_sw_r != DR16_SW_DOWN && last_sw_r != DR16_SW_ERR) {
-          reset=!reset; 
+        reset = !reset;
       }
     }
-    last_sw_l = dr16.data.sw_l;  /* 更新拨杆状态 */
-    last_sw_r = dr16.data.sw_r;  /* 更新右拨杆状态 */
-    /* USER CODE END */
-    osDelayUntil(tick); /* 运行结束，等待下一次唤醒 */
+
+    last_sw_l = dr16.data.sw_l;
+    last_sw_r = dr16.data.sw_r;
+    osDelayUntil(tick);
   }
-  
 }

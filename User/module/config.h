@@ -16,13 +16,6 @@ extern "C" {
 #include "module/pole.h"
 #include "module/cmd/cmd.h"
 #include "module/rod.h"
-#ifdef __cplusplus
-}
-#include "module/arm.h"
-extern "C" {
-#else
-#include "module/arm.h"
-#endif
 typedef struct {
     Chassis_Params_t chassis_param;
     Pole_Params_t pole_param;

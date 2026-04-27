@@ -2,15 +2,15 @@
 
 #include <array>
 
-#include "arm_control_types.h"
-#include "arm_runtime_kinematics.hpp"
-#include "arm_runtime_utils.hpp"
+#include "module/arm/arm_control_types.h"
+#include "module/arm/detail/kinematics.hpp"
+#include "module/arm/detail/utils.hpp"
 #include "component/arm_lib/trajectory/cartesian_traj.h"
 #include "component/arm_lib/trajectory/joint_traj.h"
-#include "joint.hpp"
+#include "device/joint/joint.hpp"
 
 namespace mrobot {
-namespace arm_runtime {
+namespace arm {
 
 struct CartesianTrajectoryStepResult {
     ArmPose_t pose;
@@ -109,5 +109,5 @@ inline JointTrajectoryStepResult step_joint_trajectory(
     return out;
 }
 
-}  // namespace arm_runtime
+}  // namespace arm
 }  // namespace mrobot

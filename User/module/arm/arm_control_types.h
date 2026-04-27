@@ -52,6 +52,19 @@ typedef enum {
     ARM_CTRL_FRAME_HEADING = 2,
 } ArmControlFrame_t;
 
+typedef struct {
+    bool enable;
+    bool set_target_as_current;
+    bool gripper_toggle;
+    bool gripper_close;
+    Arm_CtrlType_t ctrl_type;
+    ArmControlFrame_t frame;
+    ArmPose_t target_pose;
+    ArmPoseDelta_t target_delta;
+    ArmPoseDelta_t joy_vel;
+    ArmJointAngles_t target_joints;
+} Arm_CMD_t;
+
 #ifdef __cplusplus
 }
 #endif

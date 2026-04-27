@@ -4,7 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "arm_control_types.h"
+#include "module/arm/arm_control_types.h"
 #include "component/arm_lib/adapter/toolbox_adapter.h"
 #include "component/arm_lib/core/arm_types.h"
 
