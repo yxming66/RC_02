@@ -10,11 +10,11 @@
 #include "bsp/can.h"
 #include "device/motor/factory/motor_factory.hpp"
 
-using mrobot::motor::DmJ4310Motor;
-using mrobot::motor::MotorFactory;
-using mrobot::motor::MotorInstanceConfig;
-using mrobot::motor::MotorKind;
-using mrobot::motor::MotorState;
+using mr::motor::DmJ4310Motor;
+using mr::motor::MotorFactory;
+using mr::motor::MotorInstanceConfig;
+using mr::motor::MotorKind;
+using mr::motor::MotorState;
 
 namespace {
 
@@ -341,8 +341,8 @@ int8_t Rod_Init(Rod_t *r, const Rod_Params_t *param, float target_freq) {
   const auto rol_cfg =
       MotorInstanceConfig<MotorKind::DM>::FromVendorParam(param->rol_motor_param);
 
-  RodPitMotor(r) = MotorFactory::Create<MotorKind::DM, mrobot::motor::MotorModel::J4310>(pit_cfg);
-  RodRolMotor(r) = MotorFactory::Create<MotorKind::DM, mrobot::motor::MotorModel::J4310>(rol_cfg);
+  RodPitMotor(r) = MotorFactory::Create<MotorKind::DM, mr::motor::MotorModel::J4310>(pit_cfg);
+  RodRolMotor(r) = MotorFactory::Create<MotorKind::DM, mr::motor::MotorModel::J4310>(rol_cfg);
   if (RodPitMotor(r) == NULL || RodRolMotor(r) == NULL) {
     return ROD_ERR;
   }

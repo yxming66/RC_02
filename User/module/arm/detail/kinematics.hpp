@@ -4,13 +4,13 @@
 
 #include "module/arm/arm_control_types.h"
 #include "module/arm/detail/utils.hpp"
-#include "component/arm_lib/kinematics/fk.h"
-#include "component/arm_lib/kinematics/ik_dispatch.h"
-#include "component/arm_lib/kinematics/task_constraints.h"
-#include "component/arm_lib/model/serial_chain.h"
+#include "robotics/arm/kinematics/fk.h"
+#include "robotics/arm/kinematics/ik_dispatch.h"
+#include "robotics/arm/kinematics/task_constraints.h"
+#include "robotics/arm/model/serial_chain.h"
 #include "device/joint/joint.hpp"
 
-namespace mrobot {
+namespace mr {
 namespace arm {
 
 inline void fill_current_joint_angles(
@@ -27,8 +27,10 @@ inline void fill_current_joint_angles(
 inline ArmPose_t forward_pose(
     const arm_lib::SerialChain<ARM_JOINT_COUNT>& chain,
     const ArmJointAngles_t& q) {
-    return arm_project::transform_to_pose(
-        arm_lib::kinematics::fk(chain, arm_project::angles_to_joint_vec(q)));
+    const arm_lib::JointVec<ARM_JOINT_COUNT> q_vec =
+        arm_project::angles_to_joint_vec(q);
+    return arm_project::transform_to_three_pit_pose(
+        arm_lib::kinematics::fk(chain, q_vec), q_vec);
 }
 
 inline int8_t solve_ik(
@@ -93,4 +95,4 @@ inline int8_t solve_ik(
 }
 
 }  // namespace arm
-}  // namespace mrobot
+}  // namespace mr

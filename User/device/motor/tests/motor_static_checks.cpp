@@ -1,7 +1,7 @@
 #include "device/motor/core/motor_t.hpp"
 #include "device/motor/core/motor_aliases.hpp"
 
-namespace mrobot::motor::tests {
+namespace mr::motor::tests {
 
 using RmM2006 = MotorT<MotorKind::RM, MotorModel::M2006>;
 using RmM3508 = MotorT<MotorKind::RM, MotorModel::M3508>;
@@ -64,4 +64,4 @@ static_assert(std::is_same_v<DmJ4310PMotor, DmJ4310P>, "DM alias mismatch");
 static_assert(std::is_same_v<DmJ4340Motor, DmJ4340>, "DM alias mismatch");
 static_assert(std::is_same_v<LzRso3Motor, LzRso3>, "LZ alias mismatch");
 
-} // namespace mrobot::motor::tests
+} // namespace mr::motor::tests

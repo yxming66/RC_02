@@ -18,7 +18,12 @@ void Task_rod(void *argument) {
   osDelay(ROD_INIT_DELAY);
 
   uint32_t tick = osKernelGetTickCount();
-  Rod_Init(&rod, &Config_GetRobotParam()->rod_param, (float)ROD_FREQ);
+  Config_RobotParam_t *cfg = Config_GetRobotParam();
+  if (cfg == NULL ||
+      Rod_Init(&rod, &cfg->rod_param, (float)ROD_FREQ) != ROD_OK) {
+    osThreadTerminate(osThreadGetId());
+    return;
+  }
 
   while (1) { 
     tick += delay_tick;
@@ -35,6 +40,7 @@ void Task_rod(void *argument) {
     Rod_Control(&rod, &rod_cmd, osKernelGetTickCount());
     // Rod_Output(&rod);
 
+    task_runtime.stack_water_mark.rod = uxTaskGetStackHighWaterMark(NULL);
     osDelayUntil(tick);
   }
 }

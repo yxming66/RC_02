@@ -3,7 +3,7 @@
 #include "component/user_math.h"
 #include "device/device.h"
 
-namespace mrobot::motor {
+namespace mr::motor {
 
 namespace {
 
@@ -289,15 +289,24 @@ int8_t MotorProtocol<MotorKind::DM, Model>::Disable() {
 template <MotorModel Model>
 int8_t MotorProtocol<MotorKind::DM, Model>::Relax() {
     ClearPendingCommand();
-    if (instance_ != nullptr && instance_->motor.header.online && instance_->status == MOTOR_DM_STATUS_DISABLED) {
-        state_.protocol_state = MotorProtocolState::Relaxed;
-        state_.protocol_status_code = instance_->status_raw;
-        state_.protocol_fault = EncodeDmFault(instance_->status);
-        return DEVICE_OK;
-    }
     const int8_t ret = MOTOR_DM_Relax(&param_);
     if (ret == DEVICE_OK) {
-        state_.protocol_state = MotorProtocolState::Relaxed;
+        state_.protocol_state = MotorProtocolState::Enabled;
+    }
+    return ret;
+}
+
+template <MotorModel Model>
+int8_t MotorProtocol<MotorKind::DM, Model>::SetZero() {
+    ClearPendingCommand();
+    const int8_t ret = MOTOR_DM_SetZero(&param_);
+    if (ret == DEVICE_OK) {
+        ResetPositionTracker();
+        state_.position_rad = 0.0f;
+        state_.position_single_turn_rad = 0.0f;
+        state_.last_commit_ok = true;
+    } else {
+        state_.last_commit_ok = false;
     }
     return ret;
 }
@@ -400,5 +409,7 @@ int8_t MotorProtocol<MotorKind::DM, Model>::SetMIT(float position, float velocit
 }
 
 template class MotorProtocol<MotorKind::DM, MotorModel::J4310>;
+template class MotorProtocol<MotorKind::DM, MotorModel::J4310P>;
+template class MotorProtocol<MotorKind::DM, MotorModel::J4340>;
 
-} // namespace mrobot::motor
+} // namespace mr::motor

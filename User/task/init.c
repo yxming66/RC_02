@@ -24,12 +24,12 @@ void Task_Init(void *argument) {
 
   task_runtime.thread.blink = osThreadNew(Task_blink, NULL, &attr_blink);
   task_runtime.thread.atti_esti = osThreadNew(Task_atti_esti, NULL, &attr_atti_esti);
-  task_runtime.thread.chassis_main = osThreadNew(Task_chassis_main, NULL, &attr_chassis_main);
+  // task_runtime.thread.chassis_main = osThreadNew(Task_chassis_main, NULL, &attr_chassis_main);
   task_runtime.thread.rc_main = osThreadNew(Task_rc_main, NULL, &attr_rc_main);
-  task_runtime.thread.cmd_main =osThreadNew(Task_cmd_main, NULL, &attr_cmd_main);
-  task_runtime.thread.sick = osThreadNew(Task_sick, NULL, &attr_sick);
-  task_runtime.thread.auto_ctrl =osThreadNew(Task_auto_ctrl, NULL, &attr_auto_ctrl);
-  // task_runtime.thread.arm = osThreadNew(Task_arm, NULL, &attr_arm);
+  // task_runtime.thread.cmd_main =osThreadNew(Task_cmd_main, NULL, &attr_cmd_main);
+  // task_runtime.thread.sick = osThreadNew(Task_sick, NULL, &attr_sick);
+  // task_runtime.thread.auto_ctrl =osThreadNew(Task_auto_ctrl, NULL, &attr_auto_ctrl);
+  task_runtime.thread.arm = osThreadNew(Task_arm, NULL, &attr_arm);
   // task_runtime.thread.pc_uart_rx = osThreadNew(Task_pc_uart_rx, NULL,&attr_pc_uart_rx);
   // task_runtime.thread.rod = osThreadNew(Task_rod, NULL, &attr_rod);
 

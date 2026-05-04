@@ -11,6 +11,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "device/motor_dm.h"
+#include "device/motor_lz.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -64,6 +67,40 @@ typedef struct {
     ArmPoseDelta_t joy_vel;
     ArmJointAngles_t target_joints;
 } Arm_CMD_t;
+
+typedef struct {
+    float y_min;
+    float y_max;
+    float z_min;
+    float z_max;
+    float pitch_min;
+    float pitch_max;
+} ArmWorkspaceLimit_t;
+
+typedef struct {
+    float input_deadzone;
+    float max_y_velocity;
+    float max_z_velocity;
+    float max_pitch_velocity;
+    float max_linear_velocity;
+    float max_angular_velocity;
+    float max_linear_acceleration;
+    float max_angular_acceleration;
+    float max_joint_step;
+    float joint_max_velocity[ARM_JOINT_COUNT];
+    float joint_max_acceleration[ARM_JOINT_COUNT];
+    ArmWorkspaceLimit_t workspace;
+} ArmCartesianRemoteParam_t;
+
+typedef struct {
+    MOTOR_LZ_Param_t joint1_motor_param;
+    MOTOR_DM_Param_t joint2_motor_param;
+    MOTOR_DM_Param_t joint3_motor_param;
+    float joint_kp[ARM_JOINT_COUNT];
+    float joint_kd[ARM_JOINT_COUNT];
+    float gravity_comp_scale[ARM_JOINT_COUNT];
+    ArmCartesianRemoteParam_t remote_cartesian;
+} Arm_Params_t;
 
 #ifdef __cplusplus
 }

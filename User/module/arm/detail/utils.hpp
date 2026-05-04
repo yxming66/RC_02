@@ -5,10 +5,10 @@
 #include <stdint.h>
 
 #include "module/arm/arm_control_types.h"
-#include "component/arm_lib/adapter/toolbox_adapter.h"
-#include "component/arm_lib/core/arm_types.h"
+#include "robotics/arm/adapter/toolbox_adapter.h"
+#include "robotics/arm/core/arm_types.h"
 
-namespace mrobot {
+namespace mr {
 namespace arm_project {
 
 static constexpr size_t kJointNum = ARM_JOINT_COUNT;
@@ -54,6 +54,46 @@ inline ArmPose_t transform_to_pose(const arm_lib::Transform& transform) {
     pose.pitch = rpy[1][0];
     pose.yaw = rpy[0][0];
     return pose;
+}
+
+inline float three_pit_planar_pitch_from_joints(
+    const arm_lib::JointVec<ARM_JOINT_COUNT>& q) {
+    float pitch = 0.0f;
+    for (size_t i = 0; i < kJointNum; ++i) {
+        pitch += q[i][0];
+    }
+    return pitch;
+}
+
+inline float three_pit_planar_pitch_from_angles(
+    const ArmJointAngles_t& angles) {
+    float pitch = 0.0f;
+    for (size_t i = 0; i < kJointNum; ++i) {
+        pitch += angles.q[i];
+    }
+    return pitch;
+}
+
+inline ArmPose_t transform_to_pose_with_planar_pitch(
+    const arm_lib::Transform& transform,
+    float planar_pitch) {
+    ArmPose_t pose = transform_to_pose(transform);
+    pose.pitch = planar_pitch;
+    return pose;
+}
+
+inline ArmPose_t transform_to_three_pit_pose(
+    const arm_lib::Transform& transform,
+    const arm_lib::JointVec<ARM_JOINT_COUNT>& q) {
+    return transform_to_pose_with_planar_pitch(
+        transform, three_pit_planar_pitch_from_joints(q));
+}
+
+inline ArmPose_t transform_to_three_pit_pose(
+    const arm_lib::Transform& transform,
+    const ArmJointAngles_t& angles) {
+    return transform_to_pose_with_planar_pitch(
+        transform, three_pit_planar_pitch_from_angles(angles));
 }
 
 inline arm_lib::JointVec<ARM_JOINT_COUNT> angles_to_joint_vec(
@@ -139,4 +179,4 @@ inline bool joint_step_is_reasonable(const ArmJointAngles_t& next_q,
 }
 
 }  // namespace arm_project
-}  // namespace mrobot
+}  // namespace mr

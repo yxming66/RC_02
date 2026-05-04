@@ -322,16 +322,16 @@ static void CMD_RC_BuildArmCmd(CMD_t *ctx) {
   switch (ctx->input.rc.sw[1]) {
     case CMD_SW_UP:
       /* 位置模式：3轴平移 + 偏航 */
-      ctx->output.arm.cmd.joy_vel.x   = ctx->input.rc.joy_right.x * pos_scale;
+      ctx->output.arm.cmd.joy_vel.x   = 0.0f;
       ctx->output.arm.cmd.joy_vel.y   = ctx->input.rc.joy_right.y * pos_scale;
       ctx->output.arm.cmd.joy_vel.z   = ctx->input.rc.joy_left.y  * pos_scale;
-      ctx->output.arm.cmd.joy_vel.yaw = ctx->input.rc.joy_left.x  * rot_scale;
+      ctx->output.arm.cmd.joy_vel.pitch = ctx->input.rc.joy_left.x  * rot_scale;
       break;
     case CMD_SW_MID:
       /* 姿态模式：俯仰 + 横滚 + 偏航 + 升降（全6自由度可达，Z/Yaw持续可调） */
-      ctx->output.arm.cmd.joy_vel.yaw   = ctx->input.rc.joy_right.x * rot_scale;
-      ctx->output.arm.cmd.joy_vel.pitch = ctx->input.rc.joy_right.y * rot_scale;
-      ctx->output.arm.cmd.joy_vel.roll  = ctx->input.rc.joy_left.x  * rot_scale;
+      ctx->output.arm.cmd.joy_vel.y     = ctx->input.rc.joy_right.y * pos_scale;
+      ctx->output.arm.cmd.joy_vel.pitch = ctx->input.rc.joy_left.x  * rot_scale;
+      ctx->output.arm.cmd.joy_vel.roll  = 0.0f;
       ctx->output.arm.cmd.joy_vel.z     = ctx->input.rc.joy_left.y  * pos_scale;
       break;
     default:

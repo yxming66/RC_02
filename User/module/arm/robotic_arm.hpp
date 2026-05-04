@@ -5,26 +5,24 @@
 #include <cstring>
 #include <stdint.h>
 
-#include "bsp/time.h"
-#include "module/arm/arm_control_types.h"
-#include "module/arm/detail/control_ops.hpp"
-#include "module/arm/detail/kinematics.hpp"
-#include "module/arm/detail/trajectory.hpp"
-#include "module/arm/detail/utils.hpp"
-#include "component/arm_lib/model/serial_chain.h"
-#include "component/arm_lib/dynamics/gravity.h"
 #include "device/joint/joint.hpp"
+#include "module/arm/arm_control_types.h"
+#include "module/arm/detail/utils.hpp"
+#include "robotics/arm/controller/arm_controller.h"
+#include "robotics/arm/dynamics/gravity.h"
+#include "robotics/arm/kinematics/fk.h"
+#include "robotics/arm/model/serial_chain.h"
 
-namespace mrobot {
+namespace mr {
 
 enum class ControlMode {
-    IDLE = 0,              // 空闲模式：关节放松，不跟踪目标。
-    JOINT_POSITION,        // 关节位置模式：直接使用各关节 target_angle 做位置控制。
-    CARTESIAN_POSITION,    // 笛卡尔轨迹模式：按末端目标生成轨迹，并用常规 IK 跟踪。
-    CARTESIAN_ANALYTICAL,  // 受约束笛卡尔模式：按末端目标生成轨迹，并优先使用 yz+pitch 约束 IK。
-    TEACH,                 // 示教模式：通常只保留重力补偿，方便手拖机械臂。
-    GRAVITY_COMP,          // 重力补偿模式：目标锁定当前关节角，仅持续输出重力前馈。
-    JOINT_TRAJECTORY,      // 关节轨迹模式：按关节空间轨迹插值后再跟踪。
+    IDLE = 0,
+    JOINT_POSITION,
+    CARTESIAN_POSITION,
+    CARTESIAN_ANALYTICAL,
+    TEACH,
+    GRAVITY_COMP,
+    JOINT_TRAJECTORY,
 };
 
 enum class MotionState {
@@ -37,165 +35,39 @@ enum class MotionState {
 class RoboticArm {
 private:
     static constexpr size_t JOINT_NUM = ARM_JOINT_COUNT;
-
-    std::array<IJoint*, JOINT_NUM> joints_;
-    arm_lib::SerialChain<ARM_JOINT_COUNT> chain_;
-    bool chain_configured_;
-
-    struct {
-        ArmPose_t current;
-        ArmPose_t target;
-    } end_effector_;
-
-    struct {
-        ControlMode mode;
-        MotionState state;
-        float position_tolerance;
-        bool enable;
-        bool gravity_comp_enable;
-    } control_;
-
-    struct {
-        ArmJointAngles_t angles;
-        bool valid;
-    } inverse_kinematics_;
-
-    struct {
-        float torques[JOINT_NUM];
-        float scales[JOINT_NUM];
-    } gravity_comp_;
-
-    struct {
-        ArmPose_t start;
-        ArmPose_t goal;
-        float elapsed;
-        bool active;
-        bool valid;
-        float max_lin_vel;
-        float max_ang_vel;
-        float max_lin_acc;
-        float max_ang_acc;
-        float max_joint_delta;
-        ArmJointAngles_t angles;
-        arm_lib::trajectory::CartesianTrajectory trajectory;
-    } traj_;
-
-    struct {
-        ArmJointAngles_t start;
-        ArmJointAngles_t goal;
-        float elapsed;
-        bool active;
-        bool valid;
-        float max_velocity[JOINT_NUM];
-        float max_acceleration[JOINT_NUM];
-        ArmJointAngles_t angles;
-        arm_lib::trajectory::JointTrajectory<ARM_JOINT_COUNT> trajectory;
-    } joint_traj_;
-
-    struct {
-        float now;
-        uint64_t last_wakeup;
-        float dt;
-    } timer_;
-
-    void StepTrajectory(bool position_priority_only) {
-        if (!traj_.active || !traj_.trajectory.valid()) {
-            return;
-        }
-
-        const arm::CartesianTrajectoryStepResult step =
-            arm::step_cartesian_trajectory(
-                &traj_.trajectory,
-                &traj_.elapsed,
-                timer_.dt,
-                joints_,
-                chain_,
-                chain_configured_,
-                traj_.valid,
-                traj_.angles,
-                traj_.max_joint_delta,
-                position_priority_only);
-        if (!step.valid) {
-            traj_.valid = false;
-            traj_.active = false;
-            control_.state = MotionState::ERROR;
-            return;
-        }
-
-        traj_.angles = step.angles;
-        traj_.valid = true;
-        traj_.active = step.active;
-        end_effector_.target = step.pose;
-        inverse_kinematics_.angles = step.angles;
-        inverse_kinematics_.valid = true;
-    }
-
-    void StepJointTrajectory() {
-        if (!joint_traj_.active || !joint_traj_.trajectory.valid()) {
-            return;
-        }
-
-        const arm::JointTrajectoryStepResult step =
-            arm::step_joint_trajectory(
-                &joint_traj_.trajectory,
-                &joint_traj_.elapsed,
-                timer_.dt,
-                chain_);
-        if (!step.valid) {
-            joint_traj_.valid = false;
-            joint_traj_.active = false;
-            control_.state = MotionState::ERROR;
-            return;
-        }
-
-        joint_traj_.angles = step.angles;
-        joint_traj_.valid = true;
-        joint_traj_.active = step.active;
-        end_effector_.target = step.pose;
-        inverse_kinematics_.angles = joint_traj_.angles;
-        inverse_kinematics_.valid = true;
-    }
+    using Controller = arm_lib::controller::ArmController<ARM_JOINT_COUNT>;
 
 public:
     RoboticArm()
         : joints_{},
           chain_(),
-          chain_configured_(false) {
+          controller_(),
+          chain_configured_(false),
+          mode_(ControlMode::IDLE),
+          state_(MotionState::STOPPED),
+          position_tolerance_(0.02f),
+          enable_(false),
+          gravity_comp_enable_(false),
+          current_pose_{},
+          target_pose_{},
+          target_joints_{},
+          ik_angles_{},
+          ik_valid_(false),
+          target_joints_valid_(false),
+          max_lin_vel_(0.15f),
+          max_ang_vel_(1.0f),
+          max_lin_acc_(0.40f),
+          max_ang_acc_(2.0f),
+          pending_relax_(false) {
         joints_.fill(nullptr);
-        std::memset(&end_effector_, 0, sizeof(end_effector_));
-        std::memset(&inverse_kinematics_, 0, sizeof(inverse_kinematics_));
-
-        control_.mode = ControlMode::IDLE;
-        control_.state = MotionState::STOPPED;
-        control_.position_tolerance = 0.02f;
-        control_.enable = false;
-        control_.gravity_comp_enable = false;
-
         for (size_t i = 0; i < JOINT_NUM; ++i) {
-            gravity_comp_.torques[i] = 0.0f;
-            gravity_comp_.scales[i] = 1.0f;
-            joint_traj_.max_velocity[i] =
+            gravity_torques_[i] = 0.0f;
+            gravity_scales_[i] = 1.0f;
+            joint_traj_max_velocity_[i] =
                 arm_project::kDefaultJointTrajMaxVelocity;
-            joint_traj_.max_acceleration[i] =
+            joint_traj_max_acceleration_[i] =
                 arm_project::kDefaultJointTrajMaxAcceleration;
         }
-
-        traj_.elapsed = 0.0f;
-        traj_.active = false;
-        traj_.valid = false;
-        traj_.max_lin_vel = 0.15f;
-        traj_.max_ang_vel = 1.0f;
-        traj_.max_lin_acc = 0.40f;
-        traj_.max_ang_acc = 2.0f;
-        traj_.max_joint_delta = arm_project::kTrajectoryMaxJointDelta;
-
-        joint_traj_.elapsed = 0.0f;
-        joint_traj_.active = false;
-        joint_traj_.valid = false;
-
-        timer_.now = 0.0f;
-        timer_.last_wakeup = 0U;
-        timer_.dt = 0.001f;
     }
 
     RoboticArm(const RoboticArm&) = delete;
@@ -203,12 +75,15 @@ public:
 
     void SetChain(const arm_lib::SerialChain<ARM_JOINT_COUNT>& chain) {
         chain_ = chain;
-        chain_configured_ = true;
+        chain_configured_ = chain_.validate();
+        controller_.set_chain(chain_);
+        ConfigureControllerDefaults();
     }
 
     void AddJoint(size_t index, IJoint* joint) {
         if (index < JOINT_NUM) {
             joints_[index] = joint;
+            ConfigureControllerDefaults();
         }
     }
 
@@ -221,34 +96,42 @@ public:
     }
 
     int8_t Init() {
-        for (IJoint* joint : joints_) {
-            if (joint != nullptr) {
-                joint->Register();
-                joint->Enable();
-            }
-        }
-        std::memset(&end_effector_.target, 0, sizeof(end_effector_.target));
-        return chain_configured_ ? 0 : -1;
-    }
-
-    int8_t Update() {
-        for (IJoint* joint : joints_) {
-            if (joint != nullptr) {
-                joint->Enable();
-                joint->Update();
-            }
-        }
-
         if (!chain_configured_) {
             return -1;
         }
 
-        ArmJointAngles_t q{};
-        arm::fill_current_joint_angles(joints_, &q);
-        end_effector_.current = arm::forward_pose(chain_, q);
+        for (IJoint* joint : joints_) {
+            if (joint == nullptr) {
+                return -1;
+            }
+            joint->Register();
+            joint->Enable();
+        }
 
-        if (control_.gravity_comp_enable) {
-            CalcGravityTorques(q);
+        controller_.set_chain(chain_);
+        ConfigureControllerDefaults();
+        if (!RefreshControllerFeedback()) {
+            return -1;
+        }
+        SyncTargetsFromCurrent();
+        return 0;
+    }
+
+    int8_t Update() {
+        for (IJoint* joint : joints_) {
+            if (joint == nullptr) {
+                return -1;
+            }
+            joint->Enable();
+            joint->Update();
+        }
+
+        if (!RefreshControllerFeedback()) {
+            return -1;
+        }
+
+        if (gravity_comp_enable_) {
+            CalcGravityTorques(CurrentJointAngles());
         }
         return 0;
     }
@@ -258,34 +141,53 @@ public:
             return -1;
         }
 
-        const auto tau = arm_lib::dynamics::gravity_torques(
-            chain_, arm_project::angles_to_joint_vec(q));
+        const arm_lib::JointVec<ARM_JOINT_COUNT> tau =
+            arm_lib::dynamics::gravity_torques(
+                chain_, arm_project::angles_to_joint_vec(q));
         for (size_t i = 0; i < JOINT_NUM; ++i) {
-            gravity_comp_.torques[i] = tau[i][0] * gravity_comp_.scales[i];
+            gravity_torques_[i] = tau[i][0] * gravity_scales_[i];
         }
         return 0;
     }
 
-    int8_t InverseKinematicsAnalytical(const ArmPose_t* pose,
-                                       ArmJointAngles_t* q_out,
-                                       const ArmJointAngles_t* q_seed = nullptr) {
-        if (pose == nullptr || q_out == nullptr) {
+    int8_t InverseKinematicsAnalytical(
+        const ArmPose_t* pose,
+        ArmJointAngles_t* q_out,
+        const ArmJointAngles_t* q_seed = nullptr) {
+        if (pose == nullptr || q_out == nullptr || !chain_configured_) {
             return -1;
         }
-        return arm::solve_ik(
-            chain_, chain_configured_, joints_, *pose, q_out, q_seed, true);
+
+        const ArmJointAngles_t seed =
+            (q_seed != nullptr) ? *q_seed : CurrentJointAngles();
+        const arm_lib::kinematics::IKResult<ARM_JOINT_COUNT> result =
+            controller_.solve_pose_ik(
+                arm_project::pose_to_transform(*pose),
+                arm_project::angles_to_joint_vec(seed),
+                true,
+                true);
+
+        if (!arm_lib::is_success(result.status)) {
+            ik_valid_ = false;
+            return -1;
+        }
+
+        ik_angles_ = arm_project::joint_vec_to_angles(result.q);
+        *q_out = ik_angles_;
+        ik_valid_ = true;
+        return 0;
     }
 
     int8_t GetPose(ArmPose_t* pose) const {
         if (pose == nullptr) {
             return -1;
         }
-        *pose = end_effector_.current;
+        *pose = current_pose_;
         return 0;
     }
 
     int8_t SetTargetPose(const ArmPose_t pose) {
-        end_effector_.target = pose;
+        target_pose_ = pose;
         return 0;
     }
 
@@ -293,158 +195,172 @@ public:
         if (pose == nullptr) {
             return -1;
         }
-        *pose = end_effector_.target;
+        *pose = target_pose_;
         return 0;
     }
 
     int8_t Control() {
-        const uint64_t now_us = BSP_TIME_Get_us();
-        if (timer_.last_wakeup == 0U || now_us <= timer_.last_wakeup) {
-            timer_.dt = 0.001f;
-        } else {
-            timer_.dt = (now_us - timer_.last_wakeup) / 1000000.0f;
-            if (timer_.dt < 0.0002f) {
-                timer_.dt = 0.0002f;
-            }
-            if (timer_.dt > 0.02f) {
-                timer_.dt = 0.02f;
-            }
-        }
-        timer_.last_wakeup = now_us;
-        timer_.now = now_us / 1000000.0f;
+        return Control(0.001f);
+    }
 
-        if (!control_.enable) {
-            arm::relax_all_joints(joints_);
-            control_.state = MotionState::STOPPED;
+    int8_t Control(float dt) {
+        if (!chain_configured_) {
+            state_ = MotionState::ERROR;
+            return -1;
+        }
+
+        const float safe_dt = SanitizeDt(dt);
+        if (!RefreshControllerFeedback()) {
+            state_ = MotionState::ERROR;
+            return -1;
+        }
+        controller_.set_enabled(enable_);
+        controller_.set_gravity_feedforward_enabled(gravity_comp_enable_);
+
+        if (!enable_) {
+            controller_.set_idle();
+            StageRelaxAllJoints();
+            state_ = MotionState::STOPPED;
             return 0;
         }
 
-        switch (control_.mode) {
+        arm_lib::ArmStatus status = arm_lib::ArmStatus::kOk;
+        bool has_controller_command = true;
+
+        switch (mode_) {
         case ControlMode::IDLE:
-            arm::relax_all_joints(joints_);
-            control_.state = MotionState::STOPPED;
-            break;
+            controller_.set_idle();
+            StageRelaxAllJoints();
+            state_ = MotionState::STOPPED;
+            return 0;
 
         case ControlMode::JOINT_POSITION:
+            if (!target_joints_valid_) {
+                SyncTargetsFromCurrent();
+            }
+            status = controller_.command_joint_position(
+                arm_project::angles_to_joint_vec(target_joints_),
+                safe_dt,
+                position_tolerance_);
+            break;
+
         case ControlMode::CARTESIAN_POSITION:
         case ControlMode::CARTESIAN_ANALYTICAL:
         case ControlMode::JOINT_TRAJECTORY:
-        case ControlMode::GRAVITY_COMP: {
-            if (control_.state == MotionState::ERROR) {
-                arm::relax_all_joints(joints_);
-                control_.enable = false;
-                return -1;
-            }
-
-            if (control_.gravity_comp_enable) {
-                arm::apply_feedforward_torques(joints_, gravity_comp_.torques);
-            }
-
-            if (control_.mode == ControlMode::JOINT_POSITION) {
-                if (!arm::validate_and_copy_joint_targets(
-                        joints_, &inverse_kinematics_.angles)) {
-                    arm::relax_all_joints(joints_);
-                    control_.state = MotionState::ERROR;
-                    return -1;
-                }
-                inverse_kinematics_.valid = true;
-                traj_.valid = true;
-                traj_.active = false;
-            }
-
-            if (control_.mode == ControlMode::GRAVITY_COMP) {
-                arm::set_joint_targets_to_current(joints_);
-            }
-
-            if (control_.mode == ControlMode::CARTESIAN_POSITION ||
-                control_.mode == ControlMode::CARTESIAN_ANALYTICAL) {
-                StepTrajectory(control_.mode == ControlMode::CARTESIAN_ANALYTICAL);
-                if (!traj_.valid) {
-                    arm::relax_all_joints(joints_);
-                    control_.state = MotionState::ERROR;
-                    return -1;
-                }
-
-                arm::apply_joint_targets(joints_, traj_.angles);
-            }
-
-            if (control_.mode == ControlMode::JOINT_TRAJECTORY) {
-                StepJointTrajectory();
-                if (!joint_traj_.valid) {
-                    arm::relax_all_joints(joints_);
-                    control_.state = MotionState::ERROR;
-                    return -1;
-                }
-
-                arm::apply_joint_targets(joints_, joint_traj_.angles);
-            }
-
-            const arm::PositionDriveResult drive_result =
-                arm::drive_position_targets_and_commit(
-                    joints_, timer_.dt, control_.position_tolerance);
-            if (!drive_result.all_online || !drive_result.command_ok) {
-                arm::relax_all_joints(joints_);
-                control_.state = MotionState::ERROR;
-                return -1;
-            }
-
-            control_.state = drive_result.all_reached
-                                 ? MotionState::REACHED
-                                 : MotionState::MOVING;
+            status = controller_.update(safe_dt);
             break;
-        }
+
+        case ControlMode::GRAVITY_COMP:
+            status = controller_.command_gravity_hold(safe_dt);
+            break;
 
         case ControlMode::TEACH:
-            if (control_.gravity_comp_enable) {
-                arm::drive_torque_targets_and_commit(joints_, gravity_comp_.torques);
+            if (gravity_comp_enable_) {
+                status = controller_.command_gravity_torque(safe_dt);
             } else {
-                arm::relax_all_joints(joints_);
+                StageRelaxAllJoints();
+                state_ = MotionState::MOVING;
+                has_controller_command = false;
             }
-            control_.state = MotionState::MOVING;
             break;
 
         default:
-            control_.state = MotionState::ERROR;
-            break;
+            state_ = MotionState::ERROR;
+            return -1;
         }
 
+        if (!arm_lib::is_ok(status)) {
+            state_ = MotionState::ERROR;
+            StageRelaxAllJoints();
+            return -1;
+        }
+
+        if (has_controller_command && StageControllerCommand(safe_dt) != 0) {
+            state_ = MotionState::ERROR;
+            StageRelaxAllJoints();
+            return -1;
+        }
+
+        state_ = MapMotionState(controller_.motion_state());
         return 0;
     }
 
+    int8_t Commit() {
+        int8_t ret = 0;
+        bool has_pending_control = false;
+        for (IJoint* joint : joints_) {
+            if (joint != nullptr && joint->HasPendingControl()) {
+                has_pending_control = true;
+                break;
+            }
+        }
+
+        if (pending_relax_ && !has_pending_control) {
+            for (IJoint* joint : joints_) {
+                if (joint != nullptr && joint->Relax() != 0) {
+                    ret = -1;
+                }
+            }
+            pending_relax_ = false;
+            return ret;
+        }
+        pending_relax_ = false;
+
+        for (IJoint* joint : joints_) {
+            if (joint != nullptr && joint->HasPendingControl() &&
+                joint->CommitControl() != 0) {
+                ret = -1;
+            }
+        }
+        return ret;
+    }
+
     void Enable(bool enable) {
-        control_.enable = enable;
+        const bool was_enabled = enable_;
+        enable_ = enable;
+        controller_.set_enabled(enable);
+        if (enable && !was_enabled) {
+            for (IJoint* joint : joints_) {
+                if (joint != nullptr) {
+                    joint->Enable();
+                }
+            }
+        }
         if (!enable) {
-            control_.mode = ControlMode::IDLE;
+            mode_ = ControlMode::IDLE;
         }
     }
 
     void SetMode(ControlMode mode) {
-        control_.mode = mode;
+        mode_ = mode;
     }
 
     MotionState GetState() const {
-        return control_.state;
+        return state_;
     }
 
     void EnableGravityCompensation(bool enable) {
-        control_.gravity_comp_enable = enable;
+        gravity_comp_enable_ = enable;
+        controller_.set_gravity_feedforward_enabled(enable);
         if (!enable) {
             for (size_t i = 0; i < JOINT_NUM; ++i) {
-                gravity_comp_.torques[i] = 0.0f;
+                gravity_torques_[i] = 0.0f;
             }
-            arm::clear_feedforward_torques(joints_);
+            ClearFeedforwardTorques();
         }
     }
 
     void SetGravityCompScale(float scale) {
         for (size_t i = 0; i < JOINT_NUM; ++i) {
-            gravity_comp_.scales[i] = scale;
+            gravity_scales_[i] = scale;
         }
+        ConfigureControllerDefaults();
     }
 
     void SetGravityCompScale(size_t index, float scale) {
         if (index < JOINT_NUM) {
-            gravity_comp_.scales[index] = scale;
+            gravity_scales_[index] = scale;
+            ConfigureControllerDefaults();
         }
     }
 
@@ -453,72 +369,90 @@ public:
             return;
         }
         for (size_t i = 0; i < JOINT_NUM; ++i) {
-            gravity_comp_.scales[i] = scales[i];
+            gravity_scales_[i] = scales[i];
         }
+        ConfigureControllerDefaults();
     }
 
     float GetGravityCompScale(size_t index) const {
-        return (index < JOINT_NUM) ? gravity_comp_.scales[index] : 1.0f;
+        return (index < JOINT_NUM) ? gravity_scales_[index] : 1.0f;
     }
 
     float GetGravityTorque(size_t index) const {
-        return (index < JOINT_NUM) ? gravity_comp_.torques[index] : 0.0f;
+        return (index < JOINT_NUM) ? gravity_torques_[index] : 0.0f;
     }
 
     bool IsGravityCompEnabled() const {
-        return control_.gravity_comp_enable;
+        return gravity_comp_enable_;
     }
 
     int8_t MoveJoint(const float target_angles[JOINT_NUM]) {
+        if (target_angles == nullptr) {
+            return -1;
+        }
+
+        ArmJointAngles_t candidate{};
         for (size_t i = 0; i < JOINT_NUM; ++i) {
+            if (!std::isfinite(target_angles[i])) {
+                return -1;
+            }
             if (joints_[i] != nullptr) {
                 const auto& params = joints_[i]->GetParams();
-                if (target_angles[i] < params.qmin || target_angles[i] > params.qmax) {
+                if (target_angles[i] < params.qmin ||
+                    target_angles[i] > params.qmax) {
                     return -1;
                 }
             }
+            candidate.q[i] = target_angles[i];
         }
 
+        target_joints_ = candidate;
+        target_joints_valid_ = true;
+        ik_angles_ = candidate;
+        ik_valid_ = true;
         for (size_t i = 0; i < JOINT_NUM; ++i) {
             if (joints_[i] != nullptr) {
-                joints_[i]->SetTargetAngle(target_angles[i]);
+                joints_[i]->SetTargetAngle(target_joints_.q[i]);
             }
         }
-        control_.state = MotionState::MOVING;
+        state_ = MotionState::MOVING;
         return 0;
     }
 
     int8_t MoveCartesian(const ArmPose_t& goal) {
-        const bool goal_changed = arm_project::is_pose_changed(
-            goal,
-            traj_.goal,
-            arm_project::kTrajectoryPosThreshold,
-            arm_project::kTrajectoryAngThreshold);
-
-        if (!goal_changed && traj_.active) {
-            return 0;
-        }
-
-        arm_lib::trajectory::CartesianTrajectoryRequest request;
-        request.start = arm_project::pose_to_transform(end_effector_.current);
-        request.goal = arm_project::pose_to_transform(goal);
-        request.max_linear_velocity = traj_.max_lin_vel;
-        request.max_angular_velocity = traj_.max_ang_vel;
-        request.max_linear_acceleration = traj_.max_lin_acc;
-        request.max_angular_acceleration = traj_.max_ang_acc;
-
-        if (!traj_.trajectory.configure(request)) {
-            control_.state = MotionState::ERROR;
+        if (!chain_configured_) {
             return -1;
         }
 
-        traj_.start = end_effector_.current;
-        traj_.goal = goal;
-        traj_.elapsed = 0.0f;
-        traj_.active = true;
-        traj_.valid = false;
-        end_effector_.target = goal;
-        control_.state = MotionState::MOVING;
+        if (!RefreshControllerFeedback()) {
+            state_ = MotionState::ERROR;
+            return -1;
+        }
+
+        arm_lib::controller::MoveLControllerRequest<ARM_JOINT_COUNT> request;
+        request.cartesian.start = arm_project::pose_to_transform(current_pose_);
+        request.cartesian.goal = arm_project::pose_to_transform(goal);
+        request.cartesian.max_linear_velocity = max_lin_vel_;
+        request.cartesian.max_angular_velocity = max_ang_vel_;
+        request.cartesian.max_linear_acceleration = max_lin_acc_;
+        request.cartesian.max_angular_acceleration = max_ang_acc_;
+        request.limits = chain_.joint_limits();
+        request.enforce_limits = true;
+        request.limit_joint_step = true;
+        request.max_joint_step = arm_project::kTrajectoryMaxJointDelta;
+        request.position_priority_only =
+            (mode_ == ControlMode::CARTESIAN_ANALYTICAL);
+        FillJointLimitVectors(request.max_velocity, request.max_acceleration);
+
+        const arm_lib::ArmStatus status = controller_.start_move_l(request);
+        if (!arm_lib::is_ok(status)) {
+            state_ = MotionState::ERROR;
+            return -1;
+        }
+
+        target_pose_ = goal;
+        target_joints_valid_ = false;
+        state_ = MotionState::MOVING;
         return 0;
     }
 
@@ -527,50 +461,41 @@ public:
             return -1;
         }
 
-        ArmJointAngles_t q_seed{};
-        arm::fill_current_joint_angles(joints_, &q_seed);
-        ArmJointAngles_t q_goal{};
-        if (arm::solve_ik(
-                chain_, chain_configured_, joints_, goal, &q_goal, &q_seed, false) != 0) {
-            control_.state = MotionState::ERROR;
+        if (!RefreshControllerFeedback()) {
+            state_ = MotionState::ERROR;
             return -1;
         }
 
-        arm_lib::trajectory::JointTrajectoryRequest<ARM_JOINT_COUNT> request;
-        request.start = arm_project::angles_to_joint_vec(q_seed);
-        request.goal = arm_project::angles_to_joint_vec(q_goal);
+        arm_lib::controller::MoveJToPoseControllerRequest<ARM_JOINT_COUNT>
+            request;
+        request.target = arm_project::pose_to_transform(goal);
+        request.limits = chain_.joint_limits();
+        request.enforce_limits = true;
+        request.position_priority_only = false;
+        FillJointLimitVectors(request.max_velocity, request.max_acceleration);
 
-        for (size_t i = 0; i < ARM_JOINT_COUNT; ++i) {
-            request.max_velocity[i][0] = joint_traj_.max_velocity[i];
-            request.max_acceleration[i][0] = joint_traj_.max_acceleration[i];
-        }
-        request.enforce_limits = false;
-
-        if (!joint_traj_.trajectory.configure(request)) {
-            control_.state = MotionState::ERROR;
+        const arm_lib::ArmStatus status =
+            controller_.start_move_j_to_pose(request);
+        if (!arm_lib::is_ok(status)) {
+            state_ = MotionState::ERROR;
             return -1;
         }
 
-        joint_traj_.start = q_seed;
-        joint_traj_.goal = q_goal;
-        joint_traj_.elapsed = 0.0f;
-        joint_traj_.active = true;
-        joint_traj_.valid = false;
-        end_effector_.target = goal;
-        control_.state = MotionState::MOVING;
+        target_pose_ = goal;
+        target_joints_valid_ = false;
+        state_ = MotionState::MOVING;
         return 0;
     }
 
     void Stop() {
-        traj_.active = false;
-        joint_traj_.active = false;
-        control_.state = MotionState::STOPPED;
+        controller_.set_idle();
+        state_ = MotionState::STOPPED;
     }
 
     void MoveCartesianDelta(const ArmPoseDelta_t& delta,
                             ArmControlFrame_t frame = ARM_CTRL_FRAME_WORLD) {
         const ArmPose_t goal =
-            arm_project::apply_pose_delta(end_effector_.target, delta, frame);
+            arm_project::apply_pose_delta(target_pose_, delta, frame);
         MoveCartesian(goal);
     }
 
@@ -597,68 +522,263 @@ public:
     }
 
     const ArmPose_t& GetEndPose() const {
-        return end_effector_.current;
+        return current_pose_;
     }
 
     const ArmJointAngles_t& GetIkAngles() const {
-        return inverse_kinematics_.angles;
+        return ik_angles_;
     }
 
     bool IsIkValid() const {
-        return inverse_kinematics_.valid;
+        return ik_valid_;
     }
 
     void SetLinVelLimit(float vel) {
-        traj_.max_lin_vel = vel;
+        if (vel > 0.0f) {
+            max_lin_vel_ = vel;
+        }
     }
 
     void SetAngVelLimit(float vel) {
-        traj_.max_ang_vel = vel;
+        if (vel > 0.0f) {
+            max_ang_vel_ = vel;
+        }
     }
 
     void SetJointTrajectoryVelocity(size_t joint_index, float max_vel) {
-        if (joint_index < ARM_JOINT_COUNT && max_vel > 0.0f) {
-            joint_traj_.max_velocity[joint_index] = max_vel;
+        if (joint_index < JOINT_NUM && max_vel > 0.0f) {
+            joint_traj_max_velocity_[joint_index] = max_vel;
         }
     }
 
     void SetJointTrajectoryAcceleration(size_t joint_index, float max_accel) {
-        if (joint_index < ARM_JOINT_COUNT && max_accel > 0.0f) {
-            joint_traj_.max_acceleration[joint_index] = max_accel;
+        if (joint_index < JOINT_NUM && max_accel > 0.0f) {
+            joint_traj_max_acceleration_[joint_index] = max_accel;
         }
     }
 
     float GetTrajProgress() const {
-        if (!traj_.trajectory.valid()) {
-            return traj_.active ? 0.0f : 1.0f;
-        }
-        const float duration = traj_.trajectory.duration();
-        if (duration <= 1.0e-6f) {
+        if (!IsTrajActive()) {
             return 1.0f;
         }
-        const float progress = traj_.elapsed / duration;
-        if (progress < 0.0f) {
-            return 0.0f;
-        }
-        if (progress > 1.0f) {
-            return 1.0f;
-        }
-        return progress;
+        return MotionProgress();
     }
 
     bool IsTrajActive() const {
-        return traj_.active;
+        return (mode_ == ControlMode::CARTESIAN_POSITION ||
+                mode_ == ControlMode::CARTESIAN_ANALYTICAL) &&
+               controller_.motion_state() ==
+                   arm_lib::controller::ArmMotionState::kMoving;
     }
 
     float GetJointTrajProgress() const {
-        if (!joint_traj_.trajectory.valid()) {
-            return joint_traj_.active ? 0.0f : 1.0f;
-        }
-        const float duration = joint_traj_.trajectory.duration();
-        if (duration <= 1.0e-6f) {
+        if (!IsJointTrajActive()) {
             return 1.0f;
         }
-        const float progress = joint_traj_.elapsed / duration;
+        return MotionProgress();
+    }
+
+    bool IsJointTrajActive() const {
+        return mode_ == ControlMode::JOINT_TRAJECTORY &&
+               controller_.motion_state() ==
+                   arm_lib::controller::ArmMotionState::kMoving;
+    }
+
+    void ResetError() {
+        controller_.clear_fault();
+        state_ = MotionState::REACHED;
+        enable_ = true;
+        controller_.set_enabled(true);
+        SyncTargetsFromCurrent();
+        SetJointTargetsToCurrent();
+    }
+
+private:
+    static float SanitizeDt(float dt) {
+        if (dt < 0.0002f) {
+            return 0.0002f;
+        }
+        if (dt > 0.02f) {
+            return 0.02f;
+        }
+        return dt;
+    }
+
+    static MotionState MapMotionState(
+        arm_lib::controller::ArmMotionState state) {
+        switch (state) {
+        case arm_lib::controller::ArmMotionState::kStopped:
+            return MotionState::STOPPED;
+        case arm_lib::controller::ArmMotionState::kMoving:
+            return MotionState::MOVING;
+        case arm_lib::controller::ArmMotionState::kReached:
+            return MotionState::REACHED;
+        case arm_lib::controller::ArmMotionState::kFault:
+        default:
+            return MotionState::ERROR;
+        }
+    }
+
+    void ConfigureControllerDefaults() {
+        arm_lib::JointVec<ARM_JOINT_COUNT> kp =
+            arm_lib::toolbox_adapter::zero_joint_vec<ARM_JOINT_COUNT>();
+        arm_lib::JointVec<ARM_JOINT_COUNT> kd =
+            arm_lib::toolbox_adapter::zero_joint_vec<ARM_JOINT_COUNT>();
+        arm_lib::JointVec<ARM_JOINT_COUNT> gravity_scales =
+            arm_lib::toolbox_adapter::zero_joint_vec<ARM_JOINT_COUNT>();
+
+        for (size_t i = 0; i < JOINT_NUM; ++i) {
+            if (joints_[i] != nullptr) {
+                const auto& params = joints_[i]->GetParams();
+                kp[i][0] = params.kp;
+                kd[i][0] = params.kd;
+            }
+            gravity_scales[i][0] = gravity_scales_[i];
+        }
+
+        controller_.set_default_gains(kp, kd);
+        controller_.set_gravity_scales(gravity_scales);
+        controller_.set_gravity_feedforward_enabled(gravity_comp_enable_);
+    }
+
+    void FillJointLimitVectors(
+        arm_lib::JointVec<ARM_JOINT_COUNT>& max_velocity,
+        arm_lib::JointVec<ARM_JOINT_COUNT>& max_acceleration) const {
+        for (size_t i = 0; i < JOINT_NUM; ++i) {
+            max_velocity[i][0] = joint_traj_max_velocity_[i];
+            max_acceleration[i][0] = joint_traj_max_acceleration_[i];
+        }
+    }
+
+    ArmJointAngles_t CurrentJointAngles() const {
+        ArmJointAngles_t q{};
+        for (size_t i = 0; i < JOINT_NUM; ++i) {
+            q.q[i] = (joints_[i] != nullptr) ? joints_[i]->GetCurrentAngle()
+                                             : 0.0f;
+        }
+        return q;
+    }
+
+    arm_lib::JointState<ARM_JOINT_COUNT> CurrentJointState() const {
+        arm_lib::JointState<ARM_JOINT_COUNT> state;
+        state.valid = true;
+        for (size_t i = 0; i < JOINT_NUM; ++i) {
+            if (joints_[i] == nullptr) {
+                state.valid = false;
+                continue;
+            }
+            state.q[i][0] = joints_[i]->GetCurrentAngle();
+            state.qd[i][0] = joints_[i]->GetCurrentVelocity();
+            state.torque[i][0] = 0.0f;
+            state.online[i] = joints_[i]->IsOnline();
+        }
+        return state;
+    }
+
+    bool RefreshControllerFeedback() {
+        if (!chain_configured_) {
+            return false;
+        }
+
+        const arm_lib::JointState<ARM_JOINT_COUNT> state =
+            CurrentJointState();
+        if (!state.valid) {
+            return false;
+        }
+
+        controller_.update_feedback(state);
+        current_pose_ = arm_project::transform_to_three_pit_pose(
+            arm_lib::kinematics::fk(chain_, state.q), state.q);
+        return true;
+    }
+
+    void SyncTargetsFromCurrent() {
+        const ArmJointAngles_t q = CurrentJointAngles();
+        target_joints_ = q;
+        target_joints_valid_ = true;
+        ik_angles_ = q;
+        ik_valid_ = true;
+        if (chain_configured_) {
+            const arm_lib::JointVec<ARM_JOINT_COUNT> q_vec =
+                arm_project::angles_to_joint_vec(q);
+            target_pose_ = arm_project::transform_to_three_pit_pose(
+                arm_lib::kinematics::fk(chain_, q_vec), q_vec);
+            current_pose_ = target_pose_;
+        } else {
+            std::memset(&target_pose_, 0, sizeof(target_pose_));
+            std::memset(&current_pose_, 0, sizeof(current_pose_));
+        }
+    }
+
+    void SetJointTargetsToCurrent() {
+        for (IJoint* joint : joints_) {
+            if (joint != nullptr) {
+                joint->SetTargetAngle(joint->GetCurrentAngle());
+            }
+        }
+    }
+
+    void ClearFeedforwardTorques() {
+        for (IJoint* joint : joints_) {
+            if (joint != nullptr) {
+                joint->SetFeedforwardTorque(0.0f);
+            }
+        }
+    }
+
+    void StageRelaxAllJoints() {
+        for (IJoint* joint : joints_) {
+            if (joint != nullptr) {
+                joint->ClearPendingControl();
+            }
+        }
+        pending_relax_ = true;
+    }
+
+    int8_t StageControllerCommand(float dt) {
+        const arm_lib::JointCommand<ARM_JOINT_COUNT>& command =
+            controller_.command();
+
+        if (command.mode == arm_lib::JointCommandMode::kDisabled) {
+            StageRelaxAllJoints();
+            return 0;
+        }
+        if (!command.valid) {
+            return -1;
+        }
+
+        int8_t ret = 0;
+        for (size_t i = 0; i < JOINT_NUM; ++i) {
+            IJoint* joint = joints_[i];
+            if (joint == nullptr || !joint->IsOnline()) {
+                ret = -1;
+                continue;
+            }
+
+            if (command.mode == arm_lib::JointCommandMode::kTorque) {
+                if (joint->TorqueControl(command.torque_ff[i][0]) != 0) {
+                    ret = -1;
+                }
+                continue;
+            }
+
+            joint->SetTargetAngle(command.q[i][0]);
+            joint->SetFeedforwardTorque(command.torque_ff[i][0]);
+            if (joint->PositionControl(command.q[i][0], dt) != 0) {
+                ret = -1;
+            }
+        }
+        pending_relax_ = false;
+        return ret;
+    }
+
+    float MotionProgress() const {
+        const auto& diagnostics = controller_.diagnostics();
+        if (diagnostics.motion_duration <= 1.0e-6f) {
+            return 1.0f;
+        }
+        const float progress =
+            diagnostics.motion_time / diagnostics.motion_duration;
         if (progress < 0.0f) {
             return 0.0f;
         }
@@ -668,27 +788,30 @@ public:
         return progress;
     }
 
-    bool IsJointTrajActive() const {
-        return joint_traj_.active;
-    }
-
-    void ResetError() {
-        control_.state = MotionState::REACHED;
-        control_.enable = true;
-        inverse_kinematics_.valid = true;
-        traj_.valid = true;
-        traj_.active = false;
-        traj_.elapsed = 0.0f;
-
-        ArmJointAngles_t q{};
-        arm::fill_current_joint_angles(joints_, &q);
-        arm::set_joint_targets_to_current(joints_);
-        inverse_kinematics_.angles = q;
-        traj_.angles = q;
-        traj_.goal = end_effector_.current;
-        traj_.start = end_effector_.current;
-        end_effector_.target = end_effector_.current;
-    }
+    std::array<IJoint*, JOINT_NUM> joints_;
+    arm_lib::SerialChain<ARM_JOINT_COUNT> chain_;
+    Controller controller_;
+    bool chain_configured_;
+    ControlMode mode_;
+    MotionState state_;
+    float position_tolerance_;
+    bool enable_;
+    bool gravity_comp_enable_;
+    float gravity_torques_[JOINT_NUM];
+    float gravity_scales_[JOINT_NUM];
+    ArmPose_t current_pose_;
+    ArmPose_t target_pose_;
+    ArmJointAngles_t target_joints_;
+    ArmJointAngles_t ik_angles_;
+    bool ik_valid_;
+    bool target_joints_valid_;
+    float max_lin_vel_;
+    float max_ang_vel_;
+    float max_lin_acc_;
+    float max_ang_acc_;
+    float joint_traj_max_velocity_[JOINT_NUM];
+    float joint_traj_max_acceleration_[JOINT_NUM];
+    bool pending_relax_;
 };
 
-}  // namespace mrobot
+}  // namespace mr

@@ -4,21 +4,24 @@
 
 #pragma once
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include <stdint.h>
 #include "component/pid.h"
 #include "device/motor.h"
 #include "device/motor_rm.h"
 #include "module/chassis.h"
 #include "module/pole.h"
+#include "module/arm/arm_control_types.h"
 #include "module/cmd/cmd.h"
 #include "module/rod.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef struct {
     Chassis_Params_t chassis_param;
     Pole_Params_t pole_param;
+    Arm_Params_t arm_param;
     struct {
         /* 通用姿态修正参数：所有带自动矫正的模板都会用到 */
         float prealign_kp;                  /* yaw误差映射到wz指令的比例系数 */

@@ -3,7 +3,7 @@
 #include "component/user_math.h"
 #include "device/device.h"
 
-namespace mrobot::motor {
+namespace mr::motor {
 
 namespace {
 
@@ -43,7 +43,7 @@ MotorProtocolState DecodeLzProtocolState(uint8_t state_bits, uint32_t fault_code
         case MOTOR_LZ_STATE_RESET:
             return MotorProtocolState::Disabled;
         case MOTOR_LZ_STATE_CALI:
-            return MotorProtocolState::Relaxed;
+            return MotorProtocolState::Enabled;
         default:
             return MotorProtocolState::Registered;
     }
@@ -207,18 +207,23 @@ int8_t MotorProtocol<MotorKind::LZ, Model>::Disable() {
 template <MotorModel Model>
 int8_t MotorProtocol<MotorKind::LZ, Model>::Relax() {
     ClearPendingCommand();
-    if (instance_ != nullptr && instance_->motor.header.online) {
-        const uint32_t fault_code = EncodeFaultBits(instance_->lz_feedback.fault_bits);
-        if (fault_code == 0u && instance_->lz_feedback.state_bits == MOTOR_LZ_STATE_CALI) {
-            state_.protocol_state = MotorProtocolState::Relaxed;
-            state_.protocol_status_code = instance_->lz_feedback.state_bits;
-            state_.protocol_fault = fault_code;
-            return DEVICE_OK;
-        }
-    }
     const int8_t ret = MOTOR_LZ_Relax(&param_);
     if (ret == DEVICE_OK) {
-        state_.protocol_state = MotorProtocolState::Relaxed;
+        state_.protocol_state = MotorProtocolState::Enabled;
+    }
+    return ret;
+}
+
+template <MotorModel Model>
+int8_t MotorProtocol<MotorKind::LZ, Model>::SetZero() {
+    ClearPendingCommand();
+    const int8_t ret = MOTOR_LZ_SetZero(&param_);
+    if (ret == DEVICE_OK) {
+        state_.position_rad = 0.0f;
+        state_.position_single_turn_rad = 0.0f;
+        state_.last_commit_ok = true;
+    } else {
+        state_.last_commit_ok = false;
     }
     return ret;
 }
@@ -226,9 +231,7 @@ int8_t MotorProtocol<MotorKind::LZ, Model>::Relax() {
 template <MotorModel Model>
 int8_t MotorProtocol<MotorKind::LZ, Model>::Update() {
     const int8_t ret = MOTOR_LZ_Update(&param_);
-    if (ret == DEVICE_OK) {
-        RefreshStateCache();
-    }
+    RefreshStateCache();
     return ret;
 }
 
@@ -328,4 +331,4 @@ template class MotorProtocol<MotorKind::LZ, MotorModel::RSO4>;
 template class MotorProtocol<MotorKind::LZ, MotorModel::RSO5>;
 template class MotorProtocol<MotorKind::LZ, MotorModel::RSO6>;
 
-} // namespace mrobot::motor
+} // namespace mr::motor

@@ -4,6 +4,14 @@ crc16:
 crc8:
   dependencies: []
   enabled: true
+controller:
+  dependencies:
+  - component/math
+  enabled: true
+filter:
+  dependencies:
+  - component/math
+  enabled: true
 limiter:
   dependencies: []
   enabled: true

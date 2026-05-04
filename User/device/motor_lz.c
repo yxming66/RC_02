@@ -33,6 +33,7 @@
 #define LZ_POSITION_CTRL_KP         (40.0f)
 #define LZ_POSITION_CTRL_KD         (1.5f)
 #define LZ_VELOCITY_CTRL_KD         (3.0f)
+#define LZ_FEEDBACK_TIMEOUT_US      (100000u)
 
 /* Private macro ------------------------------------------------------------ */
 
@@ -302,10 +303,20 @@ int8_t MOTOR_LZ_Update(MOTOR_LZ_Param_t *param) {
     uint32_t original_feedback_id = MOTOR_LZ_BuildExtID(MOTOR_LZ_CMD_FEEDBACK, param->motor_id, param->host_id);
     uint32_t parsed_feedback_id = MOTOR_LZ_IdParser(original_feedback_id, BSP_CAN_FRAME_EXT_DATA);
     BSP_CAN_Message_t msg;
+    bool got_feedback = false;
     while (BSP_CAN_GetMessage(param->can, parsed_feedback_id, &msg, 0) == BSP_OK) {
         MOTOR_LZ_Decode(motor, &msg);
+        got_feedback = true;
     }
-    return DEVICE_OK;
+    if (got_feedback) {
+        return DEVICE_OK;
+    }
+    const uint64_t now_time = BSP_TIME_Get();
+    if (now_time - motor->motor.header.last_online_time > LZ_FEEDBACK_TIMEOUT_US) {
+        motor->motor.header.online = false;
+        return DEVICE_ERR_NO_DEV;
+    }
+    return DEVICE_ERR;
 }
 
 int8_t MOTOR_LZ_UpdateAll(void) {

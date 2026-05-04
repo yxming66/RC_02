@@ -133,13 +133,23 @@ void Task_sick(void *argument) {
   uint32_t tick = osKernelGetTickCount(); /* 控制任务运行频率的计时 */
   /* USER CODE INIT BEGIN */
   int i;
+  uint8_t registered_count = 0u;
 
-  BSP_CAN_Init();
+  const int8_t can_init_ret = BSP_CAN_Init();
+  if (can_init_ret != BSP_OK && can_init_ret != BSP_ERR_INITED) {
+    osThreadTerminate(osThreadGetId());
+    return;
+  }
   for (i = 0; i < 4; i++) {
     const int8_t reg_ret = BSP_CAN_RegisterId(BSP_CAN_3, sick_can_id[i], SICK_CAN_QUEUE_SIZE);
     if (reg_ret == BSP_OK || BSP_CAN_GetQueueCount(BSP_CAN_3, sick_can_id[i]) >= 0) {
       sick_can_available[i] = true;
+      registered_count++;
     }
+  }
+  if (registered_count == 0u) {
+    osThreadTerminate(osThreadGetId());
+    return;
   }
 
   /* USER CODE INIT END */
@@ -166,6 +176,7 @@ void Task_sick(void *argument) {
       distance_cm[i] = (float)(calibrated_m * 100.0);
     }
     /* USER CODE END */
+    task_runtime.stack_water_mark.sick = uxTaskGetStackHighWaterMark(NULL);
     osDelayUntil(tick); /* 运行结束，等待下一次唤醒 */
   }
   

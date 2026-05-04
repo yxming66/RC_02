@@ -4,11 +4,11 @@
 #include <cmath>
 #include <cstring>
 
-#include "component/arm_lib/model/joint_mapping.h"
+#include "robotics/arm/model/joint_mapping.h"
 #include "component/user_math.h"
 #include "device/motor/motor.hpp"
 
-namespace mrobot {
+namespace mr {
 
 // Reuse the arm_lib chain-model joint descriptors so the runtime layer and
 // kinematic model share the same transmission and coupling semantics.
@@ -33,6 +33,7 @@ public:
     virtual int8_t Enable() = 0;
     virtual int8_t Update() = 0;
     virtual int8_t Relax() = 0;
+    virtual int8_t SetZero() = 0;
     virtual int8_t CommitControl() = 0;
     virtual bool HasPendingControl() const = 0;
     virtual void ClearPendingControl() = 0;
@@ -53,7 +54,8 @@ public:
     int8_t Register() override { return motor_ ? motor_->Register() : -1; }
     int8_t Enable() override { return motor_ ? motor_->Enable() : -1; }
     int8_t Update() override { return motor_ ? motor_->Update() : -1; }
-    int8_t Relax() override { return motor_ ? motor_->Disable() : -1; }
+    int8_t Relax() override { return motor_ ? motor_->Relax() : -1; }
+    int8_t SetZero() override { return motor_ ? motor_->SetZero() : -1; }
     int8_t CommitControl() override { return motor_ ? motor_->CommitCommand() : -1; }
     bool HasPendingControl() const override { return motor_ ? motor_->HasPendingCommand() : false; }
     void ClearPendingControl() override {
@@ -70,7 +72,7 @@ public:
         if (!motor_) {
             return state;
         }
-        const mrobot::motor::MotorState motor_state = motor_->GetState();
+        const mr::motor::MotorState motor_state = motor_->GetState();
         state.position = motor_state.position_rad;
         state.velocity = motor_state.velocity_rad_s;
         state.torque = motor_state.torque_nm;
@@ -103,6 +105,11 @@ public:
     virtual const JointControlParams& GetParams() const = 0;
     virtual float GetOffset() const = 0;
     virtual float GetFeedforwardTorque() const = 0;
+    virtual float GetMotorCommandPosition() const = 0;
+    virtual float GetMotorCommandVelocity() const = 0;
+    virtual float GetMotorCommandTorque() const = 0;
+    virtual float GetMotorCommandKp() const = 0;
+    virtual float GetMotorCommandKd() const = 0;
 
     virtual void SetOffset(float offset) = 0;
     virtual void SetTargetAngle(float target) = 0;
@@ -112,6 +119,7 @@ public:
     virtual int8_t Enable() = 0;
     virtual int8_t Update() = 0;
     virtual int8_t Relax() = 0;
+    virtual int8_t SetZero() = 0;
     virtual int8_t CommitControl() = 0;
     virtual bool HasPendingControl() const = 0;
     virtual void ClearPendingControl() = 0;
@@ -144,6 +152,11 @@ public:
         state_.current_torque = 0.0f;
         state_.target_angle = 0.0f;
         state_.feedforward_torque = 0.0f;
+        state_.motor_command_position = 0.0f;
+        state_.motor_command_velocity = 0.0f;
+        state_.motor_command_torque = 0.0f;
+        state_.motor_command_kp = 0.0f;
+        state_.motor_command_kd = 0.0f;
         state_.online = false;
     }
 
@@ -160,6 +173,11 @@ public:
     const JointControlParams& GetParams() const override { return params_; }
     float GetOffset() const override { return q_offset_; }
     float GetFeedforwardTorque() const override { return state_.feedforward_torque; }
+    float GetMotorCommandPosition() const override { return state_.motor_command_position; }
+    float GetMotorCommandVelocity() const override { return state_.motor_command_velocity; }
+    float GetMotorCommandTorque() const override { return state_.motor_command_torque; }
+    float GetMotorCommandKp() const override { return state_.motor_command_kp; }
+    float GetMotorCommandKd() const override { return state_.motor_command_kd; }
 
     void SetName(const char* name) {
         if (name == nullptr) {
@@ -237,10 +255,7 @@ public:
         const int8_t ret = actuator_ ? actuator_->Update() : -1;
         const ActuatorState actuator_state = actuator_ ? actuator_->GetState() : ActuatorState();
 
-        float joint_angle = DecodeJointPosition(actuator_state.position);
-        joint_angle = NormalizeJointAngle(joint_angle);
-
-        state_.current_angle = joint_angle;
+        state_.current_angle = DecodeJointPosition(actuator_state.position);
         state_.current_velocity = DecodeJointVelocity(actuator_state.velocity);
         state_.current_torque = actuator_state.torque;
         state_.online = actuator_state.online;
@@ -249,6 +264,25 @@ public:
 
     int8_t Relax() override {
         return actuator_ ? actuator_->Relax() : -1;
+    }
+
+    int8_t SetZero() override {
+        if (actuator_ == nullptr) {
+            return -1;
+        }
+        const int8_t ret = actuator_->SetZero();
+        if (ret == 0) {
+            q_offset_ = 0.0f;
+            state_.current_angle = 0.0f;
+            state_.current_velocity = 0.0f;
+            state_.target_angle = 0.0f;
+            state_.motor_command_position = 0.0f;
+            state_.motor_command_velocity = 0.0f;
+            state_.motor_command_torque = 0.0f;
+            state_.motor_command_kp = 0.0f;
+            state_.motor_command_kd = 0.0f;
+        }
+        return ret;
     }
 
     int8_t CommitControl() override {
@@ -263,6 +297,11 @@ public:
         if (actuator_) {
             actuator_->ClearPendingControl();
         }
+        state_.motor_command_position = 0.0f;
+        state_.motor_command_velocity = 0.0f;
+        state_.motor_command_torque = 0.0f;
+        state_.motor_command_kp = 0.0f;
+        state_.motor_command_kd = 0.0f;
     }
 
     int8_t PositionControl(float target_angle, float dt) override {
@@ -282,9 +321,16 @@ public:
             kd = (id_ < 3U) ? 0.5f : 3.0f;
         }
 
+        const float actuator_position = EncodeActuatorPosition(target_angle);
+        state_.motor_command_position = actuator_position;
+        state_.motor_command_velocity = 0.0f;
+        state_.motor_command_torque = state_.feedforward_torque;
+        state_.motor_command_kp = kp;
+        state_.motor_command_kd = kd;
+
         return actuator_ ? actuator_->SetMIT(
-            EncodeActuatorPosition(target_angle),
-            0.0f,
+            actuator_position,
+            state_.motor_command_velocity,
             kp,
             kd,
             state_.feedforward_torque) : -1;
@@ -292,6 +338,11 @@ public:
 
     int8_t TorqueControl(float torque) override {
         state_.feedforward_torque = torque;
+        state_.motor_command_position = 0.0f;
+        state_.motor_command_velocity = 0.0f;
+        state_.motor_command_torque = torque;
+        state_.motor_command_kp = 0.0f;
+        state_.motor_command_kd = 0.0f;
         return actuator_ ? actuator_->SetTorque(torque) : -1;
     }
 
@@ -306,6 +357,11 @@ private:
         float current_torque;
         float target_angle;
         float feedforward_torque;
+        float motor_command_position;
+        float motor_command_velocity;
+        float motor_command_torque;
+        float motor_command_kp;
+        float motor_command_kd;
         bool online;
     };
 
@@ -348,20 +404,6 @@ private:
             transmission_, joint_position, SumCoupledJointAngles(), q_offset_);
     }
 
-    float NormalizeJointAngle(float angle) const {
-        const bool multi_turn = (params_.qmax - params_.qmin) > 2.0f * M_PI;
-        if (multi_turn) {
-            return angle;
-        }
-        if (angle > M_PI) {
-            angle -= 2.0f * M_PI;
-        }
-        if (angle < -M_PI) {
-            angle += 2.0f * M_PI;
-        }
-        return angle;
-    }
-
     uint8_t id_;
     IActuator* actuator_;
     JointControlParams params_;
@@ -373,9 +415,11 @@ private:
     JointStateCache state_;
 };
 
-using DmActuator = MotorActuatorAdapter<mrobot::motor::DmJ4310Motor>;
-using LzActuator = MotorActuatorAdapter<mrobot::motor::LzRso3Motor>;
+using DmJ4310Actuator = MotorActuatorAdapter<mr::motor::DmJ4310Motor>;
+using DmJ4340Actuator = MotorActuatorAdapter<mr::motor::DmJ4340Motor>;
+using DmActuator = DmJ4310Actuator;
+using LzActuator = MotorActuatorAdapter<mr::motor::LzRso3Motor>;
 using DmJoint = JointT;
 using LzJoint = JointT;
 
-} // namespace mrobot
+} // namespace mr

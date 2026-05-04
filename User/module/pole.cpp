@@ -13,13 +13,13 @@
 #include "device/motor/factory/motor_factory.hpp"
 #include "device/motor/packages/controller/motor_controller.hpp"
 
-using mrobot::motor::MotorControllerConfig;
-using mrobot::motor::MotorControllerT;
-using mrobot::motor::MotorFactory;
-using mrobot::motor::MotorInstallSpec;
-using mrobot::motor::MotorInstanceConfig;
-using mrobot::motor::MotorState;
-using mrobot::motor::RmM3508Motor;
+using mr::motor::MotorControllerConfig;
+using mr::motor::MotorControllerT;
+using mr::motor::MotorFactory;
+using mr::motor::MotorInstallSpec;
+using mr::motor::MotorInstanceConfig;
+using mr::motor::MotorState;
+using mr::motor::RmM3508Motor;
 
 using PoleMotor = RmM3508Motor;
 using PoleMotorController = MotorControllerT<PoleMotor>;
@@ -465,8 +465,8 @@ int8_t Pole_Init(Pole_t *c, const Pole_Params_t *param, float target_freq) {
     LowPassFilter2p_Init(&c->filter.support_out[i], target_freq, output_cutoff_hz);
     LowPassFilter2p_Reset(&c->filter.support_out[i], 0.0f);
 
-    const auto motor_config = MotorInstanceConfig<mrobot::motor::MotorKind::RM>::FromVendorParam(c->param->motor_param[i]);
-    PoleMotorHandle(c, i) = MotorFactory::Create<mrobot::motor::MotorKind::RM, mrobot::motor::MotorModel::M3508>(motor_config, PoleInstallSpec(c, i));
+    const auto motor_config = MotorInstanceConfig<mr::motor::MotorKind::RM>::FromVendorParam(c->param->motor_param[i]);
+    PoleMotorHandle(c, i) = MotorFactory::Create<mr::motor::MotorKind::RM, mr::motor::MotorModel::M3508>(motor_config, PoleInstallSpec(c, i));
     if (PoleMotorHandle(c, i) == nullptr) {
       return POLE_ERR;
     }

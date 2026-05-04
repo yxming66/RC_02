@@ -67,7 +67,6 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     User/component/crc8.c
     User/component/filter.c
     User/component/limiter.c
-    User/component/mixer.c
     User/component/pid.c
     User/component/user_math.c
     User/component/ahrs.c
@@ -85,32 +84,38 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     User/device/motor/protocol/lz_protocol.cpp
     User/device/motor/packages/controller/motor_controller.cpp
     User/device/motor/packages/soft_limit_learning/soft_limit_learning.cpp
+    User/device/wheel/wheel.cpp
     User/component/toolbox/matrix.cpp
     User/component/toolbox/robotics.cpp
     User/component/toolbox/utils.cpp
-    User/component/arm_lib/adapter/toolbox_adapter.cpp
-    User/component/arm_lib/model/joint.cpp
-    User/component/arm_lib/model/link.cpp
-    User/component/arm_lib/model/serial_chain.cpp
-    User/component/arm_lib/model/tool_frame.cpp
-    User/component/arm_lib/parser/chain_builder.cpp
-    User/component/arm_lib/parser/urdf_loader.cpp
-    User/component/arm_lib/kinematics/fk.cpp
-    User/component/arm_lib/kinematics/jacobian.cpp
-    User/component/arm_lib/kinematics/pose_error.cpp
-    User/component/arm_lib/kinematics/ik.cpp
-    User/component/arm_lib/kinematics/ik_analytic.cpp
-    User/component/arm_lib/kinematics/ik_3r_planar.cpp
-    User/component/arm_lib/kinematics/ik_numeric.cpp
-    User/component/arm_lib/solver/lm_solver.cpp
-    User/component/arm_lib/solver/nr_solver.cpp
-    User/component/arm_lib/solver/seed_policy.cpp
-    User/component/arm_lib/dynamics/gravity.cpp
-    User/component/arm_lib/trajectory/interpolation.cpp
-    User/component/arm_lib/trajectory/joint_traj.cpp
-    User/component/arm_lib/trajectory/cartesian_traj.cpp
+    User/robotics/arm/adapter/toolbox_adapter.cpp
+    User/robotics/arm/model/joint.cpp
+    User/robotics/arm/model/link.cpp
+    User/robotics/arm/model/serial_chain.cpp
+    User/robotics/arm/model/tool_frame.cpp
+    User/robotics/arm/parser/chain_builder.cpp
+    User/robotics/arm/parser/dh_loader.cpp
+    User/robotics/arm/parser/urdf_loader.cpp
+    User/robotics/arm/kinematics/fk.cpp
+    User/robotics/arm/kinematics/jacobian.cpp
+    User/robotics/arm/kinematics/pose_error.cpp
+    User/robotics/arm/kinematics/ik.cpp
+    User/robotics/arm/kinematics/ik_analytic.cpp
+    User/robotics/arm/kinematics/ik_numeric.cpp
+    User/robotics/arm/kinematics/analytic_solvers/ik_3r_planar.cpp
+    User/robotics/arm/kinematics/analytic_solvers/ik_6r_pieper.cpp
+    User/robotics/arm/solver/lm_solver.cpp
+    User/robotics/arm/solver/nr_solver.cpp
+    User/robotics/arm/solver/seed_policy.cpp
+    User/robotics/arm/dynamics/gravity.cpp
+    User/robotics/arm/trajectory/interpolation.cpp
+    User/robotics/arm/trajectory/joint_traj.cpp
+    User/robotics/arm/trajectory/cartesian_traj.cpp
+    User/robotics/arm/control/joint_servo.cpp
+    User/robotics/arm/control/cartesian_servo.cpp
+    User/robotics/arm/application/three_pit_cartesian_app.cpp
     # User/module sources
-    User/module/chassis.cpp
+    User/module/chassis/mecanum.cpp
     User/module/pole.c
     User/module/rod.cpp
     User/module/autoCtrlAPI/api/auto_ctrl_api.c
@@ -131,7 +136,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
 
     # User/task sources
     User/task/blink.c
-    User/task/chassis_main.c
+    User/task/chassis_main.cpp
     User/task/cmd_main.c
     User/task/init.c
     User/task/rc_main.c

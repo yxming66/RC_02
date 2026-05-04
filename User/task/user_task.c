@@ -47,7 +47,7 @@ const osThreadAttr_t attr_auto_ctrl = {
 const osThreadAttr_t attr_arm = {
     .name = "arm",
     .priority = osPriorityNormal,
-    .stack_size = 256 * 4,
+    .stack_size = 2048 * 4,
 };
 const osThreadAttr_t attr_rod = {
     .name = "rod",

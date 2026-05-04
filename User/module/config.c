@@ -21,10 +21,10 @@
 Config_RobotParam_t robot_config = {
   .chassis_param = {
     .motor_param = {
-      [0] = {.can = BSP_CAN_1, .id = 0x201, .module = MOTOR_M3508, .reverse = false, .gear = true},
-      [1] = {.can = BSP_CAN_1, .id = 0x202, .module = MOTOR_M3508, .reverse = false, .gear = true},
-      [2] = {.can = BSP_CAN_1, .id = 0x203, .module = MOTOR_M3508, .reverse = false, .gear = true},
-      [3] = {.can = BSP_CAN_1, .id = 0x204, .module = MOTOR_M3508, .reverse = false, .gear = true},
+      [0] = {.can = BSP_CAN_2, .id = 0x201, .module = MOTOR_M3508, .reverse = false, .gear = true},
+      [1] = {.can = BSP_CAN_2, .id = 0x202, .module = MOTOR_M3508, .reverse = false, .gear = true},
+      [2] = {.can = BSP_CAN_2, .id = 0x203, .module = MOTOR_M3508, .reverse = false, .gear = true},
+      [3] = {.can = BSP_CAN_2, .id = 0x204, .module = MOTOR_M3508, .reverse = false, .gear = true},
     },
     .pid = {
       .follow_pid_param = {
@@ -68,10 +68,10 @@ Config_RobotParam_t robot_config = {
   },
 .pole_param = {
         .motor_param = {
-            [0] = {.can = BSP_CAN_2, .id = 0x201, .module = MOTOR_M3508, .reverse = false, .gear = true},
-            [1] = {.can = BSP_CAN_2, .id = 0x202, .module = MOTOR_M3508, .reverse = true, .gear = true},
-            [2] = {.can = BSP_CAN_2, .id = 0x203, .module = MOTOR_M3508, .reverse = false, .gear = true},
-            [3] = {.can = BSP_CAN_2, .id = 0x204, .module = MOTOR_M3508, .reverse = true, .gear = true},
+            [0] = {.can = BSP_CAN_1, .id = 0x201, .module = MOTOR_M3508, .reverse = true,.gear = true},
+            [1] = {.can = BSP_CAN_1, .id = 0x202, .module = MOTOR_M3508, .reverse = true, .gear = true},
+            [2] = {.can = BSP_CAN_1, .id = 0x203, .module = MOTOR_M3508, .reverse = true, .gear = true},
+            [3] = {.can = BSP_CAN_1, .id = 0x204, .module = MOTOR_M3508, .reverse = false, .gear = true},
         },
         .pid = {
             .support_pos_pid = {
@@ -108,6 +108,54 @@ Config_RobotParam_t robot_config = {
             .support_total_travel = 26.0f,
             .support_lift_speed = 50.0f,
         },
+    },
+    .arm_param = {
+      .joint1_motor_param = {
+        .can = BSP_CAN_3,
+        .motor_id = 127,
+        .host_id = 0xff,
+        .module = MOTOR_LZ_RSO3,
+        .reverse = true,
+        .mode = MOTOR_LZ_MODE_MOTION,
+      },
+      .joint2_motor_param = {
+        .can = BSP_CAN_3,
+        .master_id = 0x11,
+        .can_id = 0x01,
+        .module = MOTOR_DM_J4340,
+        .reverse = false,
+      },
+      .joint3_motor_param = {
+        .can = BSP_CAN_3,
+        .master_id = 0x13,
+        .can_id = 0x03,
+        .module = MOTOR_DM_J4310,
+        .reverse = false,
+      },
+      .joint_kp = {6.0f, 8.0f, 10.0f},
+      .joint_kd = {0.20f, 0.20f, 0.15f},
+      .gravity_comp_scale = {1.0f, 1.0f, 1.0f},
+      .remote_cartesian = {
+        .input_deadzone = 0.05f,
+        .max_y_velocity = 0.30f,
+        .max_z_velocity = 0.30f,
+        .max_pitch_velocity = 1.0f,
+        .max_linear_velocity = 0.20f,
+        .max_angular_velocity = 1.0f,
+        .max_linear_acceleration = 0.50f,
+        .max_angular_acceleration = 2.0f,
+        .max_joint_step = 0.04f,
+        .joint_max_velocity = {2.0f, 2.0f, 2.0f},
+        .joint_max_acceleration = {5.0f, 5.0f, 5.0f},
+        .workspace = {
+          .y_min = -1.0f,
+          .y_max = 1.0f,
+          .z_min = -0.8f,
+          .z_max = 1.2f,
+          .pitch_min = -3.0f,
+          .pitch_max = 3.0f,
+        },
+      },
     },
     .auto_ctrl_param = {
       /* 通用姿态修正参数 */

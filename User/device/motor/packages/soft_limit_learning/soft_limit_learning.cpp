@@ -2,7 +2,7 @@
 
 #include <math.h>
 
-namespace mrobot::motor {
+namespace mr::motor {
 
 namespace {
 
@@ -282,4 +282,4 @@ SoftLimitLearningState SoftLimitLearning::ResolveIdleState() const {
     return HasRange() ? SoftLimitLearningState::Ready : SoftLimitLearningState::Idle;
 }
 
-} // namespace mrobot::motor
+} // namespace mr::motor

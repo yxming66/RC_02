@@ -38,6 +38,7 @@ void Task_cmd_main(void *argument) {
     /* USER CODE BEGIN */
 
     /* USER CODE END */
+    task_runtime.stack_water_mark.cmd_main = uxTaskGetStackHighWaterMark(NULL);
     osDelayUntil(tick); /* 运行结束，等待下一次唤醒 */
   }
   

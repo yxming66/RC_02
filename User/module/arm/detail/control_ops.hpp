@@ -6,7 +6,7 @@
 #include "module/arm/arm_control_types.h"
 #include "device/joint/joint.hpp"
 
-namespace mrobot {
+namespace mr {
 namespace arm {
 
 struct PositionDriveResult {
@@ -142,4 +142,4 @@ inline void drive_torque_targets_and_commit(
 }
 
 }  // namespace arm
-}  // namespace mrobot
+}  // namespace mr

@@ -29,24 +29,8 @@
 #define AUTO_CTRL_RC_YAW_TOLERANCE_RAD (0.0872664626f)
 #endif
 
-#ifndef AUTO_CTRL_RC_DIR_THRESHOLD
-#define AUTO_CTRL_RC_DIR_THRESHOLD (0.35f)
-#endif
-
 #ifndef AUTO_CTRL_OUTPUT_ENABLE
 #define AUTO_CTRL_OUTPUT_ENABLE (1u)
-#endif
-
-#ifndef ARM_RC_Y_SPEED_MPS
-#define ARM_RC_Y_SPEED_MPS (0.08f)
-#endif
-
-#ifndef ARM_RC_Z_SPEED_MPS
-#define ARM_RC_Z_SPEED_MPS (0.08f)
-#endif
-
-#ifndef ARM_RC_PITCH_RATE_RAD_S
-#define ARM_RC_PITCH_RATE_RAD_S (0.45f)
 #endif
 
 /* USER STRUCT BEGIN */
@@ -60,9 +44,6 @@ static Rod_CMD_t rod_cmd;
 extern bool reset;
 extern auto_ctrl_t auto_ctrl;
 extern bool auto_ctrl_inited;
-
-static auto_ctrl_travel_dir_e auto_ctrl_requested_dir =
-    AUTO_CTRL_TRAVEL_DIR_HEAD_FORWARD;
 
 static void Rc_SetRodRelax(void) {
   rod_cmd.mode = ROD_MODE_RELAX;
@@ -103,24 +84,22 @@ static void Rc_SetArmDisabled(void) {
   arm_cmd.frame = ARM_CTRL_FRAME_WORLD;
 }
 
-static void Rc_SetArmRemoteCartesian(ArmControlFrame_t frame,
-                                     bool sync_target) {
-  memset(&arm_cmd.joy_vel, 0, sizeof(arm_cmd.joy_vel));
-  memset(&arm_cmd.target_delta, 0, sizeof(arm_cmd.target_delta));
-  arm_cmd.enable = true;
-  arm_cmd.set_target_as_current = sync_target;
-  arm_cmd.ctrl_type = ARM_CTRL_REMOTE_CARTESIAN;
-  arm_cmd.frame = frame;
-  arm_cmd.joy_vel.y = ARM_RC_Y_SPEED_MPS * dr16.data.ch_r_y;
-  arm_cmd.joy_vel.z = ARM_RC_Z_SPEED_MPS * dr16.data.ch_l_y;
-  arm_cmd.joy_vel.pitch = -ARM_RC_PITCH_RATE_RAD_S * dr16.data.ch_l_x;
-}
-
-static void Rc_SetAutoDryRunCommands(void) {
+static void Rc_SetChassisRelax(void) {
   chassis_cmd.mode = CHASSIS_MODE_RELAX;
   chassis_cmd.ctrl_vec.vx = 0.0f;
   chassis_cmd.ctrl_vec.vy = 0.0f;
   chassis_cmd.ctrl_vec.wz = 0.0f;
+}
+
+static void Rc_SetChassisRemote(void) {
+  chassis_cmd.mode = CHASSIS_MODE_INDEPENDENT;
+  chassis_cmd.ctrl_vec.vx = dr16.data.ch_r_x;
+  chassis_cmd.ctrl_vec.vy = dr16.data.ch_r_y;
+  chassis_cmd.ctrl_vec.wz = dr16.data.ch_l_x;
+}
+
+static void Rc_SetAutoDryRunCommands(void) {
+  Rc_SetChassisRelax();
 
   Rc_SetPoleManual(0.0f, 0.0f);
   pole_cmd.mode = POLE_MODE_RELAX;
@@ -129,17 +108,8 @@ static void Rc_SetAutoDryRunCommands(void) {
 static bool Rc_ShouldExitAutoCtrlBySwitch(void) {
   return dr16.header.online &&
          (dr16.data.sw_l == DR16_SW_MID || dr16.data.sw_l == DR16_SW_DOWN) &&
-         last_sw_r == DR16_SW_UP && dr16.data.sw_r == DR16_SW_MID;
-}
-
-static auto_ctrl_travel_dir_e Rc_GetRequestedAutoCtrlDir(void) {
-  if (dr16.data.ch_r_x <= -AUTO_CTRL_RC_DIR_THRESHOLD) {
-    return AUTO_CTRL_TRAVEL_DIR_TAIL_FORWARD;
-  }
-  if (dr16.data.ch_r_x >= AUTO_CTRL_RC_DIR_THRESHOLD) {
-    return AUTO_CTRL_TRAVEL_DIR_HEAD_FORWARD;
-  }
-  return auto_ctrl_requested_dir;
+         (last_sw_r == DR16_SW_UP || last_sw_r == DR16_SW_DOWN) &&
+         dr16.data.sw_r == DR16_SW_MID;
 }
 
 static void Rc_TryStartAutoCtrlBySwitch(uint32_t now_ms) {
@@ -147,7 +117,7 @@ static void Rc_TryStartAutoCtrlBySwitch(uint32_t now_ms) {
     return;
   }
 
-  if (dr16.data.sw_l != DR16_SW_DOWN) {
+  if (dr16.data.sw_l != DR16_SW_MID && dr16.data.sw_l != DR16_SW_DOWN) {
     return;
   }
 
@@ -155,19 +125,25 @@ static void Rc_TryStartAutoCtrlBySwitch(uint32_t now_ms) {
     return;
   }
 
-  auto_ctrl_requested_dir = Rc_GetRequestedAutoCtrlDir();
+  auto_ctrl_template_e template_id = AUTO_CTRL_TEMPLATE_NONE;
+  float target_yaw_rad = 0.0f;
 
   if (dr16.data.sw_r == DR16_SW_UP) {
-    (void)AutoCtrl_StartTemplate(
-        &auto_ctrl, AUTO_CTRL_TEMPLATE_ASCEND_400_STD,
-        auto_ctrl_requested_dir, AUTO_CTRL_RC_YAW_POS_90_RAD,
-        AUTO_CTRL_RC_YAW_TOLERANCE_RAD,
-        AUTO_CTRL_SENSOR_MODE_SICK_FRONT_AND_BOTTOM, now_ms);
+    target_yaw_rad = AUTO_CTRL_RC_YAW_POS_90_RAD;
+    template_id = (dr16.data.sw_l == DR16_SW_MID)
+                      ? AUTO_CTRL_TEMPLATE_ASCEND_200
+                      : AUTO_CTRL_TEMPLATE_ASCEND_400_STD;
   } else if (dr16.data.sw_r == DR16_SW_DOWN) {
+    target_yaw_rad = AUTO_CTRL_RC_YAW_NEG_90_RAD;
+    template_id = (dr16.data.sw_l == DR16_SW_MID)
+                      ? AUTO_CTRL_TEMPLATE_DESCEND_200
+                      : AUTO_CTRL_TEMPLATE_DESCEND_400_STD;
+  }
+
+  if (template_id != AUTO_CTRL_TEMPLATE_NONE) {
     (void)AutoCtrl_StartTemplate(
-        &auto_ctrl, AUTO_CTRL_TEMPLATE_DESCEND_400_STD,
-        auto_ctrl_requested_dir, AUTO_CTRL_RC_YAW_NEG_90_RAD,
-        AUTO_CTRL_RC_YAW_TOLERANCE_RAD,
+        &auto_ctrl, template_id, AUTO_CTRL_TRAVEL_DIR_HEAD_FORWARD,
+        target_yaw_rad, AUTO_CTRL_RC_YAW_TOLERANCE_RAD,
         AUTO_CTRL_SENSOR_MODE_SICK_FRONT_AND_BOTTOM, now_ms);
   }
 }
@@ -181,8 +157,14 @@ void Task_rc_main(void *argument) {
   osDelay(RC_MAIN_INIT_DELAY);
 
   uint32_t tick = osKernelGetTickCount();
-  DR16_Init(&dr16);
-  DR16_StartDmaRecv(&dr16);
+  if (DR16_Init(&dr16) != DEVICE_OK) {
+    osThreadTerminate(osThreadGetId());
+    return;
+  }
+  if (DR16_StartDmaRecv(&dr16) != DEVICE_OK) {
+    osThreadTerminate(osThreadGetId());
+    return;
+  }
   Rc_SetArmDisabled();
 
   while (1) {
@@ -197,10 +179,6 @@ void Task_rc_main(void *argument) {
     }
 
     now_ms = osKernelGetTickCount();
-
-    if (auto_ctrl_inited && !AutoCtrl_IsBusy(&auto_ctrl)) {
-      auto_ctrl_requested_dir = Rc_GetRequestedAutoCtrlDir();
-    }
 
     Rc_TryStartAutoCtrlBySwitch(now_ms);
 
@@ -256,36 +234,22 @@ void Task_rc_main(void *argument) {
       Rc_SetArmDisabled();
       Rc_SetRodRelax();
     } else if (dr16.data.sw_l == DR16_SW_MID) {
-      ArmControlFrame_t frame = ARM_CTRL_FRAME_WORLD;
-
       if (auto_ctrl_inited && AutoCtrl_IsBusy(&auto_ctrl)) {
-        AutoCtrl_Abort(&auto_ctrl);
+#if AUTO_CTRL_OUTPUT_ENABLE
+        chassis_cmd = auto_ctrl.chassis_cmd;
+        pole_cmd = auto_ctrl.pole_cmd;
+#else
+        Rc_SetAutoDryRunCommands();
+#endif
+      } else if (dr16.data.sw_r == DR16_SW_MID) {
+        Rc_SetChassisRemote();
+        Rc_SetPoleAuto(0.0f, 0.0f);
+      } else {
+        Rc_SetChassisRelax();
+        Rc_SetPoleAuto(0.0f, 0.0f);
       }
 
-      chassis_cmd.mode = CHASSIS_MODE_RELAX;
-      chassis_cmd.ctrl_vec.vx = 0.0f;
-      chassis_cmd.ctrl_vec.vy = 0.0f;
-      chassis_cmd.ctrl_vec.wz = 0.0f;
-      Rc_SetPoleManual(0.0f, 0.0f);
-      pole_cmd.mode = POLE_MODE_RELAX;
-
-      switch (dr16.data.sw_r) {
-        case DR16_SW_UP:
-          frame = ARM_CTRL_FRAME_WORLD;
-          break;
-        case DR16_SW_MID:
-          frame = ARM_CTRL_FRAME_TOOL;
-          break;
-        case DR16_SW_DOWN:
-          frame = ARM_CTRL_FRAME_HEADING;
-          break;
-        default:
-          frame = ARM_CTRL_FRAME_WORLD;
-          break;
-      }
-
-      Rc_SetArmRemoteCartesian(
-          frame, last_sw_l != DR16_SW_MID || last_sw_r != dr16.data.sw_r);
+      Rc_SetArmDisabled();
       Rc_SetRodRelax();
     } else if (dr16.data.sw_l == DR16_SW_DOWN) {
       if (auto_ctrl_inited && AutoCtrl_IsBusy(&auto_ctrl)) {
@@ -295,11 +259,11 @@ void Task_rc_main(void *argument) {
 #else
         Rc_SetAutoDryRunCommands();
 #endif
+      } else if (dr16.data.sw_r == DR16_SW_MID) {
+        Rc_SetChassisRemote();
+        Rc_SetPoleAuto(0.0f, 0.0f);
       } else {
-        chassis_cmd.mode = CHASSIS_MODE_INDEPENDENT;
-        chassis_cmd.ctrl_vec.vx = dr16.data.ch_r_x;
-        chassis_cmd.ctrl_vec.vy = dr16.data.ch_r_y;
-        chassis_cmd.ctrl_vec.wz = -dr16.data.ch_l_x;
+        Rc_SetChassisRelax();
         Rc_SetPoleAuto(0.0f, 0.0f);
       }
 
@@ -325,6 +289,7 @@ void Task_rc_main(void *argument) {
 
     last_sw_l = dr16.data.sw_l;
     last_sw_r = dr16.data.sw_r;
+    task_runtime.stack_water_mark.rc_main = uxTaskGetStackHighWaterMark(NULL);
     osDelayUntil(tick);
   }
 }

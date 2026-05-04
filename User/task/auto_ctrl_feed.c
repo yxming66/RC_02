@@ -18,7 +18,6 @@
 /* Private macro ------------------------------------------------------------ */
 /* Private variables -------------------------------------------------------- */
 /* USER STRUCT BEGIN */
-extern Chassis_t chassis;
 extern Chassis_IMU_t chassis_imu;
 extern float distance_cm[4];
 extern DR16_t dr16;
@@ -79,6 +78,7 @@ void Task_auto_ctrl(void *argument) {
       AutoCtrl_Update(&auto_ctrl, now_ms);
     }
 
+    task_runtime.stack_water_mark.auto_ctrl = uxTaskGetStackHighWaterMark(NULL);
     osDelayUntil(tick);
   }
 }

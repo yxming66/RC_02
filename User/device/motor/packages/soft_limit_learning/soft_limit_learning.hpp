@@ -4,7 +4,7 @@
 
 #include "device/motor/core/motor_state.hpp"
 
-namespace mrobot::motor {
+namespace mr::motor {
 
 struct SoftLimitRange {
     bool lower_valid = false;
@@ -85,4 +85,4 @@ private:
     float elapsed_seek_s_ = 0.0f;
 };
 
-} // namespace mrobot::motor
+} // namespace mr::motor

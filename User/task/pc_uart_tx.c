@@ -56,10 +56,16 @@ void Task_pc_uart_rx(void *argument) {
   osDelay(PC_UART_RX_INIT_DELAY);
 
   pc_uart_thread_id = osThreadGetId();
-  BSP_UART_RegisterCallback(BSP_UART_PC, BSP_UART_RX_CPLT_CB, PcUartRxCpltCallback);
+  if (BSP_UART_RegisterCallback(BSP_UART_PC, BSP_UART_RX_CPLT_CB,
+                                PcUartRxCpltCallback) != BSP_OK) {
+    osThreadTerminate(osThreadGetId());
+    return;
+  }
   last_tx_tick = osKernelGetTickCount();
 
   while (1) {
+    task_runtime.stack_water_mark.pc_uart_rx = uxTaskGetStackHighWaterMark(NULL);
+
     if ((osKernelGetTickCount() - last_tx_tick) >= PC_UART_TX_PERIOD_MS) {
       PcUart_SendTestFrame();
       last_tx_tick = osKernelGetTickCount();

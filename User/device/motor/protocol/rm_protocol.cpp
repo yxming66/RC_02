@@ -6,7 +6,7 @@
 #include "device/device.h"
 #include "device/motor.h"
 
-namespace mrobot::motor {
+namespace mr::motor {
 
 namespace {
 
@@ -260,7 +260,7 @@ int8_t MotorProtocol<MotorKind::RM, Model>::Relax() {
     if (ret != DEVICE_OK) {
         return ret;
     }
-    state_.protocol_state = MotorProtocolState::Relaxed;
+    state_.protocol_state = MotorProtocolState::Enabled;
     return MOTOR_RM_Ctrl(&param_);
 }
 
@@ -341,4 +341,4 @@ template class MotorProtocol<MotorKind::RM, MotorModel::M2006>;
 template class MotorProtocol<MotorKind::RM, MotorModel::M3508>;
 template class MotorProtocol<MotorKind::RM, MotorModel::M6020>;
 
-} // namespace mrobot::motor
+} // namespace mr::motor

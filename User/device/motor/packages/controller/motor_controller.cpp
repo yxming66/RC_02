@@ -4,7 +4,7 @@
 
 #include "component/user_math.h"
 
-namespace mrobot::motor {
+namespace mr::motor {
 
 namespace {
 
@@ -315,7 +315,7 @@ float MotorControllerT<MotorType>::ResolveTorqueLimit(float request_limit) const
     return 0.0f;
 }
 
-template class MotorControllerT<mrobot::motor::DmJ4310Motor>;
-template class MotorControllerT<mrobot::motor::RmM3508Motor>;
+template class MotorControllerT<mr::motor::DmJ4310Motor>;
+template class MotorControllerT<mr::motor::RmM3508Motor>;
 
-} // namespace mrobot::motor
+} // namespace mr::motor

@@ -183,10 +183,21 @@ void Task_atti_esti(void *argument) {
   /* USER CODE INIT BEGIN */
 
 
-  BMI088_Init(&bmi088,&cali_bmi088);
-  AHRS_Init(&chassis_ahrs, NULL, BMI088_GetUpdateFreq(&bmi088));
-  PID_Init(&imu_temp_ctrl_pid, KPID_MODE_NO_D,
-           1.0f / BMI088_GetUpdateFreq(&bmi088), &imu_temp_ctrl_pid_param);
+  if (BMI088_Init(&bmi088, &cali_bmi088) != DEVICE_OK) {
+    osThreadTerminate(osThreadGetId());
+    return;
+  }
+  if (AHRS_Init(&chassis_ahrs, NULL, BMI088_GetUpdateFreq(&bmi088)) !=
+      DEVICE_OK) {
+    osThreadTerminate(osThreadGetId());
+    return;
+  }
+  if (PID_Init(&imu_temp_ctrl_pid, KPID_MODE_NO_D,
+               1.0f / BMI088_GetUpdateFreq(&bmi088),
+               &imu_temp_ctrl_pid_param) != DEVICE_OK) {
+    osThreadTerminate(osThreadGetId());
+    return;
+  }
   BSP_PWM_Start(BSP_PWM_IMU_HEAT);
 
   /* 注册按钮回调函数并启用中断 */
@@ -281,6 +292,7 @@ void Task_atti_esti(void *argument) {
     BSP_PWM_SetComp(BSP_PWM_IMU_HEAT, PID_Calc(&imu_temp_ctrl_pid, 40.0f, bmi088.temp, 0.0f, 0.0f));
     
     /* USER CODE END */
+    task_runtime.stack_water_mark.atti_esti = uxTaskGetStackHighWaterMark(NULL);
     osDelayUntil(tick); /* 运行结束，等待下一次唤醒 */
   }
   

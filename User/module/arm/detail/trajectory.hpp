@@ -5,11 +5,11 @@
 #include "module/arm/arm_control_types.h"
 #include "module/arm/detail/kinematics.hpp"
 #include "module/arm/detail/utils.hpp"
-#include "component/arm_lib/trajectory/cartesian_traj.h"
-#include "component/arm_lib/trajectory/joint_traj.h"
+#include "robotics/arm/trajectory/cartesian_traj.h"
+#include "robotics/arm/trajectory/joint_traj.h"
 #include "device/joint/joint.hpp"
 
-namespace mrobot {
+namespace mr {
 namespace arm {
 
 struct CartesianTrajectoryStepResult {
@@ -110,4 +110,4 @@ inline JointTrajectoryStepResult step_joint_trajectory(
 }
 
 }  // namespace arm
-}  // namespace mrobot
+}  // namespace mr
