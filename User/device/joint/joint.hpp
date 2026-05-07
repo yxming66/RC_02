@@ -306,11 +306,36 @@ public:
 
     int8_t PositionControl(float target_angle, float dt) override {
         (void)dt;
-        if (target_angle < params_.qmin || target_angle > params_.qmax) {
+        if (!std::isfinite(target_angle) ||
+            !std::isfinite(state_.current_angle) ||
+            !std::isfinite(params_.qmin) ||
+            !std::isfinite(params_.qmax) ||
+            params_.qmin >= params_.qmax) {
             return -1;
         }
 
-        state_.target_angle = target_angle;
+        float limited_target = target_angle;
+        if (limited_target < params_.qmin) {
+            limited_target = params_.qmin;
+        } else if (limited_target > params_.qmax) {
+            limited_target = params_.qmax;
+        }
+
+        constexpr float kLimitBoundaryEpsilon = 1.0e-4f;
+        const bool at_lower_limit =
+            state_.current_angle <= params_.qmin + kLimitBoundaryEpsilon;
+        const bool at_upper_limit =
+            state_.current_angle >= params_.qmax - kLimitBoundaryEpsilon;
+        const bool pushing_lower = target_angle < state_.current_angle;
+        const bool pushing_upper = target_angle > state_.current_angle;
+        const bool blocked_by_limit =
+            (at_lower_limit && pushing_lower) ||
+            (at_upper_limit && pushing_upper);
+        if (blocked_by_limit) {
+            limited_target = state_.current_angle;
+        }
+
+        state_.target_angle = limited_target;
 
         float kp = params_.kp;
         float kd = params_.kd;
@@ -321,10 +346,12 @@ public:
             kd = (id_ < 3U) ? 0.5f : 3.0f;
         }
 
-        const float actuator_position = EncodeActuatorPosition(target_angle);
+        const float torque_ff =
+            blocked_by_limit ? 0.0f : state_.feedforward_torque;
+        const float actuator_position = EncodeActuatorPosition(limited_target);
         state_.motor_command_position = actuator_position;
         state_.motor_command_velocity = 0.0f;
-        state_.motor_command_torque = state_.feedforward_torque;
+        state_.motor_command_torque = torque_ff;
         state_.motor_command_kp = kp;
         state_.motor_command_kd = kd;
 
@@ -333,7 +360,7 @@ public:
             state_.motor_command_velocity,
             kp,
             kd,
-            state_.feedforward_torque) : -1;
+            torque_ff) : -1;
     }
 
     int8_t TorqueControl(float torque) override {
@@ -416,6 +443,7 @@ private:
 };
 
 using DmJ4310Actuator = MotorActuatorAdapter<mr::motor::DmJ4310Motor>;
+using DmJ4310PActuator = MotorActuatorAdapter<mr::motor::DmJ4310PMotor>;
 using DmJ4340Actuator = MotorActuatorAdapter<mr::motor::DmJ4340Motor>;
 using DmActuator = DmJ4310Actuator;
 using LzActuator = MotorActuatorAdapter<mr::motor::LzRso3Motor>;

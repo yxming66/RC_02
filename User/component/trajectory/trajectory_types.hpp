@@ -1,31 +1,39 @@
 #pragma once
 
-#include <cmath>
+/*
+ * 轨迹规划基础类型定义。
+ *
+ * 定义轨迹规划所需的基础类型：
+ *   - Scalar: 标量类型（float）
+ *   - ScalarMotionSample: 单轴运动采样结果（位置、速度、加速度）
+ *   - abs_scalar, clamp_scalar: 基础数学函数
+ *
+ * 业务代码通常包含具体轨迹头文件或聚合头文件即可：
+ *
+ *   #include "component/trajectory/trajectory.hpp"
+ */
+
 #include <stdint.h>
 
-namespace mr::component::trajectory {
+#include "component/math/scalar.hpp"
 
-using Scalar = float;
+namespace mr::comp::traj {
 
-constexpr Scalar kDefaultEpsilon = 1.0e-6f;
-constexpr Scalar kDefaultFiniteLimit = 1.0e30f;
+using Scalar = mr::component::math::Scalar;
+
+constexpr Scalar kDefaultEpsilon = mr::component::math::kDefaultEpsilon;
+constexpr Scalar kDefaultFiniteLimit = mr::component::math::kFiniteLimit;
 
 inline Scalar abs_scalar(Scalar value) {
-  return fabsf(value);
+  return mr::component::math::abs_scalar(value);
 }
 
 inline bool is_finite_scalar(Scalar value) {
-  return (value == value) && (abs_scalar(value) <= kDefaultFiniteLimit);
+  return mr::component::math::is_finite_scalar(value);
 }
 
 inline Scalar clamp_scalar(Scalar value, Scalar lower, Scalar upper) {
-  if (value < lower) {
-    return lower;
-  }
-  if (value > upper) {
-    return upper;
-  }
-  return value;
+  return mr::component::math::clamp_scalar(value, lower, upper);
 }
 
 struct ScalarMotionSample {
@@ -43,4 +51,4 @@ struct ScalarMotionSample {
         finished(false) {}
 };
 
-}  // namespace mr::component::trajectory
+}  // namespace mr::comp::traj

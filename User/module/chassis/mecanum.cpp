@@ -5,6 +5,7 @@
 #include <new>
 
 #include "bsp/can.h"
+#include "component/math/scalar.hpp"
 #include "device/device.h"
 
 namespace mr::module::chassis {
@@ -12,6 +13,7 @@ namespace mr::module::chassis {
 namespace {
 
 using PlanarVelocity = mr::robotics::chassis::PlanarVelocity;
+namespace scalar = mr::component::math;
 
 constexpr float kRotorWzMin = 0.6f;
 constexpr float kRotorWzMax = 0.8f;
@@ -55,23 +57,17 @@ float WheelSpeedLimit(const Chassis_Params_t *param) {
     return 0.0f;
   }
   const float limit = param->physical.wheel_output_max_speed;
-  return (std::isfinite(limit) && limit > 0.0f) ? limit : 0.0f;
+  return scalar::is_positive_scalar(limit) ? limit : 0.0f;
 }
 
 float ClampSymmetric(float value, float limit) {
-  if (!std::isfinite(value)) {
+  if (!scalar::is_finite_scalar(value)) {
     return 0.0f;
   }
-  if (!std::isfinite(limit) || limit <= 0.0f) {
+  if (!scalar::is_positive_scalar(limit)) {
     return value;
   }
-  if (value > limit) {
-    return limit;
-  }
-  if (value < -limit) {
-    return -limit;
-  }
-  return value;
+  return scalar::abs_clip_scalar(value, limit);
 }
 
 float RotorWz(float min_wz, float max_wz, uint32_t now) {
@@ -513,16 +509,7 @@ void MecanumController::StoreWheelDebug(uint8_t idx) {
 float MecanumController::CalcDt(uint32_t now) {
   float dt = static_cast<float>(now - last_wakeup_) / 1000.0f;
   last_wakeup_ = now;
-  if (!std::isfinite(dt) || dt <= 0.0f) {
-    dt = kDefaultDtS;
-  }
-  if (dt < kMinDtS) {
-    dt = kMinDtS;
-  }
-  if (dt > kMaxDtS) {
-    dt = kMaxDtS;
-  }
-  return dt;
+  return scalar::sanitize_dt(dt, kDefaultDtS, kMinDtS, kMaxDtS);
 }
 
 }  // namespace mr::module::chassis

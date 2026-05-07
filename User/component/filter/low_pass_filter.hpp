@@ -1,24 +1,24 @@
 #pragma once
 
 /*
- * Second-order low-pass filter.
+ * 二阶低通滤波器。
  *
- * Use it to smooth high-frequency noise while keeping low-frequency motion:
+ * 用于滤除高频噪声，同时保留低频运动趋势：
  *
  *   auto filter = mr::comp::filter::low_pass::Build(
- *       30.0f,    // cutoff_freq_hz
- *       1000.0f   // sample_freq_hz
+ *       30.0f,    // 截止频率 Hz
+ *       1000.0f   // 采样频率 Hz
  *   );
  *
  *   filter.Reset(initial_value);
  *   float y = filter.Update(sample);
  *
- * If the loop period is not fixed, pass dt_s on each update:
+ * 如果循环周期不固定，每次更新时传入本次实际间隔 dt_s，单位为秒：
  *
  *   float y = filter.Update(sample, dt_s);
  *
- * cutoff_freq_hz <= 0 or cutoff_freq_hz >= Nyquist makes the filter bypass
- * and return the input sample.
+ * cutoff_freq_hz <= 0 或 cutoff_freq_hz >= 奈奎斯特频率时，滤波器旁路，
+ * 直接返回输入值。
  */
 
 #include <cmath>

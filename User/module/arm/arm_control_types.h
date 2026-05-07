@@ -99,8 +99,18 @@ typedef struct {
     float joint_kp[ARM_JOINT_COUNT];
     float joint_kd[ARM_JOINT_COUNT];
     float gravity_comp_scale[ARM_JOINT_COUNT];
+    float joint_soft_limit_lower[ARM_JOINT_COUNT];
+    float joint_soft_limit_upper[ARM_JOINT_COUNT];
     ArmCartesianRemoteParam_t remote_cartesian;
 } Arm_Params_t;
+
+/* PC上位机接口 (预留) */
+typedef struct {
+    bool pc_control_enable;
+    uint8_t pc_ctrl_type;     /* 控制类型 */
+    ArmPose_t pc_target_pose; /* 目标位姿 */
+    ArmJointAngles_t pc_target_joints; /* 目标关节角度 */
+} Arm_PCInterface_t;
 
 #ifdef __cplusplus
 }

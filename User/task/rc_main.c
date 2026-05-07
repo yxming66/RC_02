@@ -10,10 +10,13 @@
 #include "module/chassis.h"
 #include "module/pole.h"
 #include "module/arm/arm_control_types.h"
+#include "module/config.h"
 #include "module/rod.h"
 #include "module/autoCtrlAPI/api/auto_ctrl_api.h"
 #include "module/autoCtrlAPI/core/auto_ctrl_def.h"
+#include "module/pc_protocol/pc_protocol.h"
 #include "main.h"
+#include <math.h>
 #include <string.h>
 /* USER INCLUDE END */
 
@@ -33,6 +36,8 @@
 #define AUTO_CTRL_OUTPUT_ENABLE (1u)
 #endif
 
+#define RC_ARM_FINE_SCALE (0.35f)
+
 /* USER STRUCT BEGIN */
 DR16_t dr16;
 static Chassis_CMD_t chassis_cmd;
@@ -44,6 +49,28 @@ static Rod_CMD_t rod_cmd;
 extern bool reset;
 extern auto_ctrl_t auto_ctrl;
 extern bool auto_ctrl_inited;
+
+typedef struct {
+  bool enabled;
+  bool force_enable;
+  bool command_queued;
+  uint32_t request_seq;
+  uint32_t applied_seq;
+  ArmPose_t target_pose;
+} ArmTaskDebugPoseControl_t;
+
+// Temporary task-layer hook for debugger pose injection; remove after bring-up.
+volatile ArmTaskDebugPoseControl_t g_arm_task_debug_pose_control = {0};
+
+/* PC上位机控制相关 */
+#define RC_MODE_PC_ARM_TRIGGER_THRESHOLD (0.9f)  /* 摇杆阈值，触发上位机控制 */
+extern PC_Protocol_t* g_pc_protocol_ptr;
+
+static bool Rc_ArmPoseIsFinite(const ArmPose_t* pose) {
+  return pose != NULL && isfinite(pose->x) && isfinite(pose->y) &&
+         isfinite(pose->z) && isfinite(pose->roll) &&
+         isfinite(pose->pitch) && isfinite(pose->yaw);
+}
 
 static void Rc_SetRodRelax(void) {
   rod_cmd.mode = ROD_MODE_RELAX;
@@ -80,8 +107,88 @@ static void Rc_SetPoleAuto(float left_target, float right_target) {
 
 static void Rc_SetArmDisabled(void) {
   memset(&arm_cmd, 0, sizeof(arm_cmd));
+  arm_cmd.enable = dr16.header.online;
+  arm_cmd.set_target_as_current = dr16.header.online;
   arm_cmd.ctrl_type = ARM_CTRL_REMOTE_CARTESIAN;
   arm_cmd.frame = ARM_CTRL_FRAME_WORLD;
+}
+
+static const ArmCartesianRemoteParam_t* Rc_GetArmRemoteParam(void) {
+  Config_RobotParam_t* robot_param = Config_GetRobotParam();
+  if (robot_param == NULL) {
+    return NULL;
+  }
+  return &robot_param->arm_param.remote_cartesian;
+}
+
+static float Rc_ArmMaxYVelocity(void) {
+  const ArmCartesianRemoteParam_t* remote = Rc_GetArmRemoteParam();
+  return (remote != NULL) ? remote->max_y_velocity : 0.30f;
+}
+
+static float Rc_ArmMaxZVelocity(void) {
+  const ArmCartesianRemoteParam_t* remote = Rc_GetArmRemoteParam();
+  return (remote != NULL) ? remote->max_z_velocity : 0.30f;
+}
+
+static float Rc_ArmMaxPitchVelocity(void) {
+  const ArmCartesianRemoteParam_t* remote = Rc_GetArmRemoteParam();
+  return (remote != NULL) ? remote->max_pitch_velocity : 1.0f;
+}
+
+static void Rc_SetArmRemoteCartesian(float scale) {
+  memset(&arm_cmd, 0, sizeof(arm_cmd));
+  arm_cmd.enable = dr16.header.online;
+  arm_cmd.ctrl_type = ARM_CTRL_REMOTE_CARTESIAN;
+  arm_cmd.frame = ARM_CTRL_FRAME_WORLD;
+
+  if (!dr16.header.online) {
+    return;
+  }
+
+  arm_cmd.joy_vel.y = dr16.data.ch_r_y * Rc_ArmMaxYVelocity() * scale;
+  arm_cmd.joy_vel.z = dr16.data.ch_l_y * Rc_ArmMaxZVelocity() * scale;
+  arm_cmd.joy_vel.pitch =
+      dr16.data.ch_l_x * Rc_ArmMaxPitchVelocity() * scale;
+}
+
+static void Rc_SetArmPoseAbsolute(const ArmPose_t* target_pose,
+                                  bool enable) {
+  memset(&arm_cmd, 0, sizeof(arm_cmd));
+  arm_cmd.enable = enable;
+  arm_cmd.ctrl_type = ARM_CTRL_POSE_ABSOLUTE;
+  arm_cmd.frame = ARM_CTRL_FRAME_WORLD;
+  if (target_pose != NULL) {
+    arm_cmd.target_pose = *target_pose;
+  }
+}
+
+static void Rc_ApplyArmDebugPoseOverride(void) {
+  if (!g_arm_task_debug_pose_control.enabled) {
+    g_arm_task_debug_pose_control.command_queued = false;
+    return;
+  }
+
+  ArmPose_t target_pose;
+  target_pose.x = g_arm_task_debug_pose_control.target_pose.x;
+  target_pose.y = g_arm_task_debug_pose_control.target_pose.y;
+  target_pose.z = g_arm_task_debug_pose_control.target_pose.z;
+  target_pose.roll = g_arm_task_debug_pose_control.target_pose.roll;
+  target_pose.pitch = g_arm_task_debug_pose_control.target_pose.pitch;
+  target_pose.yaw = g_arm_task_debug_pose_control.target_pose.yaw;
+
+  const bool valid_pose = Rc_ArmPoseIsFinite(&target_pose);
+  if (!valid_pose) {
+    g_arm_task_debug_pose_control.command_queued = false;
+    return;
+  }
+
+  const bool enable =
+      dr16.header.online || g_arm_task_debug_pose_control.force_enable;
+  Rc_SetArmPoseAbsolute(&target_pose, enable);
+  g_arm_task_debug_pose_control.applied_seq =
+      g_arm_task_debug_pose_control.request_seq;
+  g_arm_task_debug_pose_control.command_queued = true;
 }
 
 static void Rc_SetChassisRelax(void) {
@@ -117,7 +224,7 @@ static void Rc_TryStartAutoCtrlBySwitch(uint32_t now_ms) {
     return;
   }
 
-  if (dr16.data.sw_l != DR16_SW_MID && dr16.data.sw_l != DR16_SW_DOWN) {
+  if (dr16.data.sw_l != DR16_SW_MID) {
     return;
   }
 
@@ -130,14 +237,10 @@ static void Rc_TryStartAutoCtrlBySwitch(uint32_t now_ms) {
 
   if (dr16.data.sw_r == DR16_SW_UP) {
     target_yaw_rad = AUTO_CTRL_RC_YAW_POS_90_RAD;
-    template_id = (dr16.data.sw_l == DR16_SW_MID)
-                      ? AUTO_CTRL_TEMPLATE_ASCEND_200
-                      : AUTO_CTRL_TEMPLATE_ASCEND_400_STD;
+    template_id = AUTO_CTRL_TEMPLATE_ASCEND_200;
   } else if (dr16.data.sw_r == DR16_SW_DOWN) {
     target_yaw_rad = AUTO_CTRL_RC_YAW_NEG_90_RAD;
-    template_id = (dr16.data.sw_l == DR16_SW_MID)
-                      ? AUTO_CTRL_TEMPLATE_DESCEND_200
-                      : AUTO_CTRL_TEMPLATE_DESCEND_400_STD;
+    template_id = AUTO_CTRL_TEMPLATE_DESCEND_200;
   }
 
   if (template_id != AUTO_CTRL_TEMPLATE_NONE) {
@@ -253,23 +356,48 @@ void Task_rc_main(void *argument) {
       Rc_SetRodRelax();
     } else if (dr16.data.sw_l == DR16_SW_DOWN) {
       if (auto_ctrl_inited && AutoCtrl_IsBusy(&auto_ctrl)) {
-#if AUTO_CTRL_OUTPUT_ENABLE
-        chassis_cmd = auto_ctrl.chassis_cmd;
-        pole_cmd = auto_ctrl.pole_cmd;
-#else
-        Rc_SetAutoDryRunCommands();
-#endif
-      } else if (dr16.data.sw_r == DR16_SW_MID) {
-        Rc_SetChassisRemote();
-        Rc_SetPoleAuto(0.0f, 0.0f);
-      } else {
-        Rc_SetChassisRelax();
-        Rc_SetPoleAuto(0.0f, 0.0f);
+        AutoCtrl_Abort(&auto_ctrl);
       }
 
-      Rc_SetArmDisabled();
+      /* 检测是否切换到上位机控制模式 */
+      /* 当右摇杆推到右下角区域时（ch_r_x < -阈值 && ch_r_y < -阈值），使用上位机命令 */
+      if (g_pc_protocol_ptr != NULL &&
+          PC_Protocol_IsPCControlMode(g_pc_protocol_ptr) &&
+          dr16.data.ch_r_x < -RC_MODE_PC_ARM_TRIGGER_THRESHOLD &&
+          dr16.data.ch_r_y < -RC_MODE_PC_ARM_TRIGGER_THRESHOLD) {
+        /* 上位机控制模式 */
+        const PC_ChassisCMD_t* pc_chassis_cmd = PC_Protocol_GetChassisCMD(g_pc_protocol_ptr);
+        const PC_PoleCMD_t* pc_pole_cmd = PC_Protocol_GetPoleCMD(g_pc_protocol_ptr);
+
+        /* 使用上位机Chassis命令 */
+        if (pc_chassis_cmd != NULL) {
+          chassis_cmd.mode = CHASSIS_MODE_INDEPENDENT;
+          chassis_cmd.ctrl_vec.vx = pc_chassis_cmd->vx;
+          chassis_cmd.ctrl_vec.vy = pc_chassis_cmd->vy;
+          chassis_cmd.ctrl_vec.wz = pc_chassis_cmd->wz;
+        } else {
+          Rc_SetChassisRelax();
+        }
+
+        /* 使用上位机Pole命令 */
+        if (pc_pole_cmd != NULL) {
+          pole_cmd.mode = (pc_pole_cmd->mode == 0) ? POLE_MODE_RELAX : POLE_MODE_ACTIVE;
+          pole_cmd.lift[0] = pc_pole_cmd->lift[0];
+          pole_cmd.lift[1] = pc_pole_cmd->lift[1];
+          pole_cmd.auto_target_enable[0] = false;
+          pole_cmd.auto_target_enable[1] = false;
+        }
+      } else {
+        /* 遥控器控制模式（默认机械臂） */
+        Rc_SetChassisRelax();
+        Rc_SetPoleAuto(0.0f, 0.0f);
+        Rc_SetArmRemoteCartesian(
+            (dr16.data.sw_r == DR16_SW_UP) ? 1.0f : RC_ARM_FINE_SCALE);
+      }
       Rc_SetRodRelax();
     }
+
+    Rc_ApplyArmDebugPoseOverride();
 
     osMessageQueueReset(task_runtime.msgq.chassis.cmd);
     osMessageQueuePut(task_runtime.msgq.chassis.cmd, &chassis_cmd, 0, 0);

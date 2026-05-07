@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd /d D:/STM32Projects_HAL/board-H7/RC_02)",
+      "Bash(ls build/Debug/*.exe)",
+      "Bash(ninja -C build/Debug)",
+      "Bash(cmake --build build/Debug)",
+      "Bash(cmake --build build --target RC_02)",
+      "Bash(where cmake *)",
+      "Bash(ninja)",
+      "Bash(/c/Program Files/CMake/bin/cmake.exe *)",
+      "Bash(\"/c/Program Files/CMake/bin/cmake.exe\" --build \"D:/STM32Projects_HAL/board-H7/RC_02/build/Debug\")",
+      "Bash(arm-none-eabi-nm \"D:/STM32Projects_HAL/board-H7/RC_02/build/Debug/CMakeFiles/RC_02.dir/User/module/pc_protocol/pc_protocol.cpp.obj\")"
+    ]
+  }
+}

@@ -8,7 +8,7 @@ namespace mr::motor {
 namespace {
 
 float ResolvePositiveRatio(float ratio) {
-    return (ratio > 0.0f) ? ratio : 1.0f;
+    return comp_positive_or_f(ratio, 1.0f);
 }
 
 constexpr float kPi = 3.14159265358979323846f;
@@ -29,23 +29,11 @@ float UintToFloat(uint16_t raw, float min_value, float max_value, int bits) {
 }
 
 float WrapToPi(float angle_rad) {
-    while (angle_rad >= kPi) {
-        angle_rad -= kTwoPi;
-    }
-    while (angle_rad < -kPi) {
-        angle_rad += kTwoPi;
-    }
-    return angle_rad;
+    return comp_wrap_to_pi_f(angle_rad);
 }
 
 float WrapDmAngleDiff(float diff_rad) {
-    while (diff_rad > kDmPositionHalfSpan) {
-        diff_rad -= kDmPositionSpan;
-    }
-    while (diff_rad < -kDmPositionHalfSpan) {
-        diff_rad += kDmPositionSpan;
-    }
-    return diff_rad;
+    return comp_wrap_error_f(diff_rad, kDmPositionSpan);
 }
 
 uint32_t EncodeDmFault(MOTOR_DM_Status_t status) {

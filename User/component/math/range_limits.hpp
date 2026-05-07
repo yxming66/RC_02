@@ -1,3 +1,12 @@
+/**
+ ******************************************************************************
+ * @file    range_limits.hpp
+ * @brief   Range limit and projection utilities for multi-DOF systems.
+ *          关节/轴范围限制与投影工具
+ * @author  XuMing Yuan
+ ******************************************************************************
+ */
+
 #pragma once
 
 #include <stdint.h>

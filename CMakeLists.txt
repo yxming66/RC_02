@@ -68,6 +68,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     User/component/filter.c
     User/component/limiter.c
     User/component/pid.c
+    User/component/timer.cpp
     User/component/user_math.c
     User/component/ahrs.c
     # User/device sources
@@ -124,15 +125,10 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     User/module/autoCtrlAPI/step/auto_ctrl_step.c
     User/module/autoCtrlAPI/template/auto_ctrl_template_runner.c
 
-    # User/module/cmd sources
-    User/module/cmd/cmd.c
-    User/module/cmd/cmd_adapter.c
-    User/module/cmd/cmd_behavior.c
-    User/module/cmd/cmd_example.c
-
     # User/module sources
     User/module/arm/arm.cpp
     User/module/config.c
+    User/module/pc_protocol/pc_protocol.cpp
 
     # User/task sources
     User/task/blink.c
@@ -146,7 +142,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     User/task/arm_main.cpp
     User/task/rod_main.c
     User/task/atti_esti.c
-    User/task/pc_uart_tx.c
+    User/task/pc_comm_task.c
 )
 
 # Add include paths

@@ -1,5 +1,32 @@
 #pragma once
 
+/*
+ * 模型预测速度控制器。
+ *
+ * 基于位置误差和速度误差的双环速度控制器：
+ *   target_velocity = kp_position * pos_error
+ *   target_velocity = clamp(target_velocity, +/-velocity_limit)
+ *   target_velocity = velocity_slew_limiter.update(target_velocity)
+ *   output = kp_velocity * (target_velocity - velocity)
+ *   output = clamp(output, +/-output_limit)
+ *
+ * 特性：
+ *   - 双环串级控制：位置环 -> 速度环
+ *   - 内置速度限幅和加速度斜率限制
+ *   - 适用于点到点运动跟踪
+ *
+ * 使用示例：
+ *   auto mpc = mr::comp::cntlr::mpc::Build(
+ *       2.0f,    // kp_position: 位置环增益
+ *       10.0f,   // kp_velocity: 速度环增益
+ *       1.0f,    // velocity_limit: 最大速度 (m/s 或 rad/s)
+ *       5.0f,    // acceleration_limit: 最大加速度 (m/s^2)
+ *       3.0f     // output_limit: 力矩/力输出限幅
+ *   );
+ *
+ *   float torque = mpc.Update(target_pos, current_pos, current_vel, dt_s);
+ */
+
 #include "component/controller/controller_types.hpp"
 
 namespace mr::comp::cntlr {

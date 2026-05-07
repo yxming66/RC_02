@@ -14,6 +14,8 @@ extern "C" {
 #include <stdint.h>
 #include <stddef.h>
 
+#include "component/math/scalar.h"
+
 /* USER INCLUDE BEGIN */
 
 /* USER INCLUDE END */

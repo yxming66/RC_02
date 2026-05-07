@@ -14,7 +14,8 @@
  * 控制律:
  *   error = state - reference
  *   u = feedforward - K * error
- *
+ *  
+ * api:
  * 固定 LQR 示例:
  *   using Lqr = mr::comp::cntlr::lqr<6, 2>;
  *
@@ -25,7 +26,7 @@
  *   cfg.coeff[1][5][0] = k26;  // 第 1 个输出对第 5 个状态的固定增益
  *   cfg.output_limit[0] = mr::comp::cntlr::SymmetricLimit::Abs(10.0f);
  *   cfg.output_limit[1] = mr::comp::cntlr::SymmetricLimit::Abs(8.0f);
- *
+ *d1222
  *   auto ctrl = Lqr::Build(cfg);
  *   Lqr::State ref = {0.0f, 0.0f, target_x, target_v, 0.0f, 0.0f};
  *   Lqr::State x = {theta, d_theta, pos_x, vel_x, pitch, pitch_rate};
@@ -46,7 +47,7 @@
  *   ctrl.UpdateSchedule(leg_length);  // 根据腿长等调度量更新当前 K
  *   Lqr::Control u = ctrl.Update(ref, x);
  *
- * 参数说明:
+ * 参数说明
  *   coeff[control][state][poly]
  *     control : 第几个控制输出
  *     state   : 第几个状态误差

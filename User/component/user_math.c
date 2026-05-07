@@ -26,16 +26,15 @@ inline float InvSqrt(float x) {
 }
 
 inline float AbsClip(float in, float limit) {
-  return (in < -limit) ? -limit : ((in > limit) ? limit : in);
+  return comp_abs_clip_f(in, limit);
 }
 
 float fAbs(float in){
-  return (in > 0) ? in : -in;
+  return comp_abs_f(in);
 }
 
 inline void Clip(float *origin, float min, float max) {
-  if (*origin > max) *origin = max;
-  if (*origin < min) *origin = min;
+  *origin = comp_clamp_f(*origin, min, max);
 }
 
 inline float Sign(float in) { return (in > 0) ? 1.0f : 0.0f; }
@@ -56,16 +55,7 @@ inline void ResetMoveVector(MoveVector_t *mv) { memset(mv, 0, sizeof(*mv)); }
  * \return 函数运行结果
  */
 inline float CircleError(float sp, float fb, float range) {
-  float error = sp - fb;
-  if (range > 0.0f) {
-    float half_range = range / 2.0f;
-
-    if (error > half_range)
-      error -= range;
-    else if (error < -half_range)
-      error += range;
-  }
-  return error;
+  return comp_wrap_error_f(sp - fb, range);
 }
 
 /**

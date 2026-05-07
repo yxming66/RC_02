@@ -554,13 +554,18 @@ void test_three_pit_cartesian_app_unreachable_target_holds_output() {
   input.z_axis = 1.0f;
   const app::ThreePitCartesianAppResult result =
       controller.update(state, input, 0.10f);
+  const app::ThreePitCartesianAppResult repeated_result =
+      controller.update(state, input, 0.10f);
 
-  ok = ok && result.target_updated &&
+  ok = ok && !result.target_updated &&
        result.state == app::ThreePitCartesianAppState::kTargetUnreachableHold &&
-       controller.target_yz_pitch().z > initial_target.z + 1.0f &&
+       result.hold_reason ==
+           app::ThreePitCartesianHoldReason::kTargetUnreachable &&
+       near(controller.target_yz_pitch().z, initial_target.z, 1.0e-6f) &&
+       near(repeated_result.target_yz_pitch.z, initial_target.z, 1.0e-6f) &&
        joint_vec_close3(result.command.q, hold_q, 1.0e-6f) &&
        joint_vec_close3(controller.last_valid_q(), hold_q, 1.0e-6f);
-  check(ok, "3pit Cartesian app in-range unreachable target holds output");
+  check(ok, "3pit Cartesian app freezes target at reachable boundary");
 }
 
 void test_three_pit_cartesian_app_recovers_after_target_reachable() {
@@ -584,7 +589,7 @@ void test_three_pit_cartesian_app_recovers_after_target_reachable() {
   (void)controller.update(state, input, 0.10f);
 
   input.y_axis = 1.0f;
-  input.z_axis = -1.0f;
+  input.z_axis = 0.0f;
   const app::ThreePitCartesianAppResult result =
       controller.update(state, input, 0.10f);
 
@@ -607,6 +612,35 @@ void test_three_pit_cartesian_app_recovers_after_target_reachable() {
         result.command.q[2][0] - hold_q[2][0]);
   }
   check(ok, "3pit Cartesian app resumes after reachable target returns");
+}
+
+void test_three_pit_cartesian_app_classifies_singularity_hold() {
+  namespace app = ::mr::robotics::arm::application;
+  const SerialChain<3> chain = make_three_pit_chain();
+  app::ThreePitCartesianApp controller;
+  app::ThreePitCartesianAppConfig config = make_three_pit_app_config(chain);
+  config.max_z_velocity = 20.0f;
+  config.workspace.z_max = 3.0f;
+  config.ik_options.singularity_threshold = 0.10f;
+  const float q_values[3] = {0.10f, -0.25f, 0.15f};
+  JointState<3> state = joint_state3(joint_vec(q_values));
+
+  bool ok = controller.configure(chain, config);
+  ok = ok && controller.reset_from_feedback(state);
+  const app::YzPitchPose initial_target = controller.target_yz_pitch();
+
+  app::ThreePitRemoteInput input;
+  input.enabled = true;
+  input.z_axis = 1.0f;
+  const app::ThreePitCartesianAppResult result =
+      controller.update(state, input, 0.10f);
+
+  ok = ok &&
+       result.state == app::ThreePitCartesianAppState::kSingularityHold &&
+       result.hold_reason ==
+           app::ThreePitCartesianHoldReason::kTargetSingularity &&
+       near(controller.target_yz_pitch().z, initial_target.z, 1.0e-6f);
+  check(ok, "3pit Cartesian app separates singularity hold");
 }
 
 void test_three_pit_cartesian_app_pitch_follows_joint3_monotonically() {
@@ -695,6 +729,7 @@ int main() {
   test_three_pit_cartesian_app_rejects_workspace_without_target_change();
   test_three_pit_cartesian_app_unreachable_target_holds_output();
   test_three_pit_cartesian_app_recovers_after_target_reachable();
+  test_three_pit_cartesian_app_classifies_singularity_hold();
   test_three_pit_cartesian_app_pitch_follows_joint3_monotonically();
   test_three_pit_cartesian_app_output_respects_joint_limits();
 

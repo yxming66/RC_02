@@ -6,7 +6,6 @@
 #include "module/config.h"
 #include "bsp/can.h"
 #include "device/motor_rm.h"
-#include "module/cmd/cmd.h"
 #include <stdbool.h>
 /* Private typedef ---------------------------------------------------------- */
 /* Private define ----------------------------------------------------------- */
@@ -129,12 +128,14 @@ Config_RobotParam_t robot_config = {
         .can = BSP_CAN_3,
         .master_id = 0x13,
         .can_id = 0x03,
-        .module = MOTOR_DM_J4310,
+        .module = MOTOR_DM_J4310P,
         .reverse = false,
       },
-      .joint_kp = {6.0f, 8.0f, 10.0f},
-      .joint_kd = {0.20f, 0.20f, 0.15f},
-      .gravity_comp_scale = {1.0f, 1.0f, 1.0f},
+      .joint_kp = {8.0f, 6.0f, 6.0f},
+      .joint_kd = {3.35f, 2.65f, 2.45f},
+      .gravity_comp_scale = {1.05f, 0.5f, 1.0f},
+      .joint_soft_limit_lower = {-0.87f, -2.20f, -1.84f},
+      .joint_soft_limit_upper = {2.0f, 2.20f, 1.75f},
       .remote_cartesian = {
         .input_deadzone = 0.05f,
         .max_y_velocity = 0.30f,
@@ -146,7 +147,7 @@ Config_RobotParam_t robot_config = {
         .max_angular_acceleration = 2.0f,
         .max_joint_step = 0.04f,
         .joint_max_velocity = {2.0f, 2.0f, 2.0f},
-        .joint_max_acceleration = {5.0f, 5.0f, 5.0f},
+        .joint_max_acceleration = {8.0f, 8.0f, 8.0f},
         .workspace = {
           .y_min = -1.0f,
           .y_max = 1.0f,

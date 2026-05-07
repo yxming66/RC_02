@@ -132,6 +132,13 @@ typedef struct {
 
   Rod_Feedback_t feedback;
   Rod_Output_t out;
+
+  /* PC上位机接口 (预留) */
+  struct {
+    bool pc_control_enable;
+    uint8_t pc_mode;
+    uint8_t pc_pose;
+  } pc_if;
 } Rod_t;
 
 int8_t Rod_Init(Rod_t *r, const Rod_Params_t *param, float target_freq);
@@ -139,6 +146,12 @@ int8_t Rod_UpdateFeedback(Rod_t *r);
 int8_t Rod_Control(Rod_t *r, const Rod_CMD_t *cmd, uint32_t now);
 void Rod_Output(Rod_t *r);
 void Rod_ResetOutput(Rod_t *r);
+
+/* PC上位机接口函数 (预留) */
+void Rod_InitPCInterface(Rod_t *r);
+void Rod_SetPCCommand(Rod_t *r, uint8_t mode, uint8_t pose);
+bool Rod_IsPCControlEnabled(const Rod_t *r);
+void Rod_FillPCFeedback(const Rod_t *r, void *fb);
 
 #ifdef __cplusplus
 }

@@ -1,25 +1,25 @@
 #pragma once
 
 /*
- * Second-order notch filter.
+ * 二阶陷波滤波器。
  *
- * Use it to suppress a narrow vibration or resonance frequency:
+ * 用于抑制窄频段振动或共振频率：
  *
  *   auto filter = mr::comp::filter::notch::Build(
- *       50.0f,    // notch_freq_hz
- *       5.0f,     // bandwidth_hz
- *       1000.0f   // sample_freq_hz
+ *       50.0f,    // 陷波中心频率 Hz
+ *       5.0f,     // 带宽 Hz
+ *       1000.0f   // 采样频率 Hz
  *   );
  *
  *   filter.Reset(initial_value);
  *   float y = filter.Update(sample);
  *
- * If the loop period is not fixed, pass dt_s on each update:
+ * 如果循环周期不固定，每次更新时传入本次实际间隔 dt_s，单位为秒：
  *
  *   float y = filter.Update(sample, dt_s);
  *
- * notch_freq_hz <= 0, bandwidth_hz <= 0, or notch_freq_hz >= Nyquist makes
- * the filter bypass and return the input sample.
+ * notch_freq_hz <= 0、bandwidth_hz <= 0 或 notch_freq_hz >= 奈奎斯特频率时，
+ * 滤波器旁路，直接返回输入值。
  */
 
 #include <cmath>

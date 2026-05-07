@@ -1,8 +1,34 @@
 #pragma once
 
+/*
+ * 三次混合曲线规划。
+ *
+ * 控制律（三次Hermite插值）：
+ *   u = elapsed / duration  (归一化时间，范围 [0, 1])
+ *   s = 3*u^2 - 2*u^3     (位置，三次S曲线)
+ *   ds = 6*u*(1-u)/T       (速度)
+ *   dds = 6*(1-2*u)/T^2    (加速度)
+ *
+ * 特性：
+ *   - 返回归一化进度 s ∈ [0, 1]，乘以目标距离得到实际位置
+ *   - 速度和加速度在起点/终点为零
+ *   - 适用于笛卡尔空间直线/旋转轨迹的平滑插值
+ *
+ * 使用示例：
+ *   float duration = mr::comp::traj::cubic_blend_duration_from_limits(
+ *       distance, max_velocity, max_acceleration);
+ *
+ *   float elapsed = get_current_time() - start_time;
+ *   auto sample = mr::comp::traj::sample_cubic_blend(elapsed, duration);
+ *   float position = sample.s * total_distance;  // 实际位置
+ *   float velocity = sample.ds * total_distance;   // 实际速度
+ */
+
+#include <math.h>
+
 #include "trajectory_types.hpp"
 
-namespace mr::component::trajectory {
+namespace mr::comp::traj {
 
 struct CubicBlendSample {
   Scalar s;
@@ -67,4 +93,4 @@ inline Scalar cubic_blend_duration_from_limits(
                                                : acceleration_bound;
 }
 
-}  // namespace mr::component::trajectory
+}  // namespace mr::comp::traj

@@ -1,3 +1,12 @@
+/**
+ ******************************************************************************
+ * @file    linear_solve.hpp
+ * @brief   Linear equation solver using LDL^T decomposition for symmetric
+ *          positive definite matrices. 对称正定矩阵线性方程组求解器
+ * @author  XuMing Yuan
+ ******************************************************************************
+ */
+
 #pragma once
 
 #include <stdint.h>

@@ -11,7 +11,7 @@
 #include "module/chassis.h"
 #include "module/pole.h"
 #include "module/arm/arm_control_types.h"
-#include "module/cmd/cmd.h"
+
 #include "module/rod.h"
 
 #ifdef __cplusplus
@@ -119,7 +119,6 @@ typedef struct {
         float sick_assist_gain;
         float sick_assist_max_rad;
     } auto_ctrl_param;
-    CMD_Config_t cmd_param;
     Rod_Params_t rod_param;
 } Config_RobotParam_t;
 

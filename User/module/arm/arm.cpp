@@ -1,10 +1,10 @@
 #include "module/arm/arm.hpp"
 
 #include <array>
-#include <cmath>
 #include <cstring>
 
 #include "bsp/can.h"
+#include "component/math/scalar.hpp"
 #include "module/arm/detail/utils.hpp"
 #include "robotics/arm/adapter/toolbox_adapter.h"
 #include "robotics/arm/application/three_pit_cartesian_app.h"
@@ -25,23 +25,13 @@ static_assert(ARM_JOINT_COUNT == 3, "3pit runtime expects exactly 3 joints");
 
 constexpr float kMinLoopDt = 0.0005f;
 constexpr float kMaxLoopDt = 0.05f;
-constexpr float kDebugTorqueEpsilon = 1.0e-4f;
 constexpr const char* kJointNames[ARM_JOINT_COUNT] = {"armj1", "armj2", "armj3"};
 
 }  // namespace
 
-extern "C" {
-
-volatile float g_arm_j1_test_torque_nm = 0.0f;
-volatile float g_arm_j2_test_torque_nm = 0.0f;
-volatile float g_arm_j3_test_torque_nm = 0.0f;
-
-}
-
 namespace {
 
 using mr::ControlMode;
-using mr::DmActuator;
 using mr::DmJoint;
 using mr::IJoint;
 using mr::JointControlParams;
@@ -127,13 +117,8 @@ arm_lib::Link MakeArmLink(const arm_lib::Transform& joint_origin,
 }
 
 float ClampDt(float dt_s) {
-  if (dt_s < kMinLoopDt) {
-    return kMinLoopDt;
-  }
-  if (dt_s > kMaxLoopDt) {
-    return kMaxLoopDt;
-  }
-  return dt_s;
+  return mr::component::math::sanitize_dt(dt_s, kMinLoopDt, kMinLoopDt,
+                                          kMaxLoopDt);
 }
 
 void ClearTransientCommand(Arm_CMD_t* cmd) {
@@ -142,7 +127,6 @@ void ClearTransientCommand(Arm_CMD_t* cmd) {
   }
   cmd->set_target_as_current = false;
   cmd->gripper_toggle = false;
-  std::memset(&cmd->joy_vel, 0, sizeof(cmd->joy_vel));
   std::memset(&cmd->target_delta, 0, sizeof(cmd->target_delta));
 }
 
@@ -161,7 +145,8 @@ float NormalizeRemoteAxis(float velocity, float max_velocity) {
   if (max_velocity <= 1.0e-6f) {
     return 0.0f;
   }
-  return arm_lib::clamp_scalar(velocity / max_velocity, -1.0f, 1.0f);
+  return mr::component::math::clamp_scalar(velocity / max_velocity, -1.0f,
+                                           1.0f);
 }
 
 ArmPose_t ForwardPose(const arm_lib::SerialChain<ARM_JOINT_COUNT>& chain,
@@ -172,17 +157,51 @@ ArmPose_t ForwardPose(const arm_lib::SerialChain<ARM_JOINT_COUNT>& chain,
       arm_lib::kinematics::fk(chain, q), q);
 }
 
-void StageTorqueTargets(
-    const std::array<IJoint*, ARM_JOINT_COUNT>& joints,
-    const float torques[ARM_JOINT_COUNT]) {
-  if (torques == nullptr) {
+void CopyIkDebugResult(
+    const arm_lib::kinematics::IKResult<ARM_JOINT_COUNT>& result,
+    const arm_lib::JointVec<ARM_JOINT_COUNT>& current,
+    mr::arm::RuntimeIkDebugData* debug) {
+  if (debug == nullptr) {
     return;
   }
-  for (size_t i = 0; i < ARM_JOINT_COUNT; ++i) {
-    if (joints[i] != nullptr) {
-      joints[i]->TorqueControl(torques[i]);
+
+  debug->status = result.status;
+  debug->stage = result.diagnostics.stage;
+  debug->reason = result.diagnostics.reason;
+  debug->iterations = result.stats.iterations;
+  debug->seed_count_tried = result.diagnostics.seed_count_tried;
+  debug->retry_count = result.retry_count;
+  debug->candidate_solution_count = result.candidate_solution_count;
+  debug->selected_solution_index = result.selected_solution_index;
+  debug->final_error_norm = result.stats.final_error_norm;
+  debug->final_step_norm = result.stats.final_step_norm;
+  debug->singularity_metric = result.singularity_metric;
+  debug->manipulability_metric = result.manipulability_metric;
+  debug->limit_violation = result.limit_violation;
+  debug->null_space_step_norm = result.null_space_step_norm;
+  debug->used_analytic = result.used_analytic;
+  debug->used_numeric_fallback = result.used_numeric_fallback;
+  debug->used_numeric_refine = result.used_numeric_refine;
+  debug->used_null_space_objective = result.used_null_space_objective;
+  debug->task_projection_applied =
+      result.diagnostics.task_projection_applied;
+  debug->task_weighting_applied =
+      result.diagnostics.task_weighting_applied;
+  debug->orientation_relaxed = result.diagnostics.orientation_relaxed;
+  debug->clamped_to_limits = result.diagnostics.clamped_to_limits;
+
+  float max_abs_delta = 0.0f;
+  for (uint8_t i = 0; i < ARM_JOINT_COUNT; ++i) {
+    const float q = result.q[i][0];
+    const float delta = q - current[i][0];
+    debug->q[i] = q;
+    debug->delta_from_current[i] = delta;
+    const float abs_delta = arm_lib::abs_scalar(delta);
+    if (abs_delta > max_abs_delta) {
+      max_abs_delta = abs_delta;
     }
   }
+  debug->max_abs_delta_from_current = max_abs_delta;
 }
 
 arm_lib::SerialChain<ARM_JOINT_COUNT> BuildThreePitChain(bool* ok) {
@@ -198,7 +217,7 @@ arm_lib::SerialChain<ARM_JOINT_COUNT> BuildThreePitChain(bool* ok) {
           MakeUrdfTransform(-0.0005f, 0.35f, 0.0f, 0.0f, 0.0f, 0.0f),
           -2.32f, 2.32f,
           MakeInertial(
-              0.5273f, MakeVec3(-0.0003464f, 0.2219719f, 0.00658453f),
+              0.5643f, MakeVec3(-0.00034549f, 0.22380246f, 0.00724804f),
               MakeInertia(0.00075992f, 1.0161E-06f, 0.0f, 4.9865E-05f, 0.0f,
                           0.00078302f))),
       MakeArmLink(
@@ -206,7 +225,7 @@ arm_lib::SerialChain<ARM_JOINT_COUNT> BuildThreePitChain(bool* ok) {
                             -0.00262500000000032f, 0.0f, 0.0f, 0.0f),
           -1.95f, 1.95f,
           MakeInertial(
-              0.24563f, MakeVec3(0.002693f, 0.11635f, 0.0019852f),
+              0.256f, MakeVec3(0.002693f, 0.11635f, 0.0019852f),
               MakeInertia(0.00013404f, 1.2628E-06f, 6.3612E-09f,
                           0.0001778f, -1.8653E-10f, 0.00013348f))),
   };
@@ -227,6 +246,53 @@ arm_lib::SerialChain<ARM_JOINT_COUNT> BuildThreePitChain(bool* ok) {
 namespace mr::arm {
 
 namespace arm_app = mr::robotics::arm::application;
+
+RuntimeIkDebugData::RuntimeIkDebugData()
+    : status(arm_lib::IkStatus::kNoConvergence),
+      stage(arm_lib::IkFailStage::kNone),
+      reason(arm_lib::IkFailureReason::kNone),
+      iterations(0U),
+      seed_count_tried(0U),
+      retry_count(0U),
+      candidate_solution_count(0U),
+      selected_solution_index(0U),
+      final_error_norm(0.0f),
+      final_step_norm(0.0f),
+      singularity_metric(0.0f),
+      manipulability_metric(0.0f),
+      limit_violation(0.0f),
+      null_space_step_norm(0.0f),
+      max_abs_delta_from_current(0.0f),
+      q{0.0f},
+      delta_from_current{0.0f},
+      used_analytic(false),
+      used_numeric_fallback(false),
+      used_numeric_refine(false),
+      used_null_space_objective(false),
+      task_projection_applied(false),
+      task_weighting_applied(false),
+      orientation_relaxed(false),
+      clamped_to_limits(false) {}
+
+RuntimeRemoteCartesianDebugData::RuntimeRemoteCartesianDebugData()
+    : active(false),
+      feedback_valid(false),
+      input_enabled(false),
+      reset_target_to_feedback(false),
+      candidate_rejected_out_of_range(false),
+      target_updated(false),
+      target_reachable(false),
+      command_updated(false),
+      dt_s(0.0f),
+      y_axis(0.0f),
+      z_axis(0.0f),
+      pitch_axis(0.0f),
+      target_yz_pitch(),
+      last_valid_target_yz_pitch(),
+      candidate_yz_pitch(),
+      safety_result(),
+      target_ik(),
+      step_ik() {}
 
 RuntimeDebugData::RuntimeDebugData()
     : initialized(false),
@@ -249,16 +315,11 @@ RuntimeDebugData::RuntimeDebugData()
       control_torque_ff{0.0f},
       gravity_torque{0.0f},
       control_total_torque_ff{0.0f},
-      motor_command_position{0.0f},
-      motor_command_velocity{0.0f},
-      motor_command_torque{0.0f},
-      motor_command_kp{0.0f},
-      motor_command_kd{0.0f},
       joint_online{false},
       joint_pending{false},
-      motor_state(),
       cartesian_state(arm_app::ThreePitCartesianAppState::kIdle),
-      cartesian_hold_reason(arm_app::ThreePitCartesianHoldReason::kNone) {}
+      cartesian_hold_reason(arm_app::ThreePitCartesianHoldReason::kNone),
+      remote_cartesian() {}
 
 Runtime::Runtime() {
   joints_.fill(nullptr);
@@ -312,6 +373,7 @@ bool Runtime::Init(float control_freq_hz) {
 void Runtime::Update() {
   (void)robot_.Update();
   if (param_ != nullptr) {
+    robot_.EnableGravityCompensation(true);
     robot_.SetGravityCompScales(param_->gravity_comp_scale);
   }
   RefreshDebugData();
@@ -327,25 +389,6 @@ void Runtime::PollCommand(osMessageQueueId_t cmd_queue) {
 void Runtime::Control(float dt_s) {
   const float clamped_dt = ClampDt(dt_s);
 
-  if (g_arm_gravity_only_torque_enable != 0U) {
-    gravity_only_torque_was_enabled_ = true;
-    (void)RunGravityOnlyTorqueCycle();
-    RefreshDebugData();
-    return;
-  }
-  if (gravity_only_torque_was_enabled_) {
-    gravity_only_torque_was_enabled_ = false;
-    (void)RunZeroTorqueCycle();
-    RefreshDebugData();
-    return;
-  }
-
-  if (HasDebugTorqueOverride()) {
-    RunDebugTorqueCycle();
-    RefreshDebugData();
-    return;
-  }
-
   robot_.Enable(arm_cmd_.enable);
   if (!arm_cmd_.enable) {
     RunDisabledCycle();
@@ -355,6 +398,21 @@ void Runtime::Control(float dt_s) {
 
   if (ShouldSyncTargets()) {
     SyncTargetsFromCurrent();
+  }
+
+  if (arm_cmd_.ctrl_type == ARM_CTRL_REMOTE_CARTESIAN &&
+      arm_cmd_.set_target_as_current) {
+    target_pose_ = robot_.GetEndPose();
+    for (uint8_t i = 0; i < ARM_JOINT_COUNT; ++i) {
+      target_joints_.q[i] =
+          (joints_[i] != nullptr) ? joints_[i]->GetCurrentAngle() : 0.0f;
+    }
+    if (!RunGravityHoldCycle()) {
+      RunDisabledCycle();
+    }
+    RememberLastCommandState();
+    RefreshDebugData();
+    return;
   }
 
   if (arm_cmd_.ctrl_type == ARM_CTRL_REMOTE_CARTESIAN) {
@@ -369,20 +427,7 @@ void Runtime::Control(float dt_s) {
   robot_.SetMode(ControlMode::JOINT_POSITION);
   ApplyCommand(clamped_dt);
   (void)robot_.Control();
-  debug_.control_command_mode =
-      arm_lib::JointCommandMode::kPositionVelocityTorque;
-  debug_.control_command_valid = true;
-  for (uint8_t i = 0; i < ARM_JOINT_COUNT; ++i) {
-    IJoint* joint = joints_[i];
-    debug_.control_position[i] =
-        (joint != nullptr) ? joint->GetTargetAngle() : target_joints_.q[i];
-    debug_.control_velocity[i] = 0.0f;
-    debug_.control_acceleration[i] = 0.0f;
-    debug_.control_torque_ff[i] =
-        (joint != nullptr) ? joint->GetFeedforwardTorque() : 0.0f;
-    debug_.gravity_torque[i] = robot_.GetGravityTorque(i);
-    debug_.control_total_torque_ff[i] = debug_.control_torque_ff[i];
-  }
+  CaptureJointPositionControlDebug(true);
   RememberLastCommandState();
   RefreshDebugData();
 }
@@ -408,7 +453,7 @@ bool Runtime::InitActuatorsAndJoints() {
       MotorFactory::Create<MotorKind::DM, MotorModel::J4340>(dm2_cfg,
                                                              kDirectDriveInstall);
   joint3_motor_ =
-      MotorFactory::Create<MotorKind::DM, MotorModel::J4310>(dm3_cfg,
+      MotorFactory::Create<MotorKind::DM, MotorModel::J4310P>(dm3_cfg,
                                                              kDirectDriveInstall);
   if (joint1_motor_ == nullptr || joint2_motor_ == nullptr ||
       joint3_motor_ == nullptr) {
@@ -447,105 +492,35 @@ bool Runtime::InitActuatorsAndJoints() {
   return true;
 }
 
-bool Runtime::HasDebugTorqueOverride() const {
-  return std::fabs(g_arm_j1_test_torque_nm) > kDebugTorqueEpsilon ||
-         std::fabs(g_arm_j2_test_torque_nm) > kDebugTorqueEpsilon ||
-         std::fabs(g_arm_j3_test_torque_nm) > kDebugTorqueEpsilon;
-}
-
-void Runtime::RunDebugTorqueCycle() {
-  const float torques[ARM_JOINT_COUNT] = {
-      g_arm_j1_test_torque_nm,
-      g_arm_j2_test_torque_nm,
-      g_arm_j3_test_torque_nm,
-  };
-  debug_.control_command_mode = arm_lib::JointCommandMode::kTorque;
-  debug_.control_command_valid = true;
-  for (uint8_t i = 0; i < ARM_JOINT_COUNT; ++i) {
-    debug_.control_position[i] =
-        (joints_[i] != nullptr) ? joints_[i]->GetCurrentAngle() : 0.0f;
-    debug_.control_velocity[i] = 0.0f;
-    debug_.control_acceleration[i] = 0.0f;
-    debug_.control_torque_ff[i] = torques[i];
-    debug_.gravity_torque[i] = robot_.GetGravityTorque(i);
-    debug_.control_total_torque_ff[i] = torques[i];
-  }
-  robot_.Enable(true);
-  StageTorqueTargets(joints_, torques);
-  last_enable_ = false;
-  last_frame_ = arm_cmd_.frame;
-  last_ctrl_type_ = arm_cmd_.ctrl_type;
-  ClearTransientCommand(&arm_cmd_);
-}
-
-bool Runtime::RunGravityOnlyTorqueCycle() {
-  robot_.Enable(true);
-  debug_.control_command_mode = arm_lib::JointCommandMode::kTorque;
+bool Runtime::RunGravityHoldCycle() {
+  debug_.control_command_mode =
+      arm_lib::JointCommandMode::kPositionVelocityTorque;
   debug_.control_command_valid = true;
 
   bool ok = true;
   for (uint8_t i = 0; i < ARM_JOINT_COUNT; ++i) {
     IJoint* joint = joints_[i];
-    const float torque = robot_.GetGravityTorque(i);
-    debug_.control_position[i] =
+    const float target_angle =
         (joint != nullptr) ? joint->GetCurrentAngle() : 0.0f;
-    debug_.control_velocity[i] = 0.0f;
-    debug_.control_acceleration[i] = 0.0f;
-    debug_.control_torque_ff[i] = torque;
-    debug_.gravity_torque[i] = torque;
-    debug_.control_total_torque_ff[i] = torque;
-
-    if (joint == nullptr || !joint->IsOnline()) {
-      ok = false;
-      continue;
-    }
-    if (joint->TorqueControl(torque) != 0) {
-      ok = false;
-      continue;
-    }
-    if (joint->CommitControl() != 0) {
-      ok = false;
-    }
-  }
-
-  debug_.last_commit_ok = ok;
-  last_enable_ = false;
-  last_frame_ = arm_cmd_.frame;
-  last_ctrl_type_ = arm_cmd_.ctrl_type;
-  ClearTransientCommand(&arm_cmd_);
-  return ok;
-}
-
-bool Runtime::RunZeroTorqueCycle() {
-  debug_.control_command_mode = arm_lib::JointCommandMode::kTorque;
-  debug_.control_command_valid = true;
-
-  bool ok = true;
-  for (uint8_t i = 0; i < ARM_JOINT_COUNT; ++i) {
-    IJoint* joint = joints_[i];
+    const float gravity_torque = robot_.GetGravityTorque(i);
     debug_.control_position[i] =
-        (joint != nullptr) ? joint->GetCurrentAngle() : 0.0f;
+        target_angle;
     debug_.control_velocity[i] = 0.0f;
     debug_.control_acceleration[i] = 0.0f;
     debug_.control_torque_ff[i] = 0.0f;
-    debug_.gravity_torque[i] = robot_.GetGravityTorque(i);
-    debug_.control_total_torque_ff[i] = 0.0f;
+    debug_.gravity_torque[i] = gravity_torque;
+    debug_.control_total_torque_ff[i] = gravity_torque;
 
     if (joint == nullptr || !joint->IsOnline()) {
       ok = false;
       continue;
     }
-    if (joint->TorqueControl(0.0f) != 0) {
-      ok = false;
-      continue;
-    }
-    if (joint->CommitControl() != 0) {
+    joint->SetTargetAngle(target_angle);
+    joint->SetFeedforwardTorque(gravity_torque);
+    if (joint->PositionControl(target_angle, 0.0f) != 0) {
       ok = false;
     }
   }
-
-  debug_.last_commit_ok = ok;
-  ClearTransientCommand(&arm_cmd_);
   return ok;
 }
 
@@ -631,6 +606,23 @@ bool Runtime::ApplyJointTarget(const ArmJointAngles_t& candidate_joints) {
   target_pose_ = ForwardPose(chain_, candidate_joints);
   (void)robot_.SetTargetPose(target_pose_);
   return true;
+}
+
+void Runtime::CaptureJointPositionControlDebug(bool command_valid) {
+  debug_.control_command_mode =
+      arm_lib::JointCommandMode::kPositionVelocityTorque;
+  debug_.control_command_valid = command_valid;
+  for (uint8_t i = 0; i < ARM_JOINT_COUNT; ++i) {
+    IJoint* joint = joints_[i];
+    debug_.control_position[i] =
+        (joint != nullptr) ? joint->GetTargetAngle() : target_joints_.q[i];
+    debug_.control_velocity[i] = 0.0f;
+    debug_.control_acceleration[i] = 0.0f;
+    debug_.control_torque_ff[i] =
+        (joint != nullptr) ? joint->GetFeedforwardTorque() : 0.0f;
+    debug_.gravity_torque[i] = robot_.GetGravityTorque(i);
+    debug_.control_total_torque_ff[i] = debug_.control_torque_ff[i];
+  }
 }
 
 void Runtime::ConfigureCartesianApp() {
@@ -727,8 +719,10 @@ bool Runtime::RunRemoteCartesianCycle(float dt_s) {
 
   const arm_lib::JointState<ARM_JOINT_COUNT> feedback =
       ReadCurrentJointState();
+  const arm_app::ThreePitRemoteInput input = BuildRemoteCartesianInput();
   const arm_app::ThreePitCartesianAppResult result =
-      cartesian_app_.update(feedback, BuildRemoteCartesianInput(), dt_s);
+      cartesian_app_.update(feedback, input, dt_s);
+  CaptureRemoteCartesianDebug(result, input, feedback, dt_s);
 
   target_pose_ = mr::arm_project::transform_to_pose_with_planar_pitch(
       cartesian_app_.target_transform(),
@@ -739,6 +733,40 @@ bool Runtime::RunRemoteCartesianCycle(float dt_s) {
   }
 
   return StageJointCommand(result.command, dt_s);
+}
+
+void Runtime::CaptureRemoteCartesianDebug(
+    const arm_app::ThreePitCartesianAppResult& result,
+    const arm_app::ThreePitRemoteInput& input,
+    const arm_lib::JointState<ARM_JOINT_COUNT>& feedback,
+    float dt_s) {
+  RuntimeRemoteCartesianDebugData& remote_debug = debug_.remote_cartesian;
+  remote_debug.active = true;
+  remote_debug.feedback_valid = feedback.valid;
+  for (uint8_t i = 0; i < ARM_JOINT_COUNT; ++i) {
+    remote_debug.feedback_valid =
+        remote_debug.feedback_valid && feedback.online[i];
+  }
+  remote_debug.input_enabled = input.enabled;
+  remote_debug.reset_target_to_feedback = input.reset_target_to_feedback;
+  remote_debug.candidate_rejected_out_of_range =
+      result.candidate_rejected_out_of_range;
+  remote_debug.target_updated = result.target_updated;
+  remote_debug.target_reachable = result.target_reachable;
+  remote_debug.command_updated = result.command_updated;
+  remote_debug.dt_s = dt_s;
+  remote_debug.y_axis = input.y_axis;
+  remote_debug.z_axis = input.z_axis;
+  remote_debug.pitch_axis = input.pitch_axis;
+  remote_debug.target_yz_pitch = result.target_yz_pitch;
+  remote_debug.last_valid_target_yz_pitch =
+      result.last_valid_target_yz_pitch;
+  remote_debug.candidate_yz_pitch = result.candidate_yz_pitch;
+  remote_debug.safety_result = result.safety_result;
+  CopyIkDebugResult(result.target_ik_result, feedback.q,
+                    &remote_debug.target_ik);
+  CopyIkDebugResult(result.step_ik_result, feedback.q,
+                    &remote_debug.step_ik);
 }
 
 bool Runtime::StageJointCommand(
@@ -792,11 +820,6 @@ bool Runtime::StageJointCommand(
 }
 
 void Runtime::Commit() {
-  if (g_arm_gravity_only_torque_enable == 0U) {
-    debug_.last_commit_ok = true;
-    RefreshDebugData();
-    return;
-  }
   debug_.last_commit_ok = (robot_.Commit() == 0);
   RefreshDebugData();
 }
@@ -899,28 +922,8 @@ void Runtime::RefreshDebugData() {
     debug_.feedforward_torque[i] =
         (joint != nullptr) ? joint->GetFeedforwardTorque() : 0.0f;
     debug_.gravity_torque[i] = robot_.GetGravityTorque(i);
-    debug_.motor_command_position[i] =
-        (joint != nullptr) ? joint->GetMotorCommandPosition() : 0.0f;
-    debug_.motor_command_velocity[i] =
-        (joint != nullptr) ? joint->GetMotorCommandVelocity() : 0.0f;
-    debug_.motor_command_torque[i] =
-        (joint != nullptr) ? joint->GetMotorCommandTorque() : 0.0f;
-    debug_.motor_command_kp[i] =
-        (joint != nullptr) ? joint->GetMotorCommandKp() : 0.0f;
-    debug_.motor_command_kd[i] =
-        (joint != nullptr) ? joint->GetMotorCommandKd() : 0.0f;
     debug_.joint_online[i] = (joint != nullptr) && joint->IsOnline();
     debug_.joint_pending[i] = (joint != nullptr) && joint->HasPendingControl();
-  }
-
-  if (joint1_motor_ != nullptr) {
-    debug_.motor_state[0] = joint1_motor_->GetState();
-  }
-  if (joint2_motor_ != nullptr) {
-    debug_.motor_state[1] = joint2_motor_->GetState();
-  }
-  if (joint3_motor_ != nullptr) {
-    debug_.motor_state[2] = joint3_motor_->GetState();
   }
 }
 

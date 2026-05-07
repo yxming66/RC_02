@@ -1,7 +1,8 @@
 #pragma once
 
 #include <array>
-#include <cmath>
+
+#include "component/math/scalar.hpp"
 
 namespace mr::robotics::chassis {
 
@@ -20,7 +21,8 @@ struct MecanumGeometry {
   float RotationRadius() const { return wheelbase_m + trackwidth_m; }
 
   bool IsValid() const {
-    return std::isfinite(wheelbase_m) && std::isfinite(trackwidth_m) &&
+    return mr::component::math::is_finite_scalar(wheelbase_m) &&
+           mr::component::math::is_finite_scalar(trackwidth_m) &&
            wheelbase_m >= 0.0f && trackwidth_m >= 0.0f &&
            RotationRadius() > 1e-5f;
   }
@@ -85,30 +87,14 @@ class MecanumChassis {
   }
 
   static float MaxAbsWheelSpeed(const WheelSpeeds& wheel_speeds) {
-    float max_abs = 0.0f;
-    for (float speed : wheel_speeds) {
-      const float abs_speed = std::fabs(speed);
-      if (abs_speed > max_abs) {
-        max_abs = abs_speed;
-      }
-    }
-    return max_abs;
+    return mr::component::math::max_abs_array(wheel_speeds.data(),
+                                              kWheelCount);
   }
 
   static bool ScaleWheelSpeedsToLimit(WheelSpeeds& wheel_speeds,
                                       float max_abs_speed) {
-    if (!std::isfinite(max_abs_speed) || max_abs_speed <= 0.0f) {
-      return false;
-    }
-    const float max_abs = MaxAbsWheelSpeed(wheel_speeds);
-    if (max_abs <= max_abs_speed || max_abs <= 0.0f) {
-      return false;
-    }
-    const float scale = max_abs_speed / max_abs;
-    for (float& speed : wheel_speeds) {
-      speed *= scale;
-    }
-    return true;
+    return mr::component::math::scale_to_abs_limit(
+        wheel_speeds.data(), kWheelCount, max_abs_speed);
   }
 
  private:
@@ -117,17 +103,14 @@ class MecanumChassis {
   }
 
   static bool IsFinite(const PlanarVelocity& velocity) {
-    return std::isfinite(velocity.vx_mps) && std::isfinite(velocity.vy_mps) &&
-           std::isfinite(velocity.wz_rad_s);
+    return mr::component::math::is_finite_scalar(velocity.vx_mps) &&
+           mr::component::math::is_finite_scalar(velocity.vy_mps) &&
+           mr::component::math::is_finite_scalar(velocity.wz_rad_s);
   }
 
   static bool IsFinite(const WheelSpeeds& wheel_speeds) {
-    for (float speed : wheel_speeds) {
-      if (!std::isfinite(speed)) {
-        return false;
-      }
-    }
-    return true;
+    return mr::component::math::values_are_finite(wheel_speeds.data(),
+                                                  kWheelCount);
   }
 
   MecanumGeometry geometry_{};

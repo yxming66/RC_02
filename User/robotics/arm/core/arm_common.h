@@ -1,19 +1,18 @@
 #ifndef ARM_LIB_CORE_ARM_COMMON_H
 #define ARM_LIB_CORE_ARM_COMMON_H
 
-#include <cmath>
-
+#include "component/math/scalar.hpp"
 #include "../arm_config.h"
 #include "arm_types.h"
 
 namespace mr::robotics::arm {
 
 inline Scalar abs_scalar(Scalar value) {
-  return fabsf(value);
+  return ::mr::component::math::abs_scalar(value);
 }
 
 inline bool is_finite_scalar(Scalar value) {
-  return (value == value) && (abs_scalar(value) <= 1.0e30f);
+  return ::mr::component::math::is_finite_scalar(value);
 }
 
 inline bool is_near_zero(Scalar value, Scalar epsilon = ARM_LIB_EPSILON) {
@@ -21,13 +20,7 @@ inline bool is_near_zero(Scalar value, Scalar epsilon = ARM_LIB_EPSILON) {
 }
 
 inline Scalar clamp_scalar(Scalar value, Scalar lower, Scalar upper) {
-  if (value < lower) {
-    return lower;
-  }
-  if (value > upper) {
-    return upper;
-  }
-  return value;
+  return ::mr::component::math::clamp_scalar(value, lower, upper);
 }
 
 inline Scalar deg_to_rad(Scalar degrees) {
@@ -39,11 +32,8 @@ inline Scalar rad_to_deg(Scalar angle_rad) {
 }
 
 inline Scalar wrap_to_pi(Scalar angle) {
-  Scalar wrapped = fmodf(angle + ARM_LIB_PI, 2.0f * ARM_LIB_PI);
-  if (wrapped < 0.0f) {
-    wrapped += 2.0f * ARM_LIB_PI;
-  }
-  return wrapped - ARM_LIB_PI;
+  return ::mr::component::math::wrap_to_range(
+      angle, -ARM_LIB_PI, ARM_LIB_PI, ARM_LIB_EPSILON);
 }
 
 inline Scalar angle_distance(Scalar from, Scalar to) {

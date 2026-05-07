@@ -1,5 +1,21 @@
 #pragma once
 
+/*
+ * 控制律组件共用类型和工具函数。
+ *
+ * 定义控制器通用类型：
+ *   - Scalar: 标量类型别名
+ *   - SymmetricLimit: 对称限幅结构
+ *   - RangeWrap: 周期角度误差处理
+ *   - Step: 控制器采样结果
+ *   - SlewRateLimiter: 输出斜率限制器
+ *   - DerivativeMode: 微分项计算模式
+ *
+ * 业务代码通常包含具体控制器头文件或聚合头文件即可：
+ *
+ *   #include "component/controller/controller.hpp"
+ */
+
 #include <stdint.h>
 
 #include "component/math/scalar.hpp"

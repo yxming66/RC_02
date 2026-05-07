@@ -5,6 +5,7 @@
 #include <cstring>
 #include <stdint.h>
 
+#include "component/math/scalar.hpp"
 #include "device/joint/joint.hpp"
 #include "module/arm/arm_control_types.h"
 #include "module/arm/detail/utils.hpp"
@@ -595,13 +596,7 @@ public:
 
 private:
     static float SanitizeDt(float dt) {
-        if (dt < 0.0002f) {
-            return 0.0002f;
-        }
-        if (dt > 0.02f) {
-            return 0.02f;
-        }
-        return dt;
+        return mr::component::math::sanitize_dt(dt, 0.0002f, 0.0002f, 0.02f);
     }
 
     static MotionState MapMotionState(

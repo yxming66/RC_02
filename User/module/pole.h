@@ -164,6 +164,13 @@ typedef struct {
   Pole_Output_t out;
   Pole_Feedback_t feedback;
   Pole_Debug_t debug;
+
+  /* PC上位机接口 */
+  struct {
+    bool pc_control_enable;
+    float pc_lift[2];         /* PC下发升降命令 [-1, 1] */
+    uint8_t pc_mode;          /* PC下发模式 */
+  } pc_if;
 } Pole_t;
 
 #ifdef __cplusplus
@@ -181,6 +188,13 @@ const Pole_Debug_t *Pole_GetDebug(const Pole_t *c);
 void Pole_Output(Pole_t *c);
 void Pole_ResetOutput(Pole_t *c);
 void Pole_Power_Control(Pole_t *c, float max_power);
+
+/* PC上位机接口函数 */
+void Pole_InitPCInterface(Pole_t *c);
+void Pole_SetPCCommand(Pole_t *c, uint8_t mode, float lift0, float lift1);
+bool Pole_IsPCControlEnabled(const Pole_t *c);
+const float* Pole_GetPCLiftCommand(const Pole_t *c);
+void Pole_FillPCFeedback(const Pole_t *c, void *fb);
 
 #ifdef __cplusplus
 }

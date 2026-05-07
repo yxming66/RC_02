@@ -1,4 +1,5 @@
 #include "module/autoCtrlAPI/core/auto_ctrl_math.h"
+#include "component/math/scalar.h"
 
 /*
  * auto_ctrl_math.c
@@ -11,18 +12,9 @@
 
 #include <math.h>
 
-#define AUTO_CTRL_PI_F (3.14159265358979323846f)
-#define AUTO_CTRL_TWO_PI_F (2.0f * AUTO_CTRL_PI_F)
-
 /* 将弧度循环折返到 [-pi, pi]。 */
 float AutoCtrlMath_WrapYawRad(float yaw_rad) {
-  while (yaw_rad > AUTO_CTRL_PI_F) {
-    yaw_rad -= AUTO_CTRL_TWO_PI_F;
-  }
-  while (yaw_rad < -AUTO_CTRL_PI_F) {
-    yaw_rad += AUTO_CTRL_TWO_PI_F;
-  }
-  return yaw_rad;
+  return comp_wrap_to_pi_f(yaw_rad);
 }
 
 /* 计算目标朝向相对当前朝向的最短有符号误差（弧度）。 */
@@ -33,6 +25,6 @@ float AutoCtrlMath_GetYawErrorRad(float target_yaw_rad, float current_yaw_rad) {
 /* 基于最短误差判断 yaw 是否达标。 */
 bool AutoCtrlMath_IsYawAlignedRad(float target_yaw_rad, float current_yaw_rad,
                                   float tolerance_rad) {
-  return fabsf(AutoCtrlMath_GetYawErrorRad(target_yaw_rad, current_yaw_rad)) <=
-         fabsf(tolerance_rad);
+  return comp_abs_f(AutoCtrlMath_GetYawErrorRad(target_yaw_rad, current_yaw_rad)) <=
+         comp_abs_f(tolerance_rad);
 }

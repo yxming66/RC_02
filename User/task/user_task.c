@@ -27,7 +27,7 @@ const osThreadAttr_t attr_chassis_main = {
 const osThreadAttr_t attr_rc_main = {
     .name = "rc_main",
     .priority = osPriorityNormal,
-    .stack_size = 256 * 4,
+    .stack_size = 512 * 4,
 };
 const osThreadAttr_t attr_cmd_main = {
     .name = "cmd_main",
@@ -47,12 +47,17 @@ const osThreadAttr_t attr_auto_ctrl = {
 const osThreadAttr_t attr_arm = {
     .name = "arm",
     .priority = osPriorityNormal,
-    .stack_size = 2048 * 4,
+    .stack_size = 2048 * 12,
 };
 const osThreadAttr_t attr_rod = {
     .name = "rod",
     .priority = osPriorityNormal,
     .stack_size = 256 * 4,
+};
+const osThreadAttr_t attr_pc_comm = {
+    .name = "pc_comm",
+    .priority = osPriorityHigh,
+    .stack_size = 512 * 4,
 };
 const osThreadAttr_t attr_pc_uart_rx = {
     .name = "pc_uart_rx",

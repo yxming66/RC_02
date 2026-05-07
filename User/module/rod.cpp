@@ -8,6 +8,7 @@
 #include <string.h>
 
 #include "bsp/can.h"
+#include "component/trajectory/online_trapezoid.h"
 #include "device/motor/factory/motor_factory.hpp"
 
 using mr::motor::DmJ4310Motor;
@@ -63,49 +64,16 @@ static void Rod_SetMotorEnable(Rod_t *r, bool enable) {
   }
 }
 
-static float Rod_Clipf(float val, float min, float max) {
-  if (val < min) return min;
-  if (val > max) return max;
-  return val;
-}
-
 static float Rod_AngleError(float target, float feedback) {
   return target - feedback;
 }
 
 static float Rod_UpdateTrapezoidAxis(float current, float target, float *velocity,
                                      float max_vel, float max_acc, float dt) {
-  float error = Rod_AngleError(target, current);
-  const float stop_pos_eps = 0.002f;
-  const float stop_vel_eps = fmaxf(0.02f, max_acc * dt);
-
-  if (fabsf(error) <= stop_pos_eps && fabsf(*velocity) <= stop_vel_eps) {
-    *velocity = 0.0f;
-    return target;
-  }
-
-  float brake_vel = sqrtf(fmaxf(0.0f, 2.0f * max_acc * fabsf(error)));
-  float desired_vel = copysignf(fminf(max_vel, brake_vel), error);
-
-  if (brake_vel < stop_vel_eps) {
-    desired_vel = 0.0f;
-  }
-
-  if (fabsf(desired_vel) > brake_vel) {
-    desired_vel = copysignf(brake_vel, desired_vel);
-  }
-
-  float dv = desired_vel - *velocity;
-  float max_dv = max_acc * dt;
-  dv = Rod_Clipf(dv, -max_dv, max_dv);
-  *velocity = Rod_Clipf(*velocity + dv, -max_vel, max_vel);
-
-  if (fabsf(error) <= stop_pos_eps && fabsf(*velocity) <= stop_vel_eps) {
-    *velocity = 0.0f;
-    return target;
-  }
-
-  return current + (*velocity) * dt;
+  const comp_online_trapezoid_axis_sample_t sample =
+      comp_update_trapezoid_axis_f(current, target, velocity, max_vel, max_acc,
+                                   dt, 0.002f, 0.02f);
+  return sample.valid ? sample.position : current;
 }
 
 static bool Rod_Arrived(float target, float feedback, float threshold) {
@@ -142,7 +110,7 @@ static float Rod_GetPitIntegralComp(Rod_t *r) {
 
   if (fabsf(err) <= ROD_PIT_I_ACTIVE_ERR_RAD) {
     r->comp.pit_err_i += err * r->dt;
-    r->comp.pit_err_i = Rod_Clipf(r->comp.pit_err_i, -ROD_PIT_I_LIMIT,
+    r->comp.pit_err_i = comp_clamp_f(r->comp.pit_err_i, -ROD_PIT_I_LIMIT,
                                   ROD_PIT_I_LIMIT);
   } else {
     r->comp.pit_err_i = 0.0f;
@@ -379,9 +347,7 @@ int8_t Rod_Control(Rod_t *r, const Rod_CMD_t *cmd, uint32_t now) {
 
   r->dt = (float)(now - r->last_wakeup) / 1000.0f;
   r->last_wakeup = now;
-  if (!isfinite(r->dt) || r->dt <= 0.0f) r->dt = 0.001f;
-  if (r->dt < 0.0005f) r->dt = 0.0005f;
-  if (r->dt > 0.050f) r->dt = 0.050f;
+  r->dt = comp_sanitize_dt_f(r->dt, 0.001f, 0.0005f, 0.050f);
 
   r->mode = cmd->mode;
   r->pose = cmd->pose;

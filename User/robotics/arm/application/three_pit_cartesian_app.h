@@ -90,6 +90,7 @@ enum class ThreePitCartesianAppState : uint8_t {
   kTargetUnreachableHold,
   kTargetOutOfRangeRejected,
   kFaultHold,
+  kSingularityHold,
 };
 
 enum class ThreePitCartesianHoldReason : uint8_t {
@@ -103,6 +104,8 @@ enum class ThreePitCartesianHoldReason : uint8_t {
   kTrajectoryFailure,
   kStepIkFailure,
   kSafetyFailure,
+  kTargetUnreachable,
+  kTargetSingularity,
 };
 
 struct ThreePitCartesianAppResult {
@@ -161,11 +164,33 @@ class ThreePitCartesianApp {
   using JointCommand3 = JointCommand<kThreePitCartesianDof>;
   using JointState3 = JointState<kThreePitCartesianDof>;
 
+  struct CandidateSolution {
+    YzPitchPose pose;
+    Transform transform;
+    kinematics::IKResult<kThreePitCartesianDof> ik_result;
+  };
+
+  struct ScaledCandidateSearch {
+    bool accepted;
+    bool saw_ik_failure;
+    bool saw_safety_failure;
+    YzPitchPose accepted_target;
+    Transform accepted_transform;
+    JointCommand3 accepted_command;
+    safety::JointCommandSafetyResult accepted_safety;
+    kinematics::IKResult<kThreePitCartesianDof> representative_ik_failure;
+  };
+
   static bool joint_state_is_usable(const JointState3& state);
   static bool remote_input_is_finite(const ThreePitRemoteInput& input);
   static Scalar apply_deadzone(Scalar axis, Scalar deadzone);
   static bool workspace_contains(const ThreePitWorkspaceLimits& workspace,
                                  const YzPitchPose& pose);
+  static bool ik_failure_is_singularity(
+      const kinematics::IKResult<kThreePitCartesianDof>& result,
+      const kinematics::IKOptions& options);
+  static bool ik_failure_is_reachability_boundary(
+      const kinematics::IKResult<kThreePitCartesianDof>& result);
 
   Scalar planar_pitch_from_joints(const JointVec3& q) const;
   YzPitchPose yz_pitch_from_feedback(const Transform& transform,
@@ -173,12 +198,40 @@ class ThreePitCartesianApp {
   Rotation make_planar_pitch_rotation(Scalar pitch) const;
   Transform make_target_transform(const YzPitchPose& pose,
                                   const Transform& reference_pose) const;
+  YzPitchPose make_candidate_pose(const YzPitchPose& base,
+                                  Scalar y_axis,
+                                  Scalar z_axis,
+                                  Scalar pitch_axis,
+                                  Scalar dt,
+                                  Scalar scale) const;
   kinematics::IKOptions make_yz_pitch_ik_options(
       const Transform& target_pose) const;
   kinematics::IKResult<kThreePitCartesianDof> solve_target_ik(
       const Transform& target_pose,
       const JointVec3& seed,
       const JointVec3& current) const;
+  CandidateSolution solve_candidate(const YzPitchPose& candidate,
+                                    const Transform& current_pose,
+                                    const JointVec3& reference_q,
+                                    const JointState3& feedback) const;
+  JointCommand3 make_command_from_solution(const JointVec3& reference_q,
+                                           const JointVec3& solution_q,
+                                           const JointVec3& previous_qd,
+                                           Scalar dt) const;
+  safety::JointCommandSafetyResult validate_candidate_command(
+      const JointCommand3& command,
+      const JointVec3& reference_q) const;
+  ScaledCandidateSearch try_solve_scaled_candidate(
+      const YzPitchPose& base,
+      const Transform& current_pose,
+      const JointState3& feedback,
+      Scalar y_axis,
+      Scalar z_axis,
+      Scalar pitch_axis,
+      Scalar dt,
+      const JointVec3& reference_q,
+      const JointVec3& previous_qd,
+      bool has_task_delta);
   JointVec3 joint_delta_from_current(const JointVec3& current,
                                      const JointVec3& target) const;
   safety::JointCommandSafetyConfig<kThreePitCartesianDof>

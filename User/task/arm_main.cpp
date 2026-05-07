@@ -9,7 +9,6 @@ extern "C" {
 
 mr::arm::Runtime* g_arm_runtime_ptr = &g_arm_runtime;
 mr::arm::RuntimeDebugData* g_arm_debug = &g_arm_runtime.debug();
-volatile uint8_t g_arm_gravity_only_torque_enable = 0U;
 
 }
 uint8_t setzero=0;

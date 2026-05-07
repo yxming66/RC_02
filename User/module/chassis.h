@@ -150,6 +150,22 @@ typedef struct {
   bool last_commit_ok[4];
 } Chassis_Output_t;
 
+/* PC上位机接口 */
+typedef struct {
+  bool pc_control_enable;     /* PC控制使能 */
+  float pc_vx;               /* PC下发速度命令 m/s */
+  float pc_vy;               /* PC下发速度命令 m/s */
+  float pc_wz;               /* PC下发角速度命令 rad/s */
+} Chassis_PCInterface_t;
+
 #ifdef __cplusplus
 }
+#endif
+
+#ifdef __cplusplus
+/* PC接口函数声明 */
+void Chassis_InitPCInterface(Chassis_PCInterface_t *pc_if);
+void Chassis_SetPCCommand(float vx, float vy, float wz);
+const Chassis_PCInterface_t* Chassis_GetPCInterface(void);
+void Chassis_FillPCFeedback(void *fb);
 #endif

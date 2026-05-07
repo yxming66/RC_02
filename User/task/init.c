@@ -30,6 +30,7 @@ void Task_Init(void *argument) {
   // task_runtime.thread.sick = osThreadNew(Task_sick, NULL, &attr_sick);
   // task_runtime.thread.auto_ctrl =osThreadNew(Task_auto_ctrl, NULL, &attr_auto_ctrl);
   task_runtime.thread.arm = osThreadNew(Task_arm, NULL, &attr_arm);
+  task_runtime.thread.pc_comm = osThreadNew(Task_pc_comm, NULL, &attr_pc_comm);
   // task_runtime.thread.pc_uart_rx = osThreadNew(Task_pc_uart_rx, NULL,&attr_pc_uart_rx);
   // task_runtime.thread.rod = osThreadNew(Task_rod, NULL, &attr_rod);
 

@@ -8,7 +8,7 @@
 namespace mr::robotics::arm {
 namespace trajectory {
 
-using CubicBlendSample = ::mr::component::trajectory::CubicBlendSample;
+using CubicBlendSample = ::mr::comp::traj::CubicBlendSample;
 
 inline Scalar clamp_unit_interval(Scalar value) {
   return clamp_scalar(value, 0.0f, 1.0f);
@@ -16,14 +16,14 @@ inline Scalar clamp_unit_interval(Scalar value) {
 
 inline CubicBlendSample sample_cubic_blend(Scalar elapsed,
                                            Scalar duration) {
-  return ::mr::component::trajectory::sample_cubic_blend(
+  return ::mr::comp::traj::sample_cubic_blend(
       elapsed, duration, ARM_LIB_EPSILON);
 }
 
 inline Scalar cubic_duration_from_limits(Scalar distance,
                                          Scalar max_velocity,
                                          Scalar max_acceleration) {
-  return ::mr::component::trajectory::cubic_blend_duration_from_limits(
+  return ::mr::comp::traj::cubic_blend_duration_from_limits(
       distance, max_velocity, max_acceleration, ARM_LIB_EPSILON);
 }
 

@@ -1,30 +1,30 @@
 #pragma once
 
 /*
- * First-order high-pass filter.
+ * 一阶高通滤波器。
  *
- * Use it to remove slow drift or DC offset while preserving fast changes:
+ * 用于去除慢速漂移或直流偏置，同时保留快速变化：
  *
  *   auto filter = mr::comp::filter::high_pass::Build(
- *       2.0f,     // cutoff_freq_hz
- *       1000.0f   // sample_freq_hz
+ *       2.0f,     // 截止频率 Hz
+ *       1000.0f   // 采样频率 Hz
  *   );
  *
  *   filter.Reset(initial_sample);
  *   float y = filter.Update(sample);
  *
- * If the loop period is not fixed, pass dt_s on each update:
+ * 如果循环周期不固定，每次更新时传入本次实际间隔 dt_s，单位为秒：
  *
  *   float y = filter.Update(sample, dt_s);
  *
- * cutoff_freq_hz <= 0 makes the filter bypass and return the input sample.
+ * cutoff_freq_hz <= 0 时，滤波器旁路，直接返回输入值。
  */
 
 #include "component/filter/filter_types.hpp"
 
 namespace mr::comp::filter {
 
-struct high_pass_config {
+struct high_pass_config { 
   Scalar sample_freq_hz = kDefaultSampleFreqHz;
   Scalar cutoff_freq_hz = 0.0f;
 };

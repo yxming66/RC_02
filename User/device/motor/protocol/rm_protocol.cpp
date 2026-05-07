@@ -17,27 +17,15 @@ constexpr float kMotorEncoderResolution = 8192.0f;
 constexpr float kSecondsPerMinute = 60.0f;
 
 float ResolvePositiveRatio(float ratio) {
-    return (ratio > 0.0f) ? ratio : 1.0f;
+    return comp_positive_or_f(ratio, 1.0f);
 }
 
 float WrapAngleDiff(float diff_rad) {
-    while (diff_rad > kPi) {
-        diff_rad -= kTwoPi;
-    }
-    while (diff_rad < -kPi) {
-        diff_rad += kTwoPi;
-    }
-    return diff_rad;
+    return comp_wrap_error_f(diff_rad, kTwoPi);
 }
 
 float WrapToPi(float angle_rad) {
-    while (angle_rad >= kPi) {
-        angle_rad -= kTwoPi;
-    }
-    while (angle_rad < -kPi) {
-        angle_rad += kTwoPi;
-    }
-    return angle_rad;
+    return comp_wrap_to_pi_f(angle_rad);
 }
 
 float RpmToRadPerSec(float rpm) {

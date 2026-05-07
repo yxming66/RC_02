@@ -10,6 +10,7 @@
  */
 
 #include <string.h>
+#include "component/math/scalar.h"
 #include "module/config.h"
 
 /* 底盘输出复位为 RELAX，避免上一周期残留控制量。 */
@@ -32,9 +33,7 @@ void AutoCtrlPrimitive_ResetOutputs(auto_ctrl_t *ctrl) {
 
 /* 通用限幅函数，防止控制量超界。 */
 float AutoCtrlPrimitive_Clamp(float value, float min_value, float max_value) {
-  if (value < min_value) return min_value;
-  if (value > max_value) return max_value;
-  return value;
+  return comp_clamp_f(value, min_value, max_value);
 }
 
 /* 仅执行 yaw 对齐控制，不注入平移速度。 */

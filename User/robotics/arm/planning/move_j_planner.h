@@ -118,7 +118,7 @@ class MoveJPlanner {
     out.finished = elapsed >= duration_;
 
     for (uint16_t i = 0; i < N; ++i) {
-      const ::mr::component::trajectory::ScalarMotionSample sample =
+      const ::mr::comp::traj::ScalarMotionSample sample =
           profile_.sample_axis(i, t);
 
       if (out.finished) {
@@ -159,7 +159,7 @@ class MoveJPlanner {
 
   MoveJRequest<N> request_;
   JointVec<N> delta_;
-  ::mr::component::trajectory::SynchronizedTrapezoidProfile<N> profile_;
+  ::mr::comp::traj::SynchronizedTrapezoidProfile<N> profile_;
   Scalar duration_;
   bool valid_;
 };

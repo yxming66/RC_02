@@ -1,14 +1,14 @@
 #pragma once
 
 /*
- * Shared filter component types and helpers.
+ * 滤波器组件共用类型和工具函数。
  *
- * Normal users should include a concrete filter header or the aggregate header:
+ * 业务代码通常包含具体滤波器头文件或聚合头文件即可：
  *
  *   #include "component/filter/filter.hpp"
  *
- * This file holds common scalar aliases, sample period sanitizing helpers, and
- * internal biquad state used by low_pass and notch.
+ * 本文件保存通用标量别名、采样周期清洗工具，以及 low_pass 和 notch 共用的
+ * 内部 biquad 状态。
  */
 
 #include <stdint.h>

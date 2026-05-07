@@ -1,19 +1,95 @@
 #include "device/motor/packages/controller/motor_controller.hpp"
 
-#include <math.h>
-
-#include "component/user_math.h"
-
 namespace mr::motor {
 
 namespace {
 
+namespace cntlr = mr::comp::cntlr;
+namespace scalar = mr::component::math;
+
+constexpr float kControllerMaxDtS = 0.05f;
+
 float ClampLimit(float value) {
-    return (value > 0.0f) ? value : 0.0f;
+    return (scalar::is_finite_scalar(value) && value > 0.0f) ? value : 0.0f;
 }
 
 float ResolvePositiveRatio(float ratio) {
     return (ratio > 0.0f) ? ratio : 1.0f;
+}
+
+float Maxf(float lhs, float rhs) {
+    return (lhs > rhs) ? lhs : rhs;
+}
+
+float ResolveControlFreqHz(float sample_freq) {
+    return (scalar::is_finite_scalar(sample_freq) && sample_freq > 0.0f)
+               ? sample_freq
+               : cntlr::kDefaultSampleFreqHz;
+}
+
+float ResolveDefaultDtS(float sample_freq) {
+    return 1.0f / ResolveControlFreqHz(sample_freq);
+}
+
+mr::comp::timer::Config BuildControlTimerConfig(float sample_freq) {
+    const float default_dt_s = ResolveDefaultDtS(sample_freq);
+    mr::comp::timer::Config timer_config{};
+    timer_config.first_dt_us = mr::comp::timer::SecondsToUs(default_dt_s);
+    timer_config.min_dt_us = mr::comp::timer::SecondsToUs(default_dt_s);
+    timer_config.max_dt_us =
+        mr::comp::timer::SecondsToUs(Maxf(default_dt_s, kControllerMaxDtS));
+    return timer_config;
+}
+
+bool PidParamsUsable(const KPID_Params_t* params) {
+    return params != nullptr &&
+           scalar::is_finite_scalar(params->k) &&
+           scalar::is_finite_scalar(params->p) &&
+           scalar::is_finite_scalar(params->i) &&
+           scalar::is_finite_scalar(params->d) &&
+           scalar::is_finite_scalar(params->i_limit) &&
+           scalar::is_finite_scalar(params->out_limit) &&
+           scalar::is_finite_scalar(params->d_cutoff_freq) &&
+           scalar::is_finite_scalar(params->range);
+}
+
+cntlr::pid::Config BuildPidConfig(const KPID_Params_t* params,
+                                  float sample_freq) {
+    cntlr::pid::Config pid_config{};
+    pid_config.control_freq_hz = ResolveControlFreqHz(sample_freq);
+    pid_config.derivative_mode = cntlr::DerivativeMode::kOnMeasurement;
+    pid_config.hold_integral_on_saturation = true;
+
+    if (!PidParamsUsable(params)) {
+        return pid_config;
+    }
+
+    pid_config.gains.k = params->k;
+    pid_config.gains.p = params->p;
+    pid_config.gains.i = params->i;
+    pid_config.gains.d = params->d;
+    pid_config.output_limit =
+        cntlr::SymmetricLimit::Abs(ClampLimit(params->out_limit));
+
+    const float integral_output_limit =
+        (params->i > 0.0f && params->i_limit > 0.0f)
+            ? params->i_limit * params->i
+            : cntlr::kUnlimited;
+    pid_config.integral_output_limit =
+        cntlr::SymmetricLimit::Abs(ClampLimit(integral_output_limit));
+    pid_config.error_wrap =
+        (params->range > 0.0f) ? cntlr::RangeWrap::Periodic(params->range)
+                               : cntlr::RangeWrap::Disabled();
+    pid_config.derivative_cutoff_hz = ClampLimit(params->d_cutoff_freq);
+    return pid_config;
+}
+
+float ApplyRequiredAbsLimit(float value, float limit) {
+    const float positive_limit = ClampLimit(limit);
+    if (positive_limit <= 0.0f) {
+        return 0.0f;
+    }
+    return cntlr::SymmetricLimit::Abs(positive_limit).Apply(value);
 }
 
 } // namespace
@@ -23,8 +99,12 @@ MotorControllerT<MotorType>::MotorControllerT(MotorType& motor,
                                               const MotorControllerConfig& config)
     : motor_(motor),
       config_(config),
-      velocity_pid_ {},
-      position_pid_ {},
+      velocity_pid_(BuildPidConfig(config.velocity_pid, config.sample_freq)),
+      position_pid_(BuildPidConfig(config.position_pid, config.sample_freq)),
+      control_timer_(mr::comp::timer::Build(BuildControlTimerConfig(config.sample_freq))),
+      control_dt_fallback_s_(ResolveDefaultDtS(config.sample_freq)),
+      velocity_pid_ready_(PidParamsUsable(config.velocity_pid)),
+      position_pid_ready_(PidParamsUsable(config.position_pid)),
       mode_(ControlMode::Torque),
       target_torque_(0.0f),
       target_velocity_(0.0f),
@@ -34,14 +114,6 @@ MotorControllerT<MotorType>::MotorControllerT(MotorType& motor,
       target_mit_kp_(0.0f),
       target_mit_kd_(0.0f),
       target_mit_torque_ff_(0.0f) {
-    if (config_.velocity_pid != nullptr && config_.sample_freq > 0.0f) {
-        PID_Init(&velocity_pid_, KPID_MODE_CALC_D, config_.sample_freq,
-                 config_.velocity_pid);
-    }
-    if (config_.position_pid != nullptr && config_.sample_freq > 0.0f) {
-        PID_Init(&position_pid_, KPID_MODE_CALC_D, config_.sample_freq,
-                 config_.position_pid);
-    }
 }
 
 template <typename MotorType>
@@ -82,14 +154,13 @@ int8_t MotorControllerT<MotorType>::Relax() {
 
 template <typename MotorType>
 int8_t MotorControllerT<MotorType>::Update() {
+    const float dt = UpdateControlDt();
     int8_t ret = motor_.Update();
     if (ret != DEVICE_OK) {
         return ret;
     }
 
     const MotorState state = motor_.GetState();
-    const float dt =
-        (config_.sample_freq > 0.0f) ? (1.0f / config_.sample_freq) : 0.0f;
 
     switch (mode_) {
     case ControlMode::Torque:
@@ -99,13 +170,13 @@ int8_t MotorControllerT<MotorType>::Update() {
         return motor_.SetVelocity(target_velocity_);
 
     case ControlMode::EmulatedVelocity: {
-        if (config_.velocity_pid == nullptr || dt <= 0.0f) {
+        if (!velocity_pid_ready_) {
             return DEVICE_ERR_UNSUPPORTED;
         }
-        float torque_cmd = PID_Calc(&velocity_pid_, target_velocity_,
-                                    state.velocity_rad_s, 0.0f, dt);
-        torque_cmd =
-            AbsClip(torque_cmd, ResolveTorqueLimit(velocity_torque_limit_));
+        float torque_cmd =
+            velocity_pid_.Update(target_velocity_, state.velocity_rad_s, dt);
+        torque_cmd = ApplyRequiredAbsLimit(
+            torque_cmd, ResolveTorqueLimit(velocity_torque_limit_));
         return motor_.SetTorque(torque_cmd);
     }
 
@@ -113,18 +184,17 @@ int8_t MotorControllerT<MotorType>::Update() {
         return motor_.SetPosition(target_position_, position_velocity_limit_);
 
     case ControlMode::EmulatedPosition: {
-        if (config_.position_pid == nullptr || config_.velocity_pid == nullptr ||
-            dt <= 0.0f) {
+        if (!position_pid_ready_ || !velocity_pid_ready_) {
             return DEVICE_ERR_UNSUPPORTED;
         }
-        float velocity_cmd = PID_Calc(&position_pid_, target_position_,
-                                      state.position_rad, 0.0f, dt);
-        velocity_cmd =
-            AbsClip(velocity_cmd, ResolveVelocityLimit(position_velocity_limit_));
+        float velocity_cmd =
+            position_pid_.Update(target_position_, state.position_rad, dt);
+        velocity_cmd = ApplyRequiredAbsLimit(
+            velocity_cmd, ResolveVelocityLimit(position_velocity_limit_));
         float torque_cmd =
-            PID_Calc(&velocity_pid_, velocity_cmd, state.velocity_rad_s, 0.0f, dt);
-        torque_cmd =
-            AbsClip(torque_cmd, ResolveTorqueLimit(velocity_torque_limit_));
+            velocity_pid_.Update(velocity_cmd, state.velocity_rad_s, dt);
+        torque_cmd = ApplyRequiredAbsLimit(
+            torque_cmd, ResolveTorqueLimit(velocity_torque_limit_));
         return motor_.SetTorque(torque_cmd);
     }
 
@@ -177,7 +247,7 @@ int8_t MotorControllerT<MotorType>::SetVelocity(float velocity) {
         return DEVICE_OK;
     }
 
-    if (config_.velocity_pid == nullptr) {
+    if (!velocity_pid_ready_) {
         return DEVICE_ERR_UNSUPPORTED;
     }
 
@@ -204,7 +274,7 @@ int8_t MotorControllerT<MotorType>::SetPosition(float position,
         return DEVICE_OK;
     }
 
-    if (config_.position_pid == nullptr || config_.velocity_pid == nullptr) {
+    if (!position_pid_ready_ || !velocity_pid_ready_) {
         return DEVICE_ERR_UNSUPPORTED;
     }
 
@@ -247,13 +317,19 @@ const MotorInstallSpec& MotorControllerT<MotorType>::GetInstallConfig() const {
 
 template <typename MotorType>
 int8_t MotorControllerT<MotorType>::ResetControllers() {
-    if (config_.velocity_pid != nullptr) {
-        PID_Reset(&velocity_pid_);
+    if (velocity_pid_ready_) {
+        velocity_pid_.Reset();
     }
-    if (config_.position_pid != nullptr) {
-        PID_Reset(&position_pid_);
+    if (position_pid_ready_) {
+        position_pid_.Reset();
     }
+    control_timer_.Configure(BuildControlTimerConfig(config_.sample_freq));
     return DEVICE_OK;
+}
+
+template <typename MotorType>
+float MotorControllerT<MotorType>::UpdateControlDt() {
+    return cntlr::SanitizeDt(control_timer_.Update(), control_dt_fallback_s_);
 }
 
 template <typename MotorType>

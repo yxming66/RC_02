@@ -5,12 +5,16 @@
 #include "../kinematics/task_constraints.h"
 #include "../servo/servo_l_controller.h"
 #include "../solver/solver_common.h"
-#include "../trajectory/cartesian_traj.h"
 
 namespace mr::robotics::arm {
 namespace application {
 
 namespace {
+
+constexpr Scalar kTaskScaleCandidates[] = {
+    1.0f,        0.5f,        0.25f,       0.125f,
+    0.0625f,     0.03125f,    0.015625f,   0.0078125f,
+    0.00390625f, 0.001953125f, 0.0009765625f};
 
 Rotation rotation_from_axis_angle(const Vec3& axis, Scalar angle) {
   const Scalar norm = axis.norm();
@@ -214,116 +218,74 @@ ThreePitCartesianAppResult ThreePitCartesianApp::update(
   const Scalar z_axis = apply_deadzone(input.z_axis, config_.input_deadzone);
   const Scalar pitch_axis =
       apply_deadzone(input.pitch_axis, config_.input_deadzone);
-
-  candidate_yz_pitch_ = target_yz_pitch_;
-  candidate_yz_pitch_.y += y_axis * config_.max_y_velocity * dt;
-  candidate_yz_pitch_.z += z_axis * config_.max_z_velocity * dt;
-  candidate_yz_pitch_.pitch +=
-      pitch_axis * config_.max_pitch_velocity * dt;
-
-  if (workspace_contains(config_.workspace, candidate_yz_pitch_)) {
-    target_yz_pitch_ = candidate_yz_pitch_;
-    target_updated_ = true;
-  } else {
-    candidate_rejected_out_of_range_ = true;
-  }
+  candidate_yz_pitch_ = make_candidate_pose(
+      target_yz_pitch_, y_axis, z_axis, pitch_axis, dt, 1.0f);
+  const bool has_task_delta =
+      abs_scalar(candidate_yz_pitch_.y - target_yz_pitch_.y) >
+          ARM_LIB_EPSILON ||
+      abs_scalar(candidate_yz_pitch_.z - target_yz_pitch_.z) >
+          ARM_LIB_EPSILON ||
+      abs_scalar(candidate_yz_pitch_.pitch - target_yz_pitch_.pitch) >
+          ARM_LIB_EPSILON;
 
   const Transform current_pose = kinematics::fk(chain_, feedback.q);
   target_transform_ = make_target_transform(target_yz_pitch_, current_pose);
-
-  target_ik_result_ =
-      solve_target_ik(target_transform_, last_valid_q_, feedback.q);
-  if (!is_success(target_ik_result_.status)) {
-    enter_hold(ThreePitCartesianAppState::kTargetUnreachableHold,
-               ThreePitCartesianHoldReason::kTargetIkFailure);
-    fill_result(&result);
-    return result;
-  }
-  target_reachable_ = true;
-
-  trajectory::CartesianTrajectoryRequest trajectory_request;
-  trajectory_request.start = current_pose;
-  trajectory_request.goal = target_transform_;
-  trajectory_request.max_linear_velocity = config_.max_linear_velocity;
-  trajectory_request.max_angular_velocity = config_.max_angular_velocity;
-  trajectory_request.max_linear_acceleration = config_.max_linear_acceleration;
-  trajectory_request.max_angular_acceleration =
-      config_.max_angular_acceleration;
-
-  trajectory::CartesianTrajectory trajectory;
-  if (!trajectory.configure(trajectory_request)) {
-    enter_hold(ThreePitCartesianAppState::kFaultHold,
-               ThreePitCartesianHoldReason::kTrajectoryFailure);
-    fill_result(&result);
-    return result;
-  }
-
-  const trajectory::CartesianTrajectorySample sample = trajectory.sample(dt);
-  if (!sample.valid) {
-    enter_hold(ThreePitCartesianAppState::kFaultHold,
-               ThreePitCartesianHoldReason::kTrajectoryFailure);
-    fill_result(&result);
-    return result;
-  }
-
-  step_ik_result_ = solve_target_ik(sample.pose, last_valid_q_, feedback.q);
-  if (!is_success(step_ik_result_.status)) {
-    enter_hold(ThreePitCartesianAppState::kTargetUnreachableHold,
-               ThreePitCartesianHoldReason::kStepIkFailure);
-    fill_result(&result);
-    return result;
-  }
-
-  JointVec3 desired_qd =
-      joint_delta_from_current(feedback.q, step_ik_result_.q) / dt;
-  bool limited = false;
-  if (config_.limit_joint_velocity) {
-    desired_qd = servo::clamp_joint_velocity(
-        desired_qd, config_.max_joint_velocity, &limited);
-  }
-
-  const JointVec3 acceleration_reference =
+  const JointVec3 command_reference =
+      has_last_valid_ ? last_valid_q_ : feedback.q;
+  const JointVec3 previous_qd =
       has_previous_qd_ ? previous_qd_ : feedback.qd;
-  if (config_.limit_joint_acceleration) {
-    bool accel_limited = false;
-    desired_qd = servo::clamp_joint_acceleration(
-        desired_qd, acceleration_reference, config_.max_joint_acceleration,
-        dt, &accel_limited);
-    limited = limited || accel_limited;
-  }
-  if (config_.limit_joint_step) {
-    bool step_limited = false;
-    desired_qd = servo::clamp_joint_step(
-        desired_qd, config_.max_joint_step, dt, &step_limited);
-    limited = limited || step_limited;
-  }
-  if (config_.enforce_joint_limits) {
-    bool position_limited = false;
-    desired_qd = servo::clamp_to_position_limits_as_velocity(
-        feedback.q, desired_qd, config_.joint_limits, dt, &position_limited);
-    limited = limited || position_limited;
-  }
-  (void)limited;
 
-  JointCommand3 next_command;
-  next_command.q = feedback.q + desired_qd * dt;
-  next_command.qd = desired_qd;
-  next_command.qdd = (desired_qd - acceleration_reference) / dt;
-  next_command.mode = JointCommandMode::kPositionVelocityTorque;
-  next_command.valid = true;
-
-  const safety::JointCommandSafetyConfig<kThreePitCartesianDof> safety_config =
-      make_safety_config(feedback.q);
-  safety_result_ = safety::validate_joint_command(next_command, safety_config,
-                                                  1.0e-5f);
-  if (!safety_result_.ok) {
-    enter_hold(ThreePitCartesianAppState::kFaultHold,
-               ThreePitCartesianHoldReason::kSafetyFailure);
+  if (!workspace_contains(config_.workspace, candidate_yz_pitch_)) {
+    candidate_rejected_out_of_range_ = true;
+    make_hold_command(command_reference);
+    previous_qd_ = toolbox_adapter::zero_joint_vec<kThreePitCartesianDof>();
+    has_previous_qd_ = true;
+    state_ = ThreePitCartesianAppState::kTargetOutOfRangeRejected;
+    hold_reason_ = ThreePitCartesianHoldReason::kNone;
     fill_result(&result);
     return result;
   }
 
-  command_ = next_command;
+  const ScaledCandidateSearch search = try_solve_scaled_candidate(
+      target_yz_pitch_, current_pose, feedback, y_axis, z_axis,
+      pitch_axis, dt, command_reference, previous_qd, has_task_delta);
+
+  if (!search.accepted) {
+    if (!is_success(target_ik_result_.status)) {
+      const kinematics::IKOptions target_ik_options =
+          make_yz_pitch_ik_options(make_target_transform(candidate_yz_pitch_,
+                                                         current_pose));
+      if (ik_failure_is_singularity(target_ik_result_,
+                                    target_ik_options)) {
+        enter_hold(ThreePitCartesianAppState::kSingularityHold,
+                   ThreePitCartesianHoldReason::kTargetSingularity);
+      } else if (ik_failure_is_reachability_boundary(target_ik_result_)) {
+        enter_hold(ThreePitCartesianAppState::kTargetUnreachableHold,
+                   ThreePitCartesianHoldReason::kTargetUnreachable);
+      } else {
+        enter_hold(ThreePitCartesianAppState::kFaultHold,
+                   ThreePitCartesianHoldReason::kTargetIkFailure);
+      }
+    } else if (search.saw_safety_failure) {
+      enter_hold(ThreePitCartesianAppState::kFaultHold,
+                 ThreePitCartesianHoldReason::kSafetyFailure);
+    } else if (search.saw_ik_failure) {
+      enter_hold(ThreePitCartesianAppState::kFaultHold,
+                 ThreePitCartesianHoldReason::kStepIkFailure);
+    } else {
+      enter_hold(ThreePitCartesianAppState::kTargetUnreachableHold,
+                 ThreePitCartesianHoldReason::kTargetUnreachable);
+    }
+    fill_result(&result);
+    return result;
+  }
+
+  target_reachable_ = true;
+  target_yz_pitch_ = search.accepted_target;
+  target_transform_ = search.accepted_transform;
+  target_updated_ = has_task_delta;
+  safety_result_ = search.accepted_safety;
+  command_ = search.accepted_command;
   last_valid_q_ = command_.q;
   previous_qd_ = command_.qd;
   has_previous_qd_ = true;
@@ -420,6 +382,50 @@ bool ThreePitCartesianApp::workspace_contains(
   return true;
 }
 
+bool ThreePitCartesianApp::ik_failure_is_singularity(
+    const kinematics::IKResult<kThreePitCartesianDof>& result,
+    const kinematics::IKOptions& options) {
+  if (is_success(result.status)) {
+    return false;
+  }
+  if (result.status == IkStatus::kSingular ||
+      result.diagnostics.reason == IkFailureReason::kSingular) {
+    return true;
+  }
+
+  const Scalar threshold = options.singularity_threshold;
+  if (!is_finite_scalar(threshold) || threshold <= ARM_LIB_EPSILON) {
+    return false;
+  }
+
+  Scalar metric = result.singularity_metric;
+  if (!is_finite_scalar(metric) || metric <= 0.0f) {
+    metric = result.diagnostics.singularity_metric;
+  }
+  if (!is_finite_scalar(metric) || metric <= 0.0f) {
+    return false;
+  }
+  return metric <= threshold;
+}
+
+bool ThreePitCartesianApp::ik_failure_is_reachability_boundary(
+    const kinematics::IKResult<kThreePitCartesianDof>& result) {
+  if (is_success(result.status)) {
+    return false;
+  }
+
+  if (result.status == IkStatus::kUnreachable ||
+      result.status == IkStatus::kLimitViolation ||
+      result.diagnostics.reason == IkFailureReason::kUnreachable ||
+      result.diagnostics.reason == IkFailureReason::kLimitViolation) {
+    return true;
+  }
+
+  return result.status == IkStatus::kNoConvergence ||
+         result.status == IkStatus::kMaxIterations ||
+         result.status == IkStatus::kNumericalFailure;
+}
+
 Rotation ThreePitCartesianApp::make_planar_pitch_rotation(
     Scalar pitch) const {
   const JointVec3 zero_q =
@@ -448,6 +454,20 @@ Transform ThreePitCartesianApp::make_target_transform(
       make_planar_pitch_rotation(pose.pitch), translation);
 }
 
+YzPitchPose ThreePitCartesianApp::make_candidate_pose(
+    const YzPitchPose& base,
+    Scalar y_axis,
+    Scalar z_axis,
+    Scalar pitch_axis,
+    Scalar dt,
+    Scalar scale) const {
+  YzPitchPose candidate = base;
+  candidate.y += y_axis * config_.max_y_velocity * dt * scale;
+  candidate.z += z_axis * config_.max_z_velocity * dt * scale;
+  candidate.pitch += pitch_axis * config_.max_pitch_velocity * dt * scale;
+  return candidate;
+}
+
 kinematics::IKOptions ThreePitCartesianApp::make_yz_pitch_ik_options(
     const Transform& target_pose) const {
   kinematics::IKOptions options = config_.ik_options;
@@ -472,6 +492,124 @@ ThreePitCartesianApp::solve_target_ik(
   request.use_current = true;
   return kinematics::solve_ik(chain_, request,
                               make_yz_pitch_ik_options(target_pose));
+}
+
+ThreePitCartesianApp::CandidateSolution
+ThreePitCartesianApp::solve_candidate(
+    const YzPitchPose& candidate,
+    const Transform& current_pose,
+    const JointVec3& reference_q,
+    const JointState3& feedback) const {
+  CandidateSolution result;
+  result.pose = candidate;
+  result.transform = make_target_transform(candidate, current_pose);
+  result.ik_result =
+      solve_target_ik(result.transform, reference_q, feedback.q);
+  return result;
+}
+
+ThreePitCartesianApp::JointCommand3
+ThreePitCartesianApp::make_command_from_solution(
+    const JointVec3& reference_q,
+    const JointVec3& solution_q,
+    const JointVec3& previous_qd,
+    Scalar dt) const {
+  JointCommand3 command;
+  command.q = solution_q;
+  command.qd = joint_delta_from_current(reference_q, solution_q) / dt;
+  command.qdd = (command.qd - previous_qd) / dt;
+  command.mode = JointCommandMode::kPositionVelocityTorque;
+  command.valid = true;
+  return command;
+}
+
+safety::JointCommandSafetyResult
+ThreePitCartesianApp::validate_candidate_command(
+    const JointCommand3& command,
+    const JointVec3& reference_q) const {
+  return safety::validate_joint_command(
+      command, make_safety_config(reference_q), 1.0e-5f);
+}
+
+ThreePitCartesianApp::ScaledCandidateSearch
+ThreePitCartesianApp::try_solve_scaled_candidate(
+    const YzPitchPose& base,
+    const Transform& current_pose,
+    const JointState3& feedback,
+    Scalar y_axis,
+    Scalar z_axis,
+    Scalar pitch_axis,
+    Scalar dt,
+    const JointVec3& reference_q,
+    const JointVec3& previous_qd,
+    bool has_task_delta) {
+  ScaledCandidateSearch search;
+  search.accepted = false;
+  search.saw_ik_failure = false;
+  search.saw_safety_failure = false;
+  search.accepted_target = base;
+  search.accepted_transform = make_target_transform(base, current_pose);
+  search.accepted_command = JointCommand3();
+  search.accepted_safety = safety::JointCommandSafetyResult();
+  search.representative_ik_failure =
+      kinematics::IKResult<kThreePitCartesianDof>();
+
+  for (Scalar scale : kTaskScaleCandidates) {
+    const YzPitchPose scaled_candidate = make_candidate_pose(
+        base, y_axis, z_axis, pitch_axis, dt, scale);
+    if (!workspace_contains(config_.workspace, scaled_candidate)) {
+      continue;
+    }
+
+    const CandidateSolution solution =
+        solve_candidate(scaled_candidate, current_pose, reference_q, feedback);
+    const bool original_candidate = scale >= 1.0f - ARM_LIB_EPSILON;
+    if (original_candidate) {
+      target_ik_result_ = solution.ik_result;
+    }
+
+    if (!is_success(solution.ik_result.status)) {
+      if (!search.saw_ik_failure) {
+        search.representative_ik_failure = solution.ik_result;
+        if (!original_candidate) {
+          step_ik_result_ = solution.ik_result;
+        }
+      }
+      search.saw_ik_failure = true;
+      if (original_candidate) {
+        return search;
+      }
+      continue;
+    }
+
+    JointCommand3 next_command = make_command_from_solution(
+        reference_q, solution.ik_result.q, previous_qd, dt);
+    safety::JointCommandSafetyResult safety_result =
+        validate_candidate_command(next_command, reference_q);
+    if (!safety_result.ok && !has_task_delta) {
+      next_command.q = reference_q;
+      next_command.qd =
+          toolbox_adapter::zero_joint_vec<kThreePitCartesianDof>();
+      next_command.qdd =
+          toolbox_adapter::zero_joint_vec<kThreePitCartesianDof>();
+      safety_result = safety::JointCommandSafetyResult();
+    }
+    if (!safety_result.ok) {
+      safety_result_ = safety_result;
+      search.saw_safety_failure = true;
+      continue;
+    }
+
+    search.accepted = true;
+    search.accepted_target = scaled_candidate;
+    search.accepted_transform = solution.transform;
+    search.accepted_command = next_command;
+    search.accepted_safety = safety_result;
+    step_ik_result_ = solution.ik_result;
+    return search;
+  }
+
+  return search;
 }
 
 ThreePitCartesianApp::JointVec3

@@ -8,7 +8,7 @@ namespace mr::motor {
 namespace {
 
 float ResolvePositiveRatio(float ratio) {
-    return (ratio > 0.0f) ? ratio : 1.0f;
+    return comp_positive_or_f(ratio, 1.0f);
 }
 
 constexpr float kPi = 3.14159265358979323846f;
@@ -16,6 +16,8 @@ constexpr float kTwoPi = 6.28318530717958647692f;
 constexpr float kLzAngleRangeRad = 12.57f;
 constexpr float kLzVelocityRangeRadS = 20.0f;
 constexpr float kLzTorqueRangeNm = 60.0f;
+constexpr float kLzTorqueHoldKp = 3.0f;
+constexpr float kLzTorqueHoldKd = 0.2f;
 constexpr float kLzRawValueMax = 65535.0f;
 constexpr float kLzTempScale = 10.0f;
 
@@ -24,13 +26,7 @@ float RawToFloat(uint16_t raw_value, float max_value) {
 }
 
 float WrapToPi(float angle_rad) {
-    while (angle_rad >= kPi) {
-        angle_rad -= kTwoPi;
-    }
-    while (angle_rad < -kPi) {
-        angle_rad += kTwoPi;
-    }
-    return angle_rad;
+    return comp_wrap_to_pi_f(angle_rad);
 }
 
 MotorProtocolState DecodeLzProtocolState(uint8_t state_bits, uint32_t fault_code) {
@@ -279,7 +275,15 @@ int8_t MotorProtocol<MotorKind::LZ, Model>::SetTorque(float torque_nm) {
     if (max_torque_nm <= 0.0f) {
         return DEVICE_ERR;
     }
-    return SetMIT(0.0f, 0.0f, 0.0f, 0.0f, AbsClip(torque_nm, max_torque_nm));
+
+    // Keep a low-impedance pose reference around the latest feedback so
+    // torque-only commands in LZ motion mode still act around the current pose.
+    const float hold_position = state_.online ? state_.position_rad : 0.0f;
+    return SetMIT(hold_position,
+                  0.0f,
+                  kLzTorqueHoldKp,
+                  kLzTorqueHoldKd,
+                  AbsClip(torque_nm, max_torque_nm));
 }
 
 template <MotorModel Model>

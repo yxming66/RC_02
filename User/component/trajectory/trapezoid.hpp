@@ -1,8 +1,46 @@
 #pragma once
 
+/*
+ * 梯形速度曲线规划器。
+ *
+ * 控制律（三段式）：
+ *   Phase 1 (0 <= t < t_acc): 匀加速
+ *     acceleration = a
+ *     velocity = a * t
+ *     position = 0.5 * a * t^2
+ *
+ *   Phase 2 (t_acc <= t < t_acc + t_cruise): 匀速
+ *     acceleration = 0
+ *     velocity = v_peak
+ *     position = 0.5 * a * t_acc^2 + v_peak * (t - t_acc)
+ *
+ *   Phase 3 (t >= t_acc + t_cruise): 匀减速
+ *     acceleration = -a
+ *     velocity = v_peak - a * (t - t_acc - t_cruise)
+ *     position = d_acc + v_peak * (t - t_acc) - 0.5 * a * (t - t_acc)^2
+ *
+ * 适用于：
+ *   - 单轴位置运动规划
+ *   - 梯形加减速曲线：匀加速 -> 匀速 -> 匀减速
+ *   - 速度约束、加速约束下的最短时间轨迹
+ *
+ * 使用示例：
+ *   // 初始化：配置规划器
+ *   auto planner = mr::comp::traj::TrapezoidProfile();
+ *   planner.configure(distance, max_velocity, max_acceleration);
+ *   float start_time = get_current_time();
+ *
+ *   // 控制循环中（每周期执行）：
+ *   float elapsed = get_current_time() - start_time;
+ *   auto sample = planner.sample(elapsed);
+ *   // sample.position, sample.velocity, sample.acceleration
+ */
+
+#include <math.h>
+
 #include "trajectory_types.hpp"
 
-namespace mr::component::trajectory {
+namespace mr::comp::traj {
 
 class TrapezoidProfile {
  public:
@@ -210,4 +248,4 @@ class TrapezoidProfile {
   bool valid_;
 };
 
-}  // namespace mr::component::trajectory
+}  // namespace mr::comp::traj

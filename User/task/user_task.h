@@ -26,6 +26,7 @@ extern "C" {
 #define AUTO_CTRL_FREQ (100.0)
 #define ARM_FREQ (250.0)
 #define ROD_FREQ (200.0)
+#define PC_COMM_FREQ (100.0)
 #define PC_UART_RX_FREQ (50.0)
 /* 任务初始化延时ms */
 #define TASK_INIT_DELAY (100u)
@@ -38,6 +39,7 @@ extern "C" {
 #define AUTO_CTRL_INIT_DELAY (0)
 #define ARM_INIT_DELAY (0)
 #define ROD_INIT_DELAY (0)
+#define PC_COMM_INIT_DELAY (500u)
 #define PC_UART_RX_INIT_DELAY (0)
 /* Exported defines --------------------------------------------------------- */
 /* Exported macro ----------------------------------------------------------- */
@@ -56,6 +58,7 @@ typedef struct {
         osThreadId_t auto_ctrl;
         osThreadId_t arm;
         osThreadId_t rod;
+        osThreadId_t pc_comm;
         osThreadId_t pc_uart_rx;
 
     } thread;
@@ -108,6 +111,7 @@ typedef struct {
         UBaseType_t auto_ctrl;
         UBaseType_t arm;
         UBaseType_t rod;
+        UBaseType_t pc_comm;
         UBaseType_t pc_uart_rx;
 
     } stack_water_mark;
@@ -157,6 +161,7 @@ extern const osThreadAttr_t attr_sick;
 extern const osThreadAttr_t attr_auto_ctrl;
 extern const osThreadAttr_t attr_arm;
 extern const osThreadAttr_t attr_rod;
+extern const osThreadAttr_t attr_pc_comm;
 extern const osThreadAttr_t attr_pc_uart_rx;
 /* 任务函数声明 */
 void Task_Init(void *argument);
@@ -169,6 +174,7 @@ void Task_sick(void *argument);
 void Task_auto_ctrl(void *argument);
 void Task_arm(void *argument);
 void Task_rod(void *argument);
+void Task_pc_comm(void *argument);
 void Task_pc_uart_rx(void *argument);
 #ifdef __cplusplus
 }
