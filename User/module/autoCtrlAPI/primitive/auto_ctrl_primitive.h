@@ -11,11 +11,11 @@
  * - 撑杆目标位控制。
  */
 
+#include "module/autoCtrlAPI/api/auto_ctrl_api.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include "module/autoCtrlAPI/api/auto_ctrl_api.h"
 
 /* 清空并复位底盘与撑杆输出。 */
 void AutoCtrlPrimitive_ResetOutputs(auto_ctrl_t *ctrl);
@@ -32,16 +32,16 @@ float AutoCtrlPrimitive_Clamp(float value, float min_value, float max_value);
 /* 仅执行 yaw 对齐控制（vx/vy 置 0）。 */
 void AutoCtrlPrimitive_ApplyPrealign(auto_ctrl_t *ctrl);
 
-/* 在 yaw 对齐同时叠加前进速度 vy。 */
+/* Add forward velocity (+x) while yaw aligning. */
 void AutoCtrlPrimitive_ApplyPrealignWithForward(auto_ctrl_t *ctrl,
-                                                float vy_mps);
+                                                float vx_mps);
 
 /* 在 yaw 对齐同时叠加 vx/vy 平移速度。 */
 void AutoCtrlPrimitive_ApplyPrealignWithMove(auto_ctrl_t *ctrl, float vx_mps,
                                              float vy_mps);
 
-/* 发送纯前进命令（vx=0, wz=0）。 */
-void AutoCtrlPrimitive_CommandFlatMove(auto_ctrl_t *ctrl, float vy_mps);
+/* Send a pure forward/backward command on vx; vy/wz are cleared. */
+void AutoCtrlPrimitive_CommandFlatMove(auto_ctrl_t *ctrl, float vx_mps);
 
 /* 发送前/后撑杆目标位。 */
 void AutoCtrlPrimitive_CommandPoleTarget(auto_ctrl_t *ctrl, float front_target,

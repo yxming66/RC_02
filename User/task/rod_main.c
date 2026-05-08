@@ -13,7 +13,7 @@ bool rodsetzero=0;
 
 void Task_rod(void *argument) {
   (void)argument;
-
+ 
   const uint32_t delay_tick = osKernelGetTickFreq() / ROD_FREQ;
   osDelay(ROD_INIT_DELAY);
 

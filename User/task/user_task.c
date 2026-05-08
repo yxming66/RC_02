@@ -56,7 +56,7 @@ const osThreadAttr_t attr_rod = {
 };
 const osThreadAttr_t attr_pc_comm = {
     .name = "pc_comm",
-    .priority = osPriorityHigh,
+    .priority = osPriorityNormal,
     .stack_size = 512 * 4,
 };
 const osThreadAttr_t attr_pc_uart_rx = {

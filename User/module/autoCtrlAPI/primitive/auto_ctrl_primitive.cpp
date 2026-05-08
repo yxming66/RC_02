@@ -1,7 +1,7 @@
 #include "module/autoCtrlAPI/primitive/auto_ctrl_primitive.h"
 
 /*
- * auto_ctrl_primitive.c
+ * auto_ctrl_primitive.cpp
  *
  * 作用：
  * - 封装 AutoCtrl 可复用的底盘/撑杆动作原语；
@@ -10,7 +10,7 @@
  */
 
 #include <string.h>
-#include "component/math/scalar.h"
+#include "component/math/scalar.hpp"
 #include "module/config.h"
 
 /* 底盘输出复位为 RELAX，避免上一周期残留控制量。 */
@@ -33,7 +33,7 @@ void AutoCtrlPrimitive_ResetOutputs(auto_ctrl_t *ctrl) {
 
 /* 通用限幅函数，防止控制量超界。 */
 float AutoCtrlPrimitive_Clamp(float value, float min_value, float max_value) {
-  return comp_clamp_f(value, min_value, max_value);
+  return mr::component::math::clamp_scalar(value, min_value, max_value);
 }
 
 /* 仅执行 yaw 对齐控制，不注入平移速度。 */
@@ -57,17 +57,17 @@ void AutoCtrlPrimitive_ApplyPrealignWithMove(auto_ctrl_t *ctrl, float vx_mps,
   ctrl->chassis_cmd.ctrl_vec.vy = vy_mps;
 }
 
-/* 在 yaw 对齐基础上仅叠加前进速度 vy。 */
+/* Add forward velocity (+x) while yaw aligning. */
 void AutoCtrlPrimitive_ApplyPrealignWithForward(auto_ctrl_t *ctrl,
-                                                float vy_mps) {
-  AutoCtrlPrimitive_ApplyPrealignWithMove(ctrl, 0.0f, vy_mps);
+                                                float vx_mps) {
+  AutoCtrlPrimitive_ApplyPrealignWithMove(ctrl, vx_mps, 0.0f);
 }
 
-/* 下发纯前进命令：匀速 vy，vx/wz 清零。 */
-void AutoCtrlPrimitive_CommandFlatMove(auto_ctrl_t *ctrl, float vy_mps) {
+/* Send a pure forward/backward command on vx; vy/wz are cleared. */
+void AutoCtrlPrimitive_CommandFlatMove(auto_ctrl_t *ctrl, float vx_mps) {
   ctrl->chassis_cmd.mode = CHASSIS_MODE_INDEPENDENT;
-  ctrl->chassis_cmd.ctrl_vec.vx = 0.0f;
-  ctrl->chassis_cmd.ctrl_vec.vy = vy_mps;
+  ctrl->chassis_cmd.ctrl_vec.vx = vx_mps;
+  ctrl->chassis_cmd.ctrl_vec.vy = 0.0f;
   ctrl->chassis_cmd.ctrl_vec.wz = 0.0f;
 }
 

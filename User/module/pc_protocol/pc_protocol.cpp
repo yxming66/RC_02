@@ -14,8 +14,11 @@
 static PC_Comm_t s_pc_comm_inst;
 PC_Protocol_t* g_pc_protocol_ptr = NULL;
 static uint8_t s_rx_buf[256];
-static uint8_t s_tx_buf[256];
-static volatile uint8_t s_rx_cplt_flag = 0;
+static uint8_t s_rx_parse_buf[sizeof(s_rx_buf)];
+static uint8_t s_rx_stream_buf[512];
+static uint16_t s_rx_stream_len = 0;
+static volatile uint16_t s_rx_len = 0;
+static volatile bool s_rx_active = false;
 static osThreadId_t s_thread_id = NULL;
 
 /* Private define ----------------------------------------------------------- */
@@ -26,6 +29,13 @@ static osThreadId_t s_thread_id = NULL;
 #define PC_PROTOCOL_CRC_SIZE (2u)
 
 #define PC_PROTOCOL_HEARTBEAT_TIMEOUT_MS (500u)
+#define PC_CMD_HEARTBEAT_PAYLOAD_LEN (0u)
+#define PC_CMD_CHASSIS_PAYLOAD_LEN (12u)
+#define PC_CMD_POLE_PAYLOAD_LEN (9u)
+#define PC_CMD_STEP_PAYLOAD_LEN_BASIC (2u)
+#define PC_CMD_STEP_PAYLOAD_LEN_WITH_YAW (6u)
+#define PC_CMD_STEP_PAYLOAD_LEN_WITH_TOLERANCE (10u)
+#define PC_CMD_IMU_PAYLOAD_LEN (28u)
 
 /* USER DEFINE BEGIN */
 /* USER DEFINE END */
@@ -56,18 +66,20 @@ static const uint8_t frame_header_[2] = {
 static uint16_t PC_Protocol_BuildHeartbeat(uint8_t *tx_buf);
 static uint16_t PC_Protocol_BuildChassisFeedback(const PC_ChassisFeedback_t *fb, uint8_t *tx_buf);
 static uint16_t PC_Protocol_BuildPoleFeedback(const PC_PoleFeedback_t *fb, uint8_t *tx_buf);
+static uint16_t PC_Protocol_BuildStepFeedback(const PC_StepFeedback_t *fb, uint8_t *tx_buf);
 static uint16_t PC_Protocol_BuildStatusFeedback(const PC_StatusFeedback_t *fb, uint8_t *tx_buf);
 
 static bool PC_Protocol_ParseChassisCMD(const uint8_t *payload, uint8_t len, PC_ChassisCMD_t *cmd);
 static bool PC_Protocol_ParsePoleCMD(const uint8_t *payload, uint8_t len, PC_PoleCMD_t *cmd);
 static bool PC_Protocol_ParseHeartbeat(const uint8_t *payload, uint8_t len);
+static bool PC_Protocol_ParseStepCMD(const uint8_t *payload, uint8_t len, PC_StepCMD_t *cmd);
 
 /* Private function --------------------------------------------------------- */
 static uint16_t PC_Protocol_BuildHeartbeat(uint8_t *tx_buf) {
     PC_FrameHeader_t *header = (PC_FrameHeader_t *)tx_buf;
     header->header[0] = frame_header_[0];
     header->header[1] = frame_header_[1];
-    header->length = 1;  /* CMD only */
+    header->length = 0;
     header->cmd = PC_FEEDBACK_HEARTBEAT;
 
     uint16_t crc = CRC16_Calc(tx_buf, PC_PROTOCOL_HEADER_SIZE + PC_PROTOCOL_LENGTH_SIZE + PC_PROTOCOL_CMD_SIZE, CRC16_INIT);
@@ -109,14 +121,38 @@ static uint16_t PC_Protocol_BuildPoleFeedback(const PC_PoleFeedback_t *fb, uint8
     return PC_PROTOCOL_HEADER_SIZE + PC_PROTOCOL_LENGTH_SIZE + PC_PROTOCOL_CMD_SIZE + header->length + PC_PROTOCOL_CRC_SIZE;
 }
 
+static uint16_t PC_Protocol_BuildStepFeedback(const PC_StepFeedback_t *fb, uint8_t *tx_buf) {
+    PC_FrameHeader_t *header = (PC_FrameHeader_t *)tx_buf;
+    header->header[0] = frame_header_[0];
+    header->header[1] = frame_header_[1];
+    header->length = 10;  /* state + result + fault + template_id + step_index + reserved + progress */
+    header->cmd = PC_FEEDBACK_STEP;
+
+    tx_buf[4] = (uint8_t)fb->state;
+    tx_buf[5] = (uint8_t)fb->result;
+    tx_buf[6] = (uint8_t)fb->fault;
+    tx_buf[7] = (uint8_t)fb->template_id;
+    tx_buf[8] = fb->step_index;
+    tx_buf[9] = 0;  /* reserved */
+    memcpy(&tx_buf[10], &fb->progress, sizeof(float));
+
+    uint16_t crc = CRC16_Calc(tx_buf, PC_PROTOCOL_HEADER_SIZE + PC_PROTOCOL_LENGTH_SIZE + PC_PROTOCOL_CMD_SIZE + header->length, CRC16_INIT);
+    tx_buf[4 + header->length] = (uint8_t)(crc & 0xFFu);
+    tx_buf[5 + header->length] = (uint8_t)((crc >> 8) & 0xFFu);
+
+    return PC_PROTOCOL_HEADER_SIZE + PC_PROTOCOL_LENGTH_SIZE + PC_PROTOCOL_CMD_SIZE + header->length + PC_PROTOCOL_CRC_SIZE;
+}
+
 static uint16_t PC_Protocol_BuildStatusFeedback(const PC_StatusFeedback_t *fb, uint8_t *tx_buf) {
     PC_FrameHeader_t *header = (PC_FrameHeader_t *)tx_buf;
     header->header[0] = frame_header_[0];
     header->header[1] = frame_header_[1];
-    header->length = sizeof(PC_StatusFeedback_t);
+    header->length = 9;  /* online + recv_count + cpu_temp */
     header->cmd = PC_FEEDBACK_STATUS;
 
-    memcpy(&tx_buf[4], fb, sizeof(PC_StatusFeedback_t));
+    tx_buf[4] = fb->online;
+    memcpy(&tx_buf[5], &fb->recv_count, sizeof(uint32_t));
+    memcpy(&tx_buf[9], &fb->cpu_temp, sizeof(float));
 
     uint16_t crc = CRC16_Calc(tx_buf, PC_PROTOCOL_HEADER_SIZE + PC_PROTOCOL_LENGTH_SIZE + PC_PROTOCOL_CMD_SIZE + header->length, CRC16_INIT);
     tx_buf[4 + header->length] = (uint8_t)(crc & 0xFFu);
@@ -126,7 +162,7 @@ static uint16_t PC_Protocol_BuildStatusFeedback(const PC_StatusFeedback_t *fb, u
 }
 
 static bool PC_Protocol_ParseChassisCMD(const uint8_t *payload, uint8_t len, PC_ChassisCMD_t *cmd) {
-    if (len < sizeof(PC_ChassisCMD_t)) {
+    if (len != PC_CMD_CHASSIS_PAYLOAD_LEN) {
         return false;
     }
     memcpy(cmd, payload, sizeof(PC_ChassisCMD_t));
@@ -134,16 +170,50 @@ static bool PC_Protocol_ParseChassisCMD(const uint8_t *payload, uint8_t len, PC_
 }
 
 static bool PC_Protocol_ParsePoleCMD(const uint8_t *payload, uint8_t len, PC_PoleCMD_t *cmd) {
-    if (len < sizeof(PC_PoleCMD_t)) {
+    if (len != PC_CMD_POLE_PAYLOAD_LEN) {  /* mode + lift[0] + lift[1] */
         return false;
     }
-    memcpy(cmd, payload, sizeof(PC_PoleCMD_t));
+    cmd->mode = payload[0];
+    memcpy(&cmd->lift[0], &payload[1], sizeof(float));
+    memcpy(&cmd->lift[1], &payload[5], sizeof(float));
     return true;
 }
 
 static bool PC_Protocol_ParseHeartbeat(const uint8_t *payload, uint8_t len) {
     (void)payload;
-    (void)len;
+    return len == PC_CMD_HEARTBEAT_PAYLOAD_LEN;
+}
+
+static bool PC_Protocol_ParseStepCMD(const uint8_t *payload, uint8_t len, PC_StepCMD_t *cmd) {
+    if (len != PC_CMD_STEP_PAYLOAD_LEN_WITH_TOLERANCE) {
+        return false;
+    }
+    cmd->template_id = (PC_StepTemplate_t)payload[0];
+    cmd->travel_dir = (PC_StepDir_t)payload[1];
+    cmd->target_yaw_rad = 0.0f;
+    cmd->yaw_tolerance_rad = 0.1f;
+
+    if (len >= 6) {
+        memcpy(&cmd->target_yaw_rad, &payload[2], sizeof(float));
+    }
+    if (len >= 10) {
+        memcpy(&cmd->yaw_tolerance_rad, &payload[6], sizeof(float));
+    }
+    return true;
+}
+
+static bool PC_Protocol_ParseImuCMD(const uint8_t *payload, uint8_t len, PC_ImuCMD_t *cmd) {
+    /* IMU: qw(4) + qx(4) + qy(4) + qz(4) + roll(4) + pitch(4) + yaw(4) = 28 bytes */
+    if (len != PC_CMD_IMU_PAYLOAD_LEN) {
+        return false;
+    }
+    memcpy(&cmd->qw, &payload[0], sizeof(float));
+    memcpy(&cmd->qx, &payload[4], sizeof(float));
+    memcpy(&cmd->qy, &payload[8], sizeof(float));
+    memcpy(&cmd->qz, &payload[12], sizeof(float));
+    memcpy(&cmd->roll, &payload[16], sizeof(float));
+    memcpy(&cmd->pitch, &payload[20], sizeof(float));
+    memcpy(&cmd->yaw, &payload[24], sizeof(float));
     return true;
 }
 
@@ -189,10 +259,18 @@ int8_t PC_Protocol_ParseFrame(PC_Protocol_t *proto, const uint8_t *data, uint16_
     uint8_t length = data[2];
     uint8_t cmd = data[3];
 
+    if (length > PC_PROTOCOL_MAX_PAYLOAD_SIZE) {
+        return -6;
+    }
+
     /* 检查帧长度 */
     uint16_t expected_size = PC_PROTOCOL_HEADER_SIZE + PC_PROTOCOL_LENGTH_SIZE + PC_PROTOCOL_CMD_SIZE + length + PC_PROTOCOL_CRC_SIZE;
     if (size < expected_size) {
         return -3;
+    }
+
+    if (length > PC_PROTOCOL_MAX_PAYLOAD_SIZE) {
+        return -6;
     }
 
     /* CRC校验 */
@@ -203,33 +281,41 @@ int8_t PC_Protocol_ParseFrame(PC_Protocol_t *proto, const uint8_t *data, uint16_
     }
 
     const uint8_t *payload = &data[PC_PROTOCOL_HEADER_SIZE + PC_PROTOCOL_LENGTH_SIZE + PC_PROTOCOL_CMD_SIZE];
+    bool parsed = false;
 
     /* 处理命令 */
     switch (cmd) {
         case PC_CMD_HEARTBEAT:
-            if (PC_Protocol_ParseHeartbeat(payload, length)) {
-                proto->last_heartbeat_tick = BSP_TIME_Get_ms();
-                proto->heartbeat_valid = true;
-            }
+            parsed = PC_Protocol_ParseHeartbeat(payload, length);
             break;
 
         case PC_CMD_CHASSIS:
-            if (PC_Protocol_ParseChassisCMD(payload, length, &proto->cmd.chassis)) {
-                proto->last_heartbeat_tick = BSP_TIME_Get_ms();
-                proto->heartbeat_valid = true;
-            }
+            parsed = PC_Protocol_ParseChassisCMD(payload, length, &proto->cmd.chassis);
             break;
 
         case PC_CMD_POLE:
-            if (PC_Protocol_ParsePoleCMD(payload, length, &proto->cmd.pole)) {
-                proto->last_heartbeat_tick = BSP_TIME_Get_ms();
-                proto->heartbeat_valid = true;
-            }
+            parsed = PC_Protocol_ParsePoleCMD(payload, length, &proto->cmd.pole);
+            break;
+
+        case PC_CMD_STEP:
+            parsed = PC_Protocol_ParseStepCMD(payload, length, &proto->cmd.step);
+            break;
+
+        case PC_CMD_IMU:
+            parsed = PC_Protocol_ParseImuCMD(payload, length, &proto->cmd.imu);
             break;
 
         default:
             return -5;  /* 未知命令 */
     }
+
+    if (!parsed) {
+        return -7;
+    }
+
+    proto->last_heartbeat_tick = BSP_TIME_Get_ms();
+    proto->heartbeat_valid = true;
+    proto->control_mode = PC_MODE_PC;
 
     return 0;
 }
@@ -250,6 +336,9 @@ uint16_t PC_Protocol_BuildFrame(PC_Protocol_t *proto, uint8_t cmd, uint8_t *tx_b
 
         case PC_FEEDBACK_POLE:
             return PC_Protocol_BuildPoleFeedback(&proto->feedback.pole, tx_buf);
+
+        case PC_FEEDBACK_STEP:
+            return PC_Protocol_BuildStepFeedback(&proto->feedback.step, tx_buf);
 
         case PC_FEEDBACK_STATUS:
             return PC_Protocol_BuildStatusFeedback(&proto->feedback.status, tx_buf);
@@ -284,9 +373,14 @@ const PC_ArmCMD_t* PC_Protocol_GetArmCMD(const PC_Protocol_t *proto) {
     return &proto->cmd.arm;
 }
 
-const PC_RodCMD_t* PC_Protocol_GetRodCMD(const PC_Protocol_t *proto) {
+const PC_StepCMD_t* PC_Protocol_GetStepCMD(const PC_Protocol_t *proto) {
     if (proto == NULL) return NULL;
-    return &proto->cmd.rod;
+    return &proto->cmd.step;
+}
+
+const PC_ImuCMD_t* PC_Protocol_GetImuCMD(const PC_Protocol_t *proto) {
+    if (proto == NULL) return NULL;
+    return &proto->cmd.imu;
 }
 
 void PC_Protocol_SetChassisFeedback(PC_Protocol_t *proto, const PC_ChassisFeedback_t *fb) {
@@ -304,9 +398,9 @@ void PC_Protocol_SetArmFeedback(PC_Protocol_t *proto, const PC_ArmFeedback_t *fb
     memcpy(&proto->feedback.arm, fb, sizeof(PC_ArmFeedback_t));
 }
 
-void PC_Protocol_SetRodFeedback(PC_Protocol_t *proto, const PC_RodFeedback_t *fb) {
+void PC_Protocol_SetStepFeedback(PC_Protocol_t *proto, const PC_StepFeedback_t *fb) {
     if (proto == NULL || fb == NULL) return;
-    memcpy(&proto->feedback.rod, fb, sizeof(PC_RodFeedback_t));
+    memcpy(&proto->feedback.step, fb, sizeof(PC_StepFeedback_t));
 }
 
 void PC_Protocol_SetStatusFeedback(PC_Protocol_t *proto, const PC_StatusFeedback_t *fb) {
@@ -316,18 +410,58 @@ void PC_Protocol_SetStatusFeedback(PC_Protocol_t *proto, const PC_StatusFeedback
 
 /* PC通信管理实现 */
 static const uint32_t PC_COMM_RX_CPLT_FLAG = (1u << 0);
-static const uint32_t PC_COMM_TX_PERIOD_MS = 20u;  /* 50Hz */
 
-static void PcCommRxCpltCallback(void) {
+static void PcCommRxEventCallback(uint16_t size) {
+    s_rx_active = false;
+    if (size == 0 || size > sizeof(s_rx_buf)) {
+        return;
+    }
+    s_rx_len = size;
     if (s_thread_id != NULL) {
         (void)osThreadFlagsSet(s_thread_id, PC_COMM_RX_CPLT_FLAG);
     }
 }
 
+static uint16_t PcComm_FrameSizeAt(const uint8_t *data, uint16_t size) {
+    if (data == NULL || size < PC_PROTOCOL_MIN_FRAME_SIZE) {
+        return 0;
+    }
+    if (data[0] != PC_PROTOCOL_FRAME_HEADER_0 ||
+        data[1] != PC_PROTOCOL_FRAME_HEADER_1) {
+        return 0;
+    }
+
+    const uint8_t length = data[2];
+    if (length > PC_PROTOCOL_MAX_PAYLOAD_SIZE) {
+        return 0;
+    }
+
+    uint16_t frame_size = PC_PROTOCOL_HEADER_SIZE + PC_PROTOCOL_LENGTH_SIZE +
+                          PC_PROTOCOL_CMD_SIZE + length + PC_PROTOCOL_CRC_SIZE;
+    if (size < frame_size) {
+        return 0;
+    }
+
+    return frame_size;
+}
+
 static bool PcComm_StartRecv(PC_Comm_t *comm) {
     (void)comm;
     memset(s_rx_buf, 0, sizeof(s_rx_buf));
-    return BSP_UART_Receive(BSP_UART_PC, s_rx_buf, sizeof(s_rx_buf), true) == BSP_OK;
+    s_rx_len = 0;
+    int8_t ret = BSP_UART_ReceiveToIdle(BSP_UART_PC, s_rx_buf, sizeof(s_rx_buf), true);
+    if (ret == BSP_OK) {
+        s_rx_active = true;
+        return true;
+    }
+
+    UART_HandleTypeDef *huart = BSP_UART_GetHandle(BSP_UART_PC);
+    if (huart != NULL) {
+        (void)HAL_UART_AbortReceive(huart);
+        ret = BSP_UART_ReceiveToIdle(BSP_UART_PC, s_rx_buf, sizeof(s_rx_buf), true);
+    }
+    s_rx_active = (ret == BSP_OK);
+    return s_rx_active;
 }
 
 static bool PcComm_WaitRecvCplt(uint32_t timeout_ms) {
@@ -336,7 +470,15 @@ static bool PcComm_WaitRecvCplt(uint32_t timeout_ms) {
 }
 
 bool PC_Comm_Init(PC_Comm_t *comm) {
-    if (comm == NULL) return false;
+    if (comm == NULL) {
+        g_pc_comm_debug.last_init_error = -20;
+        return false;
+    }
+    s_thread_id = osThreadGetId();
+    if (s_thread_id == NULL) {
+        g_pc_comm_debug.last_init_error = -21;
+        return false;
+    }
 
     PC_Protocol_Init(&comm->protocol);
     comm->last_recv_time = 0;
@@ -346,12 +488,18 @@ bool PC_Comm_Init(PC_Comm_t *comm) {
 
     g_pc_protocol_ptr = &comm->protocol;
 
-    /* Register RX callback */
-    if (BSP_UART_RegisterCallback(BSP_UART_PC, BSP_UART_RX_CPLT_CB,
-                                  PcCommRxCpltCallback) != BSP_OK) {
+    if (BSP_UART_RegisterRxEventCallback(BSP_UART_PC,
+                                         PcCommRxEventCallback) != BSP_OK) {
+        g_pc_comm_debug.last_init_error = -22;
         return false;
     }
 
+    if (!PcComm_StartRecv(comm)) {
+        g_pc_comm_debug.last_init_error = -23;
+        return false;
+    }
+
+    g_pc_comm_debug.last_init_error = 0;
     return true;
 }
 
@@ -364,29 +512,148 @@ void PC_Comm_Process(PC_Comm_t *comm, uint32_t now_ms) {
     if (comm == NULL) return;
 
     PC_Protocol_Update(&comm->protocol);
+    comm->online = PC_Protocol_IsHeartbeatValid(&comm->protocol);
+    PC_Comm_DebugUpdate(comm);
 
     /* Wait for RX complete */
-    if (!PcComm_WaitRecvCplt(PC_COMM_TX_PERIOD_MS)) {
+    if (!PcComm_WaitRecvCplt(0u)) {
+        if (!s_rx_active && !PcComm_StartRecv(comm)) {
+            g_pc_comm_debug.rx_restart_fail_count++;
+        }
         return;
     }
 
-    /* Parse received frame */
-    int8_t parse_result = PC_Protocol_ParseFrame(&comm->protocol,
-                                                  s_rx_buf, sizeof(s_rx_buf));
-    if (parse_result >= 0) {
-        comm->recv_count++;
-        comm->last_recv_time = now_ms;
-        comm->online = true;
-    } else {
-        comm->error_count++;
+    uint16_t rx_len = s_rx_len;
+    if (rx_len > sizeof(s_rx_parse_buf)) {
+        rx_len = sizeof(s_rx_parse_buf);
+    }
+    if (rx_len > 0) {
+        memcpy(s_rx_parse_buf, s_rx_buf, rx_len);
+    }
+    if (!PcComm_StartRecv(comm)) {
+        g_pc_comm_debug.rx_restart_fail_count++;
     }
 
-    /* Restart receive for next frame */
-    (void)PcComm_StartRecv(comm);
+    if (rx_len == 0) {
+        PC_Comm_DebugUpdate(comm);
+        return;
+    }
+
+    PC_Comm_DebugRecordRxBatch(s_rx_parse_buf, rx_len);
+
+    if ((uint16_t)(sizeof(s_rx_stream_buf) - s_rx_stream_len) < rx_len) {
+        s_rx_stream_len = 0;
+        comm->error_count++;
+        PC_Comm_DebugRecordRxError(comm, s_rx_parse_buf, rx_len, -9);
+    }
+    memcpy(&s_rx_stream_buf[s_rx_stream_len], s_rx_parse_buf, rx_len);
+    s_rx_stream_len = (uint16_t)(s_rx_stream_len + rx_len);
+
+    uint16_t offset = 0;
+    while ((uint16_t)(s_rx_stream_len - offset) >= PC_PROTOCOL_MIN_FRAME_SIZE) {
+        uint16_t available = (uint16_t)(s_rx_stream_len - offset);
+        if (s_rx_stream_buf[offset] == PC_PROTOCOL_FRAME_HEADER_0 &&
+            s_rx_stream_buf[offset + 1u] == PC_PROTOCOL_FRAME_HEADER_1 &&
+            available >= (PC_PROTOCOL_HEADER_SIZE + PC_PROTOCOL_LENGTH_SIZE + PC_PROTOCOL_CMD_SIZE)) {
+            uint8_t length = s_rx_stream_buf[offset + 2u];
+            if (length <= PC_PROTOCOL_MAX_PAYLOAD_SIZE) {
+                uint16_t expected_size = PC_PROTOCOL_HEADER_SIZE +
+                                         PC_PROTOCOL_LENGTH_SIZE +
+                                         PC_PROTOCOL_CMD_SIZE +
+                                         length +
+                                         PC_PROTOCOL_CRC_SIZE;
+                if (available < expected_size) {
+                    break;
+                }
+            }
+        }
+
+        uint16_t frame_size = PcComm_FrameSizeAt(&s_rx_stream_buf[offset],
+                                                 available);
+        if (frame_size == 0) {
+            if (s_rx_stream_buf[offset] == PC_PROTOCOL_FRAME_HEADER_0 &&
+                s_rx_stream_buf[offset + 1u] == PC_PROTOCOL_FRAME_HEADER_1) {
+                comm->error_count++;
+                PC_Comm_DebugRecordRxError(comm, &s_rx_stream_buf[offset],
+                                           available, -8);
+            } else {
+                g_pc_comm_debug.rx_header_skip_count++;
+            }
+            offset++;
+            continue;
+        }
+
+        int8_t parse_result = PC_Protocol_ParseFrame(&comm->protocol,
+                                                     &s_rx_stream_buf[offset],
+                                                     frame_size);
+        PC_Comm_DebugRecordRxFrame(comm, &s_rx_stream_buf[offset],
+                                   frame_size, parse_result);
+        if (parse_result >= 0) {
+            comm->recv_count++;
+            comm->last_recv_time = now_ms;
+            comm->online = true;
+            offset = (uint16_t)(offset + frame_size);
+        } else {
+            comm->error_count++;
+            offset++;
+        }
+    }
+
+    if (offset > 0) {
+        s_rx_stream_len = (uint16_t)(s_rx_stream_len - offset);
+        if (s_rx_stream_len > 0) {
+            memmove(s_rx_stream_buf, &s_rx_stream_buf[offset], s_rx_stream_len);
+        }
+    }
+
+    PC_Comm_DebugUpdate(comm);
 }
 
 PC_Comm_t* PC_Comm_GetInstance(void) {
     return &s_pc_comm_inst;
+}
+
+/* PC Step命令映射到auto_ctrl参数 - 内部缓存 */
+static PC_AutoStepParams_t s_auto_step_params;
+
+static auto_ctrl_template_e PcStep_MapTemplate(PC_StepTemplate_t pc_template) {
+    switch (pc_template) {
+        case PC_STEP_TEMPLATE_FLAT_MOVE:      return AUTO_CTRL_TEMPLATE_FLAT_MOVE;
+        case PC_STEP_TEMPLATE_ASCEND_200:     return AUTO_CTRL_TEMPLATE_ASCEND_200;
+        case PC_STEP_TEMPLATE_DESCEND_200:    return AUTO_CTRL_TEMPLATE_DESCEND_200;
+        case PC_STEP_TEMPLATE_DESCEND_200_ALT: return AUTO_CTRL_TEMPLATE_DESCEND_200_ALT;
+        case PC_STEP_TEMPLATE_ASCEND_400_STD: return AUTO_CTRL_TEMPLATE_ASCEND_400_STD;
+        case PC_STEP_TEMPLATE_ASCEND_400_ALT: return AUTO_CTRL_TEMPLATE_ASCEND_400_ALT;
+        case PC_STEP_TEMPLATE_DESCEND_400_STD: return AUTO_CTRL_TEMPLATE_DESCEND_400_STD;
+        case PC_STEP_TEMPLATE_DESCEND_400_ALT: return AUTO_CTRL_TEMPLATE_DESCEND_400_ALT;
+        default:                              return AUTO_CTRL_TEMPLATE_NONE;
+    }
+}
+
+static auto_ctrl_travel_dir_e PcStep_MapTravelDir(PC_StepDir_t pc_dir) {
+    return (pc_dir == PC_STEP_DIR_TAIL_FORWARD) ?
+           AUTO_CTRL_TRAVEL_DIR_TAIL_FORWARD :
+           AUTO_CTRL_TRAVEL_DIR_HEAD_FORWARD;
+}
+
+const PC_AutoStepParams_t* PC_Protocol_GetAutoStepParams(const PC_Protocol_t *proto) {
+    if (proto == NULL) return NULL;
+
+    const PC_StepCMD_t *step_cmd = &proto->cmd.step;
+    if (step_cmd->template_id == PC_STEP_TEMPLATE_NONE) {
+        return NULL;
+    }
+
+    s_auto_step_params.template_id = PcStep_MapTemplate(step_cmd->template_id);
+    if (s_auto_step_params.template_id == AUTO_CTRL_TEMPLATE_NONE) {
+        return NULL;
+    }
+
+    s_auto_step_params.travel_dir = PcStep_MapTravelDir(step_cmd->travel_dir);
+    s_auto_step_params.target_yaw_rad = step_cmd->target_yaw_rad;
+    s_auto_step_params.yaw_tolerance_rad = step_cmd->yaw_tolerance_rad;
+
+    return &s_auto_step_params;
 }
 
 /* USER FUNCTION BEGIN */

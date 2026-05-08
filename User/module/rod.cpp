@@ -8,7 +8,7 @@
 #include <string.h>
 
 #include "bsp/can.h"
-#include "component/trajectory/online_trapezoid.h"
+#include "component/trajectory/online_trapezoid.hpp"
 #include "device/motor/factory/motor_factory.hpp"
 
 using mr::motor::DmJ4310Motor;
@@ -42,8 +42,8 @@ static void Rod_StoreMotorState(MOTOR_Feedback_t *feedback,
 }
 
 static void Rod_SetGrip(bool open) {
-  HAL_GPIO_WritePin(rod_GPIO_Port, rod_Pin,
-                    open ? GPIO_PIN_SET : GPIO_PIN_RESET);
+  // HAL_GPIO_WritePin(rod_GPIO_Port, rod_Pin,
+  //                   open ? GPIO_PIN_SET : GPIO_PIN_RESET);
 }
 
 static void Rod_SetMotorEnable(Rod_t *r, bool enable) {
@@ -70,9 +70,9 @@ static float Rod_AngleError(float target, float feedback) {
 
 static float Rod_UpdateTrapezoidAxis(float current, float target, float *velocity,
                                      float max_vel, float max_acc, float dt) {
-  const comp_online_trapezoid_axis_sample_t sample =
-      comp_update_trapezoid_axis_f(current, target, velocity, max_vel, max_acc,
-                                   dt, 0.002f, 0.02f);
+  const mr::comp::traj::OnlineTrapezoidAxisSample sample =
+      mr::comp::traj::update_trapezoid_axis(current, target, velocity, max_vel,
+                                            max_acc, dt, 0.002f, 0.02f);
   return sample.valid ? sample.position : current;
 }
 
@@ -110,8 +110,8 @@ static float Rod_GetPitIntegralComp(Rod_t *r) {
 
   if (fabsf(err) <= ROD_PIT_I_ACTIVE_ERR_RAD) {
     r->comp.pit_err_i += err * r->dt;
-    r->comp.pit_err_i = comp_clamp_f(r->comp.pit_err_i, -ROD_PIT_I_LIMIT,
-                                  ROD_PIT_I_LIMIT);
+    r->comp.pit_err_i = mr::component::math::clamp_scalar(
+        r->comp.pit_err_i, -ROD_PIT_I_LIMIT, ROD_PIT_I_LIMIT);
   } else {
     r->comp.pit_err_i = 0.0f;
   }
@@ -347,7 +347,7 @@ int8_t Rod_Control(Rod_t *r, const Rod_CMD_t *cmd, uint32_t now) {
 
   r->dt = (float)(now - r->last_wakeup) / 1000.0f;
   r->last_wakeup = now;
-  r->dt = comp_sanitize_dt_f(r->dt, 0.001f, 0.0005f, 0.050f);
+  r->dt = mr::component::math::sanitize_dt(r->dt, 0.001f, 0.0005f, 0.050f);
 
   r->mode = cmd->mode;
   r->pose = cmd->pose;

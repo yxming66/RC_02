@@ -1,5 +1,6 @@
 #include "device/motor/protocol/dm_protocol.hpp"
 
+#include "component/math/scalar.hpp"
 #include "component/user_math.h"
 #include "device/device.h"
 
@@ -8,7 +9,7 @@ namespace mr::motor {
 namespace {
 
 float ResolvePositiveRatio(float ratio) {
-    return comp_positive_or_f(ratio, 1.0f);
+    return mr::component::math::positive_or(ratio, 1.0f);
 }
 
 constexpr float kPi = 3.14159265358979323846f;
@@ -29,11 +30,11 @@ float UintToFloat(uint16_t raw, float min_value, float max_value, int bits) {
 }
 
 float WrapToPi(float angle_rad) {
-    return comp_wrap_to_pi_f(angle_rad);
+    return mr::component::math::wrap_to_pi(angle_rad);
 }
 
 float WrapDmAngleDiff(float diff_rad) {
-    return comp_wrap_error_f(diff_rad, kDmPositionSpan);
+    return mr::component::math::wrap_error(diff_rad, kDmPositionSpan);
 }
 
 uint32_t EncodeDmFault(MOTOR_DM_Status_t status) {

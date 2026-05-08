@@ -52,10 +52,11 @@ typedef struct {
   auto_ctrl_template_e template_id; /* 当前执行的动作模板。 */
   auto_ctrl_travel_dir_e travel_dir; /* 当前任务采用的前进方向语义。 */
   auto_ctrl_sensor_mode_e sensor_mode; /* 当前任务使用的传感器约束模式。 */
+  auto_ctrl_yaw_source_e yaw_source; /* 当前任务使用的 yaw 来源。 */
 
   float yaw_raw_rad;         /* 最近一次输入的原始 yaw，未扣零点。 */
   float yaw_zero_offset_rad; /* 将 raw yaw 转为 auto yaw 使用的零点偏移。 */
-  float target_yaw_rad;      /* 本次模板要求的目标朝向，单位: rad。 */
+  float target_yaw_rad;      /* 本次模板要求的目标朝向，单位: rad，范围 [-pi, pi)。 */
   float yaw_tolerance_rad;   /* PREALIGN 通过阈值，单位: rad。 */
   float yaw_error_rad;       /* 目标减当前的有符号朝向误差，单位: rad。 */
 
@@ -99,6 +100,12 @@ void AutoCtrl_Reset(auto_ctrl_t *ctrl);
 
 /* 设置 yaw 零点偏移。 */
 void AutoCtrl_SetYawZeroOffset(auto_ctrl_t *ctrl, float raw_yaw_rad);
+
+/* 设置自动控制使用的 yaw 来源。 */
+void AutoCtrl_SetYawSource(auto_ctrl_t *ctrl, auto_ctrl_yaw_source_e source);
+
+/* 查询自动控制当前使用的 yaw 来源。 */
+auto_ctrl_yaw_source_e AutoCtrl_GetYawSource(const auto_ctrl_t *ctrl);
 
 /* 更新外部反馈快照（会完成 yaw 零点补偿）。 */
 void AutoCtrl_SetFeedback(auto_ctrl_t *ctrl,

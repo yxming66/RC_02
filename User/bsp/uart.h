@@ -48,6 +48,8 @@ typedef enum {
   BSP_UART_CB_NUM,
 } BSP_UART_Callback_t;
 
+typedef void (*BSP_UART_RxEventCallback_t)(uint16_t size);
+
 /* Exported functions prototypes -------------------------------------------- */
 
 UART_HandleTypeDef *BSP_UART_GetHandle(BSP_UART_t uart);
@@ -56,9 +58,13 @@ void BSP_UART_IRQHandler(UART_HandleTypeDef *huart);
 
 int8_t BSP_UART_RegisterCallback(BSP_UART_t uart, BSP_UART_Callback_t type,
                                  void (*callback)(void));
+int8_t BSP_UART_RegisterRxEventCallback(BSP_UART_t uart,
+                                        BSP_UART_RxEventCallback_t callback);
 
 int8_t BSP_UART_Transmit(BSP_UART_t uart, uint8_t *data, uint16_t size, bool dma);
 int8_t BSP_UART_Receive(BSP_UART_t uart, uint8_t *data, uint16_t size, bool dma);
+int8_t BSP_UART_ReceiveToIdle(BSP_UART_t uart, uint8_t *data, uint16_t size,
+                              bool dma);
 
 /* USER FUNCTION BEGIN */
 

@@ -1,5 +1,6 @@
 #include "device/motor/protocol/lz_protocol.hpp"
 
+#include "component/math/scalar.hpp"
 #include "component/user_math.h"
 #include "device/device.h"
 
@@ -8,7 +9,7 @@ namespace mr::motor {
 namespace {
 
 float ResolvePositiveRatio(float ratio) {
-    return comp_positive_or_f(ratio, 1.0f);
+    return mr::component::math::positive_or(ratio, 1.0f);
 }
 
 constexpr float kPi = 3.14159265358979323846f;
@@ -26,7 +27,7 @@ float RawToFloat(uint16_t raw_value, float max_value) {
 }
 
 float WrapToPi(float angle_rad) {
-    return comp_wrap_to_pi_f(angle_rad);
+    return mr::component::math::wrap_to_pi(angle_rad);
 }
 
 MotorProtocolState DecodeLzProtocolState(uint8_t state_bits, uint32_t fault_code) {

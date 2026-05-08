@@ -1,8 +1,8 @@
 #pragma once
 
-// 定义各电�?kind/model 组合的静态能力与参数表�?
-// 这里集中描述减速比、控制能力、量程等编译期特性�?
-// 具体型号只需要覆盖“确实有意义”的参数；未覆盖项沿用基类默认值�?
+// 定义各电机 kind/model 组合的静态能力与参数表。
+// 这里集中描述减速比、控制能力、量程等编译期特性。
+// 具体型号只需要覆盖“确实有意义”的参数；未覆盖项沿用基类默认值。
 
 #include <stdint.h>
 #include <type_traits>
@@ -54,37 +54,37 @@ struct MotorModelValid<MotorKind::LZ, MotorModel::RSO6> : std::true_type {};
 
 template <MotorKind KindValue, MotorModel ModelValue>
 struct MotorTraitsBase {
-    static constexpr MotorKind kKind = KindValue;                    // 电机种类（协议类别），如 RM / DM / LZ�?
-    static constexpr MotorModel kModel = ModelValue;                // 电机型号，如 M3508 / J4310 / RSO3�?
-    static constexpr float kGearRatio = 1.0f;                       // 电机内部减速比；输出轴物理量换算时会与外部减速比共同参与计算，无减速时�?1.0�?
-    static constexpr bool kSupportsMit = false;                     // 是否支持 MIT（位�?速度/Kp/Kd/前馈力矩）复合控制接口�?
-    static constexpr bool kSupportsTorque = false;                  // 是否支持力矩/电流控制接口�?
-    static constexpr bool kSupportsVelocity = false;                // 是否支持速度控制接口�?
-    static constexpr bool kSupportsPosition = false;                // 是否支持位置控制接口�?
-    static constexpr bool kIsMultiTurn = false;                     // 反馈位置是否天然支持多圈连续语义，或可由协议层稳定累计为多圈�?
-    static constexpr bool kHasNativeZeroSet = false;                // 电机协议是否原生支持设零/保存零点�?
-    static constexpr bool kHasHostId = false;                       // 运行时配置中是否需�?host_id 一类主机标识�?
-    static constexpr bool kHasMasterId = false;                     // 运行时配置中是否需�?master_id 一类主控标识�?
-    static constexpr float kDefaultKp = 0.0f;                       // 默认比例增益 Kp，通常�?MIT 或上层控制器初始化参考�?
-    static constexpr float kDefaultKd = 0.0f;                       // 默认微分增益 Kd，通常�?MIT 或上层控制器初始化参考�?
-    static constexpr float kMinPosition = 0.0f;                     // 位置下限，单�?rad；为 0 表示未给出限制�?
-    static constexpr float kMaxPosition = 0.0f;                     // 位置上限，单�?rad；为 0 表示未给出限制�?
-    static constexpr float kMaxTorque = 0.0f;                       // 最大输出力矩，单位 N·m；通常用于命令裁剪�?
-    static constexpr float kMaxVelocity = 0.0f;                     // 最大输出角速度，单�?rad/s；通常用于命令裁剪�?
-    static constexpr float kRecommendedCurrent = 0.0f;              // 推荐持续工作电流，单�?A�?
-    static constexpr float kRatedCurrent = 0.0f;                    // 额定电流，单�?A�?
-    static constexpr float kPeakCurrent = 0.0f;                     // 峰值电流，单位 A�?
-    static constexpr float kRawCurrentRange = 0.0f;                 // 协议原始电流指令/反馈满量程绝对值，例如 16384 / 10000 / 30000�?
-    static constexpr float kCurrentRangeAmp = 0.0f;                 // 原始电流满量程映射到的物理电流绝对值，单位 A�?
-    static constexpr float kRecommendedVelocity = 0.0f;             // 推荐持续工作角速度，单�?rad/s�?
-    static constexpr float kRatedVelocity = 0.0f;                   // 额定角速度，单�?rad/s�?
-    static constexpr float kNoLoadVelocity = 0.0f;                  // 空载最大角速度，单�?rad/s�?
-    static constexpr float kRatedTorque = 0.0f;                     // 额定输出力矩，单�?N·m�?
-    static constexpr float kPeakTorque = 0.0f;                      // 峰值输出力矩，单位 N·m�?
-    static constexpr float kTorqueConstant = 0.0f;                  // 电机轴（转子轴）力矩常数；仅适用于需要固定电�?力矩换算的型号�?
-    static constexpr uint16_t kEncoderCpr = 0;                      // 编码器每圈计数（counts per revolution）；未知时为 0�?
-    static constexpr MotorCapability kCapabilities = MotorCapability::None; // 编译期能力位掩码，汇总支持的控制能力�?
-    static constexpr const char* kName = "Unknown";                // 人类可读型号名，便于调试输出�?
+    static constexpr MotorKind kKind = KindValue;                    // 电机种类（协议类别），如 RM / DM / LZ。
+    static constexpr MotorModel kModel = ModelValue;                // 电机型号，如 M3508 / J4310 / RSO3。
+    static constexpr float kGearRatio = 1.0f;                       // 电机内部减速比；输出轴物理量换算时会与外部减速比共同参与计算，无减速时为 1.0。
+    static constexpr bool kSupportsMit = false;                     // 是否支持 MIT（位置/速度/Kp/Kd/前馈力矩）复合控制接口。
+    static constexpr bool kSupportsTorque = false;                  // 是否支持力矩/电流控制接口。
+    static constexpr bool kSupportsVelocity = false;                // 是否支持速度控制接口。
+    static constexpr bool kSupportsPosition = false;                // 是否支持位置控制接口。
+    static constexpr bool kIsMultiTurn = false;                     // 反馈位置是否天然支持多圈连续语义，或可由协议层稳定累计为多圈。
+    static constexpr bool kHasNativeZeroSet = false;                // 电机协议是否原生支持设零/保存零点。
+    static constexpr bool kHasHostId = false;                       // 运行时配置中是否需要 host_id 一类主机标识。
+    static constexpr bool kHasMasterId = false;                     // 运行时配置中是否需要 master_id 一类主控标识。
+    static constexpr float kDefaultKp = 0.0f;                       // 默认比例增益 Kp，通常用于 MIT 或上层控制器初始化参考。
+    static constexpr float kDefaultKd = 0.0f;                       // 默认微分增益 Kd，通常用于 MIT 或上层控制器初始化参考。
+    static constexpr float kMinPosition = 0.0f;                     // 位置下限，单位 rad；为 0 表示未给出限制。
+    static constexpr float kMaxPosition = 0.0f;                     // 位置上限，单位 rad；为 0 表示未给出限制。
+    static constexpr float kMaxTorque = 0.0f;                       // 最大输出力矩，单位 N·m；通常用于命令裁剪。
+    static constexpr float kMaxVelocity = 0.0f;                     // 最大输出角速度，单位 rad/s；通常用于命令裁剪。
+    static constexpr float kRecommendedCurrent = 0.0f;              // 推荐持续工作电流，单位 A。
+    static constexpr float kRatedCurrent = 0.0f;                    // 额定电流，单位 A。
+    static constexpr float kPeakCurrent = 0.0f;                     // 峰值电流，单位 A。
+    static constexpr float kRawCurrentRange = 0.0f;                 // 协议原始电流指令/反馈满量程绝对值，例如 16384 / 10000 / 30000。
+    static constexpr float kCurrentRangeAmp = 0.0f;                 // 原始电流满量程映射到的物理电流绝对值，单位 A。
+    static constexpr float kRecommendedVelocity = 0.0f;             // 推荐持续工作角速度，单位 rad/s。
+    static constexpr float kRatedVelocity = 0.0f;                   // 额定角速度，单位 rad/s。
+    static constexpr float kNoLoadVelocity = 0.0f;                  // 空载最大角速度，单位 rad/s。
+    static constexpr float kRatedTorque = 0.0f;                     // 额定输出力矩，单位 N·m。
+    static constexpr float kPeakTorque = 0.0f;                      // 峰值输出力矩，单位 N·m。
+    static constexpr float kTorqueConstant = 0.0f;                  // 电机轴（转子轴）力矩常数；仅适用于需要固定电流-力矩换算的型号。
+    static constexpr uint16_t kEncoderCpr = 0;                      // 编码器每圈计数（counts per revolution）；未知时为 0。
+    static constexpr MotorCapability kCapabilities = MotorCapability::None; // 编译期能力位掩码，汇总支持的控制能力。
+    static constexpr const char* kName = "Unknown";                // 人类可读型号名，便于调试输出。
 };
 
 template <>

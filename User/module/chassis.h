@@ -153,9 +153,9 @@ typedef struct {
 /* PC上位机接口 */
 typedef struct {
   bool pc_control_enable;     /* PC控制使能 */
-  float pc_vx;               /* PC下发速度命令 m/s */
-  float pc_vy;               /* PC下发速度命令 m/s */
-  float pc_wz;               /* PC下发角速度命令 rad/s */
+  float pc_vx;               /* +forward velocity command, m/s */
+  float pc_vy;               /* +left velocity command, m/s */
+  float pc_wz;               /* +counter-clockwise yaw rate, rad/s */
 } Chassis_PCInterface_t;
 
 #ifdef __cplusplus

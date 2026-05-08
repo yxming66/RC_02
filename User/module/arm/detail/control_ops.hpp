@@ -1,10 +1,10 @@
 #pragma once
 
 #include <array>
-#include <cmath>
 
-#include "module/arm/arm_control_types.h"
+#include "component/math/scalar.hpp"
 #include "device/joint/joint.hpp"
+#include "module/arm/arm_control_types.h"
 
 namespace mr {
 namespace arm {
@@ -74,7 +74,8 @@ inline bool validate_and_copy_joint_targets(
 
         const float target = joints[i]->GetTargetAngle();
         const auto& params = joints[i]->GetParams();
-        if (!std::isfinite(target) || target < params.qmin || target > params.qmax) {
+        if (!mr::component::math::is_finite_scalar(target) ||
+            target < params.qmin || target > params.qmax) {
             return false;
         }
         out_targets->q[i] = target;

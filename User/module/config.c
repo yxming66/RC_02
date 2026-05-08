@@ -20,10 +20,10 @@
 Config_RobotParam_t robot_config = {
   .chassis_param = {
     .motor_param = {
-      [0] = {.can = BSP_CAN_2, .id = 0x201, .module = MOTOR_M3508, .reverse = false, .gear = true},
-      [1] = {.can = BSP_CAN_2, .id = 0x202, .module = MOTOR_M3508, .reverse = false, .gear = true},
-      [2] = {.can = BSP_CAN_2, .id = 0x203, .module = MOTOR_M3508, .reverse = false, .gear = true},
-      [3] = {.can = BSP_CAN_2, .id = 0x204, .module = MOTOR_M3508, .reverse = false, .gear = true},
+      [0] = {.can = BSP_CAN_1, .id = 0x201, .module = MOTOR_M3508, .reverse = false, .gear = true},
+      [1] = {.can = BSP_CAN_1, .id = 0x202, .module = MOTOR_M3508, .reverse = false, .gear = true},
+      [2] = {.can = BSP_CAN_1, .id = 0x203, .module = MOTOR_M3508, .reverse = false, .gear = true},
+      [3] = {.can = BSP_CAN_1, .id = 0x204, .module = MOTOR_M3508, .reverse = false, .gear = true},
     },
     .pid = {
       .follow_pid_param = {
@@ -67,10 +67,10 @@ Config_RobotParam_t robot_config = {
   },
 .pole_param = {
         .motor_param = {
-            [0] = {.can = BSP_CAN_1, .id = 0x201, .module = MOTOR_M3508, .reverse = true,.gear = true},
-            [1] = {.can = BSP_CAN_1, .id = 0x202, .module = MOTOR_M3508, .reverse = true, .gear = true},
-            [2] = {.can = BSP_CAN_1, .id = 0x203, .module = MOTOR_M3508, .reverse = true, .gear = true},
-            [3] = {.can = BSP_CAN_1, .id = 0x204, .module = MOTOR_M3508, .reverse = false, .gear = true},
+            [0] = {.can = BSP_CAN_2, .id = 0x201, .module = MOTOR_M3508, .reverse = true,.gear = true},
+            [1] = {.can = BSP_CAN_2, .id = 0x202, .module = MOTOR_M3508, .reverse = false, .gear = true},
+            [2] = {.can = BSP_CAN_2, .id = 0x203, .module = MOTOR_M3508, .reverse = true, .gear = true},
+            [3] = {.can = BSP_CAN_2, .id = 0x204, .module = MOTOR_M3508, .reverse = true, .gear = true},
         },
         .pid = {
             .support_pos_pid = {
@@ -180,6 +180,7 @@ Config_RobotParam_t robot_config = {
       .pole_rear_retract_lift_speed = 30.0f, // 后杆回收阶段速度 (rad/s)
       .pole_rear_extend_lift_speed = 18.0f, // 后杆放下/重新伸出阶段速度 (rad/s)
       .head_front_photo_timeout_ms =5000u,   // 头向前光电等待超时时间 (ms)
+      .tail_front_photo_timeout_ms = 5000u,   // 尾向前光电等待超时时间 (ms)
       .climb_front_retract_speed = 0.50f, // 前杆回收阶段基础前进速度 (m/s)
       .climb_front_retract_vy = 0.04f,    // 前杆回收阶段附加横移速度vy (m/s)
       .climb_front_retract_timeout_ms = 5000u, // 前杆回收阶段最长等待时间 (ms)
@@ -191,6 +192,7 @@ Config_RobotParam_t robot_config = {
       .climb_rear_retract_speed = 0.20f, // 后杆回收阶段的基础前进速度 (m/s)
       .climb_rear_retract_vy = 0.15f,    // 后杆回收阶段附加横移速度vy，便于边收杆边修正姿态 (m/s)
       .head_rear_photo_timeout_ms = 10000u,    // 头向后光电等待超时时间 (ms)
+      .tail_rear_photo_timeout_ms = 10000u,    // 尾向后光电等待超时时间 (ms)
       .climb_rear_retract_timeout_ms = 5000u, // 后杆回收阶段最长等待时间 (ms)
       .rear_retract_move_ms = 700u,      // 后杆回收完成后继续保持运动的时间 (ms)
 
@@ -206,6 +208,7 @@ Config_RobotParam_t robot_config = {
       .descend_200_climb_front_retract_timeout_ms = 5000u, /* 下台阶前杆回收超时 (ms) */
       .descend_200_front_retract_settle_ms = 800u,     // 下台阶前杆回收后稳定时长 (ms)
       .descend_200_flat_move_ms = 600u,                // 下台阶脱离台阶平移时长 (ms)
+      .descend_200_flat_move_speed = 0.30f,             // 下台阶脱离台阶平移速度 (m/s)
       .descend_200_pole_all_extend_lift_speed = 50.0f,     // 下台阶四杆全伸阶段速度 (rad/s)
       .descend_200_pole_rear_retract_lift_speed = 30.0f,  // 下台阶后杆回收阶段速度 (rad/s)
       .descend_200_pole_front_retract_lift_speed = 18.0f, // 下台阶前杆回收阶段速度 (rad/s)
@@ -246,6 +249,43 @@ Config_RobotParam_t robot_config = {
       .descend_400_pole_all_extend_lift_speed = 40.0f,     // 下台阶四杆全伸阶段速度 (rad/s)
       .descend_400_pole_rear_retract_lift_speed = 25.0f,  // 下台阶后杆回收阶段速度 (rad/s)
       .descend_400_pole_front_retract_lift_speed = 15.0f, // 下台阶前杆回收阶段速度 (rad/s)
+
+      /* 尾部方向上200台阶参数（尾向前）：对称于头部方向上200台阶 */
+      .ascend_200_tail_align_forward_speed = 0.30f,   // 尾部上台阶对正阶段同步前进速度 (m/s)
+      .ascend_200_tail_pole_extend_forward_speed = 0.50f, // 尾部上台阶四杆伸起稳定阶段前进速度 (m/s)
+      .ascend_200_tail_forward_speed = 1.0f,         // 尾部上台阶前杆回收阶段基础前进速度 (m/s)
+      .ascend_200_tail_pole_extend_settle_ms = 900u, // 尾部上台阶四杆伸出后稳定时间 (ms)
+      .ascend_200_tail_pole_all_extend_lift_speed = 50.0f, // 尾部上台阶四杆全伸阶段速度 (rad/s)
+      .ascend_200_tail_tail_front_photo_timeout_ms = 5000u, // 尾部上台阶尾向前光电超时 (ms)
+      .ascend_200_tail_front_retract_speed = 0.50f,   // 尾部上台阶前杆回收速度 (m/s)
+      .ascend_200_tail_front_retract_vy = 0.04f,      // 尾部上台阶前杆回收附加横移速度vy (m/s)
+      .ascend_200_tail_front_retract_timeout_ms = 5000u, // 尾部上台阶前杆回收超时 (ms)
+      .ascend_200_tail_front_retract_settle_ms = 800u, // 尾部上台阶前杆回收后稳定时间 (ms)
+      .ascend_200_tail_mid_forward_speed = 0.5f,     // 尾部上台阶前杆收回后中段前进速度 (m/s)
+      .ascend_200_tail_mid_forward_ms = 1500u,       // 尾部上台阶中段前进保持时间 (ms)
+      .ascend_200_tail_rear_retract_speed = 0.20f,   // 尾部上台阶后杆回收速度 (m/s)
+      .ascend_200_tail_rear_retract_vy = 0.15f,      // 尾部上台阶后杆回收附加横移速度vy (m/s)
+      .ascend_200_tail_tail_rear_photo_timeout_ms = 10000u, // 尾部上台阶尾向后光电超时 (ms)
+      .ascend_200_tail_rear_retract_timeout_ms = 5000u, // 尾部上台阶后杆回收超时 (ms)
+      .ascend_200_tail_rear_retract_move_ms = 700u, // 尾部上台阶后杆回收后移动时长 (ms)
+      .ascend_200_tail_pole_front_retract_lift_speed = 18.0f, // 尾部上台阶前杆回收阶段速度 (rad/s)
+      .ascend_200_tail_pole_rear_retract_lift_speed = 30.0f, // 尾部上台阶后杆回收阶段速度 (rad/s)
+
+      /* 尾部方向下200台阶参数（尾向前）：对称于头部方向下200台阶 */
+      .descend_200_tail_align_speed = 0.30f,             // 尾部下台阶对正阶段速度 (m/s)
+      .descend_200_tail_climb_forward_speed = 0.50f,     // 尾部下台阶跨越时前进速度 (m/s)
+      .descend_200_tail_pole_extend_settle_ms = 900u,    // 尾部下台阶撑杆伸出稳定时间 (ms)
+      .descend_200_tail_tail_rear_photo_timeout_ms = 5000u, /* 尾部下台阶尾向后光电超时 (ms) */
+      .descend_200_tail_climb_rear_retract_speed = 0.20f,      // 尾部下台阶后杆回收速度 (m/s)
+      .descend_200_tail_climb_rear_retract_timeout_ms = 5000u, // 尾部下台阶后杆回收超时 (ms)
+      .descend_200_tail_rear_retract_move_ms = 700u,           // 尾部下台阶后杆回收后移动时长 (ms)
+      .descend_200_tail_climb_front_retract_speed = 0.50f,     // 尾部下台阶前杆回收速度 (m/s)
+      .descend_200_tail_climb_front_retract_timeout_ms = 5000u, /* 尾部下台阶前杆回收超时 (ms) */
+      .descend_200_tail_front_retract_settle_ms = 800u,     // 尾部下台阶前杆回收后稳定时长 (ms)
+      .descend_200_tail_flat_move_ms = 600u,                // 尾部下台阶脱离台阶平移时长 (ms)
+      .descend_200_tail_pole_all_extend_lift_speed = 50.0f,     // 尾部下台阶四杆全伸阶段速度 (rad/s)
+      .descend_200_tail_pole_rear_retract_lift_speed = 30.0f,  // 尾部下台阶后杆回收阶段速度 (rad/s)
+      .descend_200_tail_pole_front_retract_lift_speed = 18.0f, // 尾部下台阶前杆回收阶段速度 (rad/s)
 
       /* SICK辅助姿态修正参数 */
       .sick_valid_min_cm = 0.0f,         // SICK测距判定为有效的最小值 (cm)

@@ -10,7 +10,15 @@
       "Bash(ninja)",
       "Bash(/c/Program Files/CMake/bin/cmake.exe *)",
       "Bash(\"/c/Program Files/CMake/bin/cmake.exe\" --build \"D:/STM32Projects_HAL/board-H7/RC_02/build/Debug\")",
-      "Bash(arm-none-eabi-nm \"D:/STM32Projects_HAL/board-H7/RC_02/build/Debug/CMakeFiles/RC_02.dir/User/module/pc_protocol/pc_protocol.cpp.obj\")"
+      "Bash(arm-none-eabi-nm \"D:/STM32Projects_HAL/board-H7/RC_02/build/Debug/CMakeFiles/RC_02.dir/User/module/pc_protocol/pc_protocol.cpp.obj\")",
+      "Bash(cmake --build build --parallel 4)",
+      "Bash(where ninja *)",
+      "Bash(cmake -B build -G \"MinGW Makefiles\")",
+      "Bash(\"/c/Program Files/CMake/bin/cmake.exe\" -B D:/STM32Projects_HAL/board-H7/RC_02/build -G \"MinGW Makefiles\" -DCMAKE_BUILD_TYPE=Debug)",
+      "Bash(\"/c/Program Files/CMake/bin/cmake.exe\" --build D:/STM32Projects_HAL/board-H7/RC_02/build --target RC_02)",
+      "Bash(\"/c/Program Files/CMake/bin/cmake.exe\" --build D:/STM32Projects_HAL/board-H7/RC_02/build)",
+      "Bash(\"/c/Program Files/CMake/bin/cmake.exe\" --build .)",
+      "Bash(D:/Drivers/MSYS2/ucrt64/bin/cc.exe -fsyntax-only -I D:/STM32Projects_HAL/board-H7/RC_02/Core/Inc -I D:/STM32Projects_HAL/board-H7/RC_02/User -I D:/STM32Projects_HAL/board-H7/RC_02/User/module/autoCtrlAPI/include -I D:/STM32Projects_HAL/board-H7/RC_02/User/module/autoCtrlAPI/template -I D:/STM32Projects_HAL/board-H7/RC_02/User/module -I D:/STM32Projects_HAL/board-H7/RC_02/User/module/config -DUSE_HAL_DRIVER -DSTM32H723xx D:/STM32Projects_HAL/board-H7/RC_02/User/module/autoCtrlAPI/template/auto_ctrl_template_runner.c)"
     ]
   }
 }

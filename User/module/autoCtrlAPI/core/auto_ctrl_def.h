@@ -23,13 +23,15 @@ extern "C" {
 typedef enum {
 	AUTO_CTRL_TEMPLATE_NONE = 0,         /* 未分配模板。 */
 	AUTO_CTRL_TEMPLATE_FLAT_MOVE,        /* 平地匀速直行模板。 */
-	AUTO_CTRL_TEMPLATE_ASCEND_200,       /* 上 200mm 台阶模板。 */
-	AUTO_CTRL_TEMPLATE_DESCEND_200,      /* 下 200mm 台阶模板。 */
+	AUTO_CTRL_TEMPLATE_ASCEND_200,       /* 上 200mm 台阶模板（头向前）。 */
+	AUTO_CTRL_TEMPLATE_DESCEND_200,      /* 下 200mm 台阶模板（头向前）。 */
 	AUTO_CTRL_TEMPLATE_DESCEND_200_ALT,  /* 下 200mm 台阶模板（逆流程版本）。 */
 	AUTO_CTRL_TEMPLATE_ASCEND_400_STD,   /* 标准上 400mm 台阶模板。 */
 	AUTO_CTRL_TEMPLATE_ASCEND_400_ALT,  /* 上 400mm 台阶模板（逆流程版本）。 */
 	AUTO_CTRL_TEMPLATE_DESCEND_400_STD,  /* 标准下 400mm 台阶模板。 */
 	AUTO_CTRL_TEMPLATE_DESCEND_400_ALT,  /* 下 400mm 台阶模板（逆流程版本）。 */
+	AUTO_CTRL_TEMPLATE_ASCEND_200_TAIL,  /* 上 200mm 台阶模板（尾向前）。 */
+	AUTO_CTRL_TEMPLATE_DESCEND_200_TAIL, /* 下 200mm 台阶模板（尾向前）。 */
 } auto_ctrl_template_e;
 
 typedef enum {
@@ -43,6 +45,11 @@ typedef enum {
 	AUTO_CTRL_SENSOR_MODE_SICK_FRONT_AND_BOTTOM, /* SICK 前向/侧向 + 底部光电。 */
 	AUTO_CTRL_SENSOR_MODE_BOTTOM_ONLY, /* 仅使用底部光电触发。 */
 } auto_ctrl_sensor_mode_e;
+
+typedef enum {
+	AUTO_CTRL_YAW_SOURCE_STM32 = 0, /* 使用 STM32 本地目标 yaw / 陀螺仪 yaw。 */
+	AUTO_CTRL_YAW_SOURCE_PC,        /* 使用上位机目标 yaw / 上位机欧拉角 yaw。 */
+} auto_ctrl_yaw_source_e;
 
 typedef enum {
 	AUTO_CTRL_STATE_IDLE = 0,     /* 空闲态，等待任务启动。 */

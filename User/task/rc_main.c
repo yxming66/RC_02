@@ -20,14 +20,6 @@
 #include <string.h>
 /* USER INCLUDE END */
 
-#ifndef AUTO_CTRL_RC_YAW_POS_90_RAD
-#define AUTO_CTRL_RC_YAW_POS_90_RAD (1.57079632679f)
-#endif
-
-#ifndef AUTO_CTRL_RC_YAW_NEG_90_RAD
-#define AUTO_CTRL_RC_YAW_NEG_90_RAD (-1.57079632679f)
-#endif
-
 #ifndef AUTO_CTRL_RC_YAW_TOLERANCE_RAD
 #define AUTO_CTRL_RC_YAW_TOLERANCE_RAD (0.0872664626f)
 #endif
@@ -49,6 +41,7 @@ static Rod_CMD_t rod_cmd;
 extern bool reset;
 extern auto_ctrl_t auto_ctrl;
 extern bool auto_ctrl_inited;
+extern Chassis_IMU_t chassis_imu;
 
 typedef struct {
   bool enabled;
@@ -63,7 +56,7 @@ typedef struct {
 volatile ArmTaskDebugPoseControl_t g_arm_task_debug_pose_control = {0};
 
 /* PC上位机控制相关 */
-#define RC_MODE_PC_ARM_TRIGGER_THRESHOLD (0.9f)  /* 摇杆阈值，触发上位机控制 */
+#define RC_PC_ENABLE_SWITCH (DR16_SW_UP)  /* sw_l DOWN 且 sw_r UP 时允许PC接管 */
 extern PC_Protocol_t* g_pc_protocol_ptr;
 
 static bool Rc_ArmPoseIsFinite(const ArmPose_t* pose) {
@@ -200,8 +193,8 @@ static void Rc_SetChassisRelax(void) {
 
 static void Rc_SetChassisRemote(void) {
   chassis_cmd.mode = CHASSIS_MODE_INDEPENDENT;
-  chassis_cmd.ctrl_vec.vx = dr16.data.ch_r_x;
-  chassis_cmd.ctrl_vec.vy = dr16.data.ch_r_y;
+  chassis_cmd.ctrl_vec.vx = dr16.data.ch_r_y;
+  chassis_cmd.ctrl_vec.vy = -dr16.data.ch_r_x;
   chassis_cmd.ctrl_vec.wz = dr16.data.ch_l_x;
 }
 
@@ -217,6 +210,32 @@ static bool Rc_ShouldExitAutoCtrlBySwitch(void) {
          (dr16.data.sw_l == DR16_SW_MID || dr16.data.sw_l == DR16_SW_DOWN) &&
          (last_sw_r == DR16_SW_UP || last_sw_r == DR16_SW_DOWN) &&
          dr16.data.sw_r == DR16_SW_MID;
+}
+
+static bool Rc_ShouldUsePcCommand(void) {
+  return g_pc_protocol_ptr != NULL &&
+         PC_Protocol_IsPCControlMode(g_pc_protocol_ptr) &&
+         dr16.data.sw_l == DR16_SW_DOWN &&
+         dr16.data.sw_r == RC_PC_ENABLE_SWITCH;
+}
+
+static bool Rc_PrepareLocalAutoYawFeedback(void) {
+  if (!isfinite(chassis_imu.eulr.yaw)) {
+    return false;
+  }
+
+  if (!auto_ctrl_local_yaw_zero_initialized) {
+    auto_ctrl_local_yaw_zero_rad = chassis_imu.eulr.yaw;
+    auto_ctrl_local_yaw_zero_initialized = true;
+  }
+
+  AutoCtrl_SetYawSource(&auto_ctrl, AUTO_CTRL_YAW_SOURCE_STM32);
+  AutoCtrl_SetYawZeroOffset(&auto_ctrl, auto_ctrl_local_yaw_zero_rad);
+
+  auto_ctrl_feedback_t local_feedback = auto_ctrl.feedback;
+  local_feedback.yaw_auto_rad = chassis_imu.eulr.yaw;
+  AutoCtrl_SetFeedback(&auto_ctrl, &local_feedback);
+  return true;
 }
 
 static void Rc_TryStartAutoCtrlBySwitch(uint32_t now_ms) {
@@ -236,14 +255,18 @@ static void Rc_TryStartAutoCtrlBySwitch(uint32_t now_ms) {
   float target_yaw_rad = 0.0f;
 
   if (dr16.data.sw_r == DR16_SW_UP) {
-    target_yaw_rad = AUTO_CTRL_RC_YAW_POS_90_RAD;
     template_id = AUTO_CTRL_TEMPLATE_ASCEND_200;
   } else if (dr16.data.sw_r == DR16_SW_DOWN) {
-    target_yaw_rad = AUTO_CTRL_RC_YAW_NEG_90_RAD;
     template_id = AUTO_CTRL_TEMPLATE_DESCEND_200;
   }
 
   if (template_id != AUTO_CTRL_TEMPLATE_NONE) {
+    if (!Rc_PrepareLocalAutoYawFeedback()) {
+      return;
+    }
+
+    target_yaw_rad =
+        AutoCtrlMath_NearestCardinalYawRad(auto_ctrl.feedback.yaw_auto_rad);
     (void)AutoCtrl_StartTemplate(
         &auto_ctrl, template_id, AUTO_CTRL_TRAVEL_DIR_HEAD_FORWARD,
         target_yaw_rad, AUTO_CTRL_RC_YAW_TOLERANCE_RAD,
@@ -304,15 +327,15 @@ void Task_rc_main(void *argument) {
       switch (dr16.data.sw_r) {
         case DR16_SW_UP:
           chassis_cmd.mode = CHASSIS_MODE_INDEPENDENT;
-          chassis_cmd.ctrl_vec.vx = 2.0f * dr16.data.ch_r_x;
-          chassis_cmd.ctrl_vec.vy = 2.0f * dr16.data.ch_r_y;
+          chassis_cmd.ctrl_vec.vx = 2.0f * dr16.data.ch_r_y;
+          chassis_cmd.ctrl_vec.vy = -2.0f * dr16.data.ch_r_x;
           chassis_cmd.ctrl_vec.wz = -2.0f * dr16.data.ch_l_x;
           Rc_SetPoleManual(dr16.data.ch_l_y, dr16.data.ch_l_y);
           break;
         case DR16_SW_MID:
           chassis_cmd.mode = CHASSIS_MODE_INDEPENDENT;
-          chassis_cmd.ctrl_vec.vx = dr16.data.ch_r_x;
-          chassis_cmd.ctrl_vec.vy = dr16.data.ch_r_y;
+          chassis_cmd.ctrl_vec.vx = dr16.data.ch_r_y;
+          chassis_cmd.ctrl_vec.vy = -dr16.data.ch_r_x;
           chassis_cmd.ctrl_vec.wz = -dr16.data.ch_l_x;
           Rc_SetPoleManual(dr16.data.ch_l_y, dr16.data.ch_l_x);
           break;
@@ -359,12 +382,8 @@ void Task_rc_main(void *argument) {
         AutoCtrl_Abort(&auto_ctrl);
       }
 
-      /* 检测是否切换到上位机控制模式 */
-      /* 当右摇杆推到右下角区域时（ch_r_x < -阈值 && ch_r_y < -阈值），使用上位机命令 */
-      if (g_pc_protocol_ptr != NULL &&
-          PC_Protocol_IsPCControlMode(g_pc_protocol_ptr) &&
-          dr16.data.ch_r_x < -RC_MODE_PC_ARM_TRIGGER_THRESHOLD &&
-          dr16.data.ch_r_y < -RC_MODE_PC_ARM_TRIGGER_THRESHOLD) {
+      /* sw_l DOWN 且 sw_r UP 时才允许使用上位机命令。 */
+      if (Rc_ShouldUsePcCommand()) {
         /* 上位机控制模式 */
         const PC_ChassisCMD_t* pc_chassis_cmd = PC_Protocol_GetChassisCMD(g_pc_protocol_ptr);
         const PC_PoleCMD_t* pc_pole_cmd = PC_Protocol_GetPoleCMD(g_pc_protocol_ptr);

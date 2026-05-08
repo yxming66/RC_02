@@ -2,6 +2,7 @@
 
 #include <math.h>
 
+#include "component/math/scalar.hpp"
 #include "component/user_math.h"
 #include "device/device.h"
 #include "device/motor.h"
@@ -17,15 +18,15 @@ constexpr float kMotorEncoderResolution = 8192.0f;
 constexpr float kSecondsPerMinute = 60.0f;
 
 float ResolvePositiveRatio(float ratio) {
-    return comp_positive_or_f(ratio, 1.0f);
+    return mr::component::math::positive_or(ratio, 1.0f);
 }
 
 float WrapAngleDiff(float diff_rad) {
-    return comp_wrap_error_f(diff_rad, kTwoPi);
+    return mr::component::math::wrap_error(diff_rad, kTwoPi);
 }
 
 float WrapToPi(float angle_rad) {
-    return comp_wrap_to_pi_f(angle_rad);
+    return mr::component::math::wrap_to_pi(angle_rad);
 }
 
 float RpmToRadPerSec(float rpm) {

@@ -394,7 +394,7 @@ public:
 
         ArmJointAngles_t candidate{};
         for (size_t i = 0; i < JOINT_NUM; ++i) {
-            if (!std::isfinite(target_angles[i])) {
+            if (!mr::component::math::is_finite_scalar(target_angles[i])) {
                 return -1;
             }
             if (joints_[i] != nullptr) {

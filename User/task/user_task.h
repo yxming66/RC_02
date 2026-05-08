@@ -24,7 +24,7 @@ extern "C" {
 #define CMD_MAIN_FREQ (100.0)
 #define SICK_FREQ (100.0)
 #define AUTO_CTRL_FREQ (100.0)
-#define ARM_FREQ (250.0)
+#define ARM_FREQ (250.0) 
 #define ROD_FREQ (200.0)
 #define PC_COMM_FREQ (100.0)
 #define PC_UART_RX_FREQ (50.0)
@@ -147,6 +147,8 @@ extern Task_Runtime_t task_runtime;
 
 extern auto_ctrl_t auto_ctrl;
 extern bool auto_ctrl_inited;
+extern bool auto_ctrl_local_yaw_zero_initialized;
+extern float auto_ctrl_local_yaw_zero_rad;
 extern BUZZER_t buzzer;
 extern bool g_buzzer_calib_active;
 

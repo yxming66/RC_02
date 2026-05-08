@@ -44,6 +44,7 @@ typedef struct {
             float pole_rear_retract_lift_speed; /* 后杆回收阶段目标跟踪速度 (rad/s) */
             float pole_rear_extend_lift_speed;  /* 后杆放下/重新伸出阶段目标跟踪速度 (rad/s) */
         uint32_t head_front_photo_timeout_ms;    /* 头向前光电等待超时 (ms) */
+        uint32_t tail_front_photo_timeout_ms;    /* 尾向前光电等待超时 (ms) */
         float climb_front_retract_speed;    /* 前杆回收阶段基础前进速度 (m/s) */
         float climb_front_retract_vy;       /* 前杆回收阶段附加横移速度vy (m/s) */
         uint32_t climb_front_retract_timeout_ms; /* 前杆回收阶段最长等待时间 (ms) */
@@ -55,6 +56,7 @@ typedef struct {
         float climb_rear_retract_speed;     /* 后杆回收阶段的基础前进速度 (m/s) */
         float climb_rear_retract_vy;        /* 后杆回收阶段附加横移速度vy (m/s) */
         uint32_t head_rear_photo_timeout_ms;     /* 头向后光电等待超时 (ms) */
+        uint32_t tail_rear_photo_timeout_ms;     /* 尾向后光电等待超时 (ms) */
         uint32_t climb_rear_retract_timeout_ms; /* 后杆回收阶段最长等待时间 (ms) */
         uint32_t rear_retract_move_ms;      /* 后杆回收完成后继续保持运动的时间 (ms) */
 
@@ -70,6 +72,7 @@ typedef struct {
         uint32_t descend_200_climb_front_retract_timeout_ms; /* 下台阶前杆回收超时 (ms) */
         uint32_t descend_200_front_retract_settle_ms;     /* 下台阶前杆回收后稳定时长 (ms) */
         uint32_t descend_200_flat_move_ms;                /* 下台阶脱离台阶平移时长 (ms) */
+        float descend_200_flat_move_speed;                /* 下台阶脱离台阶平移速度 (m/s) */
         float descend_200_pole_all_extend_lift_speed;     /* 下台阶四杆全伸阶段速度 (rad/s) */
         float descend_200_pole_rear_retract_lift_speed;    /* 下台阶后杆回收阶段速度 (rad/s) */
         float descend_200_pole_front_retract_lift_speed;   /* 下台阶前杆回收阶段速度 (rad/s) */
@@ -110,6 +113,43 @@ typedef struct {
         float descend_400_pole_all_extend_lift_speed;     /* 下台阶四杆全伸阶段速度 (rad/s) */
         float descend_400_pole_rear_retract_lift_speed;    /* 下台阶后杆回收阶段速度 (rad/s) */
         float descend_400_pole_front_retract_lift_speed;  /* 下台阶前杆回收阶段速度 (rad/s) */
+
+        /* 尾部方向上200台阶参数（尾向前）：对称于头部方向上200台阶 */
+        float ascend_200_tail_align_forward_speed;   /* 尾部上台阶对正阶段同步前进速度 (m/s) */
+        float ascend_200_tail_pole_extend_forward_speed; /* 尾部上台阶四杆伸起稳定阶段前进速度 (m/s) */
+        float ascend_200_tail_forward_speed;         /* 尾部上台阶前杆回收阶段基础前进速度 (m/s) */
+        uint32_t ascend_200_tail_pole_extend_settle_ms; /* 尾部上台阶四杆伸出后稳定时间 (ms) */
+        float ascend_200_tail_pole_all_extend_lift_speed; /* 尾部上台阶四杆全伸阶段速度 (rad/s) */
+        uint32_t ascend_200_tail_tail_front_photo_timeout_ms; /* 尾部上台阶尾向前光电超时 (ms) */
+        float ascend_200_tail_front_retract_speed;   /* 尾部上台阶前杆回收速度 (m/s) */
+        float ascend_200_tail_front_retract_vy;      /* 尾部上台阶前杆回收附加横移速度vy (m/s) */
+        uint32_t ascend_200_tail_front_retract_timeout_ms; /* 尾部上台阶前杆回收超时 (ms) */
+        uint32_t ascend_200_tail_front_retract_settle_ms; /* 尾部上台阶前杆回收后稳定时间 (ms) */
+        float ascend_200_tail_mid_forward_speed;     /* 尾部上台阶前杆收回后中段前进速度 (m/s) */
+        uint32_t ascend_200_tail_mid_forward_ms;    /* 尾部上台阶中段前进保持时间 (ms) */
+        float ascend_200_tail_rear_retract_speed;   /* 尾部上台阶后杆回收速度 (m/s) */
+        float ascend_200_tail_rear_retract_vy;      /* 尾部上台阶后杆回收附加横移速度vy (m/s) */
+        uint32_t ascend_200_tail_tail_rear_photo_timeout_ms; /* 尾部上台阶尾向后光电超时 (ms) */
+        uint32_t ascend_200_tail_rear_retract_timeout_ms; /* 尾部上台阶后杆回收超时 (ms) */
+        uint32_t ascend_200_tail_rear_retract_move_ms; /* 尾部上台阶后杆回收后移动时长 (ms) */
+        float ascend_200_tail_pole_front_retract_lift_speed; /* 尾部上台阶前杆回收阶段速度 (rad/s) */
+        float ascend_200_tail_pole_rear_retract_lift_speed; /* 尾部上台阶后杆回收阶段速度 (rad/s) */
+
+        /* 尾部方向下200台阶参数（尾向前）：对称于头部方向下200台阶 */
+        float descend_200_tail_align_speed;             /* 尾部下台阶对正阶段速度 (m/s) */
+        float descend_200_tail_climb_forward_speed;     /* 尾部下台阶跨越时前进速度 (m/s) */
+        uint32_t descend_200_tail_pole_extend_settle_ms; /* 尾部下台阶撑杆伸出稳定时间 (ms) */
+        uint32_t descend_200_tail_tail_rear_photo_timeout_ms; /* 尾部下台阶尾向后光电超时 (ms) */
+        float descend_200_tail_climb_rear_retract_speed;     /* 尾部下台阶后杆回收速度 (m/s) */
+        uint32_t descend_200_tail_climb_rear_retract_timeout_ms; /* 尾部下台阶后杆回收超时 (ms) */
+        uint32_t descend_200_tail_rear_retract_move_ms;       /* 尾部下台阶后杆回收后移动时长 (ms) */
+        float descend_200_tail_climb_front_retract_speed;     /* 尾部下台阶前杆回收速度 (m/s) */
+        uint32_t descend_200_tail_climb_front_retract_timeout_ms; /* 尾部下台阶前杆回收超时 (ms) */
+        uint32_t descend_200_tail_front_retract_settle_ms;     /* 尾部下台阶前杆回收后稳定时长 (ms) */
+        uint32_t descend_200_tail_flat_move_ms;                /* 尾部下台阶脱离台阶平移时长 (ms) */
+        float descend_200_tail_pole_all_extend_lift_speed;     /* 尾部下台阶四杆全伸阶段速度 (rad/s) */
+        float descend_200_tail_pole_rear_retract_lift_speed;    /* 尾部下台阶后杆回收阶段速度 (rad/s) */
+        float descend_200_tail_pole_front_retract_lift_speed;   /* 尾部下台阶前杆回收阶段速度 (rad/s) */
 
         /* SICK辅助姿态修正参数 */
         float sick_valid_min_cm;

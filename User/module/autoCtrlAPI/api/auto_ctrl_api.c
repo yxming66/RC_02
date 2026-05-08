@@ -213,6 +213,7 @@ void AutoCtrl_Init(auto_ctrl_t *ctrl) {
   ctrl->template_id = AUTO_CTRL_TEMPLATE_NONE;
   ctrl->travel_dir = AUTO_CTRL_TRAVEL_DIR_HEAD_FORWARD;
   ctrl->sensor_mode = AUTO_CTRL_SENSOR_MODE_NONE;
+  ctrl->yaw_source = AUTO_CTRL_YAW_SOURCE_STM32;
   AutoCtrlPrimitive_ResetOutputs(ctrl);
 }
 
@@ -230,6 +231,21 @@ void AutoCtrl_SetYawZeroOffset(auto_ctrl_t *ctrl, float raw_yaw_rad) {
   ctrl->yaw_zero_offset_rad = raw_yaw_rad;
 }
 
+/* 设置 yaw 来源。 */
+void AutoCtrl_SetYawSource(auto_ctrl_t *ctrl, auto_ctrl_yaw_source_e source) {
+  if (ctrl == 0) return;
+  if (source < AUTO_CTRL_YAW_SOURCE_STM32 ||
+      source > AUTO_CTRL_YAW_SOURCE_PC) {
+    source = AUTO_CTRL_YAW_SOURCE_STM32;
+  }
+  ctrl->yaw_source = source;
+}
+
+/* 查询 yaw 来源。 */
+auto_ctrl_yaw_source_e AutoCtrl_GetYawSource(const auto_ctrl_t *ctrl) {
+  return (ctrl == 0) ? AUTO_CTRL_YAW_SOURCE_STM32 : ctrl->yaw_source;
+}
+
 /* 更新反馈并把输入 yaw 转为 auto yaw。 */
 void AutoCtrl_SetFeedback(auto_ctrl_t *ctrl,
                           const auto_ctrl_feedback_t *feedback) {
@@ -241,8 +257,29 @@ void AutoCtrl_SetFeedback(auto_ctrl_t *ctrl,
 }
 
 /*
+ * 根据 travel_dir 将基础模板映射到对应变体。
+ * 当 travel_dir = TAIL_FORWARD 时，ASCEND_200/DESCEND_200 自动映射到 _TAIL 版本。
+ */
+static auto_ctrl_template_e AutoCtrl_MapTemplateByTravelDir(
+    auto_ctrl_template_e template_id,
+    auto_ctrl_travel_dir_e travel_dir) {
+  if (travel_dir == AUTO_CTRL_TRAVEL_DIR_TAIL_FORWARD) {
+    switch (template_id) {
+      case AUTO_CTRL_TEMPLATE_ASCEND_200:
+        return AUTO_CTRL_TEMPLATE_ASCEND_200_TAIL;
+      case AUTO_CTRL_TEMPLATE_DESCEND_200:
+        return AUTO_CTRL_TEMPLATE_DESCEND_200_TAIL;
+      default:
+        break;
+    }
+  }
+  return template_id;
+}
+
+/*
  * 直接启动模板任务。
- * 时序位置：由上层在“空闲或结束态”发起，成功后立即进入 PREALIGN。
+ * 时序位置：由上层在”空闲或结束态”发起，成功后立即进入 PREALIGN。
+ * 注意：travel_dir 会影响模板选择（TAIL_FORWARD 时 200mm 台阶自动使用 _TAIL 变体）。
  */
 bool AutoCtrl_StartTemplate(auto_ctrl_t *ctrl,
                             auto_ctrl_template_e template_id,
@@ -252,6 +289,10 @@ bool AutoCtrl_StartTemplate(auto_ctrl_t *ctrl,
                             auto_ctrl_sensor_mode_e sensor_mode,
                             uint32_t now_ms) {
   if (ctrl == 0) return false;
+
+  /* 根据 travel_dir 映射模板 */
+  template_id = AutoCtrl_MapTemplateByTravelDir(template_id, travel_dir);
+
   if (template_id <= AUTO_CTRL_TEMPLATE_NONE ||
       template_id > AUTO_CTRL_TEMPLATE_DESCEND_400_STD) {
     AutoCtrl_Finish(ctrl, AUTO_CTRL_RESULT_FAIL, AUTO_CTRL_FAULT_INVALID_TEMPLATE,
@@ -271,7 +312,7 @@ bool AutoCtrl_StartTemplate(auto_ctrl_t *ctrl,
   ctrl->template_id = template_id;
   ctrl->travel_dir = travel_dir;
   ctrl->sensor_mode = sensor_mode;
-  ctrl->target_yaw_rad = target_yaw_rad;
+  ctrl->target_yaw_rad = AutoCtrlMath_WrapYawRad(target_yaw_rad);
   ctrl->yaw_tolerance_rad = yaw_tolerance_rad;
   ctrl->yaw_error_rad = AutoCtrlMath_GetYawErrorRad(ctrl->target_yaw_rad,
                                                     ctrl->feedback.yaw_auto_rad);

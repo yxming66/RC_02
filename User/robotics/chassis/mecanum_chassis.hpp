@@ -7,6 +7,7 @@
 namespace mr::robotics::chassis {
 
 struct PlanarVelocity {
+  // Body frame: +x forward, +y left, +wz counter-clockwise (+z up).
   float vx_mps = 0.0f;
   float vy_mps = 0.0f;
   float wz_rad_s = 0.0f;
@@ -57,13 +58,13 @@ class MecanumChassis {
 
     const float wz_term = geometry_.RotationRadius() * body_velocity.wz_rad_s;
     wheel_speeds[MecanumIndex(MecanumWheel::kFrontRight)] =
-        body_velocity.vx_mps - body_velocity.vy_mps - wz_term;
-    wheel_speeds[MecanumIndex(MecanumWheel::kFrontLeft)] =
-        body_velocity.vx_mps + body_velocity.vy_mps - wz_term;
-    wheel_speeds[MecanumIndex(MecanumWheel::kRearLeft)] =
-        -body_velocity.vx_mps + body_velocity.vy_mps - wz_term;
-    wheel_speeds[MecanumIndex(MecanumWheel::kRearRight)] =
         -body_velocity.vx_mps - body_velocity.vy_mps - wz_term;
+    wheel_speeds[MecanumIndex(MecanumWheel::kFrontLeft)] =
+        body_velocity.vx_mps - body_velocity.vy_mps - wz_term;
+    wheel_speeds[MecanumIndex(MecanumWheel::kRearLeft)] =
+        body_velocity.vx_mps + body_velocity.vy_mps - wz_term;
+    wheel_speeds[MecanumIndex(MecanumWheel::kRearRight)] =
+        -body_velocity.vx_mps + body_velocity.vy_mps - wz_term;
     return true;
   }
 
@@ -80,8 +81,8 @@ class MecanumChassis {
     const float v3 = wheel_speeds[MecanumIndex(MecanumWheel::kRearRight)];
     const float k = geometry_.RotationRadius();
 
-    body_velocity.vx_mps = 0.25f * (v0 + v1 - v2 - v3);
-    body_velocity.vy_mps = 0.25f * (-v0 + v1 + v2 - v3);
+    body_velocity.vx_mps = 0.25f * (-v0 + v1 + v2 - v3);
+    body_velocity.vy_mps = 0.25f * (-v0 - v1 + v2 + v3);
     body_velocity.wz_rad_s = -0.25f * (v0 + v1 + v2 + v3) / k;
     return true;
   }

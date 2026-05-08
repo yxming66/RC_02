@@ -1,12 +1,12 @@
 #pragma once
 
 #include <stdint.h>
-#include <cmath>
 #include <cstring>
 
-#include "robotics/arm/model/joint_mapping.h"
+#include "component/math/scalar.hpp"
 #include "component/user_math.h"
 #include "device/motor/motor.hpp"
+#include "robotics/arm/model/joint_mapping.h"
 
 namespace mr {
 
@@ -306,10 +306,10 @@ public:
 
     int8_t PositionControl(float target_angle, float dt) override {
         (void)dt;
-        if (!std::isfinite(target_angle) ||
-            !std::isfinite(state_.current_angle) ||
-            !std::isfinite(params_.qmin) ||
-            !std::isfinite(params_.qmax) ||
+        if (!mr::component::math::is_finite_scalar(target_angle) ||
+            !mr::component::math::is_finite_scalar(state_.current_angle) ||
+            !mr::component::math::is_finite_scalar(params_.qmin) ||
+            !mr::component::math::is_finite_scalar(params_.qmax) ||
             params_.qmin >= params_.qmax) {
             return -1;
         }
@@ -374,7 +374,8 @@ public:
     }
 
     bool IsReached(float tolerance) const override {
-        return std::fabs(state_.target_angle - state_.current_angle) < tolerance;
+        return mr::component::math::abs_scalar(
+                   state_.target_angle - state_.current_angle) < tolerance;
     }
 
 private:
