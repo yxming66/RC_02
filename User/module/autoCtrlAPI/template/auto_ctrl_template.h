@@ -21,19 +21,19 @@ typedef struct {
   uint32_t template_start_time_ms; /* 当前模板开始时刻（ms）。 */
   bool step_entered;             /* 当前 step 是否已经执行过 enter 初始化。 */
   /* 电平触发锁存（用于上台阶） */
-  bool head_front_photo_triggered_latched; /* 头向前光电在当前流程内是否曾触发。 */
-  bool head_rear_photo_triggered_latched;  /* 头向后光电在当前流程内是否曾触发。 */
-  bool tail_front_photo_triggered_latched; /* 尾向前光电在当前流程内是否曾触发。 */
-  bool tail_rear_photo_triggered_latched;  /* 尾向后光电在当前流程内是否曾触发。 */
+  bool pe13_photo1_triggered_latched; /* PE13/photo1 latched as triggered. */
+  bool pe9_photo2_triggered_latched;  /* PE9/photo2 latched as triggered. */
+  bool pa2_photo3_triggered_latched;  /* PA2/photo3 latched as triggered. */
+  bool pa0_photo4_triggered_latched;  /* PA0/photo4 latched as triggered. */
   /* 边沿检测（用于下台阶：触发→不触发） */
-  bool head_front_photo_prev_triggered;    /* 头向前光电上一周期状态。 */
-  bool head_rear_photo_prev_triggered;     /* 头向后光电上一周期状态。 */
-  bool tail_front_photo_prev_triggered;    /* 尾向前光电上一周期状态。 */
-  bool tail_rear_photo_prev_triggered;      /* 尾向后光电上一周期状态。 */
-  bool head_front_photo_falling_edge_latched;  /* 头向前光电边沿已触发。 */
-  bool head_rear_photo_falling_edge_latched;   /* 头向后光电边沿已触发。 */
-  bool tail_front_photo_falling_edge_latched;  /* 尾向前光电边沿已触发。 */
-  bool tail_rear_photo_falling_edge_latched;   /* 尾向后光电边沿已触发。 */
+  bool pe13_photo1_prev_triggered; /* PE13/photo1 previous state. */
+  bool pe9_photo2_prev_triggered;  /* PE9/photo2 previous state. */
+  bool pa2_photo3_prev_triggered;  /* PA2/photo3 previous state. */
+  bool pa0_photo4_prev_triggered;  /* PA0/photo4 previous state. */
+  bool pe13_photo1_falling_edge_latched; /* PE13/photo1 falling edge. */
+  bool pe9_photo2_falling_edge_latched;  /* PE9/photo2 falling edge. */
+  bool pa2_photo3_falling_edge_latched;  /* PA2/photo3 falling edge. */
+  bool pa0_photo4_falling_edge_latched;  /* PA0/photo4 falling edge. */
 } auto_ctrl_template_ctx_t;
 
 #ifdef __cplusplus

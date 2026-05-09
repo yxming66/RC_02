@@ -27,7 +27,23 @@
       "Bash(where make *)",
       "Bash(python3 -c \"import json,sys; cmds=json.load\\(sys.stdin\\); [print\\(c['command']\\) for c in cmds if 'auto_ctrl_template_runner.c' in c['file']]\")",
       "Bash(xxd)",
-      "Bash(git checkout *)"
+      "Bash(git checkout *)",
+      "Bash(make clean *)",
+      "Bash(clang --version)",
+      "Bash(make)",
+      "Bash(tee build.log)",
+      "Bash(gcc -fsyntax-only -I. -IUser -IUser/module -IUser/module/autoCtrlAPI -IDrivers/CMSIS/Include -IDrivers/CMSIS/Device/ST/STM32H7xx/Include -IDrivers/STM32H7xx_HAL_Driver/Inc User/module/autoCtrlAPI/template/auto_ctrl_template_runner.c)",
+      "Bash(VERBOSE=1 cmake --build . --target FreeRTOS)",
+      "Bash(D:/Drivers/MSYS2/ucrt64/bin/cc.exe -DDEBUG -DSTM32H723xx -DUSE_HAL_DRIVER -DUSE_PWR_LDO_SUPPLY -I. -ID:/STM32Projects_HAL/board-H7/RC_02/build/cmake/stm32cubemx/CMakeFiles/FreeRTOS.dir -g -std=gnu11 -c D:/STM32Projects_HAL/board-H7/RC_02/Middlewares/Third_Party/FreeRTOS/Source/event_groups.c)",
+      "Bash(\"D:/Drivers/MSYS2/ucrt64/bin/cc.exe\" -DDEBUG -DSTM32H723xx -DUSE_HAL_DRIVER -DUSE_PWR_LDO_SUPPLY -I\".\" -I\"Core/Inc\" -I\"Drivers/STM32H7xx_HAL_Driver/Inc\" -I\"Middlewares/Third_Party/FreeRTOS/Source/include\" -I\"Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2\" -I\"Drivers/CMSIS/Device/ST/STM32H7xx/Include\" -I\"Drivers/CMSIS/Include\" -g -std=gnu11 -c Middlewares/Third_Party/FreeRTOS/Source/event_groups.c -o /tmp/event_groups.o)",
+      "Bash(\"D:/Drivers/MSYS2/ucrt64/bin/cc.exe\" -DDEBUG -DSTM32H723xx -DUSE_HAL_DRIVER -DUSE_PWR_LDO_SUPPLY -I\".\" -I\"Core/Inc\" -I\"Drivers/STM32H7xx_HAL_Driver/Inc\" -I\"Middlewares/Third_Party/FreeRTOS/Source/include\" -I\"Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2\" -I\"Middlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM4F\" -I\"Drivers/CMSIS/Device/ST/STM32H7xx/Include\" -I\"Drivers/CMSIS/Include\" -g -std=gnu11 -c Middlewares/Third_Party/FreeRTOS/Source/event_groups.c -o /tmp/event_groups.o)",
+      "Bash(echo \"Exit: $?\")",
+      "Bash(D:/Drivers/MSYS2/ucrt64/bin/cc.exe *)",
+      "Bash(echo \"=== EXIT: $? ===\")",
+      "Bash(VERBOSE=1 mingw32-make RC_02)",
+      "Bash(tee /tmp/cc_out.txt)",
+      "Bash(cmd.exe /c \"D:\\\\\\\\Drivers\\\\\\\\MSYS2\\\\\\\\ucrt64\\\\\\\\bin\\\\\\\\cc.exe -DDEBUG -DSTM32H723xx -DUSE_HAL_DRIVER -DUSE_PWR_LDO_SUPPLY -ICore/Inc -IDrivers/STM32H7xx_HAL_Driver/Inc -IDrivers/STM32H7xx_HAL_Driver/Inc/Legacy -IMiddlewares/Third_Party/FreeRTOS/Source/include -IMiddlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2 -IMiddlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM4F -IDrivers/CMSIS/Device/ST/STM32H7xx/Include -IDrivers/CMSIS/Include -g -std=gnu11 -c Middlewares/Third_Party/FreeRTOS/Source/event_groups.c -o test.o 2>&1\")",
+      "Bash(cmd.exe /c \"cd cmake\\\\\\\\stm32cubemx && D:\\\\\\\\Drivers\\\\\\\\MSYS2\\\\\\\\ucrt64\\\\\\\\bin\\\\\\\\cc.exe -DDEBUG -DSTM32H723xx -DUSE_HAL_DRIVER -DUSE_PWR_LDO_SUPPLY -ICore/Inc -IDrivers/STM32H7xx_HAL_Driver/Inc -IDrivers/STM32H7xx_HAL_Driver/Inc/Legacy -IMiddlewares/Third_Party/FreeRTOS/Source/include -IMiddlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2 -IMiddlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM4F -IDrivers/CMSIS/Device/ST/STM32H7xx/Include -IDrivers/CMSIS/Include -g -std=gnu11 -c Middlewares/Third_Party/FreeRTOS/Source/event_groups.c -o test.o 2>&1\")"
     ]
   }
 }

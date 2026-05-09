@@ -27,10 +27,10 @@ typedef struct {
   float yaw_auto_rad;  /* 输入 yaw（单位: rad），SetFeedback 内会扣零点并归一化。 */
   float sick_front_left_cm;  /* 左前测距传感器读数，单位: cm。 */
   float sick_front_right_cm; /* 右前测距传感器读数，单位: cm。 */
-  bool head_front_photo_triggered; /* 头向前光电触发结果，由底层光电输入映射得到。 */
-  bool head_rear_photo_triggered;  /* 头向后光电触发结果，由底层光电输入映射得到。 */
-  bool tail_front_photo_triggered; /* 尾向前光电触发结果，当前预留给未来新增光电输入。 */
-  bool tail_rear_photo_triggered;  /* 尾向后光电触发结果，当前预留给未来新增光电输入。 */
+  bool pe13_photo1_triggered; /* PE13, photo1. */
+  bool pe9_photo2_triggered;  /* PE9, photo2. */
+  bool pa2_photo3_triggered;  /* PA2, photo3. */
+  bool pa0_photo4_triggered;  /* PA0, photo4. */
 } auto_ctrl_feedback_t;
 
 typedef enum {

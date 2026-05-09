@@ -13,6 +13,35 @@
 #include "component/math/scalar.hpp"
 #include "module/config.h"
 
+static const AutoCtrl_TemplateParam_t *AutoCtrlPrimitive_GetTemplateParams(
+    const Config_RobotParam_t *robot_param, auto_ctrl_template_e template_id) {
+  if (robot_param == nullptr) {
+    return nullptr;
+  }
+
+  switch (template_id) {
+    case AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD:
+      return &robot_param->auto_ctrl_param.head_ascend_200;
+    case AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD:
+      return &robot_param->auto_ctrl_param.head_ascend_400;
+    case AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD:
+      return &robot_param->auto_ctrl_param.head_descend_200;
+    case AUTO_CTRL_TEMPLATE_DESCEND_400_HEAD:
+      return &robot_param->auto_ctrl_param.head_descend_400;
+    case AUTO_CTRL_TEMPLATE_ASCEND_200_TAIL:
+      return &robot_param->auto_ctrl_param.tail_ascend_200;
+    case AUTO_CTRL_TEMPLATE_ASCEND_400_TAIL:
+      return &robot_param->auto_ctrl_param.tail_ascend_400;
+    case AUTO_CTRL_TEMPLATE_DESCEND_200_TAIL:
+      return &robot_param->auto_ctrl_param.tail_descend_200;
+    case AUTO_CTRL_TEMPLATE_DESCEND_400_TAIL:
+      return &robot_param->auto_ctrl_param.tail_descend_400;
+    case AUTO_CTRL_TEMPLATE_NONE:
+    default:
+      return nullptr;
+  }
+}
+
 /* 底盘输出复位为 RELAX，避免上一周期残留控制量。 */
 void AutoCtrlPrimitive_ResetChassis(auto_ctrl_t *ctrl) {
   memset(&ctrl->chassis_cmd, 0, sizeof(ctrl->chassis_cmd));
@@ -44,9 +73,9 @@ void AutoCtrlPrimitive_ApplyPrealign(auto_ctrl_t *ctrl) {
   ctrl->chassis_cmd.ctrl_vec.vx = 0.0f;
   ctrl->chassis_cmd.ctrl_vec.vy = 0.0f;
   ctrl->chassis_cmd.ctrl_vec.wz = AutoCtrlPrimitive_Clamp(
-      ctrl->yaw_error_rad * robot_param->auto_ctrl_param.prealign_kp,
-      -robot_param->auto_ctrl_param.prealign_wz_limit,
-      robot_param->auto_ctrl_param.prealign_wz_limit);
+      ctrl->yaw_error_rad * robot_param->auto_ctrl_param.common.prealign_kp,
+      -robot_param->auto_ctrl_param.common.prealign_wz_limit,
+      robot_param->auto_ctrl_param.common.prealign_wz_limit);
 }
 
     /* 在 yaw 对齐基础上叠加 vx/vy。 */
@@ -74,15 +103,32 @@ void AutoCtrlPrimitive_CommandFlatMove(auto_ctrl_t *ctrl, float vx_mps) {
 /* 下发撑杆目标位：同时使能前后杆自动目标。 */
 void AutoCtrlPrimitive_CommandPoleTarget(auto_ctrl_t *ctrl, float front_target,
                                          float rear_target) {
+  if (ctrl == nullptr) {
+    return;
+  }
+
   const Config_RobotParam_t *robot_param = Config_GetRobotParam();
+  const AutoCtrl_TemplateParam_t *template_param =
+      AutoCtrlPrimitive_GetTemplateParams(robot_param, ctrl->template_id);
+  const float default_speed =
+      (robot_param != nullptr) ? robot_param->pole_param.limit.support_lift_speed
+                               : 0.0f;
+  const float front_extend_speed =
+      (template_param != nullptr) ? template_param->pole_front_extend_speed
+                                  : default_speed;
+  const float front_retract_speed =
+      (template_param != nullptr) ? template_param->pole_front_retract_speed
+                                  : default_speed;
+  const float rear_extend_speed =
+      (template_param != nullptr) ? template_param->pole_rear_extend_speed
+                                  : default_speed;
+  const float rear_retract_speed =
+      (template_param != nullptr) ? template_param->pole_rear_retract_speed
+                                  : default_speed;
   const float front_speed =
-    (front_target >= 0.0f)
-      ? robot_param->auto_ctrl_param.pole_front_extend_lift_speed
-      : robot_param->auto_ctrl_param.pole_front_retract_lift_speed;
+    (front_target >= 0.0f) ? front_extend_speed : front_retract_speed;
   const float rear_speed =
-    (rear_target >= 0.0f)
-      ? robot_param->auto_ctrl_param.pole_rear_extend_lift_speed
-      : robot_param->auto_ctrl_param.pole_rear_retract_lift_speed;
+    (rear_target >= 0.0f) ? rear_extend_speed : rear_retract_speed;
 
   AutoCtrlPrimitive_CommandPoleTargetWithSpeed(
     ctrl, front_target, rear_target, front_speed, rear_speed);

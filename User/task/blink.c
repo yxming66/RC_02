@@ -12,8 +12,41 @@
 
 /* Private typedef ---------------------------------------------------------- */
 /* Private define ----------------------------------------------------------- */
-#define BLINK_ENABLE_MUSIC_PLAYLIST 0U
-#define BLINK_ENABLE_BREATH_RESPONSE 1U
+#define BLINK_AUDIO_FEATURE_NONE (0U)
+#define BLINK_AUDIO_FEATURE_STARTUP_MUSIC (1U << 0)
+#define BLINK_AUDIO_FEATURE_BREATH_RESPONSE (1U << 1)
+#define BLINK_AUDIO_FEATURE_MUSIC_LOOP (1U << 2)
+
+/*
+ * Quick audio feature config:
+ * - STARTUP_MUSIC: play BLINK_STARTUP_MUSIC once after boot.
+ * - BREATH_RESPONSE: idle buzzer breath response when music loop is disabled.
+ * - MUSIC_LOOP: keep cycling the playlist after startup.
+ */
+#ifndef BLINK_AUDIO_FEATURES
+#define BLINK_AUDIO_FEATURES \
+  (BLINK_AUDIO_FEATURE_STARTUP_MUSIC | BLINK_AUDIO_FEATURE_MUSIC_LOOP)
+#endif
+// BLINK_AUDIO_FEATURE_STARTUP_MUSIC
+// BLINK_AUDIO_FEATURE_MUSIC_LOOP
+// BLINK_AUDIO_FEATURE_BREATH_RESPONSE
+
+#if ((BLINK_AUDIO_FEATURES &                                               \
+      ~(BLINK_AUDIO_FEATURE_STARTUP_MUSIC |                                \
+        BLINK_AUDIO_FEATURE_BREATH_RESPONSE | BLINK_AUDIO_FEATURE_MUSIC_LOOP)) != 0U)
+#error "BLINK_AUDIO_FEATURES contains unsupported feature bits"
+#endif
+
+#define BLINK_USE_STARTUP_MUSIC \
+  ((BLINK_AUDIO_FEATURES & BLINK_AUDIO_FEATURE_STARTUP_MUSIC) != 0U)
+#define BLINK_USE_BREATH_RESPONSE \
+  ((BLINK_AUDIO_FEATURES & BLINK_AUDIO_FEATURE_BREATH_RESPONSE) != 0U)
+#define BLINK_USE_MUSIC_LOOP \
+  ((BLINK_AUDIO_FEATURES & BLINK_AUDIO_FEATURE_MUSIC_LOOP) != 0U)
+
+#ifndef BLINK_STARTUP_MUSIC
+#define BLINK_STARTUP_MUSIC MUSIC_STARTUP_YUAN_YU_CHOU
+#endif
 
 #define MUSIC_SWITCH_DOUBLE_TRIGGER_MS 500U
 #define BREATH_RESPONSE_PERIOD_MS 3000U
@@ -32,7 +65,7 @@ BUZZER_t buzzer;
 extern DR16_t dr16;
 bool reset = 0;
 
-#if BLINK_ENABLE_MUSIC_PLAYLIST
+#if BLINK_USE_MUSIC_LOOP
 static const MUSIC_t buzzer_playlist[] = {
     MUSIC_YUAN_YU_CHOU,
     MUSIC_TORI_NO_UTA,
@@ -40,20 +73,28 @@ static const MUSIC_t buzzer_playlist[] = {
     MUSIC_FLOWER_DANCE,
     MUSIC_HONG_DOU,
     MUSIC_SHUN,
+    MUSIC_FUR_ELISE,
+    MUSIC_JUE_BIE_SHU,
+    MUSIC_MOONLIGHT_SONATA,
+    MUSIC_MOONLIGHT_SONATA_2ND,
+    MUSIC_MERRY_CHRISTMAS_MR_LAWRENCE,
+    MUSIC_HAPPY_DOU_DI_ZHU_MELODY,
 };
 #endif
 
 static BUZZER_MusicPlayer_t music_player;
-#if BLINK_ENABLE_MUSIC_PLAYLIST
+#if BLINK_USE_MUSIC_LOOP
 static size_t music_playlist_index;
 static bool music_user_paused;
 static bool music_switch_pending;
 static uint32_t music_switch_pending_tick;
 static DR16_SwitchPos_t music_last_sw_r = DR16_SW_ERR;
 #endif
+#if BLINK_USE_STARTUP_MUSIC
 static bool music_startup_jingle_active;
+#endif
 
-#if BLINK_ENABLE_BREATH_RESPONSE
+#if BLINK_USE_BREATH_RESPONSE
 static bool breath_response_active;
 static uint32_t breath_response_last_tick;
 static uint32_t breath_response_start_tick;
@@ -62,6 +103,7 @@ static uint32_t breath_response_next_update_tick;
 /* USER STRUCT END */
 
 /* Private function --------------------------------------------------------- */
+#if BLINK_USE_MUSIC_LOOP || BLINK_USE_BREATH_RESPONSE
 static uint32_t Blink_MsToTicks(uint32_t ms) {
   uint32_t tick_freq = osKernelGetTickFreq();
   uint64_t ticks = ((uint64_t)ms * tick_freq + 999ULL) / 1000ULL;
@@ -77,8 +119,9 @@ static uint32_t Blink_MsToTicks(uint32_t ms) {
 static bool Blink_TickReached(uint32_t now_tick, uint32_t target_tick) {
   return (int32_t)(now_tick - target_tick) >= 0;
 }
+#endif
 
-#if BLINK_ENABLE_MUSIC_PLAYLIST
+#if BLINK_USE_MUSIC_LOOP
 static void Blink_StartPlaylistTrack(uint32_t now_tick, bool keep_pause_state) {
   bool should_pause = keep_pause_state && music_user_paused;
 
@@ -117,14 +160,27 @@ static void Blink_StartNextPlaylistTrack(uint32_t now_tick) {
   Blink_StartPlaylistTrack(now_tick, true);
 }
 
+#if BLINK_USE_STARTUP_MUSIC
 static void Blink_StartPlaylistAfterStartup(uint32_t now_tick) {
   music_startup_jingle_active = false;
   music_playlist_index = 0U;
   Blink_StartPlaylistTrack(now_tick, false);
 }
 #endif
+#endif
 
-#if BLINK_ENABLE_BREATH_RESPONSE
+#if BLINK_USE_STARTUP_MUSIC
+static void Blink_FinishStartupMusic(uint32_t now_tick) {
+#if BLINK_USE_MUSIC_LOOP
+  Blink_StartPlaylistAfterStartup(now_tick);
+#else
+  music_startup_jingle_active = false;
+  (void)now_tick;
+#endif
+}
+#endif
+
+#if BLINK_USE_BREATH_RESPONSE
 static void Blink_BreathResponseStop(void) {
   breath_response_active = false;
   BUZZER_Stop(&buzzer);
@@ -190,33 +246,44 @@ static void Blink_BreathResponseUpdate(uint32_t now_tick) {
 }
 #endif
 
-#if BLINK_ENABLE_MUSIC_PLAYLIST
+#if BLINK_USE_MUSIC_LOOP
 static bool Blink_MusicSwitchGestureTriggered(void) {
   return dr16.header.online && dr16.data.sw_l == DR16_SW_UP &&
          music_last_sw_r == DR16_SW_UP && dr16.data.sw_r == DR16_SW_MID;
 }
 
+static void Blink_ResetMusicSwitchGesture(void) {
+  music_switch_pending = false;
+  music_last_sw_r = dr16.header.online ? dr16.data.sw_r : DR16_SW_ERR;
+}
+
 static void Blink_HandleMusicSwitchGesture(uint32_t now_tick) {
   const uint32_t double_trigger_ticks =
       Blink_MsToTicks(MUSIC_SWITCH_DOUBLE_TRIGGER_MS);
+  const bool gesture_triggered = Blink_MusicSwitchGestureTriggered();
 
-  if (Blink_MusicSwitchGestureTriggered()) {
-    if (music_switch_pending &&
-        (uint32_t)(now_tick - music_switch_pending_tick) <=
-            double_trigger_ticks) {
-      music_switch_pending = false;
-      music_user_paused = !music_user_paused;
-      BUZZER_MusicPlayerSetPaused(&music_player, &buzzer, music_user_paused,
-                                  now_tick);
+  if (gesture_triggered) {
+    if (music_switch_pending) {
+      const uint32_t elapsed_ticks =
+          (uint32_t)(now_tick - music_switch_pending_tick);
+      if (elapsed_ticks <= double_trigger_ticks) {
+        music_switch_pending = false;
+        music_user_paused = !music_user_paused;
+        BUZZER_MusicPlayerSetPaused(&music_player, &buzzer, music_user_paused,
+                                    now_tick);
+      } else {
+        Blink_StartNextPlaylistTrack(now_tick);
+        music_switch_pending = true;
+        music_switch_pending_tick = now_tick;
+      }
     } else {
       music_switch_pending = true;
       music_switch_pending_tick = now_tick;
     }
-  }
-
-  if (music_switch_pending &&
-      Blink_TickReached(now_tick,
-                        music_switch_pending_tick + double_trigger_ticks)) {
+  } else if (music_switch_pending &&
+             Blink_TickReached(now_tick,
+                               music_switch_pending_tick +
+                                   double_trigger_ticks)) {
     music_switch_pending = false;
     Blink_StartNextPlaylistTrack(now_tick);
   }
@@ -224,6 +291,62 @@ static void Blink_HandleMusicSwitchGesture(uint32_t now_tick) {
   music_last_sw_r = dr16.header.online ? dr16.data.sw_r : DR16_SW_ERR;
 }
 #endif
+
+static void Blink_UpdateAudio(uint32_t now_tick) {
+  (void)now_tick;
+
+  if (g_buzzer_calib_active) {
+    BUZZER_MusicPlayerSilence(&music_player, &buzzer);
+#if BLINK_USE_BREATH_RESPONSE
+    Blink_BreathResponseStop();
+#endif
+#if BLINK_USE_MUSIC_LOOP
+    Blink_ResetMusicSwitchGesture();
+#endif
+    return;
+  }
+
+#if BLINK_USE_MUSIC_LOOP
+#if BLINK_USE_STARTUP_MUSIC
+  if (!music_startup_jingle_active) {
+    Blink_HandleMusicSwitchGesture(now_tick);
+  } else {
+    Blink_ResetMusicSwitchGesture();
+  }
+#else
+  Blink_HandleMusicSwitchGesture(now_tick);
+#endif
+#endif
+
+#if BLINK_USE_STARTUP_MUSIC
+  if (music_startup_jingle_active) {
+    if (BUZZER_MusicPlayerUpdate(&music_player, &buzzer, now_tick) !=
+            DEVICE_OK ||
+        !BUZZER_MusicPlayerIsActive(&music_player)) {
+      Blink_FinishStartupMusic(now_tick);
+    }
+    return;
+  }
+#endif
+
+#if BLINK_USE_MUSIC_LOOP
+  if (music_user_paused) {
+    BUZZER_Stop(&buzzer);
+    return;
+  }
+
+  if (BUZZER_MusicPlayerUpdate(&music_player, &buzzer, now_tick) !=
+          DEVICE_OK ||
+      !BUZZER_MusicPlayerIsActive(&music_player)) {
+    Blink_StartNextPlaylistTrack(now_tick);
+  }
+  return;
+#endif
+
+#if BLINK_USE_BREATH_RESPONSE
+  Blink_BreathResponseUpdate(now_tick);
+#endif
+}
 
 /* Exported functions ------------------------------------------------------- */
 void Task_blink(void *argument) {
@@ -241,14 +364,19 @@ void Task_blink(void *argument) {
       return;
     }
   }
+#if BLINK_USE_STARTUP_MUSIC
   music_startup_jingle_active =
       BUZZER_MusicPlayerStart(&music_player, &buzzer,
-                              MUSIC_STARTUP_YUAN_YU_CHOU, false, tick) ==
-      DEVICE_OK;
-#if BLINK_ENABLE_MUSIC_PLAYLIST
+                              BLINK_STARTUP_MUSIC, false, tick) == DEVICE_OK;
+#endif
+#if BLINK_USE_MUSIC_LOOP
+#if BLINK_USE_STARTUP_MUSIC
   if (!music_startup_jingle_active) {
     Blink_StartPlaylistTrack(tick, false);
   }
+#else
+  Blink_StartPlaylistTrack(tick, false);
+#endif
 #endif
 
   /* USER CODE INIT END */
@@ -257,54 +385,7 @@ void Task_blink(void *argument) {
     tick += delay_tick;
     /* USER CODE BEGIN */
     const uint32_t now_tick = osKernelGetTickCount();
-#if BLINK_ENABLE_MUSIC_PLAYLIST
-    if (!music_startup_jingle_active) {
-      Blink_HandleMusicSwitchGesture(now_tick);
-    }
-#endif
-
-    if (g_buzzer_calib_active) {
-      BUZZER_MusicPlayerSilence(&music_player, &buzzer);
-#if BLINK_ENABLE_BREATH_RESPONSE
-      Blink_BreathResponseStop();
-#endif
-    } else if (music_startup_jingle_active) {
-      if (BUZZER_MusicPlayerUpdate(&music_player, &buzzer, now_tick) !=
-          DEVICE_OK) {
-        music_startup_jingle_active = false;
-#if BLINK_ENABLE_MUSIC_PLAYLIST
-        Blink_StartPlaylistAfterStartup(now_tick);
-#endif
-      } else if (!BUZZER_MusicPlayerIsActive(&music_player)) {
-        music_startup_jingle_active = false;
-#if BLINK_ENABLE_MUSIC_PLAYLIST
-        Blink_StartPlaylistAfterStartup(now_tick);
-#endif
-      }
-#if BLINK_ENABLE_MUSIC_PLAYLIST
-    } else if (!music_user_paused) {
-      if (BUZZER_MusicPlayerUpdate(&music_player, &buzzer, now_tick) !=
-          DEVICE_OK) {
-        if (music_startup_jingle_active) {
-          Blink_StartPlaylistAfterStartup(now_tick);
-        } else {
-          Blink_StartNextPlaylistTrack(now_tick);
-        }
-      } else if (!BUZZER_MusicPlayerIsActive(&music_player)) {
-        if (music_startup_jingle_active) {
-          Blink_StartPlaylistAfterStartup(now_tick);
-        } else {
-          Blink_StartNextPlaylistTrack(now_tick);
-        }
-      }
-    } else {
-      BUZZER_Stop(&buzzer);
-    }
-#else
-    } else {
-      Blink_BreathResponseUpdate(now_tick);
-    }
-#endif
+    Blink_UpdateAudio(now_tick);
 
     if (reset) {
       __set_FAULTMASK(1);
@@ -314,4 +395,4 @@ void Task_blink(void *argument) {
     task_runtime.stack_water_mark.blink = uxTaskGetStackHighWaterMark(NULL);
     osDelayUntil(tick);
   }
-   }
+}

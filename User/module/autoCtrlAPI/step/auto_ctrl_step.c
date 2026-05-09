@@ -70,7 +70,7 @@ auto_ctrl_step_status_e AutoCtrlStep_Run(auto_ctrl_t *ctrl,
           ctrl->template_id != AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD) {
         return AUTO_CTRL_STEP_STATUS_RUNNING;
       }
-      if (ctrl->feedback.head_front_photo_triggered) {
+      if (ctrl->feedback.pe13_photo1_triggered) {
         return AUTO_CTRL_STEP_STATUS_DONE;
       }
       if (step->timeout_ms > 0u &&
@@ -85,7 +85,7 @@ auto_ctrl_step_status_e AutoCtrlStep_Run(auto_ctrl_t *ctrl,
           ctrl->template_id != AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD) {
         return AUTO_CTRL_STEP_STATUS_RUNNING;
       }
-      if (ctrl->feedback.head_rear_photo_triggered) {
+      if (ctrl->feedback.pa2_photo3_triggered) {
         return AUTO_CTRL_STEP_STATUS_DONE;
       }
       if (step->timeout_ms > 0u &&

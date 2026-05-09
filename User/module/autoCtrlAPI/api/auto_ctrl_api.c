@@ -31,9 +31,33 @@
 #define AUTO_CTRL_SICK_ACCEPT_MAX_YAW_DIFF_RAD (1.57079632679f)
 
 /* 判断模板是否属于 200 跨越类（上/下都按跨越逻辑处理）。 */
-static bool AutoCtrl_IsCross200Template(auto_ctrl_template_e template_id) {
-  return template_id == AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD ||
-         template_id == AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD;
+static const AutoCtrl_TemplateParam_t *AutoCtrl_GetTemplateParams(
+    const Config_RobotParam_t *robot_param, auto_ctrl_template_e template_id) {
+  if (robot_param == 0) {
+    return 0;
+  }
+
+  switch (template_id) {
+    case AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD:
+      return &robot_param->auto_ctrl_param.head_ascend_200;
+    case AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD:
+      return &robot_param->auto_ctrl_param.head_ascend_400;
+    case AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD:
+      return &robot_param->auto_ctrl_param.head_descend_200;
+    case AUTO_CTRL_TEMPLATE_DESCEND_400_HEAD:
+      return &robot_param->auto_ctrl_param.head_descend_400;
+    case AUTO_CTRL_TEMPLATE_ASCEND_200_TAIL:
+      return &robot_param->auto_ctrl_param.tail_ascend_200;
+    case AUTO_CTRL_TEMPLATE_ASCEND_400_TAIL:
+      return &robot_param->auto_ctrl_param.tail_ascend_400;
+    case AUTO_CTRL_TEMPLATE_DESCEND_200_TAIL:
+      return &robot_param->auto_ctrl_param.tail_descend_200;
+    case AUTO_CTRL_TEMPLATE_DESCEND_400_TAIL:
+      return &robot_param->auto_ctrl_param.tail_descend_400;
+    case AUTO_CTRL_TEMPLATE_NONE:
+    default:
+      return 0;
+  }
 }
 
 /* SICK 距离值有效性检查。 */
@@ -46,8 +70,8 @@ static bool AutoCtrl_IsSickDistanceValid(float distance_cm,
 
 static bool AutoCtrl_IsSickYawUsable(const auto_ctrl_t *ctrl,
                                      const Config_RobotParam_t *robot_param) {
-  const float valid_min_cm = robot_param->auto_ctrl_param.sick_valid_min_cm;
-  const float valid_max_cm = robot_param->auto_ctrl_param.sick_valid_max_cm;
+  const float valid_min_cm = robot_param->auto_ctrl_param.common.sick_valid_min_cm;
+  const float valid_max_cm = robot_param->auto_ctrl_param.common.sick_valid_max_cm;
 
   if (ctrl == 0 || robot_param == 0) {
     return false;
@@ -107,11 +131,11 @@ static bool AutoCtrl_TryGetSickAssistRad(const auto_ctrl_t *ctrl,
     return false;
   }
 
-  valid_min_cm = robot_param->auto_ctrl_param.sick_valid_min_cm;
-  valid_max_cm = robot_param->auto_ctrl_param.sick_valid_max_cm;
-  norm_err_deadband = robot_param->auto_ctrl_param.sick_norm_err_deadband;
-  norm_err_to_rad = robot_param->auto_ctrl_param.sick_norm_err_to_rad;
-  assist_max_rad = robot_param->auto_ctrl_param.sick_assist_max_rad;
+  valid_min_cm = robot_param->auto_ctrl_param.common.sick_valid_min_cm;
+  valid_max_cm = robot_param->auto_ctrl_param.common.sick_valid_max_cm;
+  norm_err_deadband = robot_param->auto_ctrl_param.common.sick_norm_err_deadband;
+  norm_err_to_rad = robot_param->auto_ctrl_param.common.sick_norm_err_to_rad;
+  assist_max_rad = robot_param->auto_ctrl_param.common.sick_assist_max_rad;
 
   if (!AutoCtrl_IsSickDistanceValid(ctrl->feedback.sick_front_left_cm,
                                     valid_min_cm, valid_max_cm) ||
@@ -362,13 +386,15 @@ void AutoCtrl_Update(auto_ctrl_t *ctrl, uint32_t now_ms) {
               AUTO_CTRL_SICK_VALID_STABLE_MS &&
           AutoCtrl_TryGetSickAssistRad(ctrl, &sick_assist_rad)) {
         blended_yaw_error_rad -=
-            sick_assist_rad * robot_param->auto_ctrl_param.sick_assist_gain;
+            sick_assist_rad * robot_param->auto_ctrl_param.common.sick_assist_gain;
       }
       ctrl->yaw_error_rad = blended_yaw_error_rad;
 
-      if (AutoCtrl_IsCross200Template(ctrl->template_id) && robot_param != 0) {
+      const AutoCtrl_TemplateParam_t *template_param =
+          AutoCtrl_GetTemplateParams(robot_param, ctrl->template_id);
+      if (template_param != 0 && template_param->prealign_move_speed != 0.0f) {
         AutoCtrlPrimitive_ApplyPrealignWithForward(
-            ctrl, robot_param->auto_ctrl_param.climb_forward_speed);
+            ctrl, template_param->prealign_move_speed);
       } else {
         AutoCtrlPrimitive_ApplyPrealign(ctrl);
       }

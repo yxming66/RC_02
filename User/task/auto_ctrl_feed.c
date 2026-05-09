@@ -94,10 +94,10 @@ void Task_auto_ctrl(void *argument) {
       GPIO_PinState photo3_state = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_2);
       GPIO_PinState photo4_state = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0);
 
-      feedback.head_front_photo_triggered = (photo1_state == photo1_active_state);
-      feedback.head_rear_photo_triggered = (photo3_state == photo3_active_state);
-      feedback.tail_front_photo_triggered = (photo2_state == photo2_active_state);
-      feedback.tail_rear_photo_triggered = (photo4_state == photo4_active_state);
+      feedback.pe13_photo1_triggered = (photo1_state == photo1_active_state);
+      feedback.pe9_photo2_triggered = (photo2_state == photo2_active_state);
+      feedback.pa2_photo3_triggered = (photo3_state == photo3_active_state);
+      feedback.pa0_photo4_triggered = (photo4_state == photo4_active_state);
 
       AutoCtrl_SetFeedback(&auto_ctrl, &feedback);
 

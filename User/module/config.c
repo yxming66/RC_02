@@ -1,73 +1,67 @@
 /*
- * 配置相关
+ * Robot configuration.
  */
 
-/* Includes ----------------------------------------------------------------- */
 #include "module/config.h"
-#include "bsp/can.h"
-#include "device/motor_rm.h"
+
 #include <stdbool.h>
-/* Private typedef ---------------------------------------------------------- */
-/* Private define ----------------------------------------------------------- */
-/* Private macro ------------------------------------------------------------ */
-/* Private variables -------------------------------------------------------- */
 
-/* Exported variables ------------------------------------------------------- */
+#include "bsp/can.h"
+#include "device/motor_dm.h"
+#include "device/motor_lz.h"
+#include "device/motor_rm.h"
 
-
-
-// 机器人参数配置
 Config_RobotParam_t robot_config = {
-  .chassis_param = {
-    .motor_param = {
-      [0] = {.can = BSP_CAN_1, .id = 0x201, .module = MOTOR_M3508, .reverse = false, .gear = true},
-      [1] = {.can = BSP_CAN_1, .id = 0x202, .module = MOTOR_M3508, .reverse = false, .gear = true},
-      [2] = {.can = BSP_CAN_1, .id = 0x203, .module = MOTOR_M3508, .reverse = false, .gear = true},
-      [3] = {.can = BSP_CAN_1, .id = 0x204, .module = MOTOR_M3508, .reverse = false, .gear = true},
-    },
-    .pid = {
-      .follow_pid_param = {
-        .k = 1.0f,
-        .p = 3.8f,
-        .i = 0.10f,
-        .d = 0.08f,
-        .i_limit = 1.5f,
-        .out_limit = 5.2f,
-        .d_cutoff_freq = 50.0f,
-        .range = 0.0f,
-      },
-      .motor_pid_param = {
-        .k = 2.2f,
-        .p = 1.8f,
-        .i = 0.24f,
-        .d = 0.01f,
-        .i_limit = 2.0f,
-        .out_limit = 6.0f,
-        .d_cutoff_freq = 35.0f,
-        .range = 0.0f,
-      },
-    },
-    .physical = {
-      .wheel_radius_m = 0.076f,
-      .wheelbase_m = 0.23f,
-      .trackwidth_m = 0.325f,
-      .wheel_output_max_speed = 5.0f,
-    },
-      .low_pass_cutoff_freq = {
-      .in = 20.0f,
-      .out = 24.0f,
-    },
-      .limit = {
-          .max_torque_cmd = 6.0f,
-          .max_vx = 6.0f,
-          .max_vy = 6.0f,
-          .max_wz = 6.28f,
-      },
-      .type = CHASSIS_TYPE_MECANUM,
-  },
-.pole_param = {
+    .chassis_param = {
         .motor_param = {
-            [0] = {.can = BSP_CAN_2, .id = 0x201, .module = MOTOR_M3508, .reverse = true,.gear = true},
+            [0] = {.can = BSP_CAN_1, .id = 0x201, .module = MOTOR_M3508, .reverse = false, .gear = true},
+            [1] = {.can = BSP_CAN_1, .id = 0x202, .module = MOTOR_M3508, .reverse = false, .gear = true},
+            [2] = {.can = BSP_CAN_1, .id = 0x203, .module = MOTOR_M3508, .reverse = false, .gear = true},
+            [3] = {.can = BSP_CAN_1, .id = 0x204, .module = MOTOR_M3508, .reverse = false, .gear = true},
+        },
+        .pid = {
+            .follow_pid_param = {
+                .k = 1.0f,
+                .p = 3.8f,
+                .i = 0.10f,
+                .d = 0.08f,
+                .i_limit = 1.5f,
+                .out_limit = 5.2f,
+                .d_cutoff_freq = 50.0f,
+                .range = 0.0f,
+            },
+            .motor_pid_param = {
+                .k = 2.2f,
+                .p = 1.8f,
+                .i = 0.24f,
+                .d = 0.01f,
+                .i_limit = 2.0f,
+                .out_limit = 6.0f,
+                .d_cutoff_freq = 35.0f,
+                .range = 0.0f,
+            },
+        },
+        .physical = {
+            .wheel_radius_m = 0.076f,
+            .wheelbase_m = 0.23f,
+            .trackwidth_m = 0.325f,
+            .wheel_output_max_speed = 5.0f,
+        },
+        .low_pass_cutoff_freq = {
+            .in = 20.0f,
+            .out = 24.0f,
+        },
+        .limit = {
+            .max_torque_cmd = 6.0f,
+            .max_vx = 6.0f,
+            .max_vy = 6.0f,
+            .max_wz = 6.28f,
+        },
+        .type = CHASSIS_TYPE_MECANUM,
+    },
+    .pole_param = {
+        .motor_param = {
+            [0] = {.can = BSP_CAN_2, .id = 0x201, .module = MOTOR_M3508, .reverse = true, .gear = true},
             [1] = {.can = BSP_CAN_2, .id = 0x202, .module = MOTOR_M3508, .reverse = false, .gear = true},
             [2] = {.can = BSP_CAN_2, .id = 0x203, .module = MOTOR_M3508, .reverse = true, .gear = true},
             [3] = {.can = BSP_CAN_2, .id = 0x204, .module = MOTOR_M3508, .reverse = true, .gear = true},
@@ -83,255 +77,342 @@ Config_RobotParam_t robot_config = {
                 .d_cutoff_freq = -1.0f,
                 .range = 0.0f,
             },
-              .support_vel_pid = {
+            .support_vel_pid = {
                 .k = 0.1f,
                 .p = 0.1f,
                 .i = 0.0f,
-                .d = 0.0f, 
+                .d = 0.0f,
                 .i_limit = 0.0f,
                 .out_limit = 1.0f,
                 .d_cutoff_freq = -1.0f,
                 .range = 0.0f,
             },
         },
-            .preset = {
-              .step_200_all_extend = {13.3f, 13.3f},      // 200mm台阶，右拨杆UP：前两杆/后两杆
-              .step_200_front_retract = {0.0f, 13.3f},   // 200mm台阶，右拨杆MID：前两杆收，后两杆位置
-              .step_200_all_retract = {0.0f, 0.0f},     // 200mm台阶，右拨杆DOWN：前两杆/后两杆
-              .step_400_all_extend = {26.0381184f, 26.0315285f},      // 400mm台阶，右拨杆UP：前两杆/后两杆
-              .step_400_front_retract = {0.0f, 26.0381184f},   // 400mm台阶，右拨杆MID：前两杆收，后两杆位置
-              .step_400_all_retract = {0.0f, 0.0f},     // 400mm台阶，右拨杆DOWN：前两杆/后两杆
-            },
+        .preset = {
+            .step_200_all_extend = {13.3f, 13.3f},
+            .step_200_front_retract = {0.0f, 13.3f},
+            .step_200_all_retract = {0.0f, 0.0f},
+            .step_200_small = {3.0f, 3.0f},
+            .step_400_all_extend = {26.3f, 26.3f},
+            .step_400_front_retract = {0.0f, 26.3f},
+            .step_400_all_retract = {0.0f, 0.0f},
+        },
         .limit = {
             .max_current = 1.0f,
-            .support_total_travel = 26.0f,
+            .support_total_travel = 26.3f,
             .support_lift_speed = 50.0f,
         },
     },
     .arm_param = {
-      .joint1_motor_param = {
-        .can = BSP_CAN_3,
-        .motor_id = 127,
-        .host_id = 0xff,
-        .module = MOTOR_LZ_RSO3,
-        .reverse = true,
-        .mode = MOTOR_LZ_MODE_MOTION,
-      },
-      .joint2_motor_param = {
-        .can = BSP_CAN_3,
-        .master_id = 0x11,
-        .can_id = 0x01,
-        .module = MOTOR_DM_J4340,
-        .reverse = false,
-      },
-      .joint3_motor_param = {
-        .can = BSP_CAN_3,
-        .master_id = 0x13,
-        .can_id = 0x03,
-        .module = MOTOR_DM_J4310P,
-        .reverse = false,
-      },
-      .joint_kp = {8.0f, 6.0f, 6.0f},
-      .joint_kd = {3.35f, 2.65f, 2.45f},
-      .gravity_comp_scale = {1.05f, 0.5f, 1.0f},
-      .joint_soft_limit_lower = {-0.87f, -2.20f, -1.84f},
-      .joint_soft_limit_upper = {2.0f, 2.20f, 1.75f},
-      .remote_cartesian = {
-        .input_deadzone = 0.05f,
-        .max_y_velocity = 0.30f,
-        .max_z_velocity = 0.30f,
-        .max_pitch_velocity = 1.0f,
-        .max_linear_velocity = 0.20f,
-        .max_angular_velocity = 1.0f,
-        .max_linear_acceleration = 0.50f,
-        .max_angular_acceleration = 2.0f,
-        .max_joint_step = 0.04f,
-        .joint_max_velocity = {2.0f, 2.0f, 2.0f},
-        .joint_max_acceleration = {8.0f, 8.0f, 8.0f},
-        .workspace = {
-          .y_min = -1.0f,
-          .y_max = 1.0f,
-          .z_min = -0.8f,
-          .z_max = 1.2f,
-          .pitch_min = -3.0f,
-          .pitch_max = 3.0f,
+        .joint1_motor_param = {
+            .can = BSP_CAN_3,
+            .motor_id = 127,
+            .host_id = 0xff,
+            .module = MOTOR_LZ_RSO3,
+            .reverse = true,
+            .mode = MOTOR_LZ_MODE_MOTION,
         },
-      },
+        .joint2_motor_param = {
+            .can = BSP_CAN_3,
+            .master_id = 0x11,
+            .can_id = 0x01,
+            .module = MOTOR_DM_J4340,
+            .reverse = false,
+        },
+        .joint3_motor_param = {
+            .can = BSP_CAN_3,
+            .master_id = 0x13,
+            .can_id = 0x03,
+            .module = MOTOR_DM_J4310P,
+            .reverse = false,
+        },
+        .joint_kp = {8.0f, 6.0f, 6.0f},
+        .joint_kd = {3.35f, 2.65f, 2.45f},
+        .gravity_comp_scale = {1.05f, 0.5f, 1.0f},
+        .joint_soft_limit_lower = {-0.87f, -2.20f, -1.84f},
+        .joint_soft_limit_upper = {2.0f, 2.20f, 1.75f},
+        .remote_cartesian = {
+            .input_deadzone = 0.05f,
+            .max_y_velocity = 0.30f,
+            .max_z_velocity = 0.30f,
+            .max_pitch_velocity = 1.0f,
+            .max_linear_velocity = 0.20f,
+            .max_angular_velocity = 1.0f,
+            .max_linear_acceleration = 0.50f,
+            .max_angular_acceleration = 2.0f,
+            .max_joint_step = 0.04f,
+            .joint_max_velocity = {2.0f, 2.0f, 2.0f},
+            .joint_max_acceleration = {8.0f, 8.0f, 8.0f},
+            .workspace = {
+                .y_min = -1.0f,
+                .y_max = 1.0f,
+                .z_min = -0.8f,
+                .z_max = 1.2f,
+                .pitch_min = -3.0f,
+                .pitch_max = 3.0f,
+            },
+        },
     },
     .auto_ctrl_param = {
-      /* 通用姿态修正参数 */
-      .prealign_kp = 4.0f,              // yaw误差到wz指令的比例系数，越大修正越激进
-      .prealign_wz_limit = 1.5f,         // 自动矫正时wz最大输出限幅 (rad/s)
-
-      /* 简单平移模板参数 */
-      .flat_move_speed = 0.25f,          // 简单平移模板默认前进速度 (m/s)
-      .flat_move_hold_ms = 600u,         // 简单平移模板默认保持时间 (ms)
-
-      /* 200台阶/跨越前段参数 */ 
-      .climb_align_forward_speed = 0.30f, // 对正阶段同步慢速前进速度 (m/s)
-        .climb_pole_extend_forward_speed = 0.50f, // 对正成功后，四杆伸起稳定阶段前进速度 (m/s)
-      .climb_forward_speed = 1.0f,      // 前段并行动作时的基础前进速度 (m/s)
-      .climb_forward_kick_speed = 0.50f, // 起步短促前冲速度，用于增加跨越动量 (m/s)
-      .climb_forward_kick_ms = 80u,      // 起步短促前冲保持时间 (ms) 
-      .pole_extend_settle_ms = 100u,     // 四杆伸出后等待机构稳定的时间 (ms)
-      .pole_all_extend_lift_speed = 50.0f, // 四杆全伸阶段速度 (rad/s)
-      .pole_front_retract_lift_speed = 18.0f, // 前杆回收阶段速度 (rad/s)
-      .pole_front_extend_lift_speed = 20.0f, // 前杆放下/重新伸出阶段速度 (rad/s)
-      .pole_rear_retract_lift_speed = 30.0f, // 后杆回收阶段速度 (rad/s)
-      .pole_rear_extend_lift_speed = 18.0f, // 后杆放下/重新伸出阶段速度 (rad/s)
-      .head_front_photo_timeout_ms =5000u,   // 头向前光电等待超时时间 (ms)
-      .tail_front_photo_timeout_ms = 5000u,   // 尾向前光电等待超时时间 (ms)
-      .climb_front_retract_speed = 0.50f, // 前杆回收阶段基础前进速度 (m/s)
-      .climb_front_retract_vy = 0.04f,    // 前杆回收阶段附加横移速度vy (m/s)
-      .climb_front_retract_timeout_ms = 5000u, // 前杆回收阶段最长等待时间 (ms)
-      .front_retract_settle_ms = 800u,   // 前杆回收后的稳定等待时间 (ms)
-
-      /* 200台阶/跨越中后段参数 */
-      .climb_mid_forward_speed = 0.5f,   // 前杆收回后，中段继续前进速度 (m/s)
-      .climb_mid_forward_ms = 1500u,       // 前杆收回后，中段继续纯前进的保持时间 (ms)
-      .climb_rear_retract_speed = 0.80f, // 后杆回收阶段的基础前进速度 (m/s)
-      .climb_rear_retract_vy = 0.15f,    // 后杆回收阶段附加横移速度vy，便于边收杆边修正姿态 (m/s)
-      .head_rear_photo_timeout_ms = 10000u,    // 头向后光电等待超时时间 (ms)
-      .tail_rear_photo_timeout_ms = 10000u,    // 尾向后光电等待超时时间 (ms)
-      .climb_rear_retract_timeout_ms = 5000u, // 后杆回收阶段最长等待时间 (ms)
-      .rear_retract_move_ms = 700u,      // 后杆回收完成后继续保持运动的时间 (ms)
-
-      /* 200下台阶逆流程参数 */
-      .descend_200_align_speed = 0.30f,             // 下台阶对正阶段速度 (m/s)
-      .descend_200_climb_forward_speed = 0.50f,     // 下台阶跨越时前进速度 (m/s)
-      .descend_200_pole_extend_settle_ms = 900u,    // 下台阶撑杆伸出稳定时间 (ms)
-      .descend_200_head_rear_photo_timeout_ms = 5000u, /* 下台阶头向后光电超时 (ms) */
-      .descend_200_climb_rear_retract_speed = 0.20f,      // 下台阶后杆回收速度 (m/s)
-      .descend_200_climb_rear_retract_timeout_ms = 5000u, // 下台阶后杆回收超时 (ms)
-      .descend_200_rear_retract_move_ms = 700u,           // 下台阶后杆回收后移动时长 (ms)
-      .descend_200_climb_front_retract_speed = 0.50f,     // 下台阶前杆回收速度 (m/s)
-      .descend_200_climb_front_retract_timeout_ms = 5000u, /* 下台阶前杆回收超时 (ms) */
-      .descend_200_front_retract_settle_ms = 800u,     // 下台阶前杆回收后稳定时长 (ms)
-      .descend_200_flat_move_ms = 600u,                // 下台阶脱离台阶平移时长 (ms)
-      .descend_200_flat_move_speed = 0.30f,             // 下台阶脱离台阶平移速度 (m/s)
-      .descend_200_pole_all_extend_lift_speed = 50.0f,     // 下台阶四杆全伸阶段速度 (rad/s)
-      .descend_200_pole_rear_retract_lift_speed = 30.0f,  // 下台阶后杆回收阶段速度 (rad/s)
-      .descend_200_pole_front_retract_lift_speed = 18.0f, // 下台阶前杆回收阶段速度 (rad/s)
-
-      /* 400上台阶逆流程参数 */
-      .ascend_400_align_forward_speed = 0.30f,  // 上台阶对正阶段同步前进速度 (m/s)
-      .ascend_400_pole_extend_forward_speed = 0.30f, // 上台阶四杆伸起稳定阶段前进速度 (m/s)
-      .ascend_400_forward_speed = 0.40f,       // 上台阶前杆回收阶段基础前进速度 (m/s)
-      .ascend_400_pole_extend_settle_ms = 1000u, // 上台阶四杆伸出后稳定时间 (ms)
-      .ascend_400_pole_all_extend_lift_speed = 40.0f, // 上台阶四杆全伸阶段速度 (rad/s)
-      .ascend_400_head_front_photo_timeout_ms = 6000u, /* 上台阶头向前光电超时 (ms) */
-      .ascend_400_front_retract_speed = 0.25f,  // 上台阶前杆回收速度 (m/s)
-      .ascend_400_front_retract_vy = 0.15f,     // 上台阶前杆回收附加横移速度vy (m/s)
-      .ascend_400_front_retract_timeout_ms = 5000u, // 上台阶前杆回收超时 (ms)
-      .ascend_400_front_retract_settle_ms = 800u, // 上台阶前杆回收后稳定时间 (ms)
-      .ascend_400_mid_forward_speed = 0.50f,     // 上台阶前杆收回后中段前进速度 (m/s)
-      .ascend_400_mid_forward_ms = 1500u,        // 上台阶中段前进保持时间 (ms)
-      .ascend_400_rear_retract_speed = 0.20f,  // 上台阶后杆回收速度 (m/s)
-      .ascend_400_rear_retract_vy = 0.15f,     // 上台阶后杆回收附加横移速度vy (m/s)
-      .ascend_400_head_rear_photo_timeout_ms = 6000u, /* 上台阶头向后光电超时 (ms) */
-      .ascend_400_rear_retract_timeout_ms = 5000u, // 上台阶后杆回收超时 (ms)
-      .ascend_400_rear_retract_move_ms = 800u,  // 上台阶后杆回收后移动时长 (ms)
-      .ascend_400_pole_rear_retract_lift_speed = 30.0f, // 上台阶后杆回收阶段速度 (rad/s)
-      .ascend_400_pole_front_retract_lift_speed = 18.0f, // 上台阶前杆回收阶段速度 (rad/s)
-
-      /* 400下台阶逆流程参数 */
-      .descend_400_align_speed = 0.30f,             // 下台阶对正阶段速度 (m/s)
-      .descend_400_climb_forward_speed = 0.40f,     // 下台阶跨越时前进速度 (m/s)
-      .descend_400_pole_extend_settle_ms = 1200u,  // 下台阶撑杆伸出稳定时间 (ms)
-      .descend_400_head_rear_photo_timeout_ms = 6000u, /* 下台阶头向后光电超时 (ms) */
-      .descend_400_climb_rear_retract_speed = 0.15f,     // 下台阶后杆回收速度 (m/s)
-      .descend_400_climb_rear_retract_timeout_ms = 6000u, // 下台阶后杆回收超时 (ms)
-      .descend_400_rear_retract_move_ms = 800u,           // 下台阶后杆回收后移动时长 (ms)
-      .descend_400_climb_front_retract_speed = 0.40f,     // 下台阶前杆回收速度 (m/s)
-      .descend_400_climb_front_retract_timeout_ms = 6000u, /* 下台阶前杆回收超时 (ms) */
-      .descend_400_front_retract_settle_ms = 1000u,     // 下台阶前杆回收后稳定时长 (ms)
-      .descend_400_flat_move_ms = 800u,                // 下台阶脱离台阶平移时长 (ms)
-      .descend_400_pole_all_extend_lift_speed = 40.0f,     // 下台阶四杆全伸阶段速度 (rad/s)
-      .descend_400_pole_rear_retract_lift_speed = 25.0f,  // 下台阶后杆回收阶段速度 (rad/s)
-      .descend_400_pole_front_retract_lift_speed = 15.0f, // 下台阶前杆回收阶段速度 (rad/s)
-
-      /* 尾部方向上200台阶参数（尾向前）：对称于头部方向上200台阶 */
-      .ascend_200_tail_align_forward_speed = 0.30f,   // 尾部上台阶对正阶段同步前进速度 (m/s)
-      .ascend_200_tail_pole_extend_forward_speed = 0.50f, // 尾部上台阶四杆伸起稳定阶段前进速度 (m/s)
-      .ascend_200_tail_forward_speed = 1.0f,         // 尾部上台阶前杆回收阶段基础前进速度 (m/s)
-      .ascend_200_tail_pole_extend_settle_ms = 900u, // 尾部上台阶四杆伸出后稳定时间 (ms)
-      .ascend_200_tail_pole_all_extend_lift_speed = 50.0f, // 尾部上台阶四杆全伸阶段速度 (rad/s)
-      .ascend_200_tail_tail_front_photo_timeout_ms = 5000u, // 尾部上台阶尾向前光电超时 (ms)
-      .ascend_200_tail_front_retract_speed = 0.50f,   // 尾部上台阶前杆回收速度 (m/s)
-      .ascend_200_tail_front_retract_vy = 0.04f,      // 尾部上台阶前杆回收附加横移速度vy (m/s)
-      .ascend_200_tail_front_retract_timeout_ms = 5000u, // 尾部上台阶前杆回收超时 (ms)
-      .ascend_200_tail_front_retract_settle_ms = 800u, // 尾部上台阶前杆回收后稳定时间 (ms)
-      .ascend_200_tail_mid_forward_speed = 0.5f,     // 尾部上台阶前杆收回后中段前进速度 (m/s)
-      .ascend_200_tail_mid_forward_ms = 1500u,       // 尾部上台阶中段前进保持时间 (ms)
-      .ascend_200_tail_rear_retract_speed = 0.20f,   // 尾部上台阶后杆回收速度 (m/s)
-      .ascend_200_tail_rear_retract_vy = 0.15f,      // 尾部上台阶后杆回收附加横移速度vy (m/s)
-      .ascend_200_tail_tail_rear_photo_timeout_ms = 10000u, // 尾部上台阶尾向后光电超时 (ms)
-      .ascend_200_tail_rear_retract_timeout_ms = 5000u, // 尾部上台阶后杆回收超时 (ms)
-      .ascend_200_tail_rear_retract_move_ms = 700u, // 尾部上台阶后杆回收后移动时长 (ms)
-      .ascend_200_tail_pole_front_retract_lift_speed = 18.0f, // 尾部上台阶前杆回收阶段速度 (rad/s)
-      .ascend_200_tail_pole_rear_retract_lift_speed = 30.0f, // 尾部上台阶后杆回收阶段速度 (rad/s)
-
-      /* 尾部方向下200台阶参数（尾向前）：对称于头部方向下200台阶 */
-      .descend_200_tail_align_speed = 0.30f,             // 尾部下台阶对正阶段速度 (m/s)
-      .descend_200_tail_climb_forward_speed = 0.50f,     // 尾部下台阶跨越时前进速度 (m/s)
-      .descend_200_tail_pole_extend_settle_ms = 900u,    // 尾部下台阶撑杆伸出稳定时间 (ms)
-      .descend_200_tail_tail_rear_photo_timeout_ms = 5000u, /* 尾部下台阶尾向后光电超时 (ms) */
-      .descend_200_tail_climb_rear_retract_speed = 0.20f,      // 尾部下台阶后杆回收速度 (m/s)
-      .descend_200_tail_climb_rear_retract_timeout_ms = 5000u, // 尾部下台阶后杆回收超时 (ms)
-      .descend_200_tail_rear_retract_move_ms = 700u,           // 尾部下台阶后杆回收后移动时长 (ms)
-      .descend_200_tail_climb_front_retract_speed = 0.50f,     // 尾部下台阶前杆回收速度 (m/s)
-      .descend_200_tail_climb_front_retract_timeout_ms = 5000u, /* 尾部下台阶前杆回收超时 (ms) */
-      .descend_200_tail_front_retract_settle_ms = 800u,     // 尾部下台阶前杆回收后稳定时长 (ms)
-      .descend_200_tail_flat_move_ms = 600u,                // 尾部下台阶脱离台阶平移时长 (ms)
-      .descend_200_tail_pole_all_extend_lift_speed = 50.0f,     // 尾部下台阶四杆全伸阶段速度 (rad/s)
-      .descend_200_tail_pole_rear_retract_lift_speed = 30.0f,  // 尾部下台阶后杆回收阶段速度 (rad/s)
-      .descend_200_tail_pole_front_retract_lift_speed = 18.0f, // 尾部下台阶前杆回收阶段速度 (rad/s)
-
-      /* SICK辅助姿态修正参数 */
-      .sick_valid_min_cm = 0.0f,         // SICK测距判定为有效的最小值 (cm)
-      .sick_valid_max_cm = 2.0f,       // SICK测距判定为有效的最大值 (cm)
-      .sick_norm_err_deadband = 0.03f,   // 左右SICK归一化差分误差死区 (无量纲)
-      .sick_norm_err_to_rad = 0.34906585f, // 归一化误差映射到姿态辅助量的比例 (rad/ratio)
-      .sick_assist_gain = 0.75f,         // SICK辅助误差融合增益，越大修正越积极
-      .sick_assist_max_rad = 0.13962634f, // SICK辅助误差的限幅上限 (rad)
+        .common = {
+            .prealign_kp = 4.0f,             /* yaw 误差到 wz 指令的比例系数。 */
+            .prealign_wz_limit = 1.5f,       /* yaw 对正最大角速度，单位 rad/s。 */
+            .flat_move_speed = 0.25f,        /* 简单平移流程默认 vx，单位 m/s；当前模板未直接使用。 */
+            .flat_move_hold_ms = 600u,       /* 简单平移流程默认保持时间，单位 ms；当前模板未直接使用。 */
+            .sick_valid_min_cm = 1.0f,       /* SICK 测距有效下限，单位 cm。 */
+            .sick_valid_max_cm = 650.0f,     /* SICK 测距有效上限，单位 cm。 */
+            .sick_norm_err_deadband = 0.02f, /* 左右 SICK 归一化差分误差死区。 */
+            .sick_norm_err_to_rad = 0.50f,   /* SICK 归一化误差到 yaw 辅助角的映射系数，单位 rad。 */
+            .sick_assist_max_rad = 0.35f,    /* SICK yaw 辅助角限幅，单位 rad。 */
+            .sick_assist_gain = 1.0f,        /* SICK yaw 辅助量融合增益。 */
+        },
+        /* 头向 / 上台阶 / 200mm 模板参数。 */
+        .head_ascend_200 = {
+            .prealign_move_speed = 1.0f,        /* PREALIGN 对正阶段叠加 vx，单位 m/s。 */
+            .align_move_speed = 0.30f,          /* 模板 step0 对正阶段 vx，单位 m/s。 */
+            .pole_extend_move_speed = 0.50f,    /* 四杆伸出阶段 vx，单位 m/s。 */
+            .pole_extend_settle_ms = 100u,      /* 四杆伸出后稳定等待时间，单位 ms。 */
+            .front_retract_move_speed = 0.50f,  /* 前杆回收阶段 vx，单位 m/s。 */
+            .front_retract_vy = 0.04f,          /* 前杆等待/动作阶段附加 vy，单位 m/s。 */
+            .front_retract_settle_ms = 800u,    /* 前杆动作后稳定等待时间，单位 ms。 */
+            .front_retract_timeout_ms = 5000u,  /* 前杆动作或前光电等待超时，单位 ms。 */
+            .mid_move_speed = 1.0f,            /* 中段平移 vx，单位 m/s。 */
+            .mid_move_ms = 1500u,               /* 中段平移持续时间，单位 ms。 */
+            .rear_retract_move_speed = 1.50f,   /* 后杆回收阶段 vx，单位 m/s。 */
+            .rear_retract_vy = 0.15f,           /* 后杆动作阶段预留附加 vy，单位 m/s。 */
+            .rear_retract_timeout_ms = 5000u,   /* 后杆动作或后光电等待超时，单位 ms。 */
+            .rear_retract_move_ms = 700u,       /* 后杆回收后继续移动时间，单位 ms。 */
+            .final_move_speed = 0.50f,          /* 收尾离开台阶 vx，单位 m/s。 */
+            .final_move_ms = 700u,              /* 收尾离开台阶持续时间，单位 ms。 */
+            .pole_all_extend_speed = 50.0f,     /* 四杆全伸目标跟随速度，单位 rad/s。 */
+            .pole_front_extend_speed = 20.0f,   /* 前杆伸出目标跟随速度，单位 rad/s。 */
+            .pole_front_retract_speed = 18.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
+            .pole_rear_extend_speed = 18.0f,    /* 后杆伸出目标跟随速度，单位 rad/s。 */
+            .pole_rear_retract_speed = 30.0f,   /* 后杆回收目标跟随速度，单位 rad/s。 */
+            .front_photo_timeout_ms = 5000u,    /* 等待前光电触发超时，单位 ms。 */
+            .rear_photo_timeout_ms = 10000u,    /* 等待后光电触发超时，单位 ms。 */
+            .hold_ms = 1200u,                   /* 保留等待时间，单位 ms；当前模板未直接使用。 */
+        },
+        /* 头向 / 上台阶 / 400mm 模板参数。 */
+        .head_ascend_400 = {
+            .prealign_move_speed = 0.40f,       /* PREALIGN 对正阶段叠加 vx，单位 m/s。 */
+            .align_move_speed = 0.30f,          /* 模板 step0 对正阶段 vx，单位 m/s。 */
+            .pole_extend_move_speed = 0.30f,    /* 四杆伸出阶段 vx，单位 m/s。 */
+            .pole_extend_settle_ms = 1000u,     /* 四杆伸出后稳定等待时间，单位 ms。 */
+            .front_retract_move_speed = 0.25f,  /* 前杆回收阶段 vx，单位 m/s。 */
+            .front_retract_vy = 0.15f,          /* 前杆等待/动作阶段附加 vy，单位 m/s。 */
+            .front_retract_settle_ms = 800u,    /* 前杆动作后稳定等待时间，单位 ms。 */
+            .front_retract_timeout_ms = 5000u,  /* 前杆动作或前光电等待超时，单位 ms。 */
+            .mid_move_speed = 0.50f,            /* 中段平移 vx，单位 m/s。 */
+            .mid_move_ms = 1500u,               /* 中段平移持续时间，单位 ms。 */
+            .rear_retract_move_speed = 0.20f,   /* 后杆回收阶段 vx，单位 m/s。 */
+            .rear_retract_vy = 0.15f,           /* 后杆动作阶段预留附加 vy，单位 m/s。 */
+            .rear_retract_timeout_ms = 5000u,   /* 后杆动作或后光电等待超时，单位 ms。 */
+            .rear_retract_move_ms = 800u,       /* 后杆回收后继续移动时间，单位 ms。 */
+            .final_move_speed = 0.50f,          /* 收尾离开台阶 vx，单位 m/s。 */
+            .final_move_ms = 800u,              /* 收尾离开台阶持续时间，单位 ms。 */
+            .pole_all_extend_speed = 40.0f,     /* 四杆全伸目标跟随速度，单位 rad/s。 */
+            .pole_front_extend_speed = 40.0f,   /* 前杆伸出目标跟随速度，单位 rad/s。 */
+            .pole_front_retract_speed = 18.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
+            .pole_rear_extend_speed = 40.0f,    /* 后杆伸出目标跟随速度，单位 rad/s。 */
+            .pole_rear_retract_speed = 30.0f,   /* 后杆回收目标跟随速度，单位 rad/s。 */
+            .front_photo_timeout_ms = 6000u,    /* 等待前光电触发超时，单位 ms。 */
+            .rear_photo_timeout_ms = 6000u,     /* 等待后光电触发超时，单位 ms。 */
+            .hold_ms = 1200u,                   /* 保留等待时间，单位 ms；当前模板未直接使用。 */
+        },
+        /* 头向 / 下台阶 / 200mm 模板参数。 */
+        .head_descend_200 = {
+            .prealign_move_speed = 0.20f,       /* PREALIGN 对正阶段叠加 vx，单位 m/s。 */
+            .align_move_speed = 0.30f,          /* 模板 step0 对正阶段 vx，单位 m/s。 */
+            .pole_extend_move_speed = 0.20f,    /* 撑杆伸出阶段 vx，单位 m/s。 */
+            .pole_extend_settle_ms = 900u,      /* 撑杆伸出后稳定等待时间，单位 ms。 */
+            .front_retract_move_speed = 0.10f,  /* 前杆动作阶段 vx，单位 m/s。 */
+            .front_retract_vy = 0.0f,           /* 前杆动作阶段附加 vy，单位 m/s。 */
+            .front_retract_settle_ms = 800u,    /* 前杆动作后稳定等待时间，单位 ms。 */
+            .front_retract_timeout_ms = 5000u,  /* 前杆动作或前光电等待超时，单位 ms。 */
+            .mid_move_speed = 0.20f,            /* 中段平移 vx，单位 m/s。 */
+            .mid_move_ms = 700u,                /* 中段平移持续时间，单位 ms。 */
+            .rear_retract_move_speed = 0.10f,   /* 后杆动作阶段 vx，单位 m/s。 */
+            .rear_retract_vy = 0.0f,            /* 后杆动作阶段预留附加 vy，单位 m/s。 */
+            .rear_retract_timeout_ms = 5000u,   /* 后杆动作或后光电等待超时，单位 ms。 */
+            .rear_retract_move_ms = 700u,       /* 后杆动作后继续移动时间，单位 ms。 */
+            .final_move_speed = 0.10f,          /* 收尾离开台阶 vx，单位 m/s。 */
+            .final_move_ms = 600u,              /* 收尾离开台阶持续时间，单位 ms。 */
+            .pole_all_extend_speed = 50.0f,     /* 四杆全伸目标跟随速度，单位 rad/s。 */
+            .pole_front_extend_speed = 30.0f,   /* 前杆伸出目标跟随速度，单位 rad/s。 */
+            .pole_front_retract_speed = 18.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
+            .pole_rear_extend_speed = 30.0f,    /* 后杆伸出目标跟随速度，单位 rad/s。 */
+            .pole_rear_retract_speed = 30.0f,   /* 后杆回收目标跟随速度，单位 rad/s。 */
+            .front_photo_timeout_ms = 5000u,    /* 等待前光电下降沿超时，单位 ms。 */
+            .rear_photo_timeout_ms = 5000u,     /* 等待后光电下降沿超时，单位 ms。 */
+            .hold_ms = 1200u,                   /* 保留等待时间，单位 ms；当前模板未直接使用。 */
+        },
+        /* 头向 / 下台阶 / 400mm 模板参数。 */
+        .head_descend_400 = {
+            .prealign_move_speed = 0.40f,       /* PREALIGN 对正阶段叠加 vx，单位 m/s。 */
+            .align_move_speed = 0.30f,          /* 模板 step0 对正阶段 vx，单位 m/s。 */
+            .pole_extend_move_speed = 0.40f,    /* 撑杆伸出阶段 vx，单位 m/s。 */
+            .pole_extend_settle_ms = 1200u,     /* 撑杆伸出后稳定等待时间，单位 ms。 */
+            .front_retract_move_speed = 0.40f,  /* 前杆动作阶段 vx，单位 m/s。 */
+            .front_retract_vy = 0.15f,          /* 前杆动作阶段附加 vy，单位 m/s。 */
+            .front_retract_settle_ms = 1000u,   /* 前杆动作后稳定等待时间，单位 ms。 */
+            .front_retract_timeout_ms = 6000u,  /* 前杆动作或前光电等待超时，单位 ms。 */
+            .mid_move_speed = 0.50f,            /* 中段平移 vx，单位 m/s。 */
+            .mid_move_ms = 1500u,               /* 中段平移持续时间，单位 ms。 */
+            .rear_retract_move_speed = 0.15f,   /* 后杆动作阶段 vx，单位 m/s。 */
+            .rear_retract_vy = 0.15f,           /* 后杆动作阶段预留附加 vy，单位 m/s。 */
+            .rear_retract_timeout_ms = 6000u,   /* 后杆动作或后光电等待超时，单位 ms。 */
+            .rear_retract_move_ms = 800u,       /* 后杆动作后继续移动时间，单位 ms。 */
+            .final_move_speed = 0.10f,          /* 收尾离开台阶 vx，单位 m/s。 */
+            .final_move_ms = 800u,              /* 收尾离开台阶持续时间，单位 ms。 */
+            .pole_all_extend_speed = 40.0f,     /* 四杆全伸目标跟随速度，单位 rad/s。 */
+            .pole_front_extend_speed = 40.0f,   /* 前杆伸出目标跟随速度，单位 rad/s。 */
+            .pole_front_retract_speed = 15.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
+            .pole_rear_extend_speed = 40.0f,    /* 后杆伸出目标跟随速度，单位 rad/s。 */
+            .pole_rear_retract_speed = 25.0f,   /* 后杆回收目标跟随速度，单位 rad/s。 */
+            .front_photo_timeout_ms = 6000u,    /* 等待前光电下降沿超时，单位 ms。 */
+            .rear_photo_timeout_ms = 6000u,     /* 等待后光电下降沿超时，单位 ms。 */
+            .hold_ms = 1200u,                   /* 保留等待时间，单位 ms；当前模板未直接使用。 */
+        },
+        /* 尾向 / 上台阶 / 200mm 模板参数。 */
+        .tail_ascend_200 = {
+            .prealign_move_speed = 0.50f,       /* PREALIGN 对正阶段叠加 vx，单位 m/s。 */
+            .align_move_speed = 0.30f,          /* 模板 step0 对正阶段 vx，单位 m/s。 */
+            .pole_extend_move_speed = 0.50f,    /* 四杆伸出阶段 vx，单位 m/s。 */
+            .pole_extend_settle_ms = 900u,      /* 四杆伸出后稳定等待时间，单位 ms。 */
+            .front_retract_move_speed = 0.50f,  /* 前杆回收阶段 vx，单位 m/s。 */
+            .front_retract_vy = 0.04f,          /* 前杆等待/动作阶段附加 vy，单位 m/s。 */
+            .front_retract_settle_ms = 800u,    /* 前杆动作后稳定等待时间，单位 ms。 */
+            .front_retract_timeout_ms = 5000u,  /* 前杆动作或前光电等待超时，单位 ms。 */
+            .mid_move_speed = 0.50f,            /* 中段平移 vx，单位 m/s。 */
+            .mid_move_ms = 1500u,               /* 中段平移持续时间，单位 ms。 */
+            .rear_retract_move_speed = 0.20f,   /* 后杆回收阶段 vx，单位 m/s。 */
+            .rear_retract_vy = 0.15f,           /* 后杆动作阶段预留附加 vy，单位 m/s。 */
+            .rear_retract_timeout_ms = 5000u,   /* 后杆动作或后光电等待超时，单位 ms。 */
+            .rear_retract_move_ms = 700u,       /* 后杆回收后继续移动时间，单位 ms。 */
+            .final_move_speed = 0.25f,          /* 收尾离开台阶 vx，单位 m/s。 */
+            .final_move_ms = 600u,              /* 收尾离开台阶持续时间，单位 ms。 */
+            .pole_all_extend_speed = 50.0f,     /* 四杆全伸目标跟随速度，单位 rad/s。 */
+            .pole_front_extend_speed = 50.0f,   /* 前杆伸出目标跟随速度，单位 rad/s。 */
+            .pole_front_retract_speed = 18.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
+            .pole_rear_extend_speed = 50.0f,    /* 后杆伸出目标跟随速度，单位 rad/s。 */
+            .pole_rear_retract_speed = 30.0f,   /* 后杆回收目标跟随速度，单位 rad/s。 */
+            .front_photo_timeout_ms = 5000u,    /* 等待前光电触发超时，单位 ms。 */
+            .rear_photo_timeout_ms = 10000u,    /* 等待后光电触发超时，单位 ms。 */
+            .hold_ms = 1200u,                   /* 保留等待时间，单位 ms；当前模板未直接使用。 */
+        },
+        /* 尾向 / 上台阶 / 400mm 模板参数。 */
+        .tail_ascend_400 = {
+            .prealign_move_speed = 0.40f,       /* PREALIGN 对正阶段叠加 vx，单位 m/s。 */
+            .align_move_speed = 0.30f,          /* 模板 step0 对正阶段 vx，单位 m/s。 */
+            .pole_extend_move_speed = 0.30f,    /* 四杆伸出阶段 vx，单位 m/s。 */
+            .pole_extend_settle_ms = 1000u,     /* 四杆伸出后稳定等待时间，单位 ms。 */
+            .front_retract_move_speed = 0.25f,  /* 前杆回收阶段 vx，单位 m/s。 */
+            .front_retract_vy = 0.15f,          /* 前杆等待/动作阶段附加 vy，单位 m/s。 */
+            .front_retract_settle_ms = 800u,    /* 前杆动作后稳定等待时间，单位 ms。 */
+            .front_retract_timeout_ms = 5000u,  /* 前杆动作或前光电等待超时，单位 ms。 */
+            .mid_move_speed = 0.50f,            /* 中段平移 vx，单位 m/s。 */
+            .mid_move_ms = 1500u,               /* 中段平移持续时间，单位 ms。 */
+            .rear_retract_move_speed = 0.20f,   /* 后杆回收阶段 vx，单位 m/s。 */
+            .rear_retract_vy = 0.15f,           /* 后杆动作阶段预留附加 vy，单位 m/s。 */
+            .rear_retract_timeout_ms = 5000u,   /* 后杆动作或后光电等待超时，单位 ms。 */
+            .rear_retract_move_ms = 800u,       /* 后杆回收后继续移动时间，单位 ms。 */
+            .final_move_speed = 0.50f,          /* 收尾离开台阶 vx，单位 m/s。 */
+            .final_move_ms = 800u,              /* 收尾离开台阶持续时间，单位 ms。 */
+            .pole_all_extend_speed = 40.0f,     /* 四杆全伸目标跟随速度，单位 rad/s。 */
+            .pole_front_extend_speed = 40.0f,   /* 前杆伸出目标跟随速度，单位 rad/s。 */
+            .pole_front_retract_speed = 18.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
+            .pole_rear_extend_speed = 40.0f,    /* 后杆伸出目标跟随速度，单位 rad/s。 */
+            .pole_rear_retract_speed = 30.0f,   /* 后杆回收目标跟随速度，单位 rad/s。 */
+            .front_photo_timeout_ms = 6000u,    /* 等待前光电触发超时，单位 ms。 */
+            .rear_photo_timeout_ms = 6000u,     /* 等待后光电触发超时，单位 ms。 */
+            .hold_ms = 1200u,                   /* 保留等待时间，单位 ms；当前模板未直接使用。 */
+        },
+        /* 尾向 / 下台阶 / 200mm 模板参数。 */
+        .tail_descend_200 = {
+            .prealign_move_speed = 0.20f,       /* PREALIGN 对正阶段叠加 vx，单位 m/s。 */
+            .align_move_speed = 0.30f,          /* 模板 step0 对正阶段 vx，单位 m/s。 */
+            .pole_extend_move_speed = 0.20f,    /* 撑杆伸出阶段 vx，单位 m/s。 */
+            .pole_extend_settle_ms = 900u,      /* 撑杆伸出后稳定等待时间，单位 ms。 */
+            .front_retract_move_speed = 0.10f,  /* 前杆动作阶段 vx，单位 m/s。 */
+            .front_retract_vy = 0.0f,           /* 前杆动作阶段附加 vy，单位 m/s。 */
+            .front_retract_settle_ms = 800u,    /* 前杆动作后稳定等待时间，单位 ms。 */
+            .front_retract_timeout_ms = 5000u,  /* 前杆动作或前光电等待超时，单位 ms。 */
+            .mid_move_speed = 0.50f,            /* 中段平移 vx，单位 m/s。 */
+            .mid_move_ms = 300u,                /* 中段平移持续时间，单位 ms。 */
+            .rear_retract_move_speed = 0.10f,   /* 后杆动作阶段 vx，单位 m/s。 */
+            .rear_retract_vy = 0.0f,            /* 后杆动作阶段预留附加 vy，单位 m/s。 */
+            .rear_retract_timeout_ms = 5000u,   /* 后杆动作或后光电等待超时，单位 ms。 */
+            .rear_retract_move_ms = 700u,       /* 后杆动作后继续移动时间，单位 ms。 */
+            .final_move_speed = 0.10f,          /* 收尾离开台阶 vx，单位 m/s。 */
+            .final_move_ms = 500u,              /* 收尾离开台阶持续时间，单位 ms。 */
+            .pole_all_extend_speed = 50.0f,     /* 四杆全伸目标跟随速度，单位 rad/s。 */
+            .pole_front_extend_speed = 50.0f,   /* 前杆伸出目标跟随速度，单位 rad/s。 */
+            .pole_front_retract_speed = 25.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
+            .pole_rear_extend_speed = 50.0f,    /* 后杆伸出目标跟随速度，单位 rad/s。 */
+            .pole_rear_retract_speed = 25.0f,   /* 后杆回收目标跟随速度，单位 rad/s。 */
+            .front_photo_timeout_ms = 5000u,    /* 等待前光电下降沿超时，单位 ms。 */
+            .rear_photo_timeout_ms = 5000u,     /* 等待后光电下降沿超时，单位 ms。 */
+            .hold_ms = 1200u,                   /* 保留等待时间，单位 ms；当前模板未直接使用。 */
+        },
+        /* 尾向 / 下台阶 / 400mm 模板参数。 */
+        .tail_descend_400 = {
+            .prealign_move_speed = 0.40f,       /* PREALIGN 对正阶段叠加 vx，单位 m/s。 */
+            .align_move_speed = 0.30f,          /* 模板 step0 对正阶段 vx，单位 m/s。 */
+            .pole_extend_move_speed = 0.40f,    /* 撑杆伸出阶段 vx，单位 m/s。 */
+            .pole_extend_settle_ms = 1200u,     /* 撑杆伸出后稳定等待时间，单位 ms。 */
+            .front_retract_move_speed = 0.40f,  /* 前杆动作阶段 vx，单位 m/s。 */
+            .front_retract_vy = 0.15f,          /* 前杆动作阶段附加 vy，单位 m/s。 */
+            .front_retract_settle_ms = 1000u,   /* 前杆动作后稳定等待时间，单位 ms。 */
+            .front_retract_timeout_ms = 6000u,  /* 前杆动作或前光电等待超时，单位 ms。 */
+            .mid_move_speed = 0.50f,            /* 中段平移 vx，单位 m/s。 */
+            .mid_move_ms = 1500u,               /* 中段平移持续时间，单位 ms。 */
+            .rear_retract_move_speed = 0.15f,   /* 后杆动作阶段 vx，单位 m/s。 */
+            .rear_retract_vy = 0.15f,           /* 后杆动作阶段预留附加 vy，单位 m/s。 */
+            .rear_retract_timeout_ms = 6000u,   /* 后杆动作或后光电等待超时，单位 ms。 */
+            .rear_retract_move_ms = 800u,       /* 后杆动作后继续移动时间，单位 ms。 */
+            .final_move_speed = 0.10f,          /* 收尾离开台阶 vx，单位 m/s。 */
+            .final_move_ms = 800u,              /* 收尾离开台阶持续时间，单位 ms。 */
+            .pole_all_extend_speed = 40.0f,     /* 四杆全伸目标跟随速度，单位 rad/s。 */
+            .pole_front_extend_speed = 40.0f,   /* 前杆伸出目标跟随速度，单位 rad/s。 */
+            .pole_front_retract_speed = 15.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
+            .pole_rear_extend_speed = 40.0f,    /* 后杆伸出目标跟随速度，单位 rad/s。 */
+            .pole_rear_retract_speed = 25.0f,   /* 后杆回收目标跟随速度，单位 rad/s。 */
+            .front_photo_timeout_ms = 6000u,    /* 等待前光电下降沿超时，单位 ms。 */
+            .rear_photo_timeout_ms = 6000u,     /* 等待后光电下降沿超时，单位 ms。 */
+            .hold_ms = 1200u,                   /* 保留等待时间，单位 ms；当前模板未直接使用。 */
+        },
     },
-          .rod_param = {
-            .pit_motor_param = {.can = BSP_CAN_1, .master_id = 0x13, .can_id = 0x03, .module = MOTOR_DM_J4310, .reverse = false},
-            .rol_motor_param = {.can = BSP_CAN_1, .master_id = 0x14, .can_id = 0x04, .module = MOTOR_DM_J4310, .reverse = false},
-            .pose = {
-              .pit_down_angle = 0.267107785f + 0.0f,
-              .pit_up_angle = 0.107107785f + 1.6465615f,
-              .pit_grip_angle = 0.267107785f + 1.7f,
-              .pit_lift_angle = 0.267107785f + 2.0f,
-              .rol_home_angle = 1.67915916f + 0.0f,
-              .rol_flip_angle = 1.67915916f + 3.1415926f,
-            },
-            .limit = {
-              .pit_arrive_threshold = 0.03f,
-              .rol_arrive_threshold = 0.03f,
-              .sequence_timeout = 2.0f,
-              .grip_open_wait_time = 1.0f,
-              .grip_wait_time = 0.25f,
-              .rol_flip_wait_time = 1.0f,
-              .pit_kp = 80.0f,
-              .pit_kd = 2.0f,
-              .rol_kp = 15.0f,
-              .rol_kd = 0.05f,
-              .pit_max_vel = 1.5f,
-              .pit_max_acc = 1.0f,
-              .rol_max_vel = 1.8f,
-              .rol_max_acc = 1.5f,
-            },
-          },
+    .rod_param = {
+        .pit_motor_param = {.can = BSP_CAN_1, .master_id = 0x13, .can_id = 0x03, .module = MOTOR_DM_J4310, .reverse = false},
+        .rol_motor_param = {.can = BSP_CAN_1, .master_id = 0x14, .can_id = 0x04, .module = MOTOR_DM_J4310, .reverse = false},
+        .pose = {
+            .pit_down_angle = 0.267107785f + 0.0f,
+            .pit_up_angle = 0.107107785f + 1.6465615f,
+            .pit_grip_angle = 0.267107785f + 1.7f,
+            .pit_lift_angle = 0.267107785f + 2.0f,
+            .rol_home_angle = 1.67915916f + 0.0f,
+            .rol_flip_angle = 1.67915916f + 3.1415926f,
+        },
+        .limit = {
+            .pit_arrive_threshold = 0.03f,
+            .rol_arrive_threshold = 0.03f,
+            .sequence_timeout = 2.0f,
+            .grip_open_wait_time = 1.0f,
+            .grip_wait_time = 0.25f,
+            .rol_flip_wait_time = 1.0f,
+            .pit_kp = 80.0f,
+            .pit_kd = 2.0f,
+            .rol_kp = 15.0f,
+            .rol_kd = 0.05f,
+            .pit_max_vel = 1.5f,
+            .pit_max_acc = 1.0f,
+            .rol_max_vel = 1.8f,
+            .rol_max_acc = 1.5f,
+        },
+    },
 };
 
-/* Private function prototypes ---------------------------------------------- */
-/* Exported functions ------------------------------------------------------- */
-
-/**
- * @brief 获取机器人配置参数
- * @return 机器人配置参数指针
- */
-Config_RobotParam_t* Config_GetRobotParam(void) {
-    return &robot_config;
+Config_RobotParam_t *Config_GetRobotParam(void) {
+  return &robot_config;
 }
