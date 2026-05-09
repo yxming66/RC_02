@@ -50,7 +50,7 @@ static float AutoCtrlFeed_SelectYawRad(void) {
   return chassis_imu.eulr.yaw;
 }
 
-static void AutoCtrlFeed_UpdateLocalYawZero(void) {
+static void AutoCtrlFeed_CacheLocalYawZero(void) {
   if (!auto_ctrl_local_yaw_zero_initialized) {
     if (!isfinite(chassis_imu.eulr.yaw)) {
       return;
@@ -59,12 +59,6 @@ static void AutoCtrlFeed_UpdateLocalYawZero(void) {
     auto_ctrl_local_yaw_zero_rad = chassis_imu.eulr.yaw;
     auto_ctrl_local_yaw_zero_initialized = true;
   }
-
-  if (AutoCtrl_GetYawSource(&auto_ctrl) != AUTO_CTRL_YAW_SOURCE_STM32) {
-    return;
-  }
-
-  AutoCtrl_SetYawZeroOffset(&auto_ctrl, auto_ctrl_local_yaw_zero_rad);
 }
 
 /* Exported functions ------------------------------------------------------- */
@@ -88,7 +82,7 @@ void Task_auto_ctrl(void *argument) {
     if (auto_ctrl_inited) {
       now_ms = osKernelGetTickCount();
 
-      AutoCtrlFeed_UpdateLocalYawZero();
+      AutoCtrlFeed_CacheLocalYawZero();
 
       feedback.yaw_auto_rad = AutoCtrlFeed_SelectYawRad();
       /* 当前 AutoCtrl API 只消费前向两路 SICK。 */

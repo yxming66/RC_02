@@ -28,6 +28,7 @@
 #define AUTO_CTRL_OUTPUT_ENABLE (1u)
 #endif
 
+#define AUTO_CTRL_RC_PI_RAD (3.14159265358979323846f)
 #define RC_ARM_FINE_SCALE (0.35f)
 
 /* USER STRUCT BEGIN */
@@ -195,7 +196,7 @@ static void Rc_SetChassisRemote(void) {
   chassis_cmd.mode = CHASSIS_MODE_INDEPENDENT;
   chassis_cmd.ctrl_vec.vx = dr16.data.ch_r_y;
   chassis_cmd.ctrl_vec.vy = -dr16.data.ch_r_x;
-  chassis_cmd.ctrl_vec.wz = dr16.data.ch_l_x;
+  chassis_cmd.ctrl_vec.wz = -dr16.data.ch_l_x;
 }
 
 static void Rc_SetAutoDryRunCommands(void) {
@@ -230,12 +231,26 @@ static bool Rc_PrepareLocalAutoYawFeedback(void) {
   }
 
   AutoCtrl_SetYawSource(&auto_ctrl, AUTO_CTRL_YAW_SOURCE_STM32);
-  AutoCtrl_SetYawZeroOffset(&auto_ctrl, auto_ctrl_local_yaw_zero_rad);
+  AutoCtrl_SetYawZeroOffset(&auto_ctrl, 0.0f);
 
   auto_ctrl_feedback_t local_feedback = auto_ctrl.feedback;
   local_feedback.yaw_auto_rad = chassis_imu.eulr.yaw;
   AutoCtrl_SetFeedback(&auto_ctrl, &local_feedback);
   return true;
+}
+
+static float Rc_SelectLocalAutoTargetYawRad(float head_yaw_rad,
+                                           auto_ctrl_travel_dir_e travel_dir) {
+  /* Tail-forward tasks choose the cardinal target by tail heading first. */
+  if (travel_dir == AUTO_CTRL_TRAVEL_DIR_TAIL_FORWARD) {
+    const float tail_yaw_rad =
+        AutoCtrlMath_WrapYawRad(head_yaw_rad + AUTO_CTRL_RC_PI_RAD);
+    const float tail_target_rad =
+        AutoCtrlMath_NearestCardinalYawRad(tail_yaw_rad);
+    return AutoCtrlMath_WrapYawRad(tail_target_rad + AUTO_CTRL_RC_PI_RAD);
+  }
+
+  return AutoCtrlMath_NearestCardinalYawRad(head_yaw_rad);
 }
 
 static void Rc_TryStartAutoCtrlBySwitch(uint32_t now_ms) {
@@ -252,12 +267,14 @@ static void Rc_TryStartAutoCtrlBySwitch(uint32_t now_ms) {
   }
 
   auto_ctrl_template_e template_id = AUTO_CTRL_TEMPLATE_NONE;
+  auto_ctrl_travel_dir_e travel_dir = AUTO_CTRL_TRAVEL_DIR_HEAD_FORWARD;
   float target_yaw_rad = 0.0f;
 
   if (dr16.data.sw_r == DR16_SW_UP) {
-    template_id = AUTO_CTRL_TEMPLATE_ASCEND_200;
+    template_id = AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD;
   } else if (dr16.data.sw_r == DR16_SW_DOWN) {
-    template_id = AUTO_CTRL_TEMPLATE_DESCEND_200;
+    template_id = AUTO_CTRL_TEMPLATE_DESCEND_200_TAIL;
+    travel_dir = AUTO_CTRL_TRAVEL_DIR_TAIL_FORWARD;
   }
 
   if (template_id != AUTO_CTRL_TEMPLATE_NONE) {
@@ -266,9 +283,10 @@ static void Rc_TryStartAutoCtrlBySwitch(uint32_t now_ms) {
     }
 
     target_yaw_rad =
-        AutoCtrlMath_NearestCardinalYawRad(auto_ctrl.feedback.yaw_auto_rad);
+        Rc_SelectLocalAutoTargetYawRad(auto_ctrl.feedback.yaw_auto_rad,
+                                       travel_dir);
     (void)AutoCtrl_StartTemplate(
-        &auto_ctrl, template_id, AUTO_CTRL_TRAVEL_DIR_HEAD_FORWARD,
+        &auto_ctrl, template_id, travel_dir,
         target_yaw_rad, AUTO_CTRL_RC_YAW_TOLERANCE_RAD,
         AUTO_CTRL_SENSOR_MODE_SICK_FRONT_AND_BOTTOM, now_ms);
   }
@@ -368,8 +386,9 @@ void Task_rc_main(void *argument) {
         Rc_SetAutoDryRunCommands();
 #endif
       } else if (dr16.data.sw_r == DR16_SW_MID) {
+        /* 左MID右MID：底盘控制，pole用左摇杆Y轴同时控制 */
         Rc_SetChassisRemote();
-        Rc_SetPoleAuto(0.0f, 0.0f);
+        Rc_SetPoleManual(dr16.data.ch_l_y, dr16.data.ch_l_y);
       } else {
         Rc_SetChassisRelax();
         Rc_SetPoleAuto(0.0f, 0.0f);
@@ -401,10 +420,14 @@ void Task_rc_main(void *argument) {
         /* 使用上位机Pole命令 */
         if (pc_pole_cmd != NULL) {
           pole_cmd.mode = (pc_pole_cmd->mode == 0) ? POLE_MODE_RELAX : POLE_MODE_ACTIVE;
-          pole_cmd.lift[0] = pc_pole_cmd->lift[0];
-          pole_cmd.lift[1] = pc_pole_cmd->lift[1];
-          pole_cmd.auto_target_enable[0] = false;
-          pole_cmd.auto_target_enable[1] = false;
+          pole_cmd.lift[0] = 0.0f;
+          pole_cmd.lift[1] = 0.0f;
+          pole_cmd.auto_target_enable[0] = (pole_cmd.mode == POLE_MODE_ACTIVE);
+          pole_cmd.auto_target_enable[1] = (pole_cmd.mode == POLE_MODE_ACTIVE);
+          pole_cmd.auto_target_lift[0] = pc_pole_cmd->lift[0];
+          pole_cmd.auto_target_lift[1] = pc_pole_cmd->lift[1];
+          pole_cmd.auto_lift_speed[0] = 0.0f;
+          pole_cmd.auto_lift_speed[1] = 0.0f;
         }
       } else {
         /* 遥控器控制模式（默认机械臂） */

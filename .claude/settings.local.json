@@ -18,7 +18,16 @@
       "Bash(\"/c/Program Files/CMake/bin/cmake.exe\" --build D:/STM32Projects_HAL/board-H7/RC_02/build --target RC_02)",
       "Bash(\"/c/Program Files/CMake/bin/cmake.exe\" --build D:/STM32Projects_HAL/board-H7/RC_02/build)",
       "Bash(\"/c/Program Files/CMake/bin/cmake.exe\" --build .)",
-      "Bash(D:/Drivers/MSYS2/ucrt64/bin/cc.exe -fsyntax-only -I D:/STM32Projects_HAL/board-H7/RC_02/Core/Inc -I D:/STM32Projects_HAL/board-H7/RC_02/User -I D:/STM32Projects_HAL/board-H7/RC_02/User/module/autoCtrlAPI/include -I D:/STM32Projects_HAL/board-H7/RC_02/User/module/autoCtrlAPI/template -I D:/STM32Projects_HAL/board-H7/RC_02/User/module -I D:/STM32Projects_HAL/board-H7/RC_02/User/module/config -DUSE_HAL_DRIVER -DSTM32H723xx D:/STM32Projects_HAL/board-H7/RC_02/User/module/autoCtrlAPI/template/auto_ctrl_template_runner.c)"
+      "Bash(D:/Drivers/MSYS2/ucrt64/bin/cc.exe -fsyntax-only -I D:/STM32Projects_HAL/board-H7/RC_02/Core/Inc -I D:/STM32Projects_HAL/board-H7/RC_02/User -I D:/STM32Projects_HAL/board-H7/RC_02/User/module/autoCtrlAPI/include -I D:/STM32Projects_HAL/board-H7/RC_02/User/module/autoCtrlAPI/template -I D:/STM32Projects_HAL/board-H7/RC_02/User/module -I D:/STM32Projects_HAL/board-H7/RC_02/User/module/config -DUSE_HAL_DRIVER -DSTM32H723xx D:/STM32Projects_HAL/board-H7/RC_02/User/module/autoCtrlAPI/template/auto_ctrl_template_runner.c)",
+      "Bash(cmake --build build)",
+      "Bash(cmake --build build --clean-first)",
+      "Bash(cmake *)",
+      "Bash(gcc -fsyntax-only -I. -I./User -I./User/module -I./User/bsp -I./User/device -I./User/task -I./User/module/autoCtrlAPI/api -I./User/module/autoCtrlAPI/primitive -I./User/module/autoCtrlAPI/template -I./cmake/stm32cubemx/Inc User/module/autoCtrlAPI/template/auto_ctrl_template_runner.c)",
+      "Bash(make -j4)",
+      "Bash(where make *)",
+      "Bash(python3 -c \"import json,sys; cmds=json.load\\(sys.stdin\\); [print\\(c['command']\\) for c in cmds if 'auto_ctrl_template_runner.c' in c['file']]\")",
+      "Bash(xxd)",
+      "Bash(git checkout *)"
     ]
   }
 }

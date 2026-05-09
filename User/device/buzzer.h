@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include <stdbool.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -66,9 +68,25 @@ typedef struct {
  */
 typedef enum {
   /* USER MUSIC MENU BEGIN */
-  MUSIC_RM,     ///< RM战队音乐
-  MUSIC_NOKIA,  ///< 诺基亚经典铃声
-  MUSIC_HAPPY_DOU_DI_ZHU_MELODY, ///< 欢乐斗地主主题曲
+  MUSIC_RM,                        ///< RM 战队队歌
+  MUSIC_NOKIA,                     ///< 诺基亚铃声
+  MUSIC_FUR_ELISE,                 ///< 贝多芬《致爱丽丝》
+  MUSIC_JUE_BIE_SHU,               ///< 《诀别书》
+  MUSIC_HONG_DOU,                  ///< 王菲《红豆》
+  MUSIC_SHUN,                      ///< 郑润泽《瞬》
+  MUSIC_YUAN_YU_CHOU,              ///< 林俊杰《愿与愁》
+  MUSIC_DREAM_WEDDING,             ///< 《梦中的婚礼》单线蜂鸣器改编
+  MUSIC_FLOWER_DANCE,              ///< DJ Okawari《Flower Dance》
+  MUSIC_TORI_NO_UTA,               ///< Lia《鸟之诗》
+  MUSIC_YI_BU_ZHI_YAO,             ///< Por Una Cabeza / Yi Bu Zhi Yao
+  MUSIC_MOONLIGHT_SONATA,          ///< 贝多芬《月光奏鸣曲》第一乐章
+  MUSIC_MOONLIGHT_SONATA_2ND,      ///< 贝多芬《月光奏鸣曲》第二乐章
+  MUSIC_MERRY_CHRISTMAS_MR_LAWRENCE, ///< 坂本龙一《圣诞快乐，劳伦斯先生》
+  MUSIC_HAPPY_DOU_DI_ZHU_MELODY,   ///< 欢乐斗地主主题曲
+  MUSIC_STARTUP_YUAN_YU_CHOU,      ///< Short Yuan Yu Chou startup jingle
+  MUSIC_STARTUP_TOMATO_GARDEN,     ///< 番茄花园片段
+  MUSIC_STARTUP_BUMBLEBEE,         ///< 《野蜂飞舞》片段
+  MUSIC_MOONLIGHT_SONATA_3RD,      ///< 贝多芬《月光奏鸣曲》第三乐章
   /* USER MUSIC MENU END */
 } MUSIC_t;
 
@@ -82,6 +100,19 @@ typedef struct {
 } BUZZER_t;
 
 /* USER STRUCT BEGIN */
+typedef struct {
+  const Tone_t *melody;
+  size_t melody_length;
+  size_t tone_index;
+  uint32_t next_tick;
+  uint16_t tone_gap_ms;
+  MUSIC_t music;
+  bool active;
+  bool paused;
+  bool loop;
+  bool waiting_tone;
+  bool waiting_gap;
+} BUZZER_MusicPlayer_t;
 
 /* USER STRUCT END */
 
@@ -131,6 +162,19 @@ int8_t BUZZER_Set(BUZZER_t *buzzer, float freq, float duty_cycle);
 int8_t BUZZER_PlayMusic(BUZZER_t *buzzer, MUSIC_t music);
 
 /* USER FUNCTION BEGIN */
+int8_t BUZZER_MusicPlayerStart(BUZZER_MusicPlayer_t *player,
+                                BUZZER_t *buzzer, MUSIC_t music, bool loop,
+                                uint32_t now_tick);
+int8_t BUZZER_MusicPlayerUpdate(BUZZER_MusicPlayer_t *player,
+                                 BUZZER_t *buzzer, uint32_t now_tick);
+void BUZZER_MusicPlayerStop(BUZZER_MusicPlayer_t *player, BUZZER_t *buzzer);
+void BUZZER_MusicPlayerSilence(BUZZER_MusicPlayer_t *player,
+                                BUZZER_t *buzzer);
+void BUZZER_MusicPlayerSetPaused(BUZZER_MusicPlayer_t *player,
+                                  BUZZER_t *buzzer, bool paused,
+                                  uint32_t now_tick);
+bool BUZZER_MusicPlayerIsActive(const BUZZER_MusicPlayer_t *player);
+bool BUZZER_MusicPlayerIsPaused(const BUZZER_MusicPlayer_t *player);
 
 /* USER FUNCTION END */
 

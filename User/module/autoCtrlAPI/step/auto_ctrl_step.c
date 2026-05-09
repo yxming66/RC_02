@@ -66,8 +66,8 @@ auto_ctrl_step_status_e AutoCtrlStep_Run(auto_ctrl_t *ctrl,
       return AUTO_CTRL_STEP_STATUS_RUNNING;
 
     case AUTO_CTRL_STEP_WAIT_HEAD_FRONT_PHOTO:
-      if (ctrl->template_id != AUTO_CTRL_TEMPLATE_ASCEND_200 &&
-          ctrl->template_id != AUTO_CTRL_TEMPLATE_DESCEND_200) {
+      if (ctrl->template_id != AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD &&
+          ctrl->template_id != AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD) {
         return AUTO_CTRL_STEP_STATUS_RUNNING;
       }
       if (ctrl->feedback.head_front_photo_triggered) {
@@ -81,8 +81,8 @@ auto_ctrl_step_status_e AutoCtrlStep_Run(auto_ctrl_t *ctrl,
       return AUTO_CTRL_STEP_STATUS_RUNNING;
 
     case AUTO_CTRL_STEP_WAIT_HEAD_REAR_PHOTO:
-      if (ctrl->template_id != AUTO_CTRL_TEMPLATE_ASCEND_200 &&
-          ctrl->template_id != AUTO_CTRL_TEMPLATE_DESCEND_200) {
+      if (ctrl->template_id != AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD &&
+          ctrl->template_id != AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD) {
         return AUTO_CTRL_STEP_STATUS_RUNNING;
       }
       if (ctrl->feedback.head_rear_photo_triggered) {

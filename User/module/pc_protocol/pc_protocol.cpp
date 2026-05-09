@@ -13,12 +13,14 @@
 /* Private variables -------------------------------------------------------- */
 static PC_Comm_t s_pc_comm_inst;
 PC_Protocol_t* g_pc_protocol_ptr = NULL;
-static uint8_t s_rx_buf[256];
-static uint8_t s_rx_parse_buf[sizeof(s_rx_buf)];
+static uint8_t s_rx_dma_buf[4][256];
+static uint8_t s_rx_parse_buf[256];
 static uint8_t s_rx_stream_buf[512];
 static uint16_t s_rx_stream_len = 0;
-static volatile uint16_t s_rx_len = 0;
 static volatile bool s_rx_active = false;
+static volatile uint8_t s_rx_dma_write_idx = 0;
+static volatile uint8_t s_rx_dma_read_idx = 0;
+static volatile uint16_t s_rx_dma_len[4] = {0};
 static osThreadId_t s_thread_id = NULL;
 
 /* Private define ----------------------------------------------------------- */
@@ -411,12 +413,43 @@ void PC_Protocol_SetStatusFeedback(PC_Protocol_t *proto, const PC_StatusFeedback
 /* PC通信管理实现 */
 static const uint32_t PC_COMM_RX_CPLT_FLAG = (1u << 0);
 
+static bool PcComm_StartRecv(PC_Comm_t *comm);
+
 static void PcCommRxEventCallback(uint16_t size) {
     s_rx_active = false;
-    if (size == 0 || size > sizeof(s_rx_buf)) {
+    const uint8_t ready_idx = s_rx_dma_write_idx;
+
+    if (size > sizeof(s_rx_dma_buf[ready_idx])) {
+        g_pc_comm_debug.rx_dma_start_fail_count++;
+        (void)PcComm_StartRecv(NULL);
         return;
     }
-    s_rx_len = size;
+
+    if (size > 0) {
+        s_rx_dma_len[ready_idx] = size;
+        g_pc_comm_debug.rx_irq_count++;
+        g_pc_comm_debug.rx_irq_byte_count += size;
+
+        uint8_t next_idx = (uint8_t)((ready_idx + 1u) %
+                                     (sizeof(s_rx_dma_buf) / sizeof(s_rx_dma_buf[0])));
+        if (s_rx_dma_len[next_idx] != 0u) {
+            g_pc_comm_debug.rx_queue_overflow_count++;
+            s_rx_dma_len[next_idx] = 0u;
+            if (s_rx_dma_read_idx == next_idx) {
+                s_rx_dma_read_idx = (uint8_t)((next_idx + 1u) %
+                                              (sizeof(s_rx_dma_buf) / sizeof(s_rx_dma_buf[0])));
+            }
+        }
+        s_rx_dma_write_idx = next_idx;
+    }
+
+    if (!PcComm_StartRecv(NULL)) {
+        g_pc_comm_debug.rx_dma_start_fail_count++;
+    }
+
+    if (size == 0) {
+        return;
+    }
     if (s_thread_id != NULL) {
         (void)osThreadFlagsSet(s_thread_id, PC_COMM_RX_CPLT_FLAG);
     }
@@ -447,21 +480,66 @@ static uint16_t PcComm_FrameSizeAt(const uint8_t *data, uint16_t size) {
 
 static bool PcComm_StartRecv(PC_Comm_t *comm) {
     (void)comm;
-    memset(s_rx_buf, 0, sizeof(s_rx_buf));
-    s_rx_len = 0;
-    int8_t ret = BSP_UART_ReceiveToIdle(BSP_UART_PC, s_rx_buf, sizeof(s_rx_buf), true);
+    const uint8_t idx = s_rx_dma_write_idx;
+    if (s_rx_dma_len[idx] != 0u) {
+        g_pc_comm_debug.rx_queue_overflow_count++;
+        s_rx_dma_len[idx] = 0u;
+        if (s_rx_dma_read_idx == idx) {
+            s_rx_dma_read_idx = (uint8_t)((idx + 1u) %
+                                          (sizeof(s_rx_dma_buf) / sizeof(s_rx_dma_buf[0])));
+        }
+    }
+
+    int8_t ret = BSP_UART_ReceiveToIdle(BSP_UART_PC,
+                                        s_rx_dma_buf[idx],
+                                        sizeof(s_rx_dma_buf[idx]),
+                                        true);
     if (ret == BSP_OK) {
         s_rx_active = true;
         return true;
     }
 
+    if (comm == NULL) {
+        s_rx_active = false;
+        return false;
+    }
+
     UART_HandleTypeDef *huart = BSP_UART_GetHandle(BSP_UART_PC);
     if (huart != NULL) {
         (void)HAL_UART_AbortReceive(huart);
-        ret = BSP_UART_ReceiveToIdle(BSP_UART_PC, s_rx_buf, sizeof(s_rx_buf), true);
+        ret = BSP_UART_ReceiveToIdle(BSP_UART_PC,
+                                     s_rx_dma_buf[idx],
+                                     sizeof(s_rx_dma_buf[idx]),
+                                     true);
     }
     s_rx_active = (ret == BSP_OK);
     return s_rx_active;
+}
+
+static uint16_t PcComm_PopRxChunk(uint8_t *dst, uint16_t dst_size) {
+    if (dst == NULL || dst_size == 0u) {
+        return 0;
+    }
+
+    uint16_t len = 0;
+    uint8_t idx = 0;
+    uint32_t primask = __get_PRIMASK();
+    __disable_irq();
+    idx = s_rx_dma_read_idx;
+    len = s_rx_dma_len[idx];
+    if (len > 0u) {
+        if (len > dst_size) {
+            len = dst_size;
+        }
+        memcpy(dst, s_rx_dma_buf[idx], len);
+        s_rx_dma_len[idx] = 0u;
+        s_rx_dma_read_idx = (uint8_t)((idx + 1u) %
+                                      (sizeof(s_rx_dma_buf) / sizeof(s_rx_dma_buf[0])));
+    }
+    if (primask == 0u) {
+        __enable_irq();
+    }
+    return len;
 }
 
 static bool PcComm_WaitRecvCplt(uint32_t timeout_ms) {
@@ -515,25 +593,12 @@ void PC_Comm_Process(PC_Comm_t *comm, uint32_t now_ms) {
     comm->online = PC_Protocol_IsHeartbeatValid(&comm->protocol);
     PC_Comm_DebugUpdate(comm);
 
-    /* Wait for RX complete */
-    if (!PcComm_WaitRecvCplt(0u)) {
-        if (!s_rx_active && !PcComm_StartRecv(comm)) {
-            g_pc_comm_debug.rx_restart_fail_count++;
-        }
-        return;
-    }
-
-    uint16_t rx_len = s_rx_len;
-    if (rx_len > sizeof(s_rx_parse_buf)) {
-        rx_len = sizeof(s_rx_parse_buf);
-    }
-    if (rx_len > 0) {
-        memcpy(s_rx_parse_buf, s_rx_buf, rx_len);
-    }
-    if (!PcComm_StartRecv(comm)) {
+    (void)PcComm_WaitRecvCplt(0u);
+    if (!s_rx_active && !PcComm_StartRecv(comm)) {
         g_pc_comm_debug.rx_restart_fail_count++;
     }
 
+    uint16_t rx_len = PcComm_PopRxChunk(s_rx_parse_buf, sizeof(s_rx_parse_buf));
     if (rx_len == 0) {
         PC_Comm_DebugUpdate(comm);
         return;
@@ -590,6 +655,25 @@ void PC_Comm_Process(PC_Comm_t *comm, uint32_t now_ms) {
                                    frame_size, parse_result);
         if (parse_result >= 0) {
             comm->recv_count++;
+            switch (s_rx_stream_buf[offset + 3u]) {
+                case PC_CMD_HEARTBEAT:
+                    g_pc_comm_debug.rx_heartbeat_count++;
+                    break;
+                case PC_CMD_CHASSIS:
+                    g_pc_comm_debug.rx_chassis_count++;
+                    break;
+                case PC_CMD_POLE:
+                    g_pc_comm_debug.rx_pole_count++;
+                    break;
+                case PC_CMD_STEP:
+                    g_pc_comm_debug.rx_step_count++;
+                    break;
+                case PC_CMD_IMU:
+                    g_pc_comm_debug.rx_imu_count++;
+                    break;
+                default:
+                    break;
+            }
             comm->last_recv_time = now_ms;
             comm->online = true;
             offset = (uint16_t)(offset + frame_size);
@@ -618,15 +702,15 @@ static PC_AutoStepParams_t s_auto_step_params;
 
 static auto_ctrl_template_e PcStep_MapTemplate(PC_StepTemplate_t pc_template) {
     switch (pc_template) {
-        case PC_STEP_TEMPLATE_FLAT_MOVE:      return AUTO_CTRL_TEMPLATE_FLAT_MOVE;
-        case PC_STEP_TEMPLATE_ASCEND_200:     return AUTO_CTRL_TEMPLATE_ASCEND_200;
-        case PC_STEP_TEMPLATE_DESCEND_200:    return AUTO_CTRL_TEMPLATE_DESCEND_200;
-        case PC_STEP_TEMPLATE_DESCEND_200_ALT: return AUTO_CTRL_TEMPLATE_DESCEND_200_ALT;
-        case PC_STEP_TEMPLATE_ASCEND_400_STD: return AUTO_CTRL_TEMPLATE_ASCEND_400_STD;
-        case PC_STEP_TEMPLATE_ASCEND_400_ALT: return AUTO_CTRL_TEMPLATE_ASCEND_400_ALT;
-        case PC_STEP_TEMPLATE_DESCEND_400_STD: return AUTO_CTRL_TEMPLATE_DESCEND_400_STD;
-        case PC_STEP_TEMPLATE_DESCEND_400_ALT: return AUTO_CTRL_TEMPLATE_DESCEND_400_ALT;
-        default:                              return AUTO_CTRL_TEMPLATE_NONE;
+        case PC_STEP_TEMPLATE_ASCEND_200_HEAD:     return AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD;
+        case PC_STEP_TEMPLATE_ASCEND_400_HEAD:     return AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD;
+        case PC_STEP_TEMPLATE_DESCEND_200_HEAD:     return AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD;
+        case PC_STEP_TEMPLATE_DESCEND_400_HEAD:     return AUTO_CTRL_TEMPLATE_DESCEND_400_HEAD;
+        case PC_STEP_TEMPLATE_ASCEND_200_TAIL:     return AUTO_CTRL_TEMPLATE_ASCEND_200_TAIL;
+        case PC_STEP_TEMPLATE_ASCEND_400_TAIL:     return AUTO_CTRL_TEMPLATE_ASCEND_400_TAIL;
+        case PC_STEP_TEMPLATE_DESCEND_200_TAIL:     return AUTO_CTRL_TEMPLATE_DESCEND_200_TAIL;
+        case PC_STEP_TEMPLATE_DESCEND_400_TAIL:    return AUTO_CTRL_TEMPLATE_DESCEND_400_TAIL;
+        default:                                   return AUTO_CTRL_TEMPLATE_NONE;
     }
 }
 

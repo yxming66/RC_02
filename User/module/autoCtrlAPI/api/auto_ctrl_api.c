@@ -32,8 +32,8 @@
 
 /* 判断模板是否属于 200 跨越类（上/下都按跨越逻辑处理）。 */
 static bool AutoCtrl_IsCross200Template(auto_ctrl_template_e template_id) {
-  return template_id == AUTO_CTRL_TEMPLATE_ASCEND_200 ||
-         template_id == AUTO_CTRL_TEMPLATE_DESCEND_200;
+  return template_id == AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD ||
+         template_id == AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD;
 }
 
 /* SICK 距离值有效性检查。 */
@@ -257,29 +257,8 @@ void AutoCtrl_SetFeedback(auto_ctrl_t *ctrl,
 }
 
 /*
- * 根据 travel_dir 将基础模板映射到对应变体。
- * 当 travel_dir = TAIL_FORWARD 时，ASCEND_200/DESCEND_200 自动映射到 _TAIL 版本。
- */
-static auto_ctrl_template_e AutoCtrl_MapTemplateByTravelDir(
-    auto_ctrl_template_e template_id,
-    auto_ctrl_travel_dir_e travel_dir) {
-  if (travel_dir == AUTO_CTRL_TRAVEL_DIR_TAIL_FORWARD) {
-    switch (template_id) {
-      case AUTO_CTRL_TEMPLATE_ASCEND_200:
-        return AUTO_CTRL_TEMPLATE_ASCEND_200_TAIL;
-      case AUTO_CTRL_TEMPLATE_DESCEND_200:
-        return AUTO_CTRL_TEMPLATE_DESCEND_200_TAIL;
-      default:
-        break;
-    }
-  }
-  return template_id;
-}
-
-/*
  * 直接启动模板任务。
  * 时序位置：由上层在”空闲或结束态”发起，成功后立即进入 PREALIGN。
- * 注意：travel_dir 会影响模板选择（TAIL_FORWARD 时 200mm 台阶自动使用 _TAIL 变体）。
  */
 bool AutoCtrl_StartTemplate(auto_ctrl_t *ctrl,
                             auto_ctrl_template_e template_id,
@@ -288,13 +267,11 @@ bool AutoCtrl_StartTemplate(auto_ctrl_t *ctrl,
                             float yaw_tolerance_rad,
                             auto_ctrl_sensor_mode_e sensor_mode,
                             uint32_t now_ms) {
+  (void)travel_dir; /* travel_dir 已内嵌到 template_id 中，不再需要映射。 */
   if (ctrl == 0) return false;
 
-  /* 根据 travel_dir 映射模板 */
-  template_id = AutoCtrl_MapTemplateByTravelDir(template_id, travel_dir);
-
   if (template_id <= AUTO_CTRL_TEMPLATE_NONE ||
-      template_id > AUTO_CTRL_TEMPLATE_DESCEND_400_STD) {
+      template_id > AUTO_CTRL_TEMPLATE_DESCEND_400_TAIL) {
     AutoCtrl_Finish(ctrl, AUTO_CTRL_RESULT_FAIL, AUTO_CTRL_FAULT_INVALID_TEMPLATE,
                     AUTO_CTRL_STATE_FAIL);
     return false;
@@ -390,10 +367,8 @@ void AutoCtrl_Update(auto_ctrl_t *ctrl, uint32_t now_ms) {
       ctrl->yaw_error_rad = blended_yaw_error_rad;
 
       if (AutoCtrl_IsCross200Template(ctrl->template_id) && robot_param != 0) {
-        const float move_sign =
-            (ctrl->template_id == AUTO_CTRL_TEMPLATE_DESCEND_200) ? -1.0f : 1.0f;
         AutoCtrlPrimitive_ApplyPrealignWithForward(
-            ctrl, move_sign * robot_param->auto_ctrl_param.climb_forward_speed);
+            ctrl, robot_param->auto_ctrl_param.climb_forward_speed);
       } else {
         AutoCtrlPrimitive_ApplyPrealign(ctrl);
       }

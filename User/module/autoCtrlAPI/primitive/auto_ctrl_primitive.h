@@ -54,6 +54,12 @@ void AutoCtrlPrimitive_CommandPoleTargetWithSpeed(auto_ctrl_t *ctrl,
                                                   float front_speed,
                                                   float rear_speed);
 
+/* 单独控制前撑杆[0][1]或后撑杆[2][3]，不改变另一组状态。group: 0=前, 1=后 */
+void AutoCtrlPrimitive_CommandPoleGroupWithSpeed(auto_ctrl_t *ctrl,
+                                                  uint8_t group,
+                                                  float target,
+                                                  float speed);
+
 #ifdef __cplusplus
 }
 #endif

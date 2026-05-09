@@ -102,3 +102,20 @@ void AutoCtrlPrimitive_CommandPoleTargetWithSpeed(auto_ctrl_t *ctrl,
   ctrl->pole_cmd.auto_lift_speed[0] = front_speed;
   ctrl->pole_cmd.auto_lift_speed[1] = rear_speed;
 }
+
+/* 单独控制前后撑杆中的一组。group: 0=前撑杆[0][1], 1=后撑杆[2][3] */
+void AutoCtrlPrimitive_CommandPoleGroupWithSpeed(auto_ctrl_t *ctrl,
+                                                  uint8_t group,
+                                                  float target,
+                                                  float speed) {
+  ctrl->pole_cmd.mode = POLE_MODE_ACTIVE;
+  if (group == 0) {
+    ctrl->pole_cmd.auto_target_enable[0] = true;
+    ctrl->pole_cmd.auto_target_lift[0] = target;
+    ctrl->pole_cmd.auto_lift_speed[0] = speed;
+  } else {
+    ctrl->pole_cmd.auto_target_enable[1] = true;
+    ctrl->pole_cmd.auto_target_lift[1] = target;
+    ctrl->pole_cmd.auto_lift_speed[1] = speed;
+  }
+}

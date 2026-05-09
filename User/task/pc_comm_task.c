@@ -11,6 +11,7 @@
 #include "main.h"
 
 #define PC_COMM_TX_PERIOD_MS (20u)  /* 50Hz */
+#define PC_COMM_LOOP_PERIOD_MS (1u)
 #define PC_COMM_TX_DMA_TIMEOUT_MS (100u)
 
 volatile PC_CommDebug_t g_pc_comm_debug;
@@ -261,14 +262,14 @@ void Task_pc_comm(void *argument) {
 
         uint32_t now = osKernelGetTickCount();
 
+        /* Process receive and protocol */
+        PC_Comm_Process(comm, now); 
+
         /* Periodic TX */
         if ((now - last_tx_tick) >= PC_COMM_TX_PERIOD_MS) {
             (void)PcComm_TransmitFeedback(comm);
             last_tx_tick = now;
         }
-
-        /* Process receive and protocol */
-        PC_Comm_Process(comm, now); 
 
         /* 处理PC自动上台阶命令 */
         if (auto_ctrl_inited && PC_Protocol_IsPCControlMode(&comm->protocol)) {
@@ -295,6 +296,6 @@ void Task_pc_comm(void *argument) {
         }
         PC_Comm_DebugUpdate(comm);
 
-        osDelay(PC_COMM_TX_PERIOD_MS);
+        osDelay(PC_COMM_LOOP_PERIOD_MS);
     }
 }

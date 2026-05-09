@@ -140,6 +140,7 @@ typedef struct {
         float descend_200_tail_climb_forward_speed;     /* 尾部下台阶跨越时前进速度 (m/s) */
         uint32_t descend_200_tail_pole_extend_settle_ms; /* 尾部下台阶撑杆伸出稳定时间 (ms) */
         uint32_t descend_200_tail_tail_rear_photo_timeout_ms; /* 尾部下台阶尾向后光电超时 (ms) */
+        uint32_t descend_200_tail_tail_front_photo_timeout_ms; /* 尾部下台阶尾向前光电超时 (ms) */
         float descend_200_tail_climb_rear_retract_speed;     /* 尾部下台阶后杆回收速度 (m/s) */
         uint32_t descend_200_tail_climb_rear_retract_timeout_ms; /* 尾部下台阶后杆回收超时 (ms) */
         uint32_t descend_200_tail_rear_retract_move_ms;       /* 尾部下台阶后杆回收后移动时长 (ms) */

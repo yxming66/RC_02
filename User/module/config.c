@@ -95,8 +95,8 @@ Config_RobotParam_t robot_config = {
             },
         },
             .preset = {
-              .step_200_all_extend = {12.7912035f, 12.7912035f},      // 200mm台阶，右拨杆UP：前两杆/后两杆
-              .step_200_front_retract = {0.0f, 12.7912035f},   // 200mm台阶，右拨杆MID：前两杆收，后两杆位置
+              .step_200_all_extend = {13.3f, 13.3f},      // 200mm台阶，右拨杆UP：前两杆/后两杆
+              .step_200_front_retract = {0.0f, 13.3f},   // 200mm台阶，右拨杆MID：前两杆收，后两杆位置
               .step_200_all_retract = {0.0f, 0.0f},     // 200mm台阶，右拨杆DOWN：前两杆/后两杆
               .step_400_all_extend = {26.0381184f, 26.0315285f},      // 400mm台阶，右拨杆UP：前两杆/后两杆
               .step_400_front_retract = {0.0f, 26.0381184f},   // 400mm台阶，右拨杆MID：前两杆收，后两杆位置
@@ -173,7 +173,7 @@ Config_RobotParam_t robot_config = {
       .climb_forward_speed = 1.0f,      // 前段并行动作时的基础前进速度 (m/s)
       .climb_forward_kick_speed = 0.50f, // 起步短促前冲速度，用于增加跨越动量 (m/s)
       .climb_forward_kick_ms = 80u,      // 起步短促前冲保持时间 (ms) 
-      .pole_extend_settle_ms = 900u,     // 四杆伸出后等待机构稳定的时间 (ms)
+      .pole_extend_settle_ms = 100u,     // 四杆伸出后等待机构稳定的时间 (ms)
       .pole_all_extend_lift_speed = 50.0f, // 四杆全伸阶段速度 (rad/s)
       .pole_front_retract_lift_speed = 18.0f, // 前杆回收阶段速度 (rad/s)
       .pole_front_extend_lift_speed = 20.0f, // 前杆放下/重新伸出阶段速度 (rad/s)
@@ -189,7 +189,7 @@ Config_RobotParam_t robot_config = {
       /* 200台阶/跨越中后段参数 */
       .climb_mid_forward_speed = 0.5f,   // 前杆收回后，中段继续前进速度 (m/s)
       .climb_mid_forward_ms = 1500u,       // 前杆收回后，中段继续纯前进的保持时间 (ms)
-      .climb_rear_retract_speed = 0.20f, // 后杆回收阶段的基础前进速度 (m/s)
+      .climb_rear_retract_speed = 0.80f, // 后杆回收阶段的基础前进速度 (m/s)
       .climb_rear_retract_vy = 0.15f,    // 后杆回收阶段附加横移速度vy，便于边收杆边修正姿态 (m/s)
       .head_rear_photo_timeout_ms = 10000u,    // 头向后光电等待超时时间 (ms)
       .tail_rear_photo_timeout_ms = 10000u,    // 尾向后光电等待超时时间 (ms)

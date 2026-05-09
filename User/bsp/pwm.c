@@ -3,6 +3,7 @@
 #include "bsp/pwm.h"
 #include "bsp.h"
 #include "stm32h7xx_hal_rcc.h"
+#include <math.h>
 
 /* USER INCLUDE BEGIN */
 
@@ -89,10 +90,23 @@ int8_t BSP_PWM_SetFreq(BSP_PWM_Channel_t ch, float freq) {
 
   uint32_t timer_clock = BSP_PWM_GetTimerClock(PWM_Map[ch].tim);
   uint32_t prescaler = PWM_Map[ch].tim->Init.Prescaler;
-  uint32_t period = (timer_clock / (prescaler + 1)) / freq - 1;
+  uint32_t period = (uint32_t)(((float)timer_clock / (float)(prescaler + 1U)) / freq) - 1U;
   
   if (period > UINT16_MAX) {
-    return BSP_ERR; // Frequency too low
+    uint32_t divider = (uint32_t)ceilf((float)timer_clock /
+                                       (freq * (float)(UINT16_MAX + 1U)));
+    if (divider == 0U || divider > (UINT16_MAX + 1U)) {
+      return BSP_ERR; // Frequency too low
+    }
+
+    prescaler = divider - 1U;
+    period = (uint32_t)(((float)timer_clock / (float)(prescaler + 1U)) / freq) - 1U;
+    if (period > UINT16_MAX) {
+      return BSP_ERR; // Frequency too low
+    }
+
+    PWM_Map[ch].tim->Init.Prescaler = prescaler;
+    __HAL_TIM_SET_PRESCALER(PWM_Map[ch].tim, prescaler);
   }
   __HAL_TIM_SET_AUTORELOAD(PWM_Map[ch].tim, period);
   __HAL_TIM_SET_COUNTER(PWM_Map[ch].tim, 0);

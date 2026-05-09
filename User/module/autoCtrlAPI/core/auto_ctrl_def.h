@@ -21,17 +21,15 @@ extern "C" {
 #include <stdint.h>
 
 typedef enum {
-	AUTO_CTRL_TEMPLATE_NONE = 0,         /* 未分配模板。 */
-	AUTO_CTRL_TEMPLATE_FLAT_MOVE,        /* 平地匀速直行模板。 */
-	AUTO_CTRL_TEMPLATE_ASCEND_200,       /* 上 200mm 台阶模板（头向前）。 */
-	AUTO_CTRL_TEMPLATE_DESCEND_200,      /* 下 200mm 台阶模板（头向前）。 */
-	AUTO_CTRL_TEMPLATE_DESCEND_200_ALT,  /* 下 200mm 台阶模板（逆流程版本）。 */
-	AUTO_CTRL_TEMPLATE_ASCEND_400_STD,   /* 标准上 400mm 台阶模板。 */
-	AUTO_CTRL_TEMPLATE_ASCEND_400_ALT,  /* 上 400mm 台阶模板（逆流程版本）。 */
-	AUTO_CTRL_TEMPLATE_DESCEND_400_STD,  /* 标准下 400mm 台阶模板。 */
-	AUTO_CTRL_TEMPLATE_DESCEND_400_ALT,  /* 下 400mm 台阶模板（逆流程版本）。 */
-	AUTO_CTRL_TEMPLATE_ASCEND_200_TAIL,  /* 上 200mm 台阶模板（尾向前）。 */
-	AUTO_CTRL_TEMPLATE_DESCEND_200_TAIL, /* 下 200mm 台阶模板（尾向前）。 */
+	AUTO_CTRL_TEMPLATE_NONE = 0,              /* 未分配模板。 */
+	AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD,       /* 头向上 200mm 台阶。 */
+	AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD,       /* 头向上 400mm 台阶。 */
+	AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD,      /* 头向下 200mm 台阶。 */
+	AUTO_CTRL_TEMPLATE_DESCEND_400_HEAD,      /* 头向下 400mm 台阶。 */
+	AUTO_CTRL_TEMPLATE_ASCEND_200_TAIL,        /* 尾向上 200mm 台阶。 */
+	AUTO_CTRL_TEMPLATE_ASCEND_400_TAIL,        /* 尾向上 400mm 台阶。 */
+	AUTO_CTRL_TEMPLATE_DESCEND_200_TAIL,       /* 尾向下 200mm 台阶。 */
+	AUTO_CTRL_TEMPLATE_DESCEND_400_TAIL,       /* 尾向下 400mm 台阶。 */
 } auto_ctrl_template_e;
 
 typedef enum {

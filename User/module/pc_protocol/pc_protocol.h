@@ -55,7 +55,7 @@ typedef struct {
 /* Pole命令 */
 typedef struct {
     uint8_t mode;
-    float lift[2];
+    float lift[2];  /* rad, target lift relative to calibrated lower limit */
 } PC_PoleCMD_t;
 
 /* Arm命令 */
@@ -67,15 +67,15 @@ typedef struct {
 
 /* 自动上台阶命令 - 对应 auto_ctrl_template_e */
 typedef enum {
-    PC_STEP_TEMPLATE_NONE = 0,           /* 未分配模板 */
-    PC_STEP_TEMPLATE_FLAT_MOVE = 1,       /* 平地匀速直行 */
-    PC_STEP_TEMPLATE_ASCEND_200 = 2,      /* 上 200mm 台阶 */
-    PC_STEP_TEMPLATE_DESCEND_200 = 3,    /* 下 200mm 台阶 */
-    PC_STEP_TEMPLATE_DESCEND_200_ALT = 4, /* 下 200mm 台阶(逆流程) */
-    PC_STEP_TEMPLATE_ASCEND_400_STD = 5,  /* 标准上 400mm 台阶 */
-    PC_STEP_TEMPLATE_ASCEND_400_ALT = 6,  /* 上 400mm 台阶(逆流程) */
-    PC_STEP_TEMPLATE_DESCEND_400_STD = 7, /* 标准下 400mm 台阶 */
-    PC_STEP_TEMPLATE_DESCEND_400_ALT = 8,  /* 下 400mm 台阶(逆流程) */
+    PC_STEP_TEMPLATE_NONE = 0,              /* 未分配模板 */
+    PC_STEP_TEMPLATE_ASCEND_200_HEAD = 1,   /* 头向上 200mm 台阶 */
+    PC_STEP_TEMPLATE_ASCEND_400_HEAD = 2,   /* 头向上 400mm 台阶 */
+    PC_STEP_TEMPLATE_DESCEND_200_HEAD = 3,  /* 头向下 200mm 台阶 */
+    PC_STEP_TEMPLATE_DESCEND_400_HEAD = 4,  /* 头向下 400mm 台阶 */
+    PC_STEP_TEMPLATE_ASCEND_200_TAIL = 5,   /* 尾向上 200mm 台阶 */
+    PC_STEP_TEMPLATE_ASCEND_400_TAIL = 6,  /* 尾向上 400mm 台阶 */
+    PC_STEP_TEMPLATE_DESCEND_200_TAIL = 7,  /* 尾向下 200mm 台阶 */
+    PC_STEP_TEMPLATE_DESCEND_400_TAIL = 8, /* 尾向下 400mm 台阶 */
 } PC_StepTemplate_t;
 
 /* 行进方向 - 对应 auto_ctrl_travel_dir_e */
@@ -220,10 +220,19 @@ typedef struct {
     uint32_t last_recv_time;
     uint32_t recv_count;
     uint32_t error_count;
+    uint32_t rx_heartbeat_count;
+    uint32_t rx_chassis_count;
+    uint32_t rx_pole_count;
+    uint32_t rx_step_count;
+    uint32_t rx_imu_count;
     uint32_t init_fail_count;
     int8_t last_init_error;
     uint32_t rx_restart_fail_count;
     uint32_t rx_header_skip_count;
+    uint32_t rx_irq_count;
+    uint32_t rx_irq_byte_count;
+    uint32_t rx_queue_overflow_count;
+    uint32_t rx_dma_start_fail_count;
 
     uint32_t rx_batch_count;
     uint16_t rx_batch_len;
