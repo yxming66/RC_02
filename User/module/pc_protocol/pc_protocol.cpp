@@ -149,12 +149,13 @@ static uint16_t PC_Protocol_BuildStatusFeedback(const PC_StatusFeedback_t *fb, u
     PC_FrameHeader_t *header = (PC_FrameHeader_t *)tx_buf;
     header->header[0] = frame_header_[0];
     header->header[1] = frame_header_[1];
-    header->length = 9;  /* online + recv_count + cpu_temp */
+    header->length = 10;  /* online + recv_count + cpu_temp + command_source */
     header->cmd = PC_FEEDBACK_STATUS;
 
     tx_buf[4] = fb->online;
     memcpy(&tx_buf[5], &fb->recv_count, sizeof(uint32_t));
     memcpy(&tx_buf[9], &fb->cpu_temp, sizeof(float));
+    tx_buf[13] = (uint8_t)fb->command_source;
 
     uint16_t crc = CRC16_Calc(tx_buf, PC_PROTOCOL_HEADER_SIZE + PC_PROTOCOL_LENGTH_SIZE + PC_PROTOCOL_CMD_SIZE + header->length, CRC16_INIT);
     tx_buf[4 + header->length] = (uint8_t)(crc & 0xFFu);

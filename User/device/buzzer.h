@@ -78,6 +78,7 @@ typedef enum {
   MUSIC_DREAM_WEDDING,             ///< 《梦中的婚礼》单线蜂鸣器改编
   MUSIC_FLOWER_DANCE,              ///< DJ Okawari《Flower Dance》
   MUSIC_TORI_NO_UTA,               ///< Lia《鸟之诗》
+  MUSIC_GU_SHI_XI_NI,              ///< JJ Lin - Gu Shi Xi Ni
   MUSIC_YI_BU_ZHI_YAO,             ///< Por Una Cabeza / Yi Bu Zhi Yao
   MUSIC_MOONLIGHT_SONATA,          ///< 贝多芬《月光奏鸣曲》第一乐章
   MUSIC_MOONLIGHT_SONATA_2ND,      ///< 贝多芬《月光奏鸣曲》第二乐章

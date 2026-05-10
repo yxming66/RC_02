@@ -15,6 +15,7 @@
 #define PC_COMM_TX_DMA_TIMEOUT_MS (100u)
 
 volatile PC_CommDebug_t g_pc_comm_debug;
+extern volatile PC_CommandSource_t g_pc_command_source;
 
 static uint8_t s_tx_buf[256];   
 static volatile bool s_tx_dma_busy = false;
@@ -72,6 +73,8 @@ void PC_Comm_DebugUpdate(const PC_Comm_t *comm) {
     g_pc_comm_debug.heartbeat_valid =
         PC_Protocol_IsHeartbeatValid(&comm->protocol) ? 1u : 0u;
     g_pc_comm_debug.control_mode = (uint8_t)comm->protocol.control_mode;
+    g_pc_comm_debug.command_source =
+        (uint8_t)comm->protocol.feedback.status.command_source;
     g_pc_comm_debug.last_heartbeat_tick = comm->protocol.last_heartbeat_tick;
     g_pc_comm_debug.last_recv_time = comm->last_recv_time;
     g_pc_comm_debug.recv_count = comm->recv_count;
@@ -189,6 +192,7 @@ static void PcComm_UpdateStatusFeedback(PC_Comm_t *comm) {
     status.online = comm->online ? 1u : 0u;
     status.recv_count = comm->recv_count;
     status.cpu_temp = task_runtime.status.cpu_temp;
+    status.command_source = g_pc_command_source;
     PC_Protocol_SetStatusFeedback(&comm->protocol, &status);
 }
 

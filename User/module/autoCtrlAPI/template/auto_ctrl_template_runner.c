@@ -53,7 +53,7 @@ static void AutoCtrlTemplate_SelectPoleTargets(
     targets->all_extend = robot_param->pole_param.preset.step_400_all_extend;
     targets->front_retract = robot_param->pole_param.preset.step_400_front_retract;
     targets->all_retract = robot_param->pole_param.preset.step_400_all_retract;
-    targets->small = robot_param->pole_param.preset.step_400_all_retract;
+    targets->small = robot_param->pole_param.preset.step_200_small;
     return;
   }
 
@@ -149,7 +149,8 @@ static bool AutoCtrlTemplate_RearFallingEdge(const auto_ctrl_t *ctrl,
 static bool AutoCtrlTemplate_DescendFirstPhotoEdge(const auto_ctrl_t *ctrl,
                                                    bool tail_side,
                                                    bool use_400mm) {
-  if (tail_side && !use_400mm) {
+  (void)use_400mm;
+  if (tail_side) {
     return ctrl->template_ctx.pa2_photo3_falling_edge_latched;
   }
   return AutoCtrlTemplate_RearFallingEdge(ctrl, tail_side);
@@ -158,7 +159,8 @@ static bool AutoCtrlTemplate_DescendFirstPhotoEdge(const auto_ctrl_t *ctrl,
 static bool AutoCtrlTemplate_DescendSecondPhotoEdge(const auto_ctrl_t *ctrl,
                                                     bool tail_side,
                                                     bool use_400mm) {
-  if (tail_side && !use_400mm) {
+  (void)use_400mm;
+  if (tail_side) {
     return ctrl->template_ctx.pe13_photo1_falling_edge_latched;
   }
   return AutoCtrlTemplate_FrontFallingEdge(ctrl, tail_side);
@@ -348,9 +350,7 @@ static bool AutoCtrlTemplate_RunDescend(auto_ctrl_t *ctrl, uint32_t now_ms,
 
     case 2:
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      AutoCtrlPrimitive_CommandFlatMove(
-          ctrl, dir * (tail_side ? param->rear_retract_move_speed
-                                 : param->front_retract_move_speed));
+      AutoCtrlPrimitive_CommandFlatMove(ctrl, 0.0f);
       if (tail_side) {
         AutoCtrlTemplate_CommandPole(ctrl, pole.all_retract[0],
                                      pole.all_extend[1],
@@ -393,15 +393,7 @@ static bool AutoCtrlTemplate_RunDescend(auto_ctrl_t *ctrl, uint32_t now_ms,
 
     case 4:
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      const float full_extend_move_speed =
-          dir * (tail_side ? param->front_retract_move_speed
-                           : param->rear_retract_move_speed);
-      if (tail_side && !use_400mm) {
-        AutoCtrlPrimitive_ApplyPrealignWithMove(ctrl, full_extend_move_speed,
-                                                0.0f);
-      } else {
-        AutoCtrlPrimitive_CommandFlatMove(ctrl, full_extend_move_speed);
-      }
+      AutoCtrlPrimitive_CommandFlatMove(ctrl, 0.0f);
       AutoCtrlTemplate_CommandPole(ctrl, pole.all_extend[0],
                                    pole.all_extend[1],
                                    param->pole_front_extend_speed,

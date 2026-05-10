@@ -19,6 +19,12 @@ typedef enum {
     PC_MODE_PC = 1,
 } PC_ControlMode_t;
 
+/* 当前实际命令来源 */
+typedef enum {
+    PC_COMMAND_SOURCE_RC = 0,  /* 遥控/本地遥操作 */
+    PC_COMMAND_SOURCE_PC = 1,  /* 上位机命令 */
+} PC_CommandSource_t;
+
 /* 通信命令 */
 typedef enum {
     PC_CMD_HEARTBEAT = 0x01,
@@ -167,6 +173,7 @@ typedef struct {
     uint8_t online;
     uint32_t recv_count;
     float cpu_temp;
+    PC_CommandSource_t command_source;
 } PC_StatusFeedback_t;
 
 /* 命令数据 */
@@ -216,6 +223,7 @@ typedef struct {
     uint8_t online;
     uint8_t heartbeat_valid;
     uint8_t control_mode;
+    uint8_t command_source;
     uint32_t last_heartbeat_tick;
     uint32_t last_recv_time;
     uint32_t recv_count;

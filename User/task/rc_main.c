@@ -59,6 +59,7 @@ volatile ArmTaskDebugPoseControl_t g_arm_task_debug_pose_control = {0};
 /* PC上位机控制相关 */
 #define RC_PC_ENABLE_SWITCH (DR16_SW_UP)  /* sw_l DOWN 且 sw_r UP 时允许PC接管 */
 extern PC_Protocol_t* g_pc_protocol_ptr;
+volatile PC_CommandSource_t g_pc_command_source = PC_COMMAND_SOURCE_RC;
 
 static bool Rc_ArmPoseIsFinite(const ArmPose_t* pose) {
   return pose != NULL && isfinite(pose->x) && isfinite(pose->y) &&
@@ -271,9 +272,9 @@ static void Rc_TryStartAutoCtrlBySwitch(uint32_t now_ms) {
   float target_yaw_rad = 0.0f;
 
   if (dr16.data.sw_r == DR16_SW_UP) {
-    template_id = AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD;
+    template_id = AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD;
   } else if (dr16.data.sw_r == DR16_SW_DOWN) {
-    template_id = AUTO_CTRL_TEMPLATE_DESCEND_200_TAIL;
+    template_id = AUTO_CTRL_TEMPLATE_DESCEND_400_TAIL;
     travel_dir = AUTO_CTRL_TRAVEL_DIR_TAIL_FORWARD;
   }
 
@@ -323,6 +324,7 @@ void Task_rc_main(void *argument) {
     }
 
     now_ms = osKernelGetTickCount();
+    g_pc_command_source = PC_COMMAND_SOURCE_RC;
 
     Rc_TryStartAutoCtrlBySwitch(now_ms);
 
@@ -403,6 +405,7 @@ void Task_rc_main(void *argument) {
 
       /* sw_l DOWN 且 sw_r UP 时才允许使用上位机命令。 */
       if (Rc_ShouldUsePcCommand()) {
+        g_pc_command_source = PC_COMMAND_SOURCE_PC;
         /* 上位机控制模式 */
         const PC_ChassisCMD_t* pc_chassis_cmd = PC_Protocol_GetChassisCMD(g_pc_protocol_ptr);
         const PC_PoleCMD_t* pc_pole_cmd = PC_Protocol_GetPoleCMD(g_pc_protocol_ptr);
