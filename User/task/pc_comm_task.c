@@ -276,7 +276,9 @@ void Task_pc_comm(void *argument) {
         }
 
         /* 处理PC自动上台阶命令 */
-        if (auto_ctrl_inited && PC_Protocol_IsPCControlMode(&comm->protocol)) {
+        if (auto_ctrl_inited &&
+            g_pc_command_source == PC_COMMAND_SOURCE_PC &&
+            PC_Protocol_IsPCControlMode(&comm->protocol)) {
             const PC_AutoStepParams_t *step_params = PC_Protocol_GetAutoStepParams(&comm->protocol);
             if (step_params != NULL && !AutoCtrl_IsBusy(&auto_ctrl)) {
                 AutoCtrl_SetYawSource(&auto_ctrl, AUTO_CTRL_YAW_SOURCE_PC);

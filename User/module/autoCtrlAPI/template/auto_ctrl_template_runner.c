@@ -166,6 +166,11 @@ static bool AutoCtrlTemplate_DescendSecondPhotoEdge(const auto_ctrl_t *ctrl,
   return AutoCtrlTemplate_FrontFallingEdge(ctrl, tail_side);
 }
 
+static bool AutoCtrlTemplate_ShouldSlowTailDescend400Approach(
+    const auto_ctrl_t *ctrl, bool tail_side, bool use_400mm) {
+  return tail_side && use_400mm && ctrl->feedback.pe13_photo1_triggered;
+}
+
 static bool AutoCtrlTemplate_RunAscend(auto_ctrl_t *ctrl, uint32_t now_ms,
                                        const Config_RobotParam_t *robot_param,
                                        const AutoCtrl_TemplateParam_t *param,
@@ -370,7 +375,16 @@ static bool AutoCtrlTemplate_RunDescend(auto_ctrl_t *ctrl, uint32_t now_ms,
 
     case 3:
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      AutoCtrlPrimitive_CommandFlatMove(ctrl, dir * param->mid_move_speed);
+      if (AutoCtrlTemplate_DescendSecondPhotoEdge(ctrl, tail_side, use_400mm)) {
+        AutoCtrlTemplate_NextStep(ctrl);
+        return false;
+      }
+      const float second_photo_approach_speed =
+          AutoCtrlTemplate_ShouldSlowTailDescend400Approach(
+              ctrl, tail_side, use_400mm)
+              ? param->front_retract_move_speed
+              : param->mid_move_speed;
+      AutoCtrlPrimitive_CommandFlatMove(ctrl, dir * second_photo_approach_speed);
       if (tail_side) {
         AutoCtrlTemplate_CommandPole(ctrl, pole.all_retract[0],
                                      pole.all_extend[1],
@@ -382,11 +396,9 @@ static bool AutoCtrlTemplate_RunDescend(auto_ctrl_t *ctrl, uint32_t now_ms,
                                      param->pole_front_extend_speed,
                                      param->pole_rear_retract_speed);
       }
-      if (AutoCtrlTemplate_DescendSecondPhotoEdge(ctrl, tail_side, use_400mm)) {
-        AutoCtrlTemplate_NextStep(ctrl);
-      } else if (param->front_photo_timeout_ms > 0u &&
-                 AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
-                     param->front_photo_timeout_ms) {
+      if (param->front_photo_timeout_ms > 0u &&
+          AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
+              param->front_photo_timeout_ms) {
         ctrl->fault = AUTO_CTRL_FAULT_SENSOR_INVALID;
       }
       return false;

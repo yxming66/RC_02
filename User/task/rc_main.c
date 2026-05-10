@@ -399,13 +399,23 @@ void Task_rc_main(void *argument) {
       Rc_SetArmDisabled();
       Rc_SetRodRelax();
     } else if (dr16.data.sw_l == DR16_SW_DOWN) {
-      if (auto_ctrl_inited && AutoCtrl_IsBusy(&auto_ctrl)) {
+      const bool use_pc_command = Rc_ShouldUsePcCommand();
+
+      if (!use_pc_command && auto_ctrl_inited && AutoCtrl_IsBusy(&auto_ctrl)) {
         AutoCtrl_Abort(&auto_ctrl);
       }
 
       /* sw_l DOWN 且 sw_r UP 时才允许使用上位机命令。 */
-      if (Rc_ShouldUsePcCommand()) {
+      if (use_pc_command) {
         g_pc_command_source = PC_COMMAND_SOURCE_PC;
+        if (auto_ctrl_inited && AutoCtrl_IsBusy(&auto_ctrl)) {
+#if AUTO_CTRL_OUTPUT_ENABLE
+          chassis_cmd = auto_ctrl.chassis_cmd;
+          pole_cmd = auto_ctrl.pole_cmd;
+#else
+          Rc_SetAutoDryRunCommands();
+#endif
+        } else {
         /* 上位机控制模式 */
         const PC_ChassisCMD_t* pc_chassis_cmd = PC_Protocol_GetChassisCMD(g_pc_protocol_ptr);
         const PC_PoleCMD_t* pc_pole_cmd = PC_Protocol_GetPoleCMD(g_pc_protocol_ptr);
@@ -431,6 +441,7 @@ void Task_rc_main(void *argument) {
           pole_cmd.auto_target_lift[1] = pc_pole_cmd->lift[1];
           pole_cmd.auto_lift_speed[0] = 0.0f;
           pole_cmd.auto_lift_speed[1] = 0.0f;
+        }
         }
       } else {
         /* 遥控器控制模式（默认机械臂） */
