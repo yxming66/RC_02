@@ -16,6 +16,14 @@ static Pole_CMD_t pole_cmd{};
 
 extern "C" {
 Chassis_IMU_t chassis_imu{};
+
+bool Task_ChassisMainPoleGroupAtTarget(uint8_t group, float threshold_rad) {
+  return Pole_IsGroupAtTarget(&pole, group, threshold_rad);
+}
+
+bool Task_ChassisMainPoleAllAtTarget(float threshold_rad) {
+  return Pole_IsAllAtTarget(&pole, threshold_rad);
+}
 }
 
 extern "C" void Task_chassis_main(void *argument) {

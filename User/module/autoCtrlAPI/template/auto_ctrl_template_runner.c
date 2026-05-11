@@ -33,10 +33,21 @@ static bool AutoCtrlTemplate_StepTimeout(auto_ctrl_t *ctrl, uint32_t now_ms,
 static void AutoCtrlTemplate_NextStep(auto_ctrl_t *ctrl) {
   ctrl->template_ctx.step_index++;
   ctrl->template_ctx.step_entered = false;
+  ctrl->template_ctx.pole_target_seen_not_ready = false;
 }
 
 static bool AutoCtrlTemplate_IsYawAligned(const auto_ctrl_t *ctrl) {
   return fabsf(ctrl->yaw_error_rad) <= ctrl->yaw_tolerance_rad;
+}
+
+static bool AutoCtrlTemplate_PoleReadyAfterNewTarget(auto_ctrl_t *ctrl,
+                                                     bool pole_ready) {
+  if (!pole_ready) {
+    ctrl->template_ctx.pole_target_seen_not_ready = true;
+    return false;
+  }
+
+  return ctrl->template_ctx.pole_target_seen_not_ready;
 }
 
 static void AutoCtrlTemplate_CommandPole(auto_ctrl_t *ctrl, float front_target,
@@ -166,11 +177,6 @@ static bool AutoCtrlTemplate_DescendSecondPhotoEdge(const auto_ctrl_t *ctrl,
   return AutoCtrlTemplate_FrontFallingEdge(ctrl, tail_side);
 }
 
-static bool AutoCtrlTemplate_ShouldSlowTailDescend400Approach(
-    const auto_ctrl_t *ctrl, bool tail_side, bool use_400mm) {
-  return tail_side && use_400mm && ctrl->feedback.pe13_photo1_triggered;
-}
-
 static bool AutoCtrlTemplate_RunAscend(auto_ctrl_t *ctrl, uint32_t now_ms,
                                        const Config_RobotParam_t *robot_param,
                                        const AutoCtrl_TemplateParam_t *param,
@@ -212,8 +218,15 @@ static bool AutoCtrlTemplate_RunAscend(auto_ctrl_t *ctrl, uint32_t now_ms,
                                    pole.all_extend[1],
                                    param->pole_all_extend_speed,
                                    param->pole_all_extend_speed);
-      if (AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
-          param->pole_extend_settle_ms) {
+      const bool all_poles_ready =
+          AutoCtrlTemplate_PoleReadyAfterNewTarget(
+              ctrl, ctrl->feedback.pole_all_at_target);
+      if ((!tail_side && use_400mm)
+              ? (AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
+                     param->pole_extend_settle_ms &&
+                 all_poles_ready)
+              : (AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
+                 param->pole_extend_settle_ms)) {
         AutoCtrlTemplate_NextStep(ctrl);
       }
       return false;
@@ -241,8 +254,11 @@ static bool AutoCtrlTemplate_RunAscend(auto_ctrl_t *ctrl, uint32_t now_ms,
                                    pole.front_retract[1],
                                    param->pole_front_retract_speed,
                                    param->pole_rear_extend_speed);
-      if (AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
-          param->front_retract_settle_ms) {
+      if ((!tail_side && use_400mm)
+              ? AutoCtrlTemplate_PoleReadyAfterNewTarget(
+                    ctrl, ctrl->feedback.pole_front_at_target)
+              : (AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
+                 param->front_retract_settle_ms)) {
         AutoCtrlTemplate_NextStep(ctrl);
       }
       if (param->front_retract_timeout_ms > 0u &&
@@ -316,19 +332,18 @@ static bool AutoCtrlTemplate_RunAscend(auto_ctrl_t *ctrl, uint32_t now_ms,
   }
 }
 
-static bool AutoCtrlTemplate_RunDescend(auto_ctrl_t *ctrl, uint32_t now_ms,
-                                        const Config_RobotParam_t *robot_param,
-                                        const AutoCtrl_TemplateParam_t *param,
-                                        bool tail_side, bool use_400mm) {
+static bool AutoCtrlTemplate_RunTailDescendOptimized(
+    auto_ctrl_t *ctrl, uint32_t now_ms,
+    const Config_RobotParam_t *robot_param,
+    const AutoCtrl_TemplateParam_t *param, bool use_400mm) {
   auto_ctrl_pole_targets_t pole;
   AutoCtrlTemplate_SelectPoleTargets(robot_param, use_400mm, &pole);
-  const float dir = tail_side ? -1.0f : 1.0f;
 
   switch (ctrl->template_ctx.step_index) {
     case 0:
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      AutoCtrlPrimitive_ApplyPrealignWithMove(
-          ctrl, dir * param->align_move_speed, 0.0f);
+      AutoCtrlPrimitive_ApplyPrealignWithMove(ctrl, -param->align_move_speed,
+                                              0.0f);
       AutoCtrlTemplate_CommandPole(ctrl, pole.small[0], pole.small[1],
                                    param->pole_front_retract_speed,
                                    param->pole_rear_retract_speed);
@@ -339,63 +354,79 @@ static bool AutoCtrlTemplate_RunDescend(auto_ctrl_t *ctrl, uint32_t now_ms,
 
     case 1:
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      AutoCtrlPrimitive_CommandFlatMove(ctrl, dir * param->mid_move_speed);
+      if (AutoCtrlTemplate_DescendFirstPhotoEdge(ctrl, true, use_400mm)) {
+        AutoCtrlTemplate_NextStep(ctrl);
+        return false;
+      }
+      AutoCtrlPrimitive_CommandFlatMove(ctrl, -param->mid_move_speed);
       AutoCtrlTemplate_CommandPole(ctrl, pole.all_retract[0],
                                    pole.all_retract[1],
                                    param->pole_front_retract_speed,
                                    param->pole_rear_retract_speed);
-      if (AutoCtrlTemplate_DescendFirstPhotoEdge(ctrl, tail_side, use_400mm)) {
+      if (AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >= param->mid_move_ms) {
         AutoCtrlTemplate_NextStep(ctrl);
-      } else if (param->rear_photo_timeout_ms > 0u &&
-                 AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
-                     param->rear_photo_timeout_ms) {
-        ctrl->fault = AUTO_CTRL_FAULT_SENSOR_INVALID;
       }
       return false;
 
     case 2:
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      AutoCtrlPrimitive_CommandFlatMove(ctrl, 0.0f);
-      if (tail_side) {
-        AutoCtrlTemplate_CommandPole(ctrl, pole.all_retract[0],
-                                     pole.all_extend[1],
-                                     param->pole_front_retract_speed,
-                                     param->pole_rear_extend_speed);
-      } else {
-        AutoCtrlTemplate_CommandPole(ctrl, pole.all_extend[0],
-                                     pole.all_retract[1],
-                                     param->pole_front_extend_speed,
-                                     param->pole_rear_retract_speed);
+      if (AutoCtrlTemplate_DescendFirstPhotoEdge(ctrl, true, use_400mm)) {
+        AutoCtrlTemplate_NextStep(ctrl);
+        return false;
       }
+      AutoCtrlPrimitive_CommandFlatMove(ctrl, -param->rear_retract_move_speed);
+      AutoCtrlTemplate_CommandPole(ctrl, pole.all_retract[0],
+                                   pole.all_retract[1],
+                                   param->pole_front_retract_speed,
+                                   param->pole_rear_retract_speed);
+      if (param->rear_photo_timeout_ms > 0u &&
+          AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
+              param->rear_photo_timeout_ms) {
+        ctrl->fault = AUTO_CTRL_FAULT_SENSOR_INVALID;
+      }
+      return false;
+
+    case 3:
+      AutoCtrlTemplate_EnterStep(ctrl, now_ms);
+      AutoCtrlPrimitive_CommandFlatMove(ctrl, 0.0f);
+      AutoCtrlTemplate_CommandPole(ctrl, pole.all_retract[0],
+                                   pole.all_extend[1],
+                                   param->pole_front_retract_speed,
+                                   param->pole_rear_extend_speed);
       if (AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
           param->pole_extend_settle_ms) {
         AutoCtrlTemplate_NextStep(ctrl);
       }
       return false;
 
-    case 3:
+    case 4:
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      if (AutoCtrlTemplate_DescendSecondPhotoEdge(ctrl, tail_side, use_400mm)) {
+      if (AutoCtrlTemplate_DescendSecondPhotoEdge(ctrl, true, use_400mm)) {
         AutoCtrlTemplate_NextStep(ctrl);
         return false;
       }
-      const float second_photo_approach_speed =
-          AutoCtrlTemplate_ShouldSlowTailDescend400Approach(
-              ctrl, tail_side, use_400mm)
-              ? param->front_retract_move_speed
-              : param->mid_move_speed;
-      AutoCtrlPrimitive_CommandFlatMove(ctrl, dir * second_photo_approach_speed);
-      if (tail_side) {
-        AutoCtrlTemplate_CommandPole(ctrl, pole.all_retract[0],
-                                     pole.all_extend[1],
-                                     param->pole_front_retract_speed,
-                                     param->pole_rear_extend_speed);
-      } else {
-        AutoCtrlTemplate_CommandPole(ctrl, pole.all_extend[0],
-                                     pole.all_retract[1],
-                                     param->pole_front_extend_speed,
-                                     param->pole_rear_retract_speed);
+      AutoCtrlPrimitive_CommandFlatMove(ctrl, -param->mid_move_speed);
+      AutoCtrlTemplate_CommandPole(ctrl, pole.all_retract[0],
+                                   pole.all_extend[1],
+                                   param->pole_front_retract_speed,
+                                   param->pole_rear_extend_speed);
+      if (AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
+          param->rear_retract_move_ms) {
+        AutoCtrlTemplate_NextStep(ctrl);
       }
+      return false;
+
+    case 5:
+      AutoCtrlTemplate_EnterStep(ctrl, now_ms);
+      if (AutoCtrlTemplate_DescendSecondPhotoEdge(ctrl, true, use_400mm)) {
+        AutoCtrlTemplate_NextStep(ctrl);
+        return false;
+      }
+      AutoCtrlPrimitive_CommandFlatMove(ctrl, -param->front_retract_move_speed);
+      AutoCtrlTemplate_CommandPole(ctrl, pole.all_retract[0],
+                                   pole.all_extend[1],
+                                   param->pole_front_retract_speed,
+                                   param->pole_rear_extend_speed);
       if (param->front_photo_timeout_ms > 0u &&
           AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
               param->front_photo_timeout_ms) {
@@ -403,7 +434,7 @@ static bool AutoCtrlTemplate_RunDescend(auto_ctrl_t *ctrl, uint32_t now_ms,
       }
       return false;
 
-    case 4:
+    case 6:
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
       AutoCtrlPrimitive_CommandFlatMove(ctrl, 0.0f);
       AutoCtrlTemplate_CommandPole(ctrl, pole.all_extend[0],
@@ -416,31 +447,179 @@ static bool AutoCtrlTemplate_RunDescend(auto_ctrl_t *ctrl, uint32_t now_ms,
       }
       return false;
 
-    case 5:
+    case 7:
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      AutoCtrlPrimitive_CommandFlatMove(ctrl, dir * param->mid_move_speed);
+      AutoCtrlPrimitive_CommandFlatMove(ctrl, -param->pole_extend_move_speed);
       AutoCtrlTemplate_CommandPole(ctrl, pole.all_extend[0],
                                    pole.all_extend[1],
                                    param->pole_front_extend_speed,
                                    param->pole_rear_extend_speed);
+      if (AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >= param->hold_ms) {
+        AutoCtrlTemplate_NextStep(ctrl);
+      }
+      return false;
+
+    case 8:
+      AutoCtrlTemplate_EnterStep(ctrl, now_ms);
+      AutoCtrlPrimitive_CommandFlatMove(ctrl, -param->final_move_speed);
+      AutoCtrlTemplate_CommandPole(ctrl, pole.all_retract[0],
+                                   pole.all_retract[1],
+                                   param->pole_front_retract_speed,
+                                   param->pole_rear_retract_speed);
+      if (AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >= param->final_move_ms) {
+        AutoCtrlTemplate_NextStep(ctrl);
+      }
+      return false;
+
+    case 9:
+      return true;
+
+    default:
+      ctrl->fault = AUTO_CTRL_FAULT_TEMPLATE_UNSUPPORTED;
+      return false;
+  }
+}
+
+static bool AutoCtrlTemplate_RunHeadDescendOptimized(
+    auto_ctrl_t *ctrl, uint32_t now_ms,
+    const Config_RobotParam_t *robot_param,
+    const AutoCtrl_TemplateParam_t *param, bool use_400mm) {
+  auto_ctrl_pole_targets_t pole;
+  AutoCtrlTemplate_SelectPoleTargets(robot_param, use_400mm, &pole);
+
+  switch (ctrl->template_ctx.step_index) {
+    case 0:
+      AutoCtrlTemplate_EnterStep(ctrl, now_ms);
+      AutoCtrlPrimitive_ApplyPrealignWithMove(ctrl, param->align_move_speed,
+                                              0.0f);
+      AutoCtrlTemplate_CommandPole(ctrl, pole.small[0], pole.small[1],
+                                   param->pole_front_retract_speed,
+                                   param->pole_rear_retract_speed);
+      if (AutoCtrlTemplate_IsYawAligned(ctrl)) {
+        AutoCtrlTemplate_NextStep(ctrl);
+      }
+      return false;
+
+    case 1:
+      AutoCtrlTemplate_EnterStep(ctrl, now_ms);
+      if (AutoCtrlTemplate_DescendFirstPhotoEdge(ctrl, false, use_400mm)) {
+        AutoCtrlTemplate_NextStep(ctrl);
+        return false;
+      }
+      AutoCtrlPrimitive_CommandFlatMove(ctrl, param->mid_move_speed);
+      AutoCtrlTemplate_CommandPole(ctrl, pole.all_retract[0],
+                                   pole.all_retract[1],
+                                   param->pole_front_retract_speed,
+                                   param->pole_rear_retract_speed);
+      if (AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >= param->mid_move_ms) {
+        AutoCtrlTemplate_NextStep(ctrl);
+      }
+      return false;
+
+    case 2:
+      AutoCtrlTemplate_EnterStep(ctrl, now_ms);
+      if (AutoCtrlTemplate_DescendFirstPhotoEdge(ctrl, false, use_400mm)) {
+        AutoCtrlTemplate_NextStep(ctrl);
+        return false;
+      }
+      AutoCtrlPrimitive_CommandFlatMove(ctrl, param->rear_retract_move_speed);
+      AutoCtrlTemplate_CommandPole(ctrl, pole.all_retract[0],
+                                   pole.all_retract[1],
+                                   param->pole_front_retract_speed,
+                                   param->pole_rear_retract_speed);
+      if (param->rear_photo_timeout_ms > 0u &&
+          AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
+              param->rear_photo_timeout_ms) {
+        ctrl->fault = AUTO_CTRL_FAULT_SENSOR_INVALID;
+      }
+      return false;
+
+    case 3:
+      AutoCtrlTemplate_EnterStep(ctrl, now_ms);
+      AutoCtrlPrimitive_CommandFlatMove(ctrl, 0.0f);
+      AutoCtrlTemplate_CommandPole(ctrl, pole.all_extend[0],
+                                   pole.all_retract[1],
+                                   param->pole_front_extend_speed,
+                                   param->pole_rear_retract_speed);
+      if (AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
+          param->pole_extend_settle_ms) {
+        AutoCtrlTemplate_NextStep(ctrl);
+      }
+      return false;
+
+    case 4:
+      AutoCtrlTemplate_EnterStep(ctrl, now_ms);
+      if (AutoCtrlTemplate_DescendSecondPhotoEdge(ctrl, false, use_400mm)) {
+        AutoCtrlTemplate_NextStep(ctrl);
+        return false;
+      }
+      AutoCtrlPrimitive_CommandFlatMove(ctrl, param->mid_move_speed);
+      AutoCtrlTemplate_CommandPole(ctrl, pole.all_extend[0],
+                                   pole.all_retract[1],
+                                   param->pole_front_extend_speed,
+                                   param->pole_rear_retract_speed);
       if (AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
           param->rear_retract_move_ms) {
         AutoCtrlTemplate_NextStep(ctrl);
       }
       return false;
 
-    case 6:
-      AutoCtrlPrimitive_CommandFlatMove(ctrl, dir * param->final_move_speed);
-      AutoCtrlTemplate_CommandPole(ctrl, pole.all_retract[0],
+    case 5:
+      AutoCtrlTemplate_EnterStep(ctrl, now_ms);
+      if (AutoCtrlTemplate_DescendSecondPhotoEdge(ctrl, false, use_400mm)) {
+        AutoCtrlTemplate_NextStep(ctrl);
+        return false;
+      }
+      AutoCtrlPrimitive_CommandFlatMove(ctrl, param->front_retract_move_speed);
+      AutoCtrlTemplate_CommandPole(ctrl, pole.all_extend[0],
                                    pole.all_retract[1],
-                                   param->pole_front_retract_speed,
+                                   param->pole_front_extend_speed,
                                    param->pole_rear_retract_speed);
-      if (AutoCtrlTemplate_StepTimeout(ctrl, now_ms, param->final_move_ms)) {
+      if (param->front_photo_timeout_ms > 0u &&
+          AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
+              param->front_photo_timeout_ms) {
+        ctrl->fault = AUTO_CTRL_FAULT_SENSOR_INVALID;
+      }
+      return false;
+
+    case 6:
+      AutoCtrlTemplate_EnterStep(ctrl, now_ms);
+      AutoCtrlPrimitive_CommandFlatMove(ctrl, 0.0f);
+      AutoCtrlTemplate_CommandPole(ctrl, pole.all_extend[0],
+                                   pole.all_extend[1],
+                                   param->pole_front_extend_speed,
+                                   param->pole_rear_extend_speed);
+      if (AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
+          param->front_retract_settle_ms) {
         AutoCtrlTemplate_NextStep(ctrl);
       }
       return false;
 
     case 7:
+      AutoCtrlTemplate_EnterStep(ctrl, now_ms);
+      AutoCtrlPrimitive_CommandFlatMove(ctrl, param->pole_extend_move_speed);
+      AutoCtrlTemplate_CommandPole(ctrl, pole.all_extend[0],
+                                   pole.all_extend[1],
+                                   param->pole_front_extend_speed,
+                                   param->pole_rear_extend_speed);
+      if (AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >= param->hold_ms) {
+        AutoCtrlTemplate_NextStep(ctrl);
+      }
+      return false;
+
+    case 8:
+      AutoCtrlTemplate_EnterStep(ctrl, now_ms);
+      AutoCtrlPrimitive_CommandFlatMove(ctrl, param->final_move_speed);
+      AutoCtrlTemplate_CommandPole(ctrl, pole.all_retract[0],
+                                   pole.all_retract[1],
+                                   param->pole_front_retract_speed,
+                                   param->pole_rear_retract_speed);
+      if (AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >= param->final_move_ms) {
+        AutoCtrlTemplate_NextStep(ctrl);
+      }
+      return false;
+
+    case 9:
       return true;
 
     default:
@@ -468,17 +647,17 @@ static bool AutoCtrlTemplate_RunHeadAscend400(
 static bool AutoCtrlTemplate_RunHeadDescend200(
     auto_ctrl_t *ctrl, uint32_t now_ms,
     const Config_RobotParam_t *robot_param) {
-  return AutoCtrlTemplate_RunDescend(
-      ctrl, now_ms, robot_param, &robot_param->auto_ctrl_param.head_descend_200,
-      false, false);
+  return AutoCtrlTemplate_RunHeadDescendOptimized(
+      ctrl, now_ms, robot_param,
+      &robot_param->auto_ctrl_param.head_descend_200, false);
 }
 
 static bool AutoCtrlTemplate_RunHeadDescend400(
     auto_ctrl_t *ctrl, uint32_t now_ms,
     const Config_RobotParam_t *robot_param) {
-  return AutoCtrlTemplate_RunDescend(
-      ctrl, now_ms, robot_param, &robot_param->auto_ctrl_param.head_descend_400,
-      false, true);
+  return AutoCtrlTemplate_RunHeadDescendOptimized(
+      ctrl, now_ms, robot_param,
+      &robot_param->auto_ctrl_param.head_descend_400, true);
 }
 
 static bool AutoCtrlTemplate_RunTailAscend200(
@@ -500,17 +679,17 @@ static bool AutoCtrlTemplate_RunTailAscend400(
 static bool AutoCtrlTemplate_RunTailDescend200(
     auto_ctrl_t *ctrl, uint32_t now_ms,
     const Config_RobotParam_t *robot_param) {
-  return AutoCtrlTemplate_RunDescend(
-      ctrl, now_ms, robot_param, &robot_param->auto_ctrl_param.tail_descend_200,
-      true, false);
+  return AutoCtrlTemplate_RunTailDescendOptimized(
+      ctrl, now_ms, robot_param,
+      &robot_param->auto_ctrl_param.tail_descend_200, false);
 }
 
 static bool AutoCtrlTemplate_RunTailDescend400(
     auto_ctrl_t *ctrl, uint32_t now_ms,
     const Config_RobotParam_t *robot_param) {
-  return AutoCtrlTemplate_RunDescend(
-      ctrl, now_ms, robot_param, &robot_param->auto_ctrl_param.tail_descend_400,
-      true, true);
+  return AutoCtrlTemplate_RunTailDescendOptimized(
+      ctrl, now_ms, robot_param,
+      &robot_param->auto_ctrl_param.tail_descend_400, true);
 }
 
 bool AutoCtrlTemplate_Run(auto_ctrl_t *ctrl, uint32_t now_ms) {

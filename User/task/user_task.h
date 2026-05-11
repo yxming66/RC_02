@@ -7,6 +7,7 @@
 
 /* USER INCLUDE BEGIN */
 #include <stdbool.h>
+#include <stdint.h>
 #include "module/autoCtrlAPI/api/auto_ctrl_api.h"
 #include "device/buzzer.h"
 
@@ -178,6 +179,9 @@ void Task_arm(void *argument);
 void Task_rod(void *argument);
 void Task_pc_comm(void *argument);
 void Task_pc_uart_rx(void *argument);
+
+bool Task_ChassisMainPoleGroupAtTarget(uint8_t group, float threshold_rad);
+bool Task_ChassisMainPoleAllAtTarget(float threshold_rad);
 #ifdef __cplusplus
 }
 #endif

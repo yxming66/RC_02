@@ -35,6 +35,10 @@ static const GPIO_PinState photo1_active_state = GPIO_PIN_RESET;
 static const GPIO_PinState photo2_active_state = GPIO_PIN_RESET;
 static const GPIO_PinState photo3_active_state = GPIO_PIN_RESET;
 static const GPIO_PinState photo4_active_state = GPIO_PIN_RESET;
+
+#ifndef AUTO_CTRL_POLE_TARGET_THRESHOLD_RAD
+#define AUTO_CTRL_POLE_TARGET_THRESHOLD_RAD (0.30f)
+#endif
 /* USER STRUCT END */
 
 /* Private function --------------------------------------------------------- */
@@ -98,6 +102,14 @@ void Task_auto_ctrl(void *argument) {
       feedback.pe9_photo2_triggered = (photo2_state == photo2_active_state);
       feedback.pa2_photo3_triggered = (photo3_state == photo3_active_state);
       feedback.pa0_photo4_triggered = (photo4_state == photo4_active_state);
+      feedback.pole_front_at_target =
+          Task_ChassisMainPoleGroupAtTarget(0u,
+                                            AUTO_CTRL_POLE_TARGET_THRESHOLD_RAD);
+      feedback.pole_rear_at_target =
+          Task_ChassisMainPoleGroupAtTarget(1u,
+                                            AUTO_CTRL_POLE_TARGET_THRESHOLD_RAD);
+      feedback.pole_all_at_target =
+          Task_ChassisMainPoleAllAtTarget(AUTO_CTRL_POLE_TARGET_THRESHOLD_RAD);
 
       AutoCtrl_SetFeedback(&auto_ctrl, &feedback);
 

@@ -34,6 +34,7 @@ typedef struct {
   bool pe9_photo2_falling_edge_latched;  /* PE9/photo2 falling edge. */
   bool pa2_photo3_falling_edge_latched;  /* PA2/photo3 falling edge. */
   bool pa0_photo4_falling_edge_latched;  /* PA0/photo4 falling edge. */
+  bool pole_target_seen_not_ready; /* Current step has observed pole target not ready. */
 } auto_ctrl_template_ctx_t;
 
 #ifdef __cplusplus

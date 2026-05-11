@@ -17,6 +17,7 @@
 #define FLOWER_DANCE_TONE_GAP_MS 0U
 #define TORI_NO_UTA_TONE_GAP_MS 0U
 #define GU_SHI_XI_NI_TONE_GAP_MS 0U
+#define SENBONZAKURA_TONE_GAP_MS 0U
 #define YI_BU_ZHI_YAO_TONE_GAP_MS 0U
 #define HONG_DOU_TONE_GAP_MS 0U
 #define YUAN_YU_CHOU_TONE_GAP_MS 0U
@@ -65,6 +66,7 @@ const Tone_t NOKIA[] = {
 #include "buzzer_flower_dance.inc"
 #include "buzzer_tori_no_uta.inc"
 #include "buzzer_gu_shi_xi_ni.inc"
+#include "buzzer_senbonzakura.inc"
 #include "buzzer_yi_bu_zhi_yao.inc"
 #include "buzzer_moonlight_sonata.inc"
 #include "buzzer_moonlight_sonata_2.inc"
@@ -405,6 +407,11 @@ static int8_t BUZZER_GetMusicData(MUSIC_t music, BuzzerMusicData_t *data) {
             data->melody_length = sizeof(GU_SHI_XI_NI) / sizeof(Tone_t);
             data->tone_gap_ms = GU_SHI_XI_NI_TONE_GAP_MS;
             break;
+        case MUSIC_SENBONZAKURA:
+            data->melody = SENBONZAKURA;
+            data->melody_length = sizeof(SENBONZAKURA) / sizeof(Tone_t);
+            data->tone_gap_ms = SENBONZAKURA_TONE_GAP_MS;
+            break;
         case MUSIC_YI_BU_ZHI_YAO:
             data->melody = YI_BU_ZHI_YAO;
             data->melody_length = sizeof(YI_BU_ZHI_YAO) / sizeof(Tone_t);
@@ -608,6 +615,11 @@ int8_t BUZZER_PlayMusic(BUZZER_t *buzzer, MUSIC_t music) {
             melody = GU_SHI_XI_NI;
             melody_length = sizeof(GU_SHI_XI_NI) / sizeof(Tone_t);
             tone_gap_ms = GU_SHI_XI_NI_TONE_GAP_MS;
+            break;
+        case MUSIC_SENBONZAKURA:
+            melody = SENBONZAKURA;
+            melody_length = sizeof(SENBONZAKURA) / sizeof(Tone_t);
+            tone_gap_ms = SENBONZAKURA_TONE_GAP_MS;
             break;
         case MUSIC_YI_BU_ZHI_YAO:
             melody = YI_BU_ZHI_YAO;
