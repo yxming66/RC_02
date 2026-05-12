@@ -39,6 +39,14 @@ static const GPIO_PinState photo4_active_state = GPIO_PIN_RESET;
 #ifndef AUTO_CTRL_POLE_TARGET_THRESHOLD_RAD
 #define AUTO_CTRL_POLE_TARGET_THRESHOLD_RAD (0.30f)
 #endif
+
+#ifndef AUTO_CTRL_POLE_TARGET_STABLE_CYCLES
+#define AUTO_CTRL_POLE_TARGET_STABLE_CYCLES (5u)
+#endif
+
+static uint8_t pole_front_at_target_stable_count = 0u;
+static uint8_t pole_rear_at_target_stable_count = 0u;
+static uint8_t pole_all_at_target_stable_count = 0u;
 /* USER STRUCT END */
 
 /* Private function --------------------------------------------------------- */
@@ -63,6 +71,23 @@ static void AutoCtrlFeed_CacheLocalYawZero(void) {
     auto_ctrl_local_yaw_zero_rad = chassis_imu.eulr.yaw;
     auto_ctrl_local_yaw_zero_initialized = true;
   }
+}
+
+static bool AutoCtrlFeed_DebouncePoleReady(bool raw_ready,
+                                           uint8_t *stable_count) {
+  if (stable_count == NULL) {
+    return false;
+  }
+
+  if (!raw_ready) {
+    *stable_count = 0u;
+    return false;
+  }
+
+  if (*stable_count < AUTO_CTRL_POLE_TARGET_STABLE_CYCLES) {
+    (*stable_count)++;
+  }
+  return *stable_count >= AUTO_CTRL_POLE_TARGET_STABLE_CYCLES;
 }
 
 /* Exported functions ------------------------------------------------------- */
@@ -102,14 +127,21 @@ void Task_auto_ctrl(void *argument) {
       feedback.pe9_photo2_triggered = (photo2_state == photo2_active_state);
       feedback.pa2_photo3_triggered = (photo3_state == photo3_active_state);
       feedback.pa0_photo4_triggered = (photo4_state == photo4_active_state);
-      feedback.pole_front_at_target =
+      const bool raw_pole_front_at_target =
           Task_ChassisMainPoleGroupAtTarget(0u,
                                             AUTO_CTRL_POLE_TARGET_THRESHOLD_RAD);
-      feedback.pole_rear_at_target =
+      const bool raw_pole_rear_at_target =
           Task_ChassisMainPoleGroupAtTarget(1u,
                                             AUTO_CTRL_POLE_TARGET_THRESHOLD_RAD);
-      feedback.pole_all_at_target =
+      const bool raw_pole_all_at_target =
           Task_ChassisMainPoleAllAtTarget(AUTO_CTRL_POLE_TARGET_THRESHOLD_RAD);
+
+      feedback.pole_front_at_target = AutoCtrlFeed_DebouncePoleReady(
+          raw_pole_front_at_target, &pole_front_at_target_stable_count);
+      feedback.pole_rear_at_target = AutoCtrlFeed_DebouncePoleReady(
+          raw_pole_rear_at_target, &pole_rear_at_target_stable_count);
+      feedback.pole_all_at_target = AutoCtrlFeed_DebouncePoleReady(
+          raw_pole_all_at_target, &pole_all_at_target_stable_count);
 
       AutoCtrl_SetFeedback(&auto_ctrl, &feedback);
 

@@ -178,6 +178,32 @@ bool Pole_IsAllAtTarget(const Pole_t *c, float threshold_rad) {
          Pole_IsGroupAtTarget(c, 1u, threshold_rad);
 }
 
+bool Pole_IsGroupAtFinalTarget(const Pole_t *c, uint8_t group,
+                               float threshold_rad) {
+  if (c == NULL || c->param == NULL) return false;
+  if (group >= 2u) return false;
+  if (!c->support_angle.calibrated) return false;
+
+  float threshold = fabsf(threshold_rad);
+  uint8_t start = (group == 0u) ? 0u : 2u;
+  uint8_t end = start + 2u;
+  for (uint8_t i = start; i < end; i++) {
+    const uint8_t side = (i < 2u) ? 0u : 1u;
+    const float target_lift = mr::component::math::clamp_scalar(
+        c->support_angle.final_target_lift[side], 0.0f,
+        c->param->limit.support_total_travel);
+    const float target = c->support_angle.lower[i] + target_lift;
+    const float fb_angle = Pole_GetSupportAngle(c, i);
+    if (fabsf(target - fb_angle) > threshold) return false;
+  }
+  return true;
+}
+
+bool Pole_IsAllAtFinalTarget(const Pole_t *c, float threshold_rad) {
+  return Pole_IsGroupAtFinalTarget(c, 0u, threshold_rad) &&
+         Pole_IsGroupAtFinalTarget(c, 1u, threshold_rad);
+}
+
 void Pole_Output(Pole_t *c) {
   if (c == NULL || c->param == NULL) return;
 

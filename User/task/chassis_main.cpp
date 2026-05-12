@@ -1,12 +1,12 @@
 #include "task/user_task.h"
 
-#include "module/chassis/mecanum.hpp"
+#include "module/chassis/front_omni_rear_mecanum.hpp"
 #include "module/config.h"
 #include "module/pole.h"
 
 namespace {
 
-mr::module::chassis::MecanumController chassis;
+mr::module::chassis::FrontOmniRearMecanumController chassis;
 Chassis_CMD_t chassis_cmd{};
 
 Pole_t pole;
@@ -18,11 +18,11 @@ extern "C" {
 Chassis_IMU_t chassis_imu{};
 
 bool Task_ChassisMainPoleGroupAtTarget(uint8_t group, float threshold_rad) {
-  return Pole_IsGroupAtTarget(&pole, group, threshold_rad);
+  return Pole_IsGroupAtFinalTarget(&pole, group, threshold_rad);
 }
 
 bool Task_ChassisMainPoleAllAtTarget(float threshold_rad) {
-  return Pole_IsAllAtTarget(&pole, threshold_rad);
+  return Pole_IsAllAtFinalTarget(&pole, threshold_rad);
 }
 }
 

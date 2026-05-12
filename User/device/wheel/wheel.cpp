@@ -83,6 +83,17 @@ int8_t RmM3508Wheel::SetTorque(float torque_nm) {
   return ret;
 }
 
+int8_t RmM3508Wheel::SetPosition(float position_rad,
+                                 float max_velocity_rad_s) {
+  if (controller_ == nullptr) {
+    return DEVICE_ERR_NULL;
+  }
+  const int8_t ret =
+      controller_->SetPosition(position_rad, max_velocity_rad_s);
+  RefreshDebug();
+  return ret;
+}
+
 int8_t RmM3508Wheel::CommitCommand() {
   if (controller_ == nullptr) {
     return DEVICE_ERR_NULL;
@@ -94,6 +105,14 @@ int8_t RmM3508Wheel::CommitCommand() {
 
 bool RmM3508Wheel::HasPendingCommand() const {
   return controller_ != nullptr && controller_->HasPendingCommand();
+}
+
+void RmM3508Wheel::ClearPendingCommand() {
+  if (controller_ == nullptr) {
+    return;
+  }
+  controller_->ClearPendingCommand();
+  RefreshDebug();
 }
 
 void RmM3508Wheel::RefreshState() {

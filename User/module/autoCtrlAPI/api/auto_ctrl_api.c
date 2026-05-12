@@ -398,6 +398,14 @@ void AutoCtrl_Update(auto_ctrl_t *ctrl, uint32_t now_ms) {
       } else {
         AutoCtrlPrimitive_ApplyPrealign(ctrl);
       }
+      if (robot_param != 0) {
+        const float prealign_pole_speed =
+            robot_param->pole_param.limit.support_lift_speed;
+        AutoCtrlPrimitive_CommandPoleTargetWithSpeed(
+            ctrl, robot_param->pole_param.preset.step_200_small[0],
+            robot_param->pole_param.preset.step_200_small[1],
+            prealign_pole_speed, prealign_pole_speed);
+      }
 
       if (sick_usable) {
         ctrl->yaw_align_stable_since_ms = 0u;

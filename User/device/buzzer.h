@@ -68,7 +68,7 @@ typedef struct {
  */
 typedef enum {
   /* USER MUSIC MENU BEGIN */
-  MUSIC_RM,                        ///< RM 战队队歌
+  MUSIC_RM,                        ///< RM战队队歌
   MUSIC_NOKIA,                     ///< 诺基亚铃声
   MUSIC_FUR_ELISE,                 ///< 贝多芬《致爱丽丝》
   MUSIC_JUE_BIE_SHU,               ///< 《诀别书》
@@ -76,19 +76,27 @@ typedef enum {
   MUSIC_SHUN,                      ///< 郑润泽《瞬》
   MUSIC_YUAN_YU_CHOU,              ///< 林俊杰《愿与愁》
   MUSIC_DREAM_WEDDING,             ///< 《梦中的婚礼》单线蜂鸣器改编
-  MUSIC_FLOWER_DANCE,              ///< DJ Okawari《Flower Dance》
+  MUSIC_FLOWER_DANCE,              ///< DJ Okawari《花之舞》
   MUSIC_TORI_NO_UTA,               ///< Lia《鸟之诗》
-  MUSIC_GU_SHI_XI_NI,              ///< JJ Lin - Gu Shi Xi Ni
-  MUSIC_SENBONZAKURA,              ///< Kurousa-P - Senbonzakura
-  MUSIC_YI_BU_ZHI_YAO,             ///< Por Una Cabeza / Yi Bu Zhi Yao
+  MUSIC_GU_SHI_XI_NI,              ///< 林俊杰《故事细腻》
+  MUSIC_SENBONZAKURA,              ///< Kurousa-P《千本樱》
+  MUSIC_ER_QUAN_YING_YUE,          ///< 阿炳《二泉映月》
+  MUSIC_YI_BU_ZHI_YAO,             ///< 《一步之遥》
+  MUSIC_RENAI_CIRCULATION,         ///< 《恋爱循环》
+  MUSIC_FUYU_NO_HANA,              ///< 《冬之花》
+  MUSIC_HAPPY_BIRTHDAY,            ///< 《生日快乐》
   MUSIC_MOONLIGHT_SONATA,          ///< 贝多芬《月光奏鸣曲》第一乐章
   MUSIC_MOONLIGHT_SONATA_2ND,      ///< 贝多芬《月光奏鸣曲》第二乐章
   MUSIC_MERRY_CHRISTMAS_MR_LAWRENCE, ///< 坂本龙一《圣诞快乐，劳伦斯先生》
-  MUSIC_HAPPY_DOU_DI_ZHU_MELODY,   ///< 欢乐斗地主主题曲
-  MUSIC_STARTUP_YUAN_YU_CHOU,      ///< Short Yuan Yu Chou startup jingle
-  MUSIC_STARTUP_TOMATO_GARDEN,     ///< 番茄花园片段
+  MUSIC_HAPPY_DOU_DI_ZHU_MELODY,   ///< 《欢乐斗地主》主题曲
+  MUSIC_HAO_YUN_LAI,               ///< 祖海《好运来》
+  MUSIC_STARTUP_YUAN_YU_CHOU,      ///< 《愿与愁》启动片段
+  MUSIC_STARTUP_TOMATO_GARDEN,     ///< 《番茄花园》片段
   MUSIC_STARTUP_BUMBLEBEE,         ///< 《野蜂飞舞》片段
   MUSIC_MOONLIGHT_SONATA_3RD,      ///< 贝多芬《月光奏鸣曲》第三乐章
+  MUSIC_CROATIAN_RHAPSODY,         ///< 马克西姆《克罗地亚狂想曲》
+  MUSIC_SUGAR_PLUM_FAIRY,          ///< 柴可夫斯基《糖梅仙子之舞》
+  MUSIC_JIAO_HUAN_YU_SHENG,        ///< 林俊杰《交换余生》
   /* USER MUSIC MENU END */
 } MUSIC_t;
 

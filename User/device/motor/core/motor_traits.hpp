@@ -38,6 +38,8 @@ struct MotorModelValid<MotorKind::DM, MotorModel::J4310P> : std::true_type {};
 template <>
 struct MotorModelValid<MotorKind::DM, MotorModel::J4340> : std::true_type {};
 template <>
+struct MotorModelValid<MotorKind::DM, MotorModel::H3510> : std::true_type {};
+template <>
 struct MotorModelValid<MotorKind::LZ, MotorModel::RSO0> : std::true_type {};
 template <>
 struct MotorModelValid<MotorKind::LZ, MotorModel::RSO1> : std::true_type {};
@@ -243,8 +245,37 @@ struct MotorTraits<MotorKind::DM, MotorModel::J4340> : MotorTraitsBase<MotorKind
     static constexpr const char* kName = "DM-J4340-2EC-24V";
 };
 
+template <>
+struct MotorTraits<MotorKind::DM, MotorModel::H3510> : MotorTraitsBase<MotorKind::DM, MotorModel::H3510> {
+    static constexpr MOTOR_DM_Module_t kVendorModule = MOTOR_DM_H3510;
+    static constexpr float kGearRatio = 1.0f;
+    static constexpr bool kSupportsMit = true;
+    static constexpr bool kSupportsTorque = true;
+    static constexpr bool kSupportsVelocity = true;
+    static constexpr bool kSupportsPosition = true;
+    static constexpr bool kIsMultiTurn = true;
+    static constexpr bool kHasNativeZeroSet = true;
+    static constexpr bool kHasMasterId = true;
+    static constexpr float kDefaultKp = 0.0f;
+    static constexpr float kDefaultKd = 0.0f;
+    static constexpr float kMaxTorque = 0.45f;  // 峰值扭矩 0.45 Nm
+    static constexpr float kMaxVelocity = 188.5f;  // 空载最大 1800 rpm
+    static constexpr float kRecommendedCurrent = 1.1f;  // 额定电流 1.1A
+    static constexpr float kRatedCurrent = 1.1f;
+    static constexpr float kPeakCurrent = 3.2f;  // 峰值电流 3.2A
+    static constexpr float kRecommendedVelocity = 52.36f;  // 额定转速 500 rpm
+    static constexpr float kRatedVelocity = 52.36f;
+    static constexpr float kNoLoadVelocity = 188.5f;
+    static constexpr float kRatedTorque = 0.18f;  // 额定扭矩 0.18 Nm
+    static constexpr float kPeakTorque = 0.45f;
+    static constexpr float kEncoderCpr = 65536;
+    static constexpr MotorCapability kCapabilities = MotorCapability::Current | MotorCapability::Velocity | MotorCapability::Position | MotorCapability::MIT;
+    static constexpr const char* kName = "DM-H3510";
+};
+
+// LZ RSO3 系列电机参数（60Nm峰值力矩）
 template <MotorModel Model>
-struct LzRsoTraits : MotorTraitsBase<MotorKind::LZ, Model> {
+struct LzRso3Traits : MotorTraitsBase<MotorKind::LZ, Model> {
     static constexpr bool kSupportsMit = true;
     static constexpr bool kSupportsTorque = true;
     static constexpr bool kSupportsVelocity = true;
@@ -261,16 +292,41 @@ struct LzRsoTraits : MotorTraitsBase<MotorKind::LZ, Model> {
     static constexpr float kRecommendedVelocity = 20.0f;
     static constexpr float kRatedVelocity = 20.0f;
     static constexpr float kNoLoadVelocity = 20.0f;
+    static constexpr float kRatedTorque = 60.0f;
     static constexpr float kPeakTorque = 60.0f;
     static constexpr MotorCapability kCapabilities = MotorCapability::Current | MotorCapability::Velocity | MotorCapability::Position | MotorCapability::MIT;
 };
 
-template <> struct MotorTraits<MotorKind::LZ, MotorModel::RSO0> : LzRsoTraits<MotorModel::RSO0> { static constexpr MOTOR_LZ_Module_t kVendorModule = MOTOR_LZ_RSO0; static constexpr const char* kName = "LZ-RSO0"; };
-template <> struct MotorTraits<MotorKind::LZ, MotorModel::RSO1> : LzRsoTraits<MotorModel::RSO1> { static constexpr MOTOR_LZ_Module_t kVendorModule = MOTOR_LZ_RSO1; static constexpr const char* kName = "LZ-RSO1"; };
-template <> struct MotorTraits<MotorKind::LZ, MotorModel::RSO2> : LzRsoTraits<MotorModel::RSO2> { static constexpr MOTOR_LZ_Module_t kVendorModule = MOTOR_LZ_RSO2; static constexpr const char* kName = "LZ-RSO2"; };
-template <> struct MotorTraits<MotorKind::LZ, MotorModel::RSO3> : LzRsoTraits<MotorModel::RSO3> { static constexpr MOTOR_LZ_Module_t kVendorModule = MOTOR_LZ_RSO3; static constexpr const char* kName = "LZ-RSO3"; };
-template <> struct MotorTraits<MotorKind::LZ, MotorModel::RSO4> : LzRsoTraits<MotorModel::RSO4> { static constexpr MOTOR_LZ_Module_t kVendorModule = MOTOR_LZ_RSO4; static constexpr const char* kName = "LZ-RSO4"; };
-template <> struct MotorTraits<MotorKind::LZ, MotorModel::RSO5> : LzRsoTraits<MotorModel::RSO5> { static constexpr MOTOR_LZ_Module_t kVendorModule = MOTOR_LZ_RSO5; static constexpr const char* kName = "LZ-RSO5"; };
-template <> struct MotorTraits<MotorKind::LZ, MotorModel::RSO6> : LzRsoTraits<MotorModel::RSO6> { static constexpr MOTOR_LZ_Module_t kVendorModule = MOTOR_LZ_RSO6; static constexpr const char* kName = "LZ-RSO6"; };
+// LZ RS05 电机参数（5.5Nm峰值力，100rpm额定转速）
+template <MotorModel Model>
+struct LzRso5Traits : MotorTraitsBase<MotorKind::LZ, Model> {
+    static constexpr bool kSupportsMit = true;
+    static constexpr bool kSupportsTorque = true;
+    static constexpr bool kSupportsVelocity = true;
+    static constexpr bool kSupportsPosition = true;
+    static constexpr bool kIsMultiTurn = true;
+    static constexpr bool kHasNativeZeroSet = true;
+    static constexpr bool kHasHostId = true;
+    static constexpr float kMaxPosition = 12.57f;
+    static constexpr float kMaxTorque = 5.5f;
+    static constexpr float kMaxVelocity = 20.0f;
+    static constexpr float kRecommendedCurrent = 10.0f;
+    static constexpr float kRatedCurrent = 10.0f;
+    static constexpr float kPeakCurrent = 15.0f;
+    static constexpr float kRecommendedVelocity = 100.0f * 2.0f * 3.14159265358979323846f / 60.0f;
+    static constexpr float kRatedVelocity = 100.0f * 2.0f * 3.14159265358979323846f / 60.0f;
+    static constexpr float kNoLoadVelocity = 150.0f * 2.0f * 3.14159265358979323846f / 60.0f;
+    static constexpr float kRatedTorque = 3.5f;
+    static constexpr float kPeakTorque = 5.5f;
+    static constexpr MotorCapability kCapabilities = MotorCapability::Current | MotorCapability::Velocity | MotorCapability::Position | MotorCapability::MIT;
+};
+
+template <> struct MotorTraits<MotorKind::LZ, MotorModel::RSO0> : LzRso3Traits<MotorModel::RSO0> { static constexpr MOTOR_LZ_Module_t kVendorModule = MOTOR_LZ_RSO0; static constexpr const char* kName = "LZ-RSO0"; };
+template <> struct MotorTraits<MotorKind::LZ, MotorModel::RSO1> : LzRso3Traits<MotorModel::RSO1> { static constexpr MOTOR_LZ_Module_t kVendorModule = MOTOR_LZ_RSO1; static constexpr const char* kName = "LZ-RSO1"; };
+template <> struct MotorTraits<MotorKind::LZ, MotorModel::RSO2> : LzRso3Traits<MotorModel::RSO2> { static constexpr MOTOR_LZ_Module_t kVendorModule = MOTOR_LZ_RSO2; static constexpr const char* kName = "LZ-RSO2"; };
+template <> struct MotorTraits<MotorKind::LZ, MotorModel::RSO3> : LzRso3Traits<MotorModel::RSO3> { static constexpr MOTOR_LZ_Module_t kVendorModule = MOTOR_LZ_RSO3; static constexpr const char* kName = "LZ-RSO3"; };
+template <> struct MotorTraits<MotorKind::LZ, MotorModel::RSO4> : LzRso3Traits<MotorModel::RSO4> { static constexpr MOTOR_LZ_Module_t kVendorModule = MOTOR_LZ_RSO4; static constexpr const char* kName = "LZ-RSO4"; };
+template <> struct MotorTraits<MotorKind::LZ, MotorModel::RSO5> : LzRso5Traits<MotorModel::RSO5> { static constexpr MOTOR_LZ_Module_t kVendorModule = MOTOR_LZ_RSO5; static constexpr const char* kName = "LZ-RS05"; };
+template <> struct MotorTraits<MotorKind::LZ, MotorModel::RSO6> : LzRso3Traits<MotorModel::RSO6> { static constexpr MOTOR_LZ_Module_t kVendorModule = MOTOR_LZ_RSO6; static constexpr const char* kName = "LZ-RSO6"; };
 
 } // namespace mr::motor

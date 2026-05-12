@@ -29,6 +29,7 @@ typedef struct {
 static const BSP_PWM_Config_t PWM_Map[BSP_PWM_NUM] = {
   {&htim12, TIM_CHANNEL_2},
     {&htim3, TIM_CHANNEL_4},
+    {&htim12, TIM_CHANNEL_1},   /* RodNew舵机PWM */
 };
 
 static uint32_t BSP_PWM_GetTimerClock(TIM_HandleTypeDef *htim) {
@@ -117,8 +118,32 @@ int8_t BSP_PWM_SetFreq(BSP_PWM_Channel_t ch, float freq) {
 
 int8_t BSP_PWM_Stop(BSP_PWM_Channel_t ch) {
   if (ch >= BSP_PWM_NUM) return BSP_ERR;
-  
+
   HAL_TIM_PWM_Stop(PWM_Map[ch].tim, PWM_Map[ch].channel);
+  return BSP_OK;
+}
+
+int8_t BSP_PWM_SetPulseUs(BSP_PWM_Channel_t ch, uint32_t pulse_us) {
+  if (ch >= BSP_PWM_NUM) return BSP_ERR;
+
+  uint32_t arr = __HAL_TIM_GET_AUTORELOAD(PWM_Map[ch].tim);
+  uint32_t psc = PWM_Map[ch].tim->Init.Prescaler;
+
+  /* 计算定时器时钟频率 (Hz) */
+  uint32_t timer_clock = BSP_PWM_GetTimerClock(PWM_Map[ch].tim);
+  uint32_t timer_freq = timer_clock / (psc + 1U);
+
+  /* 计算周期 (us) = 1 / freq * 1e6 = 1e6 / freq */
+  float period_us = 1e6f / (float)timer_freq;
+
+  /* CCR = pulse_us / period_us * (ARR + 1) */
+  float duty_ratio = (float)pulse_us / period_us;
+  uint32_t ccr = (uint32_t)(duty_ratio * (arr + 1U));
+
+  /* 限幅到有效范围 */
+  if (ccr > arr) ccr = arr;
+
+  __HAL_TIM_SET_COMPARE(PWM_Map[ch].tim, PWM_Map[ch].channel, ccr);
   return BSP_OK;
 }
 

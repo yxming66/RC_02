@@ -24,6 +24,7 @@ constexpr float kMinDtS = 0.0005f;
 constexpr float kMaxDtS = 0.050f;
 constexpr float kMinWheelSpeedMps = 1e-4f;
 constexpr float kMinWheelRadiusM = 1e-4f;
+constexpr float kHoldCommandDeadband = 1e-4f;
 
 mr::robotics::chassis::MecanumGeometry MakeMecanumGeometry(
     const Chassis_Params_t *param) {
@@ -207,6 +208,13 @@ int8_t MecanumController::Control(const Chassis_CMD_t &cmd, uint32_t now) {
   LimitMoveVector();
   debug_.cmd_vec_limited = move_vec_;
 
+  if (ShouldHoldZeroCommand()) {
+    return ControlWheelHold();
+  }
+  if (wheel_hold_active_) {
+    ExitWheelHold();
+  }
+
   const int8_t ik_ret = ComputeWheelSpeeds();
   if (ik_ret != CHASSIS_OK) {
     return ik_ret;
@@ -316,6 +324,8 @@ void MecanumController::ResetRuntime() {
   dt_ = 0.0f;
   mech_zero_ = 0.0f;
   wz_multi_ = 1.0f;
+  wheel_hold_active_ = false;
+  wheel_hold_position_rad_ = {};
 
   for (uint8_t i = 0; i < kWheelCount; ++i) {
     out_.set_torque_ret[i] = DEVICE_ERR;
@@ -330,6 +340,8 @@ void MecanumController::InitFiltersAndPid(float target_freq) {
   for (uint8_t i = 0; i < kWheelCount; ++i) {
     PID_Init(&wheel_pid_[i], KPID_MODE_NO_D, target_freq,
              &param_->pid.motor_pid_param);
+    PID_Init(&wheel_hold_pid_[i], KPID_MODE_CALC_D, target_freq,
+             &param_->pid.motor_pos_pid_param);
     LowPassFilter2p_Init(&wheel_speed_filter_[i], target_freq,
                          param_->low_pass_cutoff_freq.in);
     LowPassFilter2p_Init(&output_filter_[i], target_freq,
@@ -349,14 +361,28 @@ void MecanumController::InitFiltersAndPid(float target_freq) {
 }
 
 void MecanumController::ResetControlStateOnModeChange() {
+  ResetWheelVelocityControlState();
+  ResetWheelHoldControlState();
   for (uint8_t i = 0; i < kWheelCount; ++i) {
-    PID_Reset(&wheel_pid_[i]);
-    LowPassFilter2p_Reset(&wheel_speed_filter_[i], 0.0f);
-    LowPassFilter2p_Reset(&output_filter_[i], 0.0f);
     LowPassFilter2p_Reset(&torque_filter_[i], feedback_.motor[i].torque_nm);
   }
   for (uint8_t i = 0; i < 3U; ++i) {
     LowPassFilter2p_Reset(&body_velocity_filter_[i], 0.0f);
+  }
+  wheel_hold_active_ = false;
+}
+
+void MecanumController::ResetWheelVelocityControlState() {
+  for (uint8_t i = 0; i < kWheelCount; ++i) {
+    PID_Reset(&wheel_pid_[i]);
+    LowPassFilter2p_Reset(&wheel_speed_filter_[i], 0.0f);
+    LowPassFilter2p_Reset(&output_filter_[i], 0.0f);
+  }
+}
+
+void MecanumController::ResetWheelHoldControlState() {
+  for (uint8_t i = 0; i < kWheelCount; ++i) {
+    PID_Reset(&wheel_hold_pid_[i]);
   }
 }
 
@@ -422,6 +448,70 @@ int8_t MecanumController::ComputeWheelSpeeds() {
   MecanumKinematics::ScaleWheelSpeedsToLimit(wheel_speeds,
                                              WheelSpeedLimit(param_));
   wheel_speed_ref_ = wheel_speeds;
+  return CHASSIS_OK;
+}
+
+bool MecanumController::ShouldHoldZeroCommand() const {
+  if (mode_ == CHASSIS_MODE_RELAX || mode_ == CHASSIS_MODE_BREAK) {
+    return false;
+  }
+
+  return std::fabs(move_vec_.vx) <= kHoldCommandDeadband &&
+         std::fabs(move_vec_.vy) <= kHoldCommandDeadband &&
+         std::fabs(move_vec_.wz) <= kHoldCommandDeadband;
+}
+
+void MecanumController::EnterWheelHold() {
+  for (uint8_t i = 0; i < kWheelCount; ++i) {
+    wheel_hold_position_rad_[i] =
+        (wheels_[i] != nullptr) ? wheels_[i]->State().position_rad : 0.0f;
+    if (wheels_[i] != nullptr) {
+      wheels_[i]->ClearPendingCommand();
+    }
+  }
+  wheel_speed_ref_ = {};
+  ResetWheelVelocityControlState();
+  ResetWheelHoldControlState();
+  wheel_hold_active_ = true;
+}
+
+void MecanumController::ExitWheelHold() {
+  ResetWheelVelocityControlState();
+  ResetWheelHoldControlState();
+  wheel_hold_active_ = false;
+}
+
+int8_t MecanumController::ControlWheelHold() {
+  if (!wheel_hold_active_) {
+    EnterWheelHold();
+  }
+
+  wheel_speed_ref_ = {};
+  for (uint8_t i = 0; i < kWheelCount; ++i) {
+    Wheel *wheel = wheels_[i];
+    if (wheel == nullptr) {
+      return CHASSIS_ERR_NULL;
+    }
+
+    debug_.wheel_speed_ref_mps[i] = 0.0f;
+    debug_.wheel_speed_fdb_mps[i] = WheelSpeedFeedback(i);
+    debug_.wheel_speed_fdb_filtered_mps[i] = FilteredWheelSpeedFeedback(i);
+    const float torque_cmd = PID_Calc(&wheel_hold_pid_[i],
+                                      wheel_hold_position_rad_[i],
+                                      wheel->State().position_rad, 0.0f, dt_);
+    debug_.wheel_torque_pid_out[i] = torque_cmd;
+    out_.motor[i] = ClampSymmetric(torque_cmd, param_->limit.max_torque_cmd);
+    debug_.wheel_torque_cmd_nm[i] = out_.motor[i];
+
+    out_.set_torque_ret[i] = wheel->SetTorque(out_.motor[i]);
+    StoreWheelDebug(i);
+    if (out_.set_torque_ret[i] != DEVICE_OK) {
+      return CHASSIS_ERR;
+    }
+    out_.controller_update_ret[i] = DEVICE_OK;
+    out_.command_pending[i] = wheel->HasPendingCommand();
+  }
+
   return CHASSIS_OK;
 }
 

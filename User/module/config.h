@@ -13,6 +13,7 @@
 #include "module/chassis.h"
 #include "module/pole.h"
 #include "module/rod.h"
+#include "module/rod_new.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -21,8 +22,6 @@ extern "C" {
 typedef struct {
   float prealign_kp;          /* yaw error to wz gain */
   float prealign_wz_limit;    /* yaw correction limit, rad/s */
-  float flat_move_speed;      /* default simple flat move speed, m/s */
-  uint32_t flat_move_hold_ms; /* default simple flat move hold time, ms */
 
   float sick_valid_min_cm;       /* valid SICK distance lower bound, cm */
   float sick_valid_max_cm;       /* valid SICK distance upper bound, cm */
@@ -34,25 +33,24 @@ typedef struct {
 
 typedef struct {
   float prealign_move_speed;     /* PREALIGN added vx, m/s */
-  float align_move_speed;        /* template align step vx, m/s */
-  float pole_extend_move_speed;  /* move speed while extending poles, m/s */
-  uint32_t pole_extend_settle_ms;/* wait after all poles extend, ms */
+  float align_move_speed;        /* ascend/template alignment vx, m/s */
+  float pole_extend_move_speed;  /* vx for all-pole extend/support-pass stages, m/s */
+  uint32_t pole_extend_settle_ms;/* ascend all-pole target minimum settle time, ms */
 
-  float front_retract_move_speed;     /* move speed while front poles retract/extend, m/s */
-  float front_retract_vy;             /* optional vy while waiting front photo, m/s */
-  uint32_t front_retract_settle_ms;   /* front pole action settle time, ms */
-  uint32_t front_retract_timeout_ms;  /* front pole/photo timeout, ms */
+  float front_retract_move_speed;     /* vx for front-side action or second-edge slow capture, m/s */
+  float front_retract_vy;             /* optional vy while waiting front-side photo, m/s */
+  uint32_t front_retract_timeout_ms;  /* front-side action/photo timeout, ms */
 
-  float mid_move_speed;       /* middle move speed, m/s */
-  uint32_t mid_move_ms;       /* middle move time, ms */
+  float mid_move_speed;       /* fixed fast-approach/middle move speed, m/s */
+  uint32_t mid_move_ms;       /* first fixed fast-approach/middle move time, ms */
 
-  float rear_retract_move_speed;     /* move speed while rear poles retract/extend, m/s */
-  float rear_retract_vy;             /* optional vy while waiting rear photo, m/s */
-  uint32_t rear_retract_timeout_ms;  /* rear pole/photo timeout, ms */
-  uint32_t rear_retract_move_ms;     /* rear action move time, ms */
+  float rear_retract_move_speed;     /* vx for rear-side action or first-edge slow capture, m/s */
+  uint32_t rear_retract_timeout_ms;  /* rear-side action/photo timeout, ms */
+  uint32_t rear_retract_move_ms;     /* second fixed fast-approach/rear action move time, ms */
 
-  float final_move_speed;     /* final leave/flat move speed, m/s */
-  uint32_t final_move_ms;     /* final leave/flat move time, ms */
+  float second_photo_retract_move_speed; /* optional vx magnitude when retracting after the second photo, m/s */
+  float final_move_speed;     /* final leave speed, or fallback for second-photo retract vx, m/s */
+  uint32_t final_move_ms;     /* final/all-retract leave time, ms */
 
   float pole_all_extend_speed;    /* all poles extend speed, rad/s */
   float pole_front_extend_speed;  /* front poles extend speed, rad/s */
@@ -62,7 +60,7 @@ typedef struct {
 
   uint32_t front_photo_timeout_ms; /* current forward photo timeout, ms */
   uint32_t rear_photo_timeout_ms;  /* current rear photo timeout, ms */
-  uint32_t hold_ms;                /* simple fallback hold time, ms */
+  uint32_t hold_ms;                /* descend support-pass hold time, ms */
 } AutoCtrl_TemplateParam_t;
 
 typedef struct {
@@ -85,6 +83,7 @@ typedef struct {
   Arm_Params_t arm_param;
   AutoCtrl_Params_t auto_ctrl_param;
   Rod_Params_t rod_param;
+  RodNew_Params_t rod_new_param;
 } Config_RobotParam_t;
 
 Config_RobotParam_t *Config_GetRobotParam(void);

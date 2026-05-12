@@ -30,6 +30,7 @@ typedef enum {
   BSP_GPIO_USER_KEY,
   BSP_GPIO_ACCL_INT,
   BSP_GPIO_GYRO_INT,
+  BSP_GPIO_ROD_GRIPPER,       /* RodNew气动夹爪控制 */
   BSP_GPIO_NUM,
   BSP_GPIO_ERR,
 } BSP_GPIO_t;

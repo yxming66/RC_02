@@ -18,6 +18,7 @@ typedef enum {
     MOTOR_DM_J4310,
     MOTOR_DM_J4310P,
     MOTOR_DM_J4340,
+    MOTOR_DM_H3510,
 } MOTOR_DM_Module_t;
 
 typedef enum {
@@ -100,6 +101,8 @@ int8_t MOTOR_DM_PosVelCtrl(MOTOR_DM_Param_t *param, float target_pos, float targ
 
 int8_t MOTOR_DM_VelCtrl(MOTOR_DM_Param_t *param, float target_vel);
 
+int8_t MOTOR_DM_HybridCtrl(MOTOR_DM_Param_t *param, MOTOR_Hybrid_Output_t *output);
+
 /**
  * @brief 获取指定电机的实例指针
  * @param param 电机参数
@@ -131,6 +134,13 @@ int8_t MOTOR_DM_Offine(MOTOR_DM_Param_t *param);
  * @return DEVICE_OK 成功，DEVICE_ERR 失败
  */
 int8_t MOTOR_DM_SetZero(MOTOR_DM_Param_t *param);
+
+/**
+ * @brief 清除电机错误状态 (DM-H3510)
+ * @param param 电机参数指针
+ * @return DEVICE_OK 成功，DEVICE_ERR 失败
+ */
+int8_t MOTOR_DM_ClearFault(MOTOR_DM_Param_t *param);
 
 const MOTOR_DM_RawFeedback_t* MOTOR_DM_GetRawFeedback(MOTOR_DM_Param_t *param);
 

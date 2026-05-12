@@ -183,6 +183,9 @@ int8_t Pole_UpdateFeedback(Pole_t *c);
 int8_t Pole_Control(Pole_t *c, const Pole_CMD_t *c_cmd, uint32_t now);
 bool Pole_IsGroupAtTarget(const Pole_t *c, uint8_t group, float threshold_rad);
 bool Pole_IsAllAtTarget(const Pole_t *c, float threshold_rad);
+bool Pole_IsGroupAtFinalTarget(const Pole_t *c, uint8_t group,
+                               float threshold_rad);
+bool Pole_IsAllAtFinalTarget(const Pole_t *c, float threshold_rad);
 bool Pole_IsSideOffGround(const Pole_t *c, uint8_t side);
 bool Pole_IsAnyOffGround(const Pole_t *c);
 const Pole_Debug_t *Pole_GetDebug(const Pole_t *c);

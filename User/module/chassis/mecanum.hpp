@@ -36,10 +36,16 @@ class MecanumController final {
   void ResetRuntime();
   void InitFiltersAndPid(float target_freq);
   void ResetControlStateOnModeChange();
+  void ResetWheelVelocityControlState();
+  void ResetWheelHoldControlState();
   int8_t SetMode(Chassis_Mode_t mode, uint32_t now);
   void LimitMoveVector();
   void UpdateBodyVelocityFeedback();
   int8_t ComputeWheelSpeeds();
+  bool ShouldHoldZeroCommand() const;
+  void EnterWheelHold();
+  void ExitWheelHold();
+  int8_t ControlWheelHold();
   int8_t RegisterWheels(float target_freq);
   float WheelSpeedFeedback(uint8_t idx) const;
   float FilteredWheelSpeedFeedback(uint8_t idx);
@@ -58,6 +64,7 @@ class MecanumController final {
   Chassis_Debug_t debug_{};
   Chassis_Output_t out_{};
   std::array<KPID_t, kWheelCount> wheel_pid_{};
+  std::array<KPID_t, kWheelCount> wheel_hold_pid_{};
   KPID_t follow_pid_{};
   std::array<LowPassFilter2p_t, kWheelCount> wheel_speed_filter_{};
   std::array<LowPassFilter2p_t, kWheelCount> output_filter_{};
@@ -67,6 +74,8 @@ class MecanumController final {
   float dt_ = 0.0f;
   float mech_zero_ = 0.0f;
   float wz_multi_ = 1.0f;
+  bool wheel_hold_active_ = false;
+  std::array<float, kWheelCount> wheel_hold_position_rad_{};
   alignas(Wheel) unsigned char wheel_storage_[kWheelCount][sizeof(Wheel)]{};
 };
 

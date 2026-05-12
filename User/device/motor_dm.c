@@ -27,6 +27,7 @@
 /* CAN ID偏移量 */
 #define DM_CAN_ID_OFFSET_POS_VEL  0x100
 #define DM_CAN_ID_OFFSET_VEL      0x200
+#define DM_CAN_ID_OFFSET_HYBRID   0x300  /* 力位混控模式 (DM-H3510) */
 
 /* Private macro ------------------------------------------------------------ */
 #define FLOAT_TO_UINT(x, x_min, x_max, bits) \
@@ -51,6 +52,7 @@ static int8_t MOTOR_DM_ParseFeedbackFrame(MOTOR_DM_t *motor, const uint8_t *data
 static int8_t MOTOR_DM_SendMITCmd(MOTOR_DM_t *motor, MOTOR_MIT_Output_t *output);
 static int8_t MOTOR_DM_SendPosVelCmd(MOTOR_DM_t *motor, float pos, float vel);
 static int8_t MOTOR_DM_SendVelCmd(MOTOR_DM_t *motor, float vel);
+static int8_t MOTOR_DM_SendHybridCmd(MOTOR_DM_t *motor, MOTOR_Hybrid_Output_t *output);
 static MOTOR_DM_CANManager_t* MOTOR_DM_GetCANManager(BSP_CAN_t can);
 
 /* Private functions -------------------------------------------------------- */
@@ -204,6 +206,54 @@ static int8_t MOTOR_DM_SendVelCmd(MOTOR_DM_t *motor, float vel) {
     frame.dlc = 4;
     memcpy(frame.data, data, 4);
     
+    return BSP_CAN_TransmitStdDataFrame(motor->param.can, &frame) == BSP_OK ? DEVICE_OK : DEVICE_ERR;
+}
+
+/**
+ * @brief 发送力位混控模式控制命令 (DM-H3510)
+ * @param motor 电机实例
+ * @param output 力位混控参数
+ * @return 发送结果
+ */
+static int8_t MOTOR_DM_SendHybridCmd(MOTOR_DM_t *motor, MOTOR_Hybrid_Output_t *output) {
+    if (motor == NULL || output == NULL) {
+        return DEVICE_ERR_NULL;
+    }
+
+    uint8_t data[8] = {0};
+    float cmd_pos = output->target_angle;
+    float cmd_vel = output->max_velocity;
+    float cmd_cur = output->current_limit;
+
+    if (motor->param.reverse) {
+        cmd_pos = -cmd_pos;
+        cmd_vel = -cmd_vel;
+    }
+
+    /* 角度: 16位，范围 ±12.56637 rad */
+    int16_t pos_int = (int16_t)(cmd_pos * 10000.0f);
+    /* 速度: 16位，范围 ±1800 rpm (实际使用 rad/s * 100) */
+    int16_t vel_int = (int16_t)(cmd_vel * 100.0f);
+    /* 电流限幅: 16位，标幺值 0-1.0 * 10000 */
+    int16_t cur_int = (int16_t)(cmd_cur * 10000.0f);
+
+    /* 打包数据: P(16) + V(16) + I(16) + 保留(16) */
+    data[0] = (uint8_t)((pos_int >> 8) & 0xFF);
+    data[1] = (uint8_t)(pos_int & 0xFF);
+    data[2] = (uint8_t)((vel_int >> 8) & 0xFF);
+    data[3] = (uint8_t)(vel_int & 0xFF);
+    data[4] = (uint8_t)((cur_int >> 8) & 0xFF);
+    data[5] = (uint8_t)(cur_int & 0xFF);
+    data[6] = 0x00;
+    data[7] = 0x00;
+
+    /* 发送CAN消息，ID为原ID+0x300 */
+    uint32_t can_id = DM_CAN_ID_OFFSET_HYBRID + motor->param.can_id;
+    BSP_CAN_StdDataFrame_t frame;
+    frame.id = can_id;
+    frame.dlc = 8;
+    memcpy(frame.data, data, 8);
+
     return BSP_CAN_TransmitStdDataFrame(motor->param.can, &frame) == BSP_OK ? DEVICE_OK : DEVICE_ERR;
 }
 
@@ -457,13 +507,32 @@ int8_t MOTOR_DM_VelCtrl(MOTOR_DM_Param_t *param, float target_vel) {
     if (param == NULL) {
         return DEVICE_ERR_NULL;
     }
-    
+
     MOTOR_DM_t *motor = MOTOR_DM_GetMotor(param);
     if (motor == NULL) {
         return DEVICE_ERR_NO_DEV;
     }
-    
+
     return MOTOR_DM_SendVelCmd(motor, target_vel);
+}
+
+/**
+ * @brief 力位混控模式控制 (DM-H3510)
+ * @param param 电机参数
+ * @param output 力位混控参数
+ * @return 控制结果
+ */
+int8_t MOTOR_DM_HybridCtrl(MOTOR_DM_Param_t *param, MOTOR_Hybrid_Output_t *output) {
+    if (param == NULL || output == NULL) {
+        return DEVICE_ERR_NULL;
+    }
+
+    MOTOR_DM_t *motor = MOTOR_DM_GetMotor(param);
+    if (motor == NULL) {
+        return DEVICE_ERR_NO_DEV;
+    }
+
+    return MOTOR_DM_SendHybridCmd(motor, output);
 }
 
 /**
@@ -556,6 +625,36 @@ int8_t MOTOR_DM_SetZero(MOTOR_DM_Param_t *param){
     frame.data[5] = 0xFF;
     frame.data[6] = 0xFF;
     frame.data[7] = 0xFE;
+
+    return BSP_CAN_TransmitStdDataFrame(motor->param.can, &frame) == BSP_OK ? DEVICE_OK : DEVICE_ERR;
+}
+
+/**
+ * @brief 清除电机错误状态 (DM-H3510)
+ * @param param 电机参数
+ * @return 操作结果
+ */
+int8_t MOTOR_DM_ClearFault(MOTOR_DM_Param_t *param) {
+    if (param == NULL) {
+        return DEVICE_ERR_NULL;
+    }
+
+    MOTOR_DM_t *motor = MOTOR_DM_GetMotor(param);
+    if (motor == NULL) {
+        return DEVICE_ERR_NO_DEV;
+    }
+
+    BSP_CAN_StdDataFrame_t frame;
+    frame.id = motor->param.can_id;
+    frame.dlc = 8;
+    frame.data[0] = 0xFF;
+    frame.data[1] = 0xFF;
+    frame.data[2] = 0xFF;
+    frame.data[3] = 0xFF;
+    frame.data[4] = 0xFF;
+    frame.data[5] = 0xFF;
+    frame.data[6] = 0xFF;
+    frame.data[7] = 0xFB;  // 清除错误
 
     return BSP_CAN_TransmitStdDataFrame(motor->param.can, &frame) == BSP_OK ? DEVICE_OK : DEVICE_ERR;
 }

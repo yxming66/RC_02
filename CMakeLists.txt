@@ -116,6 +116,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     User/robotics/arm/control/cartesian_servo.cpp
     User/robotics/arm/application/three_pit_cartesian_app.cpp
     # User/module sources
+    User/module/chassis/front_omni_rear_mecanum.cpp
     User/module/chassis/mecanum.cpp
     User/module/pole.cpp
     User/module/rod.cpp
@@ -128,6 +129,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # User/module sources
     User/module/arm/arm.cpp
     User/module/config.c
+    User/module/rod_new.cpp
     User/module/pc_protocol/pc_protocol.cpp
 
     # User/task sources

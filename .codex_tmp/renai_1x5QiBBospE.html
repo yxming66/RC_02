@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta http-equiv="X-UA-Compatible" content="IE=Edge">
+<title>《弹琴吧》官网tan8.com-钢琴谱大全，吉他谱大全，学钢琴，学吉他，就来弹琴吧弹吧</title>
+<meta name="keywords" content="弹琴吧,钢琴谱大全,学钢琴,秀钢琴,吉他谱大全,学吉他,秀吉他,弹琴吧社区,弹琴吧空间,钢琴谱,免费下载,钢琴网,iPad,五线谱,乐谱,曲谱,ove" />
+<meta name="description" content="弹琴吧tan8.com(原蛐蛐钢琴网77music.com)致力成为中国的在线音乐兴趣教育社区，现注册用户突破100万。其音乐软件《钢琴谱大全》app和《吉他谱大全》app，安装量突破千万，好评如潮，小伙伴们快来加入吧。精选2万首ipad钢琴谱,五线谱,乐谱,曲谱,免费下载,强ipad版钢琴谱软件。" />
+<link href="/static/tan8_web_new/css/tan8WebPublic.css?20250121" rel="stylesheet">
+<style>
+.error-box{ position: fixed; left: 50%; top: 45%; transform: translate(-50%,-50%); width: 500px; }
+.error-box img{ width: 500px; height: auto; }
+.error-box p{ padding-top: 10px; padding-left: 15px; color: #f26f65; }
+.error-box .btn-backhome{ display: block; width: 100px; height: 30px; line-height: 30px; margin: 20px 0 0 140px; border: 1px solid #f26f65; border-radius: 15px;
+ text-align: center; font-size: 14px; color: #999; }
+</style>
+</head>
+<body>
+    <div class="error-box">
+        <img src="/static/tan8/style/img/tan8_404.png?1" alt="404">
+        <p id="backTime">5秒钟后自动返回 弹琴吧 首页</p>
+        <a href="https://www.tan8.com" class="btn-backhome"> 返回首页</a>
+    </div>
+<script>
+    var time = 5;
+    function backTime(){
+        if(time==0){
+            location.href = "http://www.tan8.com";
+            return;
+        }
+        time--;
+        document.getElementById("backTime").innerHTML = time+"秒钟后自动返回 弹琴吧 首页";
+    }
+    setInterval(backTime,1000);
+</script>
+</body>
+</html>

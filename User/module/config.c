@@ -34,10 +34,20 @@ Config_RobotParam_t robot_config = {
                 .k = 2.2f,
                 .p = 1.8f,
                 .i = 0.24f,
-                .d = 0.01f,
+                .d = 0.0f,
                 .i_limit = 2.0f,
                 .out_limit = 6.0f,
                 .d_cutoff_freq = 35.0f,
+                .range = 0.0f,
+            },
+            .motor_pos_pid_param = {
+                .k = 1.5f,
+                .p = 5.0f,
+                .i = 2.0f,
+                .d = 0.55f,
+                .i_limit = 1.0f,
+                .out_limit = 6.0f,
+                .d_cutoff_freq = 0.0f,
                 .range = 0.0f,
             },
         },
@@ -57,7 +67,12 @@ Config_RobotParam_t robot_config = {
             .max_vy = 6.0f,
             .max_wz = 6.28f,
         },
-        .type = CHASSIS_TYPE_MECANUM,
+        .controller = {
+            .sample_freq = 500.0f,
+            .position_to_velocity_limit = 1.2f,
+            .velocity_to_torque_limit = 6.0f,
+        },
+        .type = CHASSIS_TYPE_FRONT_OMNI_REAR_MECANUM,
     },
     .pole_param = {
         .motor_param = {
@@ -157,8 +172,6 @@ Config_RobotParam_t robot_config = {
         .common = {
             .prealign_kp = 8.0f,             /* yaw 误差到 wz 指令的比例系数。 */
             .prealign_wz_limit = 2.5f,       /* yaw 对正最大角速度，单位 rad/s。 */
-            .flat_move_speed = 0.25f,        /* 简单平移流程默认 vx，单位 m/s；当前模板未直接使用。 */
-            .flat_move_hold_ms = 600u,       /* 简单平移流程默认保持时间，单位 ms；当前模板未直接使用。 */
             .sick_valid_min_cm = 1.0f,       /* SICK 测距有效下限，单位 cm。 */
             .sick_valid_max_cm = 650.0f,     /* SICK 测距有效上限，单位 cm。 */
             .sick_norm_err_deadband = 0.02f, /* 左右 SICK 归一化差分误差死区。 */
@@ -168,95 +181,95 @@ Config_RobotParam_t robot_config = {
         },
         /* 头向 / 上台阶 / 200mm 模板参数。 */
         .head_ascend_200 = {
+            /*
+             * 专用模板 AutoCtrlTemplate_RunHeadAscendOptimized:
+             * - PREALIGN 已完成 yaw 对正，模板内不再使用 align_move_speed。
+             * - pole_extend_move_speed: 四杆全伸以及等待前光电的前进速度。
+             * - front_retract_move_speed: 前光电触发后，收前腿时的前进速度。
+             * - rear_retract_move_speed: 中段后低速等待后光电的前进速度。
+             * - second_photo_retract_move_speed: 后光电触发后，全收腿时的前进速度。
+             */
             .prealign_move_speed = 1.0f,        /* PREALIGN 对正阶段叠加 vx，单位 m/s。 */
-            .align_move_speed = 0.30f,          /* 模板 step0 对正阶段 vx，单位 m/s。 */
             .pole_extend_move_speed = 0.50f,    /* 撑杆伸出阶段 vx，单位 m/s。 */
-            .pole_extend_settle_ms = 500u,      /* 撑杆伸出后稳定等待时间，单位 ms。 */
             .front_retract_move_speed = 0.50f,  /* 前杆动作阶段 vx，单位 m/s。 */
-            .front_retract_vy = 0.04f,          /* 前杆动作阶段附加 vy，单位 m/s。 */
-            .front_retract_settle_ms = 800u,    /* 前杆动作后稳定等待时间，单位 ms。 */
-            .front_retract_timeout_ms = 5000u,  /* 前杆动作或前光电等待超时，单位 ms。 */
-            .mid_move_speed = 1.0f,            /* 中段平移 vx，单位 m/s。 */
-            .mid_move_ms = 1500u,               /* 中段平移持续时间，单位 ms。 */
-            .rear_retract_move_speed = 1.50f,   /* 后杆动作阶段 vx，单位 m/s。 */
-            .rear_retract_vy = 0.15f,           /* 后杆动作阶段预留附加 vy，单位 m/s。 */
-            .rear_retract_timeout_ms = 5000u,   /* 后杆动作或后光电等待超时，单位 ms。 */
-            .rear_retract_move_ms = 700u,       /* 后杆动作后继续移动时间，单位 ms。 */
-            .final_move_speed = 0.50f,          /* 收尾离开台阶 vx，单位 m/s。 */
-            .final_move_ms = 700u,              /* 收尾离开台阶持续时间，单位 ms。 */
+            .front_retract_timeout_ms = 5000u,  /* 前光电触发后，等待前杆收回到位超时，单位 ms。 */
+            .mid_move_speed = 1.5f,             /* 前杆收回到位后的中段平移 vx，单位 m/s。 */
+            .mid_move_ms = 250u,                  /* 中段平移持续时间，单位 ms。 */
+            .rear_retract_move_speed = 0.20f,   /* 等待后光电触发的低速 vx，单位 m/s。 */
+            .rear_retract_timeout_ms = 5000u,   /* 后光电触发后，全收腿动作超时，单位 ms。 */
+            .rear_retract_move_ms = 300u,       /* 后光电触发后，全收腿移动持续时间，单位 ms。 */
+            .second_photo_retract_move_speed = 0.50f, /* 后一个光电触发收腿时向头向移动 vx，单位 m/s。 */
+            .final_move_speed = 1.5f,          /* 收尾离开台阶 vx，单位 m/s。 */
+            .final_move_ms = 500u,               /* 收尾离开台阶持续时间，单位 ms。 */
             .pole_all_extend_speed = 50.0f,     /* 四杆全伸目标跟随速度，单位 rad/s。 */
             .pole_front_extend_speed = 20.0f,   /* 前杆伸出目标跟随速度，单位 rad/s。 */
-            .pole_front_retract_speed = 18.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
+            .pole_front_retract_speed = 65.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
             .pole_rear_extend_speed = 18.0f,    /* 后杆伸出目标跟随速度，单位 rad/s。 */
             .pole_rear_retract_speed = 30.0f,   /* 后杆回收目标跟随速度，单位 rad/s。 */
             .front_photo_timeout_ms = 5000u,    /* 等待前光电触发/下降沿超时，单位 ms。 */
             .rear_photo_timeout_ms = 10000u,    /* 等待后光电触发/下降沿超时，单位 ms。 */
-            .hold_ms = 1200u,                   /* 保留等待时间，单位 ms；当前模板未直接使用。 */
         },
         /* 头向 / 上台阶 / 400mm 模板参数。 */
         .head_ascend_400 = {
+            /*
+             * 专用模板 AutoCtrlTemplate_RunHeadAscendOptimized:
+             * - PREALIGN 已完成 yaw 对正，模板内不再使用 align_move_speed。
+             * - pole_extend_move_speed: 四杆全伸以及等待前光电的前进速度。
+             * - front_retract_move_speed: 前光电触发后，收前腿时的前进速度。
+             * - rear_retract_move_speed: 中段后低速等待后光电的前进速度。
+             * - second_photo_retract_move_speed: 后光电触发后，全收腿时的前进速度。
+             */
             .prealign_move_speed = 1.0f,       /* PREALIGN 对正阶段叠加 vx，单位 m/s。 */
-            .align_move_speed = 0.80f,          /* 模板 step0 对正阶段 vx，单位 m/s。 */
             .pole_extend_move_speed = 0.50f,    /* 撑杆伸出阶段 vx，单位 m/s。 */
-            .pole_extend_settle_ms = 800u,     /* 撑杆伸出后稳定等待时间，单位 ms。 */
             .front_retract_move_speed = 0.50f,  /* 前杆动作阶段 vx，单位 m/s。 */
-            .front_retract_vy = 0.04f,          /* 前杆动作阶段附加 vy，单位 m/s。 */
-            .front_retract_settle_ms = 1500u,    /* 前杆动作后稳定等待时间，单位 ms。 */
-            .front_retract_timeout_ms = 5000u,  /* 前杆动作或前光电等待超时，单位 ms。 */
-            .mid_move_speed = 1.2f,            /* 中段平移 vx，单位 m/s。 */
+            .front_retract_timeout_ms = 5000u,  /* 前光电触发后，等待前杆收回到位超时，单位 ms。 */
+            .mid_move_speed = 1.5f,             /* 前杆收回到位后的中段平移 vx，单位 m/s。 */
             .mid_move_ms = 250u,               /* 中段平移持续时间，单位 ms。 */
-            .rear_retract_move_speed = 0.80f,   /* 后杆动作阶段 vx，单位 m/s。 */
-            .rear_retract_vy = 0.0f,           /* 后杆动作阶段预留附加 vy，单位 m/s。 */
-            .rear_retract_timeout_ms = 5000u,   /* 后杆动作或后光电等待超时，单位 ms。 */
-            .rear_retract_move_ms = 700u,       /* 后杆动作后继续移动时间，单位 ms。 */
-            .final_move_speed = 0.50f,          /* 收尾离开台阶 vx，单位 m/s。 */
-            .final_move_ms = 700u,              /* 收尾离开台阶持续时间，单位 ms。 */
-            .pole_all_extend_speed = 70.0f,     /* 四杆全伸目标跟随速度，单位 rad/s。 */
+            .rear_retract_move_speed = 0.20f,   /* 等待后光电触发的低速 vx，单位 m/s。 */
+            .rear_retract_timeout_ms = 5000u,   /* 后光电触发后，全收腿动作超时，单位 ms。 */
+            .rear_retract_move_ms = 300u,       /* 后光电触发后，全收腿移动持续时间，单位 ms。 */
+            .second_photo_retract_move_speed = 0.50f, /* 后一个光电触发收腿时向头向移动 vx，单位 m/s。 */
+            .final_move_speed = 1.5f,           /* 收尾离开台阶 vx，单位 m/s。 */
+            .final_move_ms = 800u,              /* 收尾离开台阶持续时间，单位 ms。 */
+            .pole_all_extend_speed = 50.0f,     /* 四杆全伸目标跟随速度，单位 rad/s。 */
             .pole_front_extend_speed = 20.0f,   /* 前杆伸出目标跟随速度，单位 rad/s。 */
-            .pole_front_retract_speed = 70.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
+            .pole_front_retract_speed = 65.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
             .pole_rear_extend_speed = 18.0f,    /* 后杆伸出目标跟随速度，单位 rad/s。 */
             .pole_rear_retract_speed = 30.0f,   /* 后杆回收目标跟随速度，单位 rad/s。 */
             .front_photo_timeout_ms = 5000u,    /* 等待前光电触发/下降沿超时，单位 ms。 */
             .rear_photo_timeout_ms = 10000u,     /* 等待后光电触发/下降沿超时，单位 ms。 */
-            .hold_ms = 1200u,                   /* 保留等待时间，单位 ms；当前模板未直接使用。 */
         },
         /* 头向 / 下台阶 / 200mm 模板参数。 */
         .head_descend_200 = {
             /*
-             * Optimized fixed-start flow:
-             * - mid_move_speed/mid_move_ms: first fixed fast approach.
-             * - rear_retract_move_speed: slow capture speed for first falling edge.
-             * - rear_retract_move_ms: middle fixed fast run after first poles extend.
-             * - front_retract_move_speed: slow capture speed for second falling edge.
-             * - pole_extend_move_speed/hold_ms: all-pole support pass.
-             * - pole extend steps command vx = 0 in the template.
+             * Head-descend 200 optimized flow:
+             * - step0: fast approach for mid_move_ms using mid_move_speed.
+             * - step1: slow capture PA2/photo3 falling edge using rear_retract_move_speed.
+             * - step2: stop and extend front poles, then wait for front-pole target.
+             * - step3: second fixed fast approach for rear_retract_move_ms using mid_move_speed.
+             * - step4: slow capture PE13/photo1 falling edge using front_retract_move_speed.
+             * - step5: stop and extend all poles, then wait for all-pole target.
+             * - step6: all-pole support pass using pole_extend_move_speed for hold_ms.
+             * - step7: retract all poles and leave using second_photo_retract_move_speed for final_move_ms.
              */
-            /* Active fields used by AutoCtrlTemplate_RunHeadDescendOptimized. */
-            .prealign_move_speed = 0.20f,       /* PREALIGN 对正阶段叠加 vx，单位 m/s。 */
-            .align_move_speed = 0.30f,          /* 模板 step0 对正阶段 vx，单位 m/s。 */
-            .pole_extend_move_speed = 0.20f,    /* 撑杆伸出阶段 vx，单位 m/s。 */
-            .pole_extend_settle_ms = 900u,      /* 撑杆伸出后稳定等待时间，单位 ms。 */
-            .front_retract_move_speed = 0.10f,  /* 前杆动作阶段 vx，单位 m/s。 */
-            .front_retract_settle_ms = 800u,    /* 前杆动作后稳定等待时间，单位 ms。 */
-            .mid_move_speed = 0.20f,            /* 中段平移 vx，单位 m/s。 */
-            .mid_move_ms = 700u,                /* 中段平移持续时间，单位 ms。 */
-            .rear_retract_move_speed = 0.10f,   /* 后杆动作阶段 vx，单位 m/s。 */
-            .rear_retract_move_ms = 700u,       /* 后杆动作后继续移动时间，单位 ms。 */
-            .final_move_speed = 0.10f,          /* 收尾离开台阶 vx，单位 m/s。 */
-            .final_move_ms = 600u,              /* 收尾离开台阶持续时间，单位 ms。 */
-            .pole_front_extend_speed = 30.0f,   /* 前杆伸出目标跟随速度，单位 rad/s。 */
-            .pole_front_retract_speed = 18.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
-            .pole_rear_extend_speed = 30.0f,    /* 后杆伸出目标跟随速度，单位 rad/s。 */
-            .pole_rear_retract_speed = 30.0f,   /* 后杆回收目标跟随速度，单位 rad/s。 */
-            .front_photo_timeout_ms = 5000u,    /* 等待前光电触发/下降沿超时，单位 ms。 */
-            .rear_photo_timeout_ms = 5000u,     /* 等待后光电触发/下降沿超时，单位 ms。 */
-            .hold_ms = 1200u,                   /* 保留等待时间，单位 ms；当前模板未直接使用。 */
-            /* Unused legacy/shared fields for head_descend_200. */
-            .front_retract_vy = 0.0f,           /* unused: no lateral vy in this template. */
-            .front_retract_timeout_ms = 5000u, /* unused: use front_photo_timeout_ms instead. */
-            .rear_retract_vy = 0.0f,            /* unused: no lateral vy in this template. */
-            .rear_retract_timeout_ms = 5000u,  /* unused: use rear_photo_timeout_ms instead. */
-            .pole_all_extend_speed = 50.0f,     /* unused: use front/rear extend speeds. */
+            /* Active fields used by AutoCtrlTemplate_RunHeadDescend200Optimized. */
+            .prealign_move_speed = 0.20f,       /* PREALIGN yaw 对正时叠加的前进 vx，单位 m/s。 */
+            .pole_extend_move_speed = 0.0f,     /* step6 四杆全伸支撑通过 vx，单位 m/s。 */
+            .front_retract_move_speed = 0.10f,  /* step4 等待 PE13/photo1 下降沿的慢速 vx，单位 m/s。 */
+            .mid_move_speed = 1.50f,            /* step0/step3 两段固定快跑 vx，单位 m/s。 */
+            .mid_move_ms = 280u,                /* step0 第一次固定快跑持续时间，单位 ms。 */
+            .rear_retract_move_speed = 0.10f,   /* step1 等待 PA2/photo3 下降沿的慢速 vx，单位 m/s。 */
+            .rear_retract_move_ms = 280u,       /* step3 第二次固定快跑持续时间，单位 ms。 */
+            .second_photo_retract_move_speed = 0.10f, /* step7 第二个下降沿后全收杆离开 vx，单位 m/s。 */
+            .final_move_speed = 0.10f,          /* step7 离开 vx 的备用值；second_photo_retract_move_speed <= 0 时使用。 */
+            .final_move_ms = 700u,              /* step7 全收杆离开持续时间，单位 ms。 */
+            .pole_front_extend_speed = 65.0f,   /* step2 前杆伸出、step5/6 四杆全伸时的前杆速度，单位 rad/s。 */
+            .pole_front_retract_speed = 25.0f,  /* step0/1/7 前杆保持或回收到全收目标的速度，单位 rad/s。 */
+            .pole_rear_extend_speed = 65.0f,    /* step5/6 四杆全伸时的后杆速度，单位 rad/s。 */
+            .pole_rear_retract_speed = 25.0f,   /* step0-4/7 后杆保持或回收到全收目标的速度，单位 rad/s。 */
+            .front_photo_timeout_ms = 5000u,    /* step4 等待 PE13/photo1 下降沿超时，单位 ms。 */
+            .rear_photo_timeout_ms = 5000u,     /* step1 等待 PA2/photo3 下降沿超时，单位 ms。 */
+            .hold_ms = 50u,                     /* step6 四杆全伸支撑通过持续时间，单位 ms。 */
         },
         /* 头向 / 下台阶 / 400mm 模板参数。 */
         .head_descend_400 = {
@@ -271,47 +284,38 @@ Config_RobotParam_t robot_config = {
              */
             /* Active fields used by AutoCtrlTemplate_RunHeadDescend400Optimized. */
             .prealign_move_speed = 0.20f,       /* PREALIGN 对正阶段叠加 vx，单位 m/s。 */
-            .align_move_speed = 0.30f,          /* 模板 step0 对正阶段 vx，单位 m/s。 */
-            .pole_extend_move_speed = 0.25f,    /* 撑杆伸出阶段 vx，单位 m/s。 */
-            .pole_extend_settle_ms = 900u,      /* 撑杆伸出后稳定等待时间，单位 ms。 */
-            .front_retract_move_speed = 0.10f,  /* 前杆动作阶段 vx，单位 m/s。 */
-            .front_retract_settle_ms = 800u,   /* 前杆动作后稳定等待时间，单位 ms。 */
-            .mid_move_speed = 0.35f,            /* 中段平移 vx，单位 m/s。 */
-            .mid_move_ms = 200u,                /* 中段平移持续时间，单位 ms。 */
-            .rear_retract_move_speed = 0.10f,   /* 后杆动作阶段 vx，单位 m/s。 */
-            .rear_retract_move_ms = 700u,       /* 后杆动作后继续移动时间，单位 ms。 */
+            .pole_extend_move_speed = 0.0f,     /* 撑杆伸出阶段 vx，单位 m/s。 */
+            .front_retract_move_speed = 0.05f,  /* 前杆动作阶段 vx，单位 m/s。 */
+            .mid_move_speed = 1.50f,            /* 中段平移 vx，单位 m/s。 */
+            .mid_move_ms = 260u,                /* 中段平移持续时间，单位 ms。 */
+            .rear_retract_move_speed = 0.05f,   /* 后杆动作阶段 vx，单位 m/s。 */
+            .rear_retract_move_ms = 260u,       /* 后杆动作后继续移动时间，单位 ms。 */
+            .second_photo_retract_move_speed = 0.10f, /* step7 第二个下降沿后全收杆离开 vx，单位 m/s。 */
             .final_move_speed = 0.10f,          /* 收尾离开台阶 vx，单位 m/s。 */
-            .final_move_ms = 500u,              /* 收尾离开台阶持续时间，单位 ms。 */
-            .pole_front_extend_speed = 60.0f,   /* 前杆伸出目标跟随速度，单位 rad/s。 */
+            .final_move_ms = 100u,              /* 收尾离开台阶持续时间，单位 ms。 */
+            .pole_front_extend_speed = 65.0f,   /* 前杆伸出目标跟随速度，单位 rad/s。 */
             .pole_front_retract_speed = 25.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
-            .pole_rear_extend_speed = 60.0f,    /* 后杆伸出目标跟随速度，单位 rad/s。 */
+            .pole_rear_extend_speed = 65.0f,    /* 后杆伸出目标跟随速度，单位 rad/s。 */
             .pole_rear_retract_speed = 25.0f,   /* 后杆回收目标跟随速度，单位 rad/s。 */
             .front_photo_timeout_ms = 5000u,    /* 等待前光电触发/下降沿超时，单位 ms。 */
             .rear_photo_timeout_ms = 5000u,     /* 等待后光电触发/下降沿超时，单位 ms。 */
-            .hold_ms = 1200u,                   /* 保留等待时间，单位 ms；当前模板未直接使用。 */
-            /* Unused legacy/shared fields for head_descend_400. */
-            .front_retract_vy = 0.0f,           /* unused: no lateral vy in this template. */
-            .front_retract_timeout_ms = 5000u, /* unused: use front_photo_timeout_ms instead. */
-            .rear_retract_vy = 0.0f,            /* unused: no lateral vy in this template. */
-            .rear_retract_timeout_ms = 5000u,  /* unused: use rear_photo_timeout_ms instead. */
-            .pole_all_extend_speed = 50.0f,     /* unused: use front/rear extend speeds. */
+            .hold_ms = 50u,                     /* 四杆全伸支撑通过时间，单位 ms。 */
         },
         /* 尾向 / 上台阶 / 200mm 模板参数。 */
         .tail_ascend_200 = {
             .prealign_move_speed = 0.50f,       /* PREALIGN 对正阶段叠加 vx，单位 m/s。 */
-            .align_move_speed = 0.30f,          /* 模板 step0 对正阶段 vx，单位 m/s。 */
+            .align_move_speed = 0.0f,           /* 模板 step0 对正阶段 vx；0 表示只对正不前进。 */
             .pole_extend_move_speed = 0.50f,    /* 撑杆伸出阶段 vx，单位 m/s。 */
             .pole_extend_settle_ms = 900u,      /* 撑杆伸出后稳定等待时间，单位 ms。 */
             .front_retract_move_speed = 0.50f,  /* 前杆动作阶段 vx，单位 m/s。 */
             .front_retract_vy = 0.04f,          /* 前杆动作阶段附加 vy，单位 m/s。 */
-            .front_retract_settle_ms = 800u,    /* 前杆动作后稳定等待时间，单位 ms。 */
             .front_retract_timeout_ms = 5000u,  /* 前杆动作或前光电等待超时，单位 ms。 */
             .mid_move_speed = 0.50f,            /* 中段平移 vx，单位 m/s。 */
             .mid_move_ms = 1500u,               /* 中段平移持续时间，单位 ms。 */
             .rear_retract_move_speed = 0.20f,   /* 后杆动作阶段 vx，单位 m/s。 */
-            .rear_retract_vy = 0.15f,           /* 后杆动作阶段预留附加 vy，单位 m/s。 */
             .rear_retract_timeout_ms = 5000u,   /* 后杆动作或后光电等待超时，单位 ms。 */
             .rear_retract_move_ms = 700u,       /* 后杆动作后继续移动时间，单位 ms。 */
+            .second_photo_retract_move_speed = 0.20f, /* 后一个光电触发收腿时向尾向移动 vx，单位 m/s。 */
             .final_move_speed = 0.25f,          /* 收尾离开台阶 vx，单位 m/s。 */
             .final_move_ms = 600u,              /* 收尾离开台阶持续时间，单位 ms。 */
             .pole_all_extend_speed = 50.0f,     /* 四杆全伸目标跟随速度，单位 rad/s。 */
@@ -321,22 +325,19 @@ Config_RobotParam_t robot_config = {
             .pole_rear_retract_speed = 30.0f,   /* 后杆回收目标跟随速度，单位 rad/s。 */
             .front_photo_timeout_ms = 5000u,    /* 等待前光电触发/下降沿超时，单位 ms。 */
             .rear_photo_timeout_ms = 10000u,    /* 等待后光电触发/下降沿超时，单位 ms。 */
-            .hold_ms = 1200u,                   /* 保留等待时间，单位 ms；当前模板未直接使用。 */
         },
         /* 尾向 / 上台阶 / 400mm 模板参数。 */
         .tail_ascend_400 = {
             .prealign_move_speed = 0.50f,       /* PREALIGN 对正阶段叠加 vx，单位 m/s。 */
             .align_move_speed = 0.30f,          /* 模板 step0 对正阶段 vx，单位 m/s。 */
             .pole_extend_move_speed = 0.50f,    /* 撑杆伸出阶段 vx，单位 m/s。 */
-            .pole_extend_settle_ms = 900u,     /* 撑杆伸出后稳定等待时间，单位 ms。 */
+            .pole_extend_settle_ms = 0u,        /* 四杆全伸后稳定等待时间；0 表示到位后立即切步。 */
             .front_retract_move_speed = 0.50f,  /* 前杆动作阶段 vx，单位 m/s。 */
             .front_retract_vy = 0.04f,          /* 前杆动作阶段附加 vy，单位 m/s。 */
-            .front_retract_settle_ms = 800u,    /* 前杆动作后稳定等待时间，单位 ms。 */
             .front_retract_timeout_ms = 5000u,  /* 前杆动作或前光电等待超时，单位 ms。 */
             .mid_move_speed = 0.50f,            /* 中段平移 vx，单位 m/s。 */
             .mid_move_ms = 1500u,               /* 中段平移持续时间，单位 ms。 */
             .rear_retract_move_speed = 0.20f,   /* 后杆动作阶段 vx，单位 m/s。 */
-            .rear_retract_vy = 0.15f,           /* 后杆动作阶段预留附加 vy，单位 m/s。 */
             .rear_retract_timeout_ms = 5000u,   /* 后杆动作或后光电等待超时，单位 ms。 */
             .rear_retract_move_ms = 700u,       /* 后杆动作后继续移动时间，单位 ms。 */
             .final_move_speed = 0.25f,          /* 收尾离开台阶 vx，单位 m/s。 */
@@ -348,7 +349,6 @@ Config_RobotParam_t robot_config = {
             .pole_rear_retract_speed = 30.0f,   /* 后杆回收目标跟随速度，单位 rad/s。 */
             .front_photo_timeout_ms = 5000u,    /* 等待前光电触发/下降沿超时，单位 ms。 */
             .rear_photo_timeout_ms = 10000u,     /* 等待后光电触发/下降沿超时，单位 ms。 */
-            .hold_ms = 1200u,                   /* 保留等待时间，单位 ms；当前模板未直接使用。 */
         },
         /* 尾向 / 下台阶 / 200mm 模板参数。 */
         .tail_descend_200 = {
@@ -363,30 +363,22 @@ Config_RobotParam_t robot_config = {
              */
             /* Active fields used by AutoCtrlTemplate_RunTailDescendOptimized. */
             .prealign_move_speed = 0.20f,       /* PREALIGN 对正阶段叠加 vx，单位 m/s。 */
-            .align_move_speed = 0.30f,          /* 模板 step0 对正阶段 vx，单位 m/s。 */
             .pole_extend_move_speed = 0.20f,    /* 四杆全伸支撑通过 vx，单位 m/s。 */
-            .pole_extend_settle_ms = 900u,      /* 后杆伸出后停车稳定等待时间，单位 ms。 */
-            .front_retract_move_speed = 0.10f,  /* 慢速捕获 photo1 下降沿 vx，单位 m/s。 */
-            .front_retract_settle_ms = 800u,    /* 前杆伸出后停车稳定等待时间，单位 ms。 */
-            .mid_move_speed = 0.30f,            /* 固定快跑 vx，单位 m/s。 */
-            .mid_move_ms = 100u,                /* 第一次固定快跑持续时间，单位 ms。 */
-            .rear_retract_move_speed = 0.10f,   /* 慢速捕获 photo3 下降沿 vx，单位 m/s。 */
-            .rear_retract_move_ms = 700u,       /* 后杆伸出后的中间固定快跑时间，单位 ms。 */
+            .front_retract_move_speed = 0.05f,  /* 慢速捕获 photo1 下降沿 vx，单位 m/s。 */
+            .mid_move_speed = 0.80f,            /* 固定快跑 vx，单位 m/s。 */
+            .mid_move_ms = 20u,                /* 第一次固定快跑持续时间，单位 ms。 */
+            .rear_retract_move_speed = 0.05f,   /* 慢速捕获 photo3 下降沿 vx，单位 m/s。 */
+            .rear_retract_move_ms = 20u,       /* 后杆伸出后的中间固定快跑时间，单位 ms。 */
+            .second_photo_retract_move_speed = 0.10f, /* 第二个下降沿后收腿时向尾向移动 vx，单位 m/s。 */
             .final_move_speed = 0.10f,          /* 收尾离开台阶 vx，单位 m/s。 */
             .final_move_ms = 500u,              /* 收尾离开台阶持续时间，单位 ms。 */
-            .pole_front_extend_speed = 60.0f,   /* 前杆伸出目标跟随速度，单位 rad/s。 */
+            .pole_front_extend_speed = 50.0f,   /* 前杆伸出目标跟随速度，单位 rad/s。 */
             .pole_front_retract_speed = 25.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
-            .pole_rear_extend_speed = 60.0f,    /* 后杆伸出目标跟随速度，单位 rad/s。 */
+            .pole_rear_extend_speed = 50.0f,    /* 后杆伸出目标跟随速度，单位 rad/s。 */
             .pole_rear_retract_speed = 25.0f,   /* 后杆回收目标跟随速度，单位 rad/s。 */
             .front_photo_timeout_ms = 5000u,    /* 等待 photo1 下降沿超时，单位 ms。 */
             .rear_photo_timeout_ms = 5000u,     /* 等待 photo3 下降沿超时，单位 ms。 */
             .hold_ms = 1200u,                   /* 四杆全伸支撑通过时间，单位 ms。 */
-            /* Unused legacy/shared fields for tail_descend_200. */
-            .front_retract_vy = 0.0f,           /* unused: no lateral vy in this template. */
-            .front_retract_timeout_ms = 5000u, /* unused: use front_photo_timeout_ms instead. */
-            .rear_retract_vy = 0.0f,            /* unused: no lateral vy in this template. */
-            .rear_retract_timeout_ms = 5000u,  /* unused: use rear_photo_timeout_ms instead. */
-            .pole_all_extend_speed = 50.0f,     /* unused: use front/rear extend speeds. */
         },
         /* 尾向 / 下台阶 / 400mm 模板参数。 */
         .tail_descend_400 = {
@@ -401,11 +393,8 @@ Config_RobotParam_t robot_config = {
              */
             /* Active fields used by AutoCtrlTemplate_RunTailDescendOptimized. */
             .prealign_move_speed = 0.20f,       /* PREALIGN 对正阶段叠加 vx，单位 m/s。 */
-            .align_move_speed = 0.30f,          /* 模板 step0 对正阶段 vx，单位 m/s。 */
             .pole_extend_move_speed = 0.25f,    /* 撑杆伸出阶段 vx，单位 m/s。 */
-            .pole_extend_settle_ms = 900u,     /* 撑杆伸出后稳定等待时间，单位 ms。 */
             .front_retract_move_speed = 0.10f,  /* 前杆动作阶段 vx，单位 m/s。 */
-            .front_retract_settle_ms = 800u,   /* 前杆动作后稳定等待时间，单位 ms。 */
             .mid_move_speed = 0.35f,            /* 中段平移 vx，单位 m/s。 */
             .mid_move_ms = 200u,               /* 中段平移持续时间，单位 ms。 */
             .rear_retract_move_speed = 0.10f,   /* 后杆动作阶段 vx，单位 m/s。 */
@@ -418,13 +407,7 @@ Config_RobotParam_t robot_config = {
             .pole_rear_retract_speed = 25.0f,   /* 后杆回收目标跟随速度，单位 rad/s。 */
             .front_photo_timeout_ms = 5000u,    /* 等待前光电触发/下降沿超时，单位 ms。 */
             .rear_photo_timeout_ms = 5000u,     /* 等待后光电触发/下降沿超时，单位 ms。 */
-            .hold_ms = 1200u,                   /* 保留等待时间，单位 ms；当前模板未直接使用。 */
-            /* Unused legacy/shared fields for tail_descend_400. */
-            .front_retract_vy = 0.0f,           /* unused: no lateral vy in this template. */
-            .front_retract_timeout_ms = 5000u, /* unused: use front_photo_timeout_ms instead. */
-            .rear_retract_vy = 0.0f,            /* unused: no lateral vy in this template. */
-            .rear_retract_timeout_ms = 5000u,  /* unused: use rear_photo_timeout_ms instead. */
-            .pole_all_extend_speed = 50.0f,     /* unused: use front/rear extend speeds. */
+            .hold_ms = 1200u,                   /* 四杆全伸支撑通过时间，单位 ms。 */
         },
     },
     .rod_param = {
@@ -453,6 +436,26 @@ Config_RobotParam_t robot_config = {
             .pit_max_acc = 1.0f,
             .rol_max_vel = 1.8f,
             .rol_max_acc = 1.5f,
+        },
+    },
+    .rod_new_param = {
+        .servo = {
+            /* TODO: 根据实际机构调整角度参数 */
+            .angle_standby_rad = 0.0f,       /* 待机位：放平 */
+            .angle_ready_rad = 0.5f,          /* 预备位 */
+            .angle_grab_low_rad = 0.3f,     /* 低位夹取 */
+            .angle_grab_high_rad = 0.8f,     /* 高位夹取 */
+            .angle_lift_rad = 1.2f,          /* 抬升位 */
+            .angle_min_rad = -1.57f,         /* 约 -90°，舵机行程下限 */
+            .angle_max_rad = 1.57f,          /* 约 +90°，舵机行程上限 */
+            .arrive_threshold_rad = 0.05f,  /* 到位判定阈值 */
+            .max_vel_rad_s = 2.0f,           /* 最大角速度 */
+            .max_acc_rad_s = 5.0f,          /* 最大角加速度 */
+        },
+        .gripper = {
+            /* TODO: 在gpio.c中配置具体GPIO引脚 */
+            .gripper_gpio = BSP_GPIO_ROD_GRIPPER,
+            .grip_timeout_ms = 2000u,        /* 夹取超时 */
         },
     },
 };

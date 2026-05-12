@@ -1,0 +1,11 @@
+{
+  "access-control-expose-headers": "ETag",
+  "connection": "keep-alive",
+  "content-encoding": "gzip",
+  "content-type": "application/json; charset=UTF-8",
+  "date": "Mon, 11 May 2026 16:36:03 GMT",
+  "server": "nginx/1.12.2",
+  "set-cookie": "fv=1; expires=Wed, 10-Jun-2026 16:36:03 GMT; Max-Age=2592000; path=/",
+  "transfer-encoding": "chunked",
+  "x-powered-by": "PHP/7.3.1"
+}

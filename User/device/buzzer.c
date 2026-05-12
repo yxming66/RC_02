@@ -18,13 +18,21 @@
 #define TORI_NO_UTA_TONE_GAP_MS 0U
 #define GU_SHI_XI_NI_TONE_GAP_MS 0U
 #define SENBONZAKURA_TONE_GAP_MS 0U
+#define ER_QUAN_YING_YUE_TONE_GAP_MS 0U
 #define YI_BU_ZHI_YAO_TONE_GAP_MS 0U
+#define RENAI_CIRCULATION_TONE_GAP_MS 0U
+#define FUYU_NO_HANA_TONE_GAP_MS 0U
+#define HAPPY_BIRTHDAY_TONE_GAP_MS 8U
 #define HONG_DOU_TONE_GAP_MS 0U
 #define YUAN_YU_CHOU_TONE_GAP_MS 0U
 #define MOONLIGHT_SONATA_TONE_GAP_MS 1U
 #define MOONLIGHT_SONATA_2ND_TONE_GAP_MS 0U
 #define MOONLIGHT_SONATA_3RD_TONE_GAP_MS 0U
 #define MERRY_CHRISTMAS_MR_LAWRENCE_TONE_GAP_MS 1U
+#define HAO_YUN_LAI_TONE_GAP_MS 0U
+#define CROATIAN_RHAPSODY_TONE_GAP_MS 0U
+#define SUGAR_PLUM_FAIRY_TONE_GAP_MS 0U
+#define JIAO_HUAN_YU_SHENG_TONE_GAP_MS 0U
 #define BUMBLEBEE_TEMPO_BPM 165U
 #define BUMBLEBEE_SIXTEENTH_MS ((60000U + (BUMBLEBEE_TEMPO_BPM * 2U)) / (BUMBLEBEE_TEMPO_BPM * 4U))
 #define BUMBLEBEE_TONE_GAP_MS 0U
@@ -67,11 +75,19 @@ const Tone_t NOKIA[] = {
 #include "buzzer_tori_no_uta.inc"
 #include "buzzer_gu_shi_xi_ni.inc"
 #include "buzzer_senbonzakura.inc"
+#include "buzzer_er_quan_ying_yue.inc"
 #include "buzzer_yi_bu_zhi_yao.inc"
+#include "buzzer_renai_circulation.inc"
+#include "buzzer_fuyu_no_hana.inc"
+#include "buzzer_happy_birthday.inc"
 #include "buzzer_moonlight_sonata.inc"
 #include "buzzer_moonlight_sonata_2.inc"
 #include "buzzer_moonlight_sonata_3rd.inc"
 #include "buzzer_merry_christmas_mr_lawrence.inc"
+#include "buzzer_hao_yun_lai.inc"
+#include "buzzer_croatian_rhapsody.inc"
+#include "buzzer_sugar_plum_fairy.inc"
+#include "buzzer_jiao_huan_yu_sheng.inc"
 
 const Tone_t STARTUP_TOMATO_GARDEN[] = {
     {NOTE_DS, 4, 300}, {NOTE_F, 4, 300}, {NOTE_G, 4, 450},
@@ -412,10 +428,30 @@ static int8_t BUZZER_GetMusicData(MUSIC_t music, BuzzerMusicData_t *data) {
             data->melody_length = sizeof(SENBONZAKURA) / sizeof(Tone_t);
             data->tone_gap_ms = SENBONZAKURA_TONE_GAP_MS;
             break;
+        case MUSIC_ER_QUAN_YING_YUE:
+            data->melody = ER_QUAN_YING_YUE;
+            data->melody_length = sizeof(ER_QUAN_YING_YUE) / sizeof(Tone_t);
+            data->tone_gap_ms = ER_QUAN_YING_YUE_TONE_GAP_MS;
+            break;
         case MUSIC_YI_BU_ZHI_YAO:
             data->melody = YI_BU_ZHI_YAO;
             data->melody_length = sizeof(YI_BU_ZHI_YAO) / sizeof(Tone_t);
             data->tone_gap_ms = YI_BU_ZHI_YAO_TONE_GAP_MS;
+            break;
+        case MUSIC_RENAI_CIRCULATION:
+            data->melody = RENAI_CIRCULATION;
+            data->melody_length = sizeof(RENAI_CIRCULATION) / sizeof(Tone_t);
+            data->tone_gap_ms = RENAI_CIRCULATION_TONE_GAP_MS;
+            break;
+        case MUSIC_FUYU_NO_HANA:
+            data->melody = FUYU_NO_HANA;
+            data->melody_length = sizeof(FUYU_NO_HANA) / sizeof(Tone_t);
+            data->tone_gap_ms = FUYU_NO_HANA_TONE_GAP_MS;
+            break;
+        case MUSIC_HAPPY_BIRTHDAY:
+            data->melody = HAPPY_BIRTHDAY;
+            data->melody_length = sizeof(HAPPY_BIRTHDAY) / sizeof(Tone_t);
+            data->tone_gap_ms = HAPPY_BIRTHDAY_TONE_GAP_MS;
             break;
         case MUSIC_MOONLIGHT_SONATA:
             data->melody = MOONLIGHT_SONATA_1ST;
@@ -442,6 +478,26 @@ static int8_t BUZZER_GetMusicData(MUSIC_t music, BuzzerMusicData_t *data) {
             data->melody = HAPPY_DOU_DI_ZHU_MELODY;
             data->melody_length =
                 sizeof(HAPPY_DOU_DI_ZHU_MELODY) / sizeof(Tone_t);
+            break;
+        case MUSIC_HAO_YUN_LAI:
+            data->melody = HAO_YUN_LAI;
+            data->melody_length = sizeof(HAO_YUN_LAI) / sizeof(Tone_t);
+            data->tone_gap_ms = HAO_YUN_LAI_TONE_GAP_MS;
+            break;
+        case MUSIC_CROATIAN_RHAPSODY:
+            data->melody = CROATIAN_RHAPSODY;
+            data->melody_length = sizeof(CROATIAN_RHAPSODY) / sizeof(Tone_t);
+            data->tone_gap_ms = CROATIAN_RHAPSODY_TONE_GAP_MS;
+            break;
+        case MUSIC_JIAO_HUAN_YU_SHENG:
+            data->melody = JIAO_HUAN_YU_SHENG;
+            data->melody_length = sizeof(JIAO_HUAN_YU_SHENG) / sizeof(Tone_t);
+            data->tone_gap_ms = JIAO_HUAN_YU_SHENG_TONE_GAP_MS;
+            break;
+        case MUSIC_SUGAR_PLUM_FAIRY:
+            data->melody = SUGAR_PLUM_FAIRY;
+            data->melody_length = sizeof(SUGAR_PLUM_FAIRY) / sizeof(Tone_t);
+            data->tone_gap_ms = SUGAR_PLUM_FAIRY_TONE_GAP_MS;
             break;
         case MUSIC_STARTUP_YUAN_YU_CHOU:
             data->melody = STARTUP_YUAN_YU_CHOU;
@@ -621,10 +677,30 @@ int8_t BUZZER_PlayMusic(BUZZER_t *buzzer, MUSIC_t music) {
             melody_length = sizeof(SENBONZAKURA) / sizeof(Tone_t);
             tone_gap_ms = SENBONZAKURA_TONE_GAP_MS;
             break;
+        case MUSIC_ER_QUAN_YING_YUE:
+            melody = ER_QUAN_YING_YUE;
+            melody_length = sizeof(ER_QUAN_YING_YUE) / sizeof(Tone_t);
+            tone_gap_ms = ER_QUAN_YING_YUE_TONE_GAP_MS;
+            break;
         case MUSIC_YI_BU_ZHI_YAO:
             melody = YI_BU_ZHI_YAO;
             melody_length = sizeof(YI_BU_ZHI_YAO) / sizeof(Tone_t);
             tone_gap_ms = YI_BU_ZHI_YAO_TONE_GAP_MS;
+            break;
+        case MUSIC_RENAI_CIRCULATION:
+            melody = RENAI_CIRCULATION;
+            melody_length = sizeof(RENAI_CIRCULATION) / sizeof(Tone_t);
+            tone_gap_ms = RENAI_CIRCULATION_TONE_GAP_MS;
+            break;
+        case MUSIC_FUYU_NO_HANA:
+            melody = FUYU_NO_HANA;
+            melody_length = sizeof(FUYU_NO_HANA) / sizeof(Tone_t);
+            tone_gap_ms = FUYU_NO_HANA_TONE_GAP_MS;
+            break;
+        case MUSIC_HAPPY_BIRTHDAY:
+            melody = HAPPY_BIRTHDAY;
+            melody_length = sizeof(HAPPY_BIRTHDAY) / sizeof(Tone_t);
+            tone_gap_ms = HAPPY_BIRTHDAY_TONE_GAP_MS;
             break;
         case MUSIC_MOONLIGHT_SONATA:
             melody = MOONLIGHT_SONATA_1ST;
@@ -649,6 +725,26 @@ int8_t BUZZER_PlayMusic(BUZZER_t *buzzer, MUSIC_t music) {
         case MUSIC_HAPPY_DOU_DI_ZHU_MELODY:
             melody = HAPPY_DOU_DI_ZHU_MELODY;
             melody_length = sizeof(HAPPY_DOU_DI_ZHU_MELODY) / sizeof(Tone_t);
+            break;
+        case MUSIC_HAO_YUN_LAI:
+            melody = HAO_YUN_LAI;
+            melody_length = sizeof(HAO_YUN_LAI) / sizeof(Tone_t);
+            tone_gap_ms = HAO_YUN_LAI_TONE_GAP_MS;
+            break;
+        case MUSIC_CROATIAN_RHAPSODY:
+            melody = CROATIAN_RHAPSODY;
+            melody_length = sizeof(CROATIAN_RHAPSODY) / sizeof(Tone_t);
+            tone_gap_ms = CROATIAN_RHAPSODY_TONE_GAP_MS;
+            break;
+        case MUSIC_JIAO_HUAN_YU_SHENG:
+            melody = JIAO_HUAN_YU_SHENG;
+            melody_length = sizeof(JIAO_HUAN_YU_SHENG) / sizeof(Tone_t);
+            tone_gap_ms = JIAO_HUAN_YU_SHENG_TONE_GAP_MS;
+            break;
+        case MUSIC_SUGAR_PLUM_FAIRY:
+            melody = SUGAR_PLUM_FAIRY;
+            melody_length = sizeof(SUGAR_PLUM_FAIRY) / sizeof(Tone_t);
+            tone_gap_ms = SUGAR_PLUM_FAIRY_TONE_GAP_MS;
             break;
         case MUSIC_STARTUP_YUAN_YU_CHOU:
             melody = STARTUP_YUAN_YU_CHOU;

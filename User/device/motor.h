@@ -44,6 +44,15 @@ typedef struct {
 } MOTOR_MIT_Output_t;
 
 /**
+ * @brief 力位混控模式参数结构体 (DM-H3510)
+ */
+typedef struct {
+    float target_angle;     /* 目标角度 (rad) */
+    float max_velocity;     /* 限速值 (rad/s) */
+    float current_limit;    /* 电流限定标幺值 (0-1.0) */
+} MOTOR_Hybrid_Output_t;
+
+/**
  * @brief 转矩电流控制模式参数结构体
  */
 typedef struct {

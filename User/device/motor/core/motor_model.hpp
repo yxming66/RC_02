@@ -17,6 +17,7 @@ enum class MotorModel : uint16_t {
     J4310,
     J4310P,
     J4340,
+    H3510,
 
     RSO0,
     RSO1,
