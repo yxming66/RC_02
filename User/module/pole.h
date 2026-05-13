@@ -136,6 +136,7 @@ typedef struct {
     float upper[POLE_SUPPORT_MOTOR_NUM];
     float final_target_lift[2];
     float tracked_target_lift[2];
+    bool auto_target_was_enabled[2];
     bool lower_hold_latched[POLE_SUPPORT_MOTOR_NUM];
   } support_angle;
 

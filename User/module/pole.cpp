@@ -33,10 +33,45 @@ static void Pole_ResetControllers(Pole_t *c) {
   }
 }
 
+static float Pole_GetCurrentSideLift(const Pole_t *c, uint8_t side) {
+  if (c == NULL || c->param == NULL || side >= 2u ||
+      !c->support_angle.calibrated) {
+    return 0.0f;
+  }
+
+  const uint8_t start = (side == 0u) ? 0u : 2u;
+  float lift_sum = 0.0f;
+  for (uint8_t i = start; i < start + 2u; i++) {
+    lift_sum += Pole_GetSupportAngle(c, i) - c->support_angle.lower[i];
+  }
+
+  return mr::component::math::clamp_scalar(
+      lift_sum * 0.5f, 0.0f, c->param->limit.support_total_travel);
+}
+
+static void Pole_SyncSideTargetToFeedback(Pole_t *c, uint8_t side) {
+  if (c == NULL || c->param == NULL || side >= 2u ||
+      !c->support_angle.calibrated) {
+    return;
+  }
+
+  const float current_lift = Pole_GetCurrentSideLift(c, side);
+  c->support_angle.final_target_lift[side] = current_lift;
+  c->support_angle.tracked_target_lift[side] = current_lift;
+}
+
+static void Pole_SyncTargetsToFeedback(Pole_t *c) {
+  Pole_SyncSideTargetToFeedback(c, 0u);
+  Pole_SyncSideTargetToFeedback(c, 1u);
+}
+
 static int8_t Pole_SetMode(Pole_t *c, Pole_Mode_t mode) {
   if (c == NULL) return POLE_ERR_NULL;
   if (c->mode == mode) return POLE_OK;
 
+  if (mode == POLE_MODE_ACTIVE) {
+    Pole_SyncTargetsToFeedback(c);
+  }
   Pole_ResetControllers(c);
   c->mode = mode;
   return POLE_OK;
@@ -111,6 +146,8 @@ int8_t Pole_Control(Pole_t *c, const Pole_CMD_t *c_cmd, uint32_t now) {
     c->support_angle.final_target_lift[1] = 0.0f;
     c->support_angle.tracked_target_lift[0] = 0.0f;
     c->support_angle.tracked_target_lift[1] = 0.0f;
+    c->support_angle.auto_target_was_enabled[0] = false;
+    c->support_angle.auto_target_was_enabled[1] = false;
     c->support_angle.calibrated = true;
     Pole_ResetControllers(c);
   }
@@ -119,12 +156,17 @@ int8_t Pole_Control(Pole_t *c, const Pole_CMD_t *c_cmd, uint32_t now) {
     float default_speed = c->param->limit.support_lift_speed;
     float auto_speed = c_cmd->auto_lift_speed[side];
     float speed_limit = (auto_speed > 0.0f) ? auto_speed : default_speed;
+    const bool auto_target_enabled = c_cmd->auto_target_enable[side];
 
-    if (c_cmd->auto_target_enable[side]) {
+    if (auto_target_enabled) {
       c->support_angle.final_target_lift[side] = c_cmd->auto_target_lift[side];
     } else {
+      if (c->support_angle.auto_target_was_enabled[side]) {
+        Pole_SyncSideTargetToFeedback(c, side);
+      }
       c->support_angle.final_target_lift[side] += c_cmd->lift[side] * default_speed * c->dt;
     }
+    c->support_angle.auto_target_was_enabled[side] = auto_target_enabled;
 
     c->support_angle.final_target_lift[side] = mr::component::math::clamp_scalar(
         c->support_angle.final_target_lift[side], 0.0f, c->param->limit.support_total_travel);
