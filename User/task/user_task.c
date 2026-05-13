@@ -14,6 +14,11 @@ const osThreadAttr_t attr_blink = {
     .priority = osPriorityNormal,
     .stack_size = 256 * 4,
 };
+const osThreadAttr_t attr_atti_esti = {
+    .name = "atti_esti",
+    .priority = osPriorityNormal,
+    .stack_size = 512 * 4,
+};
 const osThreadAttr_t attr_chassis_main = {
     .name = "chassis_main",
     .priority = osPriorityNormal,
@@ -22,7 +27,7 @@ const osThreadAttr_t attr_chassis_main = {
 const osThreadAttr_t attr_rc_main = {
     .name = "rc_main",
     .priority = osPriorityNormal,
-    .stack_size = 256 * 4,
+    .stack_size = 512 * 4,
 };
 const osThreadAttr_t attr_cmd_main = {
     .name = "cmd_main",
@@ -34,13 +39,28 @@ const osThreadAttr_t attr_sick = {
     .priority = osPriorityNormal,
     .stack_size = 256 * 4,
 };
-const osThreadAttr_t attr_arm = {
-    .name = "arm",
+const osThreadAttr_t attr_auto_ctrl = {
+    .name = "auto_ctrl",
     .priority = osPriorityNormal,
     .stack_size = 256 * 4,
 };
+const osThreadAttr_t attr_arm = {
+    .name = "arm",
+    .priority = osPriorityNormal,
+    .stack_size = 2048 * 12,
+};
 const osThreadAttr_t attr_rod = {
     .name = "rod",
+    .priority = osPriorityNormal,
+    .stack_size = 256 * 4,
+};
+const osThreadAttr_t attr_pc_comm = {
+    .name = "pc_comm",
+    .priority = osPriorityNormal,
+    .stack_size = 512 * 4,
+};
+const osThreadAttr_t attr_pc_uart_rx = {
+    .name = "pc_uart_rx",
     .priority = osPriorityNormal,
     .stack_size = 256 * 4,
 };

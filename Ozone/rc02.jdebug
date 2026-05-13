@@ -5,7 +5,7 @@
 **********************************************************************
 
 File          : 
-Created       : 06. Apr 2026 16:30
+Created       : 21. Apr 2026 00:18
 Ozone Version : V3.40e
 */
 
@@ -22,17 +22,17 @@ void OnProjectLoad (void) {
   //
   // Dialog-generated settings
   //
-  Project.AddPathSubstitute ("D:/STM32Projects_HAL/board-F4/RC_02/Ozone", "$(ProjectDir)");
-  Project.AddPathSubstitute ("d:/stm32projects_hal/board-f4/rc_02/ozone", "$(ProjectDir)");
-  Project.SetDevice ("STM32F407IG");
+  Project.AddPathSubstitute ("D:/STM32Projects_HAL/board-H7/RC_02/Ozone", "$(ProjectDir)");
+  Project.AddPathSubstitute ("d:/stm32projects_hal/board-h7/rc_02/ozone", "$(ProjectDir)");
+  Project.SetDevice ("STM32H723VG");
   Project.SetHostIF ("USB", "");
   Project.SetTargetIF ("SWD");
   Project.SetTIFSpeed ("4 MHz");
-  Project.AddSvdFile ("$(InstallDir)/Config/CPU/Cortex-M4F.svd");
+  Project.AddSvdFile ("$(InstallDir)/Config/CPU/Cortex-M7F.svd");
   //
   // User settings
   //
-  File.Open ("D:/STM32Projects_HAL/board-F4/RC_02/build/Debug/RC_02.elf");
+  File.Open ("D:/STM32Projects_HAL/board-H7/RC_02/build/Debug/RC_02.elf");
 }
 
 /*********************************************************************

@@ -4,6 +4,15 @@ crc16:
 crc8:
   dependencies: []
   enabled: true
+controller:
+  dependencies:
+  - component/filter
+  - component/math
+  enabled: true
+filter:
+  dependencies:
+  - component/math
+  enabled: true
 limiter:
   dependencies: []
   enabled: true
@@ -14,6 +23,10 @@ mixer:
 pid:
   dependencies:
   - component/filter
+  enabled: true
+timer:
+  dependencies:
+  - bsp/time
   enabled: true
 user_math:
   dependencies: []

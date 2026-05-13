@@ -46,6 +46,8 @@
 
 /* Private variables -------------------------------------------------------- */
 static MOTOR_RM_CANManager_t *can_managers[BSP_CAN_NUM] = {NULL};
+static MOTOR_RM_TxDebug_t motor_rm_tx_debug = {0};
+MOTOR_RM_SlotTxDebug_t g_motor_rm_slot_tx_debug[MOTOR_RM_MAX_MOTORS] = {0};
 
 /* Private function  -------------------------------------------------------- */
 /* USER FUNCTION BEGIN */
@@ -89,6 +91,15 @@ static int16_t MOTOR_RM_GetLSB(MOTOR_RM_Module_t module) {
     }
 }
 
+static float MOTOR_RM_GetCurrentRangeAmp(MOTOR_RM_Module_t module) {
+    switch (module) {
+        case MOTOR_M2006: return 10.0f;
+        case MOTOR_M3508: return 20.0f;
+        case MOTOR_GM6020: return 3.0f;
+        default: return 0.0f;
+    }
+}
+
 static MOTOR_RM_CANManager_t* MOTOR_RM_GetCANManager(BSP_CAN_t can) {
     if (can >= BSP_CAN_NUM) return NULL;
     return can_managers[can];
@@ -114,6 +125,11 @@ static void Motor_RM_Decode(MOTOR_RM_t *motor, BSP_CAN_Message_t *msg) {
     float rotor_angle = raw_angle / (float)MOTOR_ENC_RES * M_2PI;
     float rotor_speed = raw_speed;
     float torque_current = raw_current * lsb / (float)MOTOR_CUR_RES;
+
+    motor->motor.raw_feedback.raw_angle = raw_angle;
+    motor->motor.raw_feedback.raw_speed = raw_speed;
+    motor->motor.raw_feedback.raw_current = raw_current;
+    motor->motor.raw_feedback.raw_temp = msg->data[6];
 
     if (motor->param.gear) {
         // 多圈累加
@@ -153,6 +169,57 @@ static void Motor_RM_Decode(MOTOR_RM_t *motor, BSP_CAN_Message_t *msg) {
     motor->feedback.temp = msg->data[6];
 }
 
+static int8_t MOTOR_RM_BindMotor(MOTOR_RM_CANManager_t *manager, MOTOR_RM_Param_t *param, MOTOR_RM_t *motor) {
+    if (manager == NULL || param == NULL || motor == NULL) return DEVICE_ERR_NULL;
+    for (int i = 0; i < manager->motor_count; i++) {
+        if (manager->motors[i] && manager->motors[i]->param.id == param->id) {
+            return DEVICE_ERR_INITED;
+        }
+    }
+    if (manager->motor_count >= MOTOR_RM_MAX_MOTORS) return DEVICE_ERR;
+    memset(motor, 0, sizeof(MOTOR_RM_t));
+    memcpy(&motor->param, param, sizeof(MOTOR_RM_Param_t));
+    motor->motor.reverse = param->reverse;
+    if (BSP_CAN_RegisterId(param->can, param->id, 3) != BSP_OK) {
+        return DEVICE_ERR;
+    }
+    manager->motors[manager->motor_count] = motor;
+    manager->motor_count++;
+    return DEVICE_OK;
+}
+
+static MOTOR_RM_t* MOTOR_RM_FindMotorById(const MOTOR_RM_CANManager_t *manager, uint16_t id) {
+    if (manager == NULL) return NULL;
+    for (int i = 0; i < manager->motor_count; i++) {
+        MOTOR_RM_t *motor = manager->motors[i];
+        if (motor && motor->param.id == id) {
+            return motor;
+        }
+    }
+    for (int i = 0; i < manager->external_motor_count; i++) {
+        MOTOR_RM_t *motor = manager->external_motors[i];
+        if (motor && motor->param.id == id) {
+            return motor;
+        }
+    }
+    return NULL;
+}
+
+static int8_t MOTOR_RM_BindExternalMotor(MOTOR_RM_CANManager_t *manager, MOTOR_RM_Param_t *param, MOTOR_RM_t *motor) {
+    if (manager == NULL || param == NULL || motor == NULL) return DEVICE_ERR_NULL;
+    if (MOTOR_RM_FindMotorById(manager, param->id) != NULL) return DEVICE_ERR_INITED;
+    if (manager->external_motor_count >= MOTOR_RM_MAX_MOTORS) return DEVICE_ERR;
+    memset(motor, 0, sizeof(MOTOR_RM_t));
+    memcpy(&motor->param, param, sizeof(MOTOR_RM_Param_t));
+    motor->motor.reverse = param->reverse;
+    if (BSP_CAN_RegisterId(param->can, param->id, 3) != BSP_OK) {
+        return DEVICE_ERR;
+    }
+    manager->external_motors[manager->external_motor_count] = motor;
+    manager->external_motor_count++;
+    return DEVICE_OK;
+}
+
 /* Exported functions ------------------------------------------------------- */
 
 int8_t MOTOR_RM_Register(MOTOR_RM_Param_t *param) {
@@ -160,27 +227,13 @@ int8_t MOTOR_RM_Register(MOTOR_RM_Param_t *param) {
     if (MOTOR_RM_CreateCANManager(param->can) != DEVICE_OK) return DEVICE_ERR;
     MOTOR_RM_CANManager_t *manager = MOTOR_RM_GetCANManager(param->can);
     if (manager == NULL) return DEVICE_ERR;
-    // 检查是否已注册
-    for (int i = 0; i < manager->motor_count; i++) {
-        if (manager->motors[i] && manager->motors[i]->param.id == param->id) {
-            return DEVICE_ERR_INITED;
-        }
-    }
-    // 检查数量
-    if (manager->motor_count >= MOTOR_RM_MAX_MOTORS) return DEVICE_ERR;
-    // 创建新电机实例
     MOTOR_RM_t *new_motor = (MOTOR_RM_t*)BSP_Malloc(sizeof(MOTOR_RM_t));
     if (new_motor == NULL) return DEVICE_ERR;
-    memcpy(&new_motor->param, param, sizeof(MOTOR_RM_Param_t));
-    memset(&new_motor->motor, 0, sizeof(MOTOR_t));
-    new_motor->motor.reverse = param->reverse;
-    // 注册CAN接收ID
-    if (BSP_CAN_RegisterId(param->can, param->id, 3) != BSP_OK) {
+    const int8_t ret = MOTOR_RM_BindMotor(manager, param, new_motor);
+    if (ret != DEVICE_OK) {
         BSP_Free(new_motor);
-        return DEVICE_ERR;
+        return ret;
     }
-    manager->motors[manager->motor_count] = new_motor;
-    manager->motor_count++;
     return DEVICE_OK;
 }
 
@@ -188,26 +241,22 @@ int8_t MOTOR_RM_Update(MOTOR_RM_Param_t *param) {
     if (param == NULL) return DEVICE_ERR_NULL;
     MOTOR_RM_CANManager_t *manager = MOTOR_RM_GetCANManager(param->can);
     if (manager == NULL) return DEVICE_ERR_NO_DEV;
-    for (int i = 0; i < manager->motor_count; i++) {
-        MOTOR_RM_t *motor = manager->motors[i];
-        if (motor && motor->param.id == param->id) {
-            BSP_CAN_Message_t rx_msg;
-            if (BSP_CAN_GetMessage(param->can, param->id, &rx_msg, BSP_CAN_TIMEOUT_IMMEDIATE) != BSP_OK) {
-                uint64_t now_time = BSP_TIME_Get();
-                if (now_time - motor->motor.header.last_online_time > 1000) {
-                    motor->motor.header.online = false;
-                    return DEVICE_ERR_NO_DEV;
-                }
-                return DEVICE_ERR;
-            }
-            motor->motor.header.online = true;
-            motor->motor.header.last_online_time = BSP_TIME_Get();
-            Motor_RM_Decode(motor, &rx_msg);
-            motor->motor.feedback = motor->feedback;
-            return DEVICE_OK;
+    MOTOR_RM_t *motor = MOTOR_RM_FindMotorById(manager, param->id);
+    if (motor == NULL) return DEVICE_ERR_NO_DEV;
+    BSP_CAN_Message_t rx_msg;
+    if (BSP_CAN_GetMessage(param->can, param->id, &rx_msg, BSP_CAN_TIMEOUT_IMMEDIATE) != BSP_OK) {
+        uint64_t now_time = BSP_TIME_Get();
+        if (now_time - motor->motor.header.last_online_time > 1000) {
+            motor->motor.header.online = false;
+            return DEVICE_ERR_NO_DEV;
         }
+        return DEVICE_ERR;
     }
-    return DEVICE_ERR_NO_DEV;
+    motor->motor.header.online = true;
+    motor->motor.header.last_online_time = BSP_TIME_Get();
+    Motor_RM_Decode(motor, &rx_msg);
+    motor->motor.feedback = motor->feedback;
+    return DEVICE_OK;
 }
 
 int8_t MOTOR_RM_UpdateAll(void) {
@@ -223,16 +272,29 @@ int8_t MOTOR_RM_UpdateAll(void) {
                 }
             }
         }
+        for (int i = 0; i < manager->external_motor_count; i++) {
+            MOTOR_RM_t *motor = manager->external_motors[i];
+            if (motor != NULL) {
+                if (MOTOR_RM_Update(&motor->param) != DEVICE_OK) {
+                    ret = DEVICE_ERR;
+                }
+            }
+        }
     }
     return ret;
 }
 
+/*
+ * 底层兼容接口：输入为归一化输出值 [-1, 1]。
+ * 主要保留给旧代码或直接比例输出场景使用。
+ * 若上层按“目标力矩”控制 RM 电机，应优先走 MOTOR_RM_SetTorqueCurrent()。
+ */
 int8_t MOTOR_RM_SetOutput(MOTOR_RM_Param_t *param, float value) {
     if (param == NULL) return DEVICE_ERR_NULL;
     MOTOR_RM_CANManager_t *manager = MOTOR_RM_GetCANManager(param->can);
     if (manager == NULL) return DEVICE_ERR_NO_DEV;
-    if (value > 0.5f) value = 0.5f;
-    if (value < -0.5f) value = -0.5f;
+    if (value > 1.0f) value = 1.0f;
+    if (value < -1.0f) value = -1.0f;
     if (param->reverse){
         value = -value;
     }
@@ -246,6 +308,21 @@ int8_t MOTOR_RM_SetOutput(MOTOR_RM_Param_t *param, float value) {
     return DEVICE_OK;
 }
 
+/*
+ * C++ RM 驱动的主下发接口：输入为转子侧目标电流，单位 A。
+ * 上层先完成“输出轴力矩 -> 转子侧电流(A)”换算，这里再统一完成
+ * “电流(A) -> RM raw 指令值”的映射并写入发送缓存。
+ */
+int8_t MOTOR_RM_SetTorqueCurrent(MOTOR_RM_Param_t *param, float current_a) {
+    if (param == NULL) return DEVICE_ERR_NULL;
+    const float lsb = (float)MOTOR_RM_GetLSB(param->module);
+    const float current_range_a = MOTOR_RM_GetCurrentRangeAmp(param->module);
+    if (lsb <= 0.0f || current_range_a <= 0.0f) return DEVICE_ERR;
+    const float raw_current = current_a * lsb / current_range_a;
+    const float normalized = raw_current / lsb;
+    return MOTOR_RM_SetOutput(param, normalized);
+}
+
 int8_t MOTOR_RM_Ctrl(MOTOR_RM_Param_t *param) {
     if (param == NULL) return DEVICE_ERR_NULL;
     MOTOR_RM_CANManager_t *manager = MOTOR_RM_GetCANManager(param->can);
@@ -253,6 +330,7 @@ int8_t MOTOR_RM_Ctrl(MOTOR_RM_Param_t *param) {
     MOTOR_RM_MsgOutput_t *output_msg = &manager->output_msg;
     BSP_CAN_StdDataFrame_t tx_frame;
     uint16_t id = param->id;
+    int8_t logical_index = MOTOR_RM_GetLogicalIndex(param->id, param->module);
     switch (id) {
         case M3508_M2006_FB_ID_BASE:
         case M3508_M2006_FB_ID_BASE+1:
@@ -291,6 +369,33 @@ int8_t MOTOR_RM_Ctrl(MOTOR_RM_Param_t *param) {
         default:
             return DEVICE_ERR;
     }
+
+    motor_rm_tx_debug.valid = 1;
+    motor_rm_tx_debug.can = param->can;
+    motor_rm_tx_debug.source_motor_id = param->id;
+    motor_rm_tx_debug.tx_frame_id = tx_frame.id;
+    motor_rm_tx_debug.logical_index = logical_index;
+    if (logical_index >= 0 && logical_index < MOTOR_RM_MAX_MOTORS) {
+        motor_rm_tx_debug.requested_current = output_msg->output[logical_index];
+    } else {
+        motor_rm_tx_debug.requested_current = 0;
+    }
+    memcpy(motor_rm_tx_debug.grouped_output,
+           output_msg->output,
+           sizeof(motor_rm_tx_debug.grouped_output));
+    memcpy(motor_rm_tx_debug.tx_data, tx_frame.data, sizeof(motor_rm_tx_debug.tx_data));
+
+    for (int i = 0; i < MOTOR_RM_MAX_MOTORS; i++) {
+        g_motor_rm_slot_tx_debug[i].valid = 1;
+        g_motor_rm_slot_tx_debug[i].can = param->can;
+        g_motor_rm_slot_tx_debug[i].tx_frame_id = tx_frame.id;
+        g_motor_rm_slot_tx_debug[i].logical_index = (int8_t)i;
+        g_motor_rm_slot_tx_debug[i].output_value = output_msg->output[i];
+        memcpy(g_motor_rm_slot_tx_debug[i].tx_data,
+               tx_frame.data,
+               sizeof(g_motor_rm_slot_tx_debug[i].tx_data));
+    }
+
     return BSP_CAN_TransmitStdDataFrame(param->can, &tx_frame) == BSP_OK ? DEVICE_OK : DEVICE_ERR;
 }
 
@@ -298,13 +403,7 @@ MOTOR_RM_t* MOTOR_RM_GetMotor(MOTOR_RM_Param_t *param) {
     if (param == NULL) return NULL;
     MOTOR_RM_CANManager_t *manager = MOTOR_RM_GetCANManager(param->can);
     if (manager == NULL) return NULL;
-    for (int i = 0; i < manager->motor_count; i++) {
-        MOTOR_RM_t *motor = manager->motors[i];
-        if (motor && motor->param.id == param->id) {
-            return motor;
-        }
-    }
-    return NULL;
+    return MOTOR_RM_FindMotorById(manager, param->id);
 }
 
 int8_t MOTOR_RM_Relax(MOTOR_RM_Param_t *param) {
@@ -318,4 +417,37 @@ int8_t MOTOR_RM_Offine(MOTOR_RM_Param_t *param) {
         return DEVICE_OK;
     }
     return DEVICE_ERR_NO_DEV;
+}
+
+/* -------------------------------------------------------------------------- */
+/* 为 C++ motor 封装层提供服务的 C 接口函数（当前主路径为 protocol/motor_t） */
+/* -------------------------------------------------------------------------- */
+
+/* C++ 驱动层将外部持有的 vendor instance 绑定到 C 管理器。 */
+int8_t MOTOR_RM_AttachExternal(MOTOR_RM_Param_t *param, MOTOR_RM_t *external_motor) {
+    if (param == NULL || external_motor == NULL) return DEVICE_ERR_NULL;
+    if (MOTOR_RM_CreateCANManager(param->can) != DEVICE_OK) return DEVICE_ERR;
+    MOTOR_RM_CANManager_t *manager = MOTOR_RM_GetCANManager(param->can);
+    if (manager == NULL) return DEVICE_ERR;
+    return MOTOR_RM_BindExternalMotor(manager, param, external_motor);
+}
+
+/* C++ 驱动层读取底层原始反馈缓存。 */
+const MOTOR_RM_RawFeedback_t* MOTOR_RM_GetRawFeedback(MOTOR_RM_Param_t *param) {
+    MOTOR_RM_t *motor = MOTOR_RM_GetMotor(param);
+    if (motor == NULL) {
+        return NULL;
+    }
+    return &motor->motor.raw_feedback;
+}
+
+const MOTOR_RM_TxDebug_t* MOTOR_RM_GetTxDebug(void) {
+    return &motor_rm_tx_debug;
+}
+
+const MOTOR_RM_SlotTxDebug_t* MOTOR_RM_GetSlotTxDebug(uint8_t logical_index) {
+    if (logical_index >= MOTOR_RM_MAX_MOTORS) {
+        return NULL;
+    }
+    return &g_motor_rm_slot_tx_debug[logical_index];
 }

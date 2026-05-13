@@ -59,9 +59,9 @@ extern "C" {
 
 /* 移动向量 */
 typedef struct {
-  float vx; /* 前后平移 */
-  float vy; /* 左右平移 */
-  float wz; /* 转动 */
+  float vx; /* +forward */
+  float vy; /* +left */
+  float wz; /* +counter-clockwise yaw */
 } MoveVector_t;
 
 /* USER STRUCT BEGIN */

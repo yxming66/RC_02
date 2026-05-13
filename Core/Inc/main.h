@@ -27,7 +27,7 @@ extern "C" {
 #endif
 
 /* Includes ------------------------------------------------------------------*/
-#include "stm32f4xx_hal.h"
+#include "stm32h7xx_hal.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -57,6 +57,35 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
+#define Power_OUT2_EN_Pin GPIO_PIN_13
+#define Power_OUT2_EN_GPIO_Port GPIOC
+#define Power_OUT1_EN_Pin GPIO_PIN_14
+#define Power_OUT1_EN_GPIO_Port GPIOC
+#define Power_5V_EN_Pin GPIO_PIN_15
+#define Power_5V_EN_GPIO_Port GPIOC
+#define ACCL_CS_Pin GPIO_PIN_0
+#define ACCL_CS_GPIO_Port GPIOC
+#define GYRO_CS_Pin GPIO_PIN_3
+#define GYRO_CS_GPIO_Port GPIOC
+#define photo4_Pin GPIO_PIN_0
+#define photo4_GPIO_Port GPIOA
+#define photo3_Pin GPIO_PIN_2
+#define photo3_GPIO_Port GPIOA
+#define IMU_HEAT_Pin GPIO_PIN_1
+#define IMU_HEAT_GPIO_Port GPIOB
+#define photo2_Pin GPIO_PIN_9
+#define photo2_GPIO_Port GPIOE
+#define ACCL_INT_Pin GPIO_PIN_10
+#define ACCL_INT_GPIO_Port GPIOE
+#define ACCL_INT_EXTI_IRQn EXTI15_10_IRQn
+#define GYRO_INT_Pin GPIO_PIN_12
+#define GYRO_INT_GPIO_Port GPIOE
+#define GYRO_INT_EXTI_IRQn EXTI15_10_IRQn
+#define photo1_Pin GPIO_PIN_13
+#define photo1_GPIO_Port GPIOE
+#define USER_KEY_Pin GPIO_PIN_15
+#define USER_KEY_GPIO_Port GPIOA
+#define USER_KEY_EXTI_IRQn EXTI15_10_IRQn
 
 /* USER CODE BEGIN Private defines */
 

@@ -20,11 +20,14 @@
 
 /* Private variables -------------------------------------------------------- */
 static void (*UART_Callback[BSP_UART_NUM][BSP_UART_CB_NUM])(void);
+static BSP_UART_RxEventCallback_t UART_RxEventCallback[BSP_UART_NUM];
 
 /* Private function  -------------------------------------------------------- */
 static BSP_UART_t UART_Get(UART_HandleTypeDef *huart) {
-  if (huart->Instance == USART3)
+  if (huart->Instance == UART5)
     return BSP_UART_RC;
+  else if (huart->Instance == USART10)
+    return BSP_UART_PC;
   else
     return BSP_UART_ERR;
 }
@@ -51,6 +54,17 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
   BSP_UART_t bsp_uart = UART_Get(huart);
   if (bsp_uart != BSP_UART_ERR) {
     if (UART_Callback[bsp_uart][BSP_UART_RX_CPLT_CB]) {
+      UART_Callback[bsp_uart][BSP_UART_RX_CPLT_CB]();
+    }
+  }
+}
+
+void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size) {
+  BSP_UART_t bsp_uart = UART_Get(huart);
+  if (bsp_uart != BSP_UART_ERR) {
+    if (UART_RxEventCallback[bsp_uart]) {
+      UART_RxEventCallback[bsp_uart](Size);
+    } else if (UART_Callback[bsp_uart][BSP_UART_RX_CPLT_CB]) {
       UART_Callback[bsp_uart][BSP_UART_RX_CPLT_CB]();
     }
   }
@@ -114,7 +128,9 @@ void BSP_UART_IRQHandler(UART_HandleTypeDef *huart) {
 UART_HandleTypeDef *BSP_UART_GetHandle(BSP_UART_t uart) {
   switch (uart) {
     case BSP_UART_RC:
-      return &huart3;
+      return &huart5;
+    case BSP_UART_PC:
+      return &huart10;
     default:
       return NULL;
   }
@@ -125,6 +141,14 @@ int8_t BSP_UART_RegisterCallback(BSP_UART_t uart, BSP_UART_Callback_t type,
   if (callback == NULL) return BSP_ERR_NULL;
   if (uart >= BSP_UART_NUM || type >= BSP_UART_CB_NUM) return BSP_ERR;
   UART_Callback[uart][type] = callback;
+  return BSP_OK;
+}
+
+int8_t BSP_UART_RegisterRxEventCallback(BSP_UART_t uart,
+                                        BSP_UART_RxEventCallback_t callback) {
+  if (callback == NULL) return BSP_ERR_NULL;
+  if (uart >= BSP_UART_NUM) return BSP_ERR;
+  UART_RxEventCallback[uart] = callback;
   return BSP_OK;
 }
 
@@ -147,6 +171,25 @@ int8_t BSP_UART_Receive(BSP_UART_t uart, uint8_t *data, uint16_t size, bool dma)
     return HAL_UART_Receive_DMA(BSP_UART_GetHandle(uart), data, size);
   } else {
     return HAL_UART_Receive_IT(BSP_UART_GetHandle(uart), data, size);
+  }
+}
+
+int8_t BSP_UART_ReceiveToIdle(BSP_UART_t uart, uint8_t *data, uint16_t size,
+                              bool dma) {
+  if (uart >= BSP_UART_NUM) return BSP_ERR;
+  if (data == NULL || size == 0) return BSP_ERR_NULL;
+
+  UART_HandleTypeDef *huart = BSP_UART_GetHandle(uart);
+  if (huart == NULL) return BSP_ERR_NULL;
+
+  if (dma) {
+    HAL_StatusTypeDef status = HAL_UARTEx_ReceiveToIdle_DMA(huart, data, size);
+    if (status == HAL_OK && huart->hdmarx != NULL) {
+      __HAL_DMA_DISABLE_IT(huart->hdmarx, DMA_IT_HT);
+    }
+    return status;
+  } else {
+    return HAL_UARTEx_ReceiveToIdle_IT(huart, data, size);
   }
 }
 

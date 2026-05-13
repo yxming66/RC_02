@@ -27,6 +27,7 @@
 /* CAN ID偏移量 */
 #define DM_CAN_ID_OFFSET_POS_VEL  0x100
 #define DM_CAN_ID_OFFSET_VEL      0x200
+#define DM_CAN_ID_OFFSET_HYBRID   0x300  /* 力位混控模式 (DM-H3510) */
 
 /* Private macro ------------------------------------------------------------ */
 #define FLOAT_TO_UINT(x, x_min, x_max, bits) \
@@ -46,19 +47,12 @@ static int float_to_uint(float x_float, float x_min, float x_max, int bits)
 	float offset = x_min;
 	return (int) ((x_float-offset)*((float)((1<<bits)-1))/span);
 }
-
-static float uint_to_float(int x_int, float x_min, float x_max, int bits)
-{
-	/* converts unsigned int to float, given range and number of bits */
-	float span = x_max - x_min;
-	float offset = x_min;
-	return ((float)x_int)*span/((float)((1<<bits)-1)) + offset;
-}
 /* Private function prototypes ---------------------------------------------- */
 static int8_t MOTOR_DM_ParseFeedbackFrame(MOTOR_DM_t *motor, const uint8_t *data);
 static int8_t MOTOR_DM_SendMITCmd(MOTOR_DM_t *motor, MOTOR_MIT_Output_t *output);
 static int8_t MOTOR_DM_SendPosVelCmd(MOTOR_DM_t *motor, float pos, float vel);
 static int8_t MOTOR_DM_SendVelCmd(MOTOR_DM_t *motor, float vel);
+static int8_t MOTOR_DM_SendHybridCmd(MOTOR_DM_t *motor, MOTOR_Hybrid_Output_t *output);
 static MOTOR_DM_CANManager_t* MOTOR_DM_GetCANManager(BSP_CAN_t can);
 
 /* Private functions -------------------------------------------------------- */
@@ -73,26 +67,30 @@ static int8_t MOTOR_DM_ParseFeedbackFrame(MOTOR_DM_t *motor, const uint8_t *data
     if (motor == NULL || data == NULL) {
         return DEVICE_ERR_NULL;
     }
+    motor->feedback_id = data[0] & 0x0F;
+    motor->status_raw = (data[0] >> 4) & 0x0F;
+    switch (motor->status_raw) {
+        case 0x0: motor->status = MOTOR_DM_STATUS_DISABLED; break;
+        case 0x1: motor->status = MOTOR_DM_STATUS_ENABLED; break;
+        case 0x8: motor->status = MOTOR_DM_STATUS_OVERVOLTAGE; break;
+        case 0x9: motor->status = MOTOR_DM_STATUS_UNDERVOLTAGE; break;
+        case 0xA: motor->status = MOTOR_DM_STATUS_OVERCURRENT; break;
+        case 0xB: motor->status = MOTOR_DM_STATUS_MOS_OVERTEMP; break;
+        case 0xC: motor->status = MOTOR_DM_STATUS_COIL_OVERTEMP; break;
+        case 0xD: motor->status = MOTOR_DM_STATUS_COMM_LOST; break;
+        case 0xE: motor->status = MOTOR_DM_STATUS_OVERLOAD; break;
+        default: motor->status = MOTOR_DM_STATUS_UNKNOWN; break;
+    }
     uint16_t p_int=(data[1]<<8)|data[2];
-    motor->motor.feedback.rotor_abs_angle = uint_to_float(p_int, DM_P_MIN, DM_P_MAX, 16); // (-12.5,12.5)
     uint16_t v_int=(data[3]<<4)|(data[4]>>4);
-    motor->motor.feedback.rotor_speed = uint_to_float(v_int, DM_V_MIN, DM_V_MAX, 12); // (-30.0,30.0)
     uint16_t t_int=((data[4]&0xF)<<8)|data[5];
-    motor->motor.feedback.torque_current = uint_to_float(t_int, DM_T_MIN, DM_T_MAX, 12);  // (-12.0,12.0)
-    motor->motor.feedback.temp = (float)(data[6]);
 
-    while (motor->motor.feedback.rotor_abs_angle < 0) {
-        motor->motor.feedback.rotor_abs_angle += M_2PI;
-    }
-    while (motor->motor.feedback.rotor_abs_angle >= M_2PI) {
-        motor->motor.feedback.rotor_abs_angle -= M_2PI;
-    }
-
-    if (motor->param.reverse) {
-        motor->motor.feedback.rotor_abs_angle = M_2PI - motor->motor.feedback.rotor_abs_angle;
-        motor->motor.feedback.rotor_speed = -motor->motor.feedback.rotor_speed;
-        motor->motor.feedback.torque_current = -motor->motor.feedback.torque_current;
-    }
+    motor->motor.raw_feedback.raw_angle = p_int;
+    motor->motor.raw_feedback.raw_speed = (int16_t)v_int;
+    motor->motor.raw_feedback.raw_current = (int16_t)t_int;
+    motor->motor.raw_feedback.raw_temp = data[6];
+    motor->mos_temp = data[6];
+    motor->rotor_temp = data[7];
     return DEVICE_OK;
 }
 
@@ -212,6 +210,54 @@ static int8_t MOTOR_DM_SendVelCmd(MOTOR_DM_t *motor, float vel) {
 }
 
 /**
+ * @brief 发送力位混控模式控制命令 (DM-H3510)
+ * @param motor 电机实例
+ * @param output 力位混控参数
+ * @return 发送结果
+ */
+static int8_t MOTOR_DM_SendHybridCmd(MOTOR_DM_t *motor, MOTOR_Hybrid_Output_t *output) {
+    if (motor == NULL || output == NULL) {
+        return DEVICE_ERR_NULL;
+    }
+
+    uint8_t data[8] = {0};
+    float cmd_pos = output->target_angle;
+    float cmd_vel = output->max_velocity;
+    float cmd_cur = output->current_limit;
+
+    if (motor->param.reverse) {
+        cmd_pos = -cmd_pos;
+        cmd_vel = -cmd_vel;
+    }
+
+    /* 角度: 16位，范围 ±12.56637 rad */
+    int16_t pos_int = (int16_t)(cmd_pos * 10000.0f);
+    /* 速度: 16位，范围 ±1800 rpm (实际使用 rad/s * 100) */
+    int16_t vel_int = (int16_t)(cmd_vel * 100.0f);
+    /* 电流限幅: 16位，标幺值 0-1.0 * 10000 */
+    int16_t cur_int = (int16_t)(cmd_cur * 10000.0f);
+
+    /* 打包数据: P(16) + V(16) + I(16) + 保留(16) */
+    data[0] = (uint8_t)((pos_int >> 8) & 0xFF);
+    data[1] = (uint8_t)(pos_int & 0xFF);
+    data[2] = (uint8_t)((vel_int >> 8) & 0xFF);
+    data[3] = (uint8_t)(vel_int & 0xFF);
+    data[4] = (uint8_t)((cur_int >> 8) & 0xFF);
+    data[5] = (uint8_t)(cur_int & 0xFF);
+    data[6] = 0x00;
+    data[7] = 0x00;
+
+    /* 发送CAN消息，ID为原ID+0x300 */
+    uint32_t can_id = DM_CAN_ID_OFFSET_HYBRID + motor->param.can_id;
+    BSP_CAN_StdDataFrame_t frame;
+    frame.id = can_id;
+    frame.dlc = 8;
+    memcpy(frame.data, data, 8);
+
+    return BSP_CAN_TransmitStdDataFrame(motor->param.can, &frame) == BSP_OK ? DEVICE_OK : DEVICE_ERR;
+}
+
+/**
  * @brief 获取指定CAN总线的管理器
  * @param can CAN总线
  * @return CAN管理器指针
@@ -241,6 +287,73 @@ static int8_t MOTOR_DM_CreateCANManager(BSP_CAN_t can) {
     return DEVICE_OK;
 }
 
+static int8_t MOTOR_DM_BindMotor(MOTOR_DM_CANManager_t *manager, MOTOR_DM_Param_t *param, MOTOR_DM_t *motor) {
+    if (manager == NULL || param == NULL || motor == NULL) {
+        return DEVICE_ERR_NULL;
+    }
+    for (int i = 0; i < manager->motor_count; i++) {
+        if (manager->motors[i] && manager->motors[i]->param.master_id == param->master_id) {
+            return DEVICE_ERR_INITED;
+        }
+    }
+    if (manager->motor_count >= MOTOR_DM_MAX_MOTORS) {
+        return DEVICE_ERR;
+    }
+    memset(motor, 0, sizeof(MOTOR_DM_t));
+    memcpy(&motor->param, param, sizeof(MOTOR_DM_Param_t));
+    motor->motor.header.online = false;
+    motor->motor.reverse = param->reverse;
+    uint16_t feedback_id = param->master_id;
+    if (BSP_CAN_RegisterId(param->can, feedback_id, 3) != BSP_OK) {
+        return DEVICE_ERR;
+    }
+    manager->motors[manager->motor_count] = motor;
+    manager->motor_count++;
+    return DEVICE_OK;
+}
+
+static MOTOR_DM_t* MOTOR_DM_FindMotorByMasterId(const MOTOR_DM_CANManager_t *manager, uint16_t master_id) {
+    if (manager == NULL) {
+        return NULL;
+    }
+    for (int i = 0; i < manager->motor_count; i++) {
+        MOTOR_DM_t *motor = manager->motors[i];
+        if (motor && motor->param.master_id == master_id) {
+            return motor;
+        }
+    }
+    for (int i = 0; i < manager->external_motor_count; i++) {
+        MOTOR_DM_t *motor = manager->external_motors[i];
+        if (motor && motor->param.master_id == master_id) {
+            return motor;
+        }
+    }
+    return NULL;
+}
+
+static int8_t MOTOR_DM_BindExternalMotor(MOTOR_DM_CANManager_t *manager, MOTOR_DM_Param_t *param, MOTOR_DM_t *motor) {
+    if (manager == NULL || param == NULL || motor == NULL) {
+        return DEVICE_ERR_NULL;
+    }
+    if (MOTOR_DM_FindMotorByMasterId(manager, param->master_id) != NULL) {
+        return DEVICE_ERR_INITED;
+    }
+    if (manager->external_motor_count >= MOTOR_DM_MAX_MOTORS) {
+        return DEVICE_ERR;
+    }
+    memset(motor, 0, sizeof(MOTOR_DM_t));
+    memcpy(&motor->param, param, sizeof(MOTOR_DM_Param_t));
+    motor->motor.header.online = false;
+    motor->motor.reverse = param->reverse;
+    uint16_t feedback_id = param->master_id;
+    if (BSP_CAN_RegisterId(param->can, feedback_id, 3) != BSP_OK) {
+        return DEVICE_ERR;
+    }
+    manager->external_motors[manager->external_motor_count] = motor;
+    manager->external_motor_count++;
+    return DEVICE_OK;
+}
+
 /* Exported functions ------------------------------------------------------- */
 
 /**
@@ -264,41 +377,15 @@ int8_t MOTOR_DM_Register(MOTOR_DM_Param_t *param) {
         return DEVICE_ERR;
     }
     
-    /* 检查是否已注册 */
-    for (int i = 0; i < manager->motor_count; i++) {
-        if (manager->motors[i] && manager->motors[i]->param.master_id == param->master_id) {
-            return DEVICE_ERR_INITED;
-        }
-    }
-    
-    /* 检查是否已达到最大数量 */
-    if (manager->motor_count >= MOTOR_DM_MAX_MOTORS) {
-        return DEVICE_ERR;
-    }
-    
-    /* 分配内存 */
     MOTOR_DM_t *motor = (MOTOR_DM_t *)BSP_Malloc(sizeof(MOTOR_DM_t));
     if (motor == NULL) {
         return DEVICE_ERR;
     }
-    
-    /* 初始化电机 */
-    memset(motor, 0, sizeof(MOTOR_DM_t));
-    memcpy(&motor->param, param, sizeof(MOTOR_DM_Param_t));
-    motor->motor.header.online = false;
-    motor->motor.reverse = param->reverse;
-    
-    /* 注册CAN接收ID - DM电机使用Master ID接收反馈 */
-    uint16_t feedback_id = param->master_id;
-    if (BSP_CAN_RegisterId(param->can, feedback_id, 3) != BSP_OK) {
+    const int8_t ret = MOTOR_DM_BindMotor(manager, param, motor);
+    if (ret != DEVICE_OK) {
         BSP_Free(motor);
-        return DEVICE_ERR;
+        return ret;
     }
-    
-    /* 添加到管理器 */
-    manager->motors[manager->motor_count] = motor;
-    manager->motor_count++;
-    
     return DEVICE_OK;
 }
 
@@ -318,14 +405,7 @@ int8_t MOTOR_DM_Update(MOTOR_DM_Param_t *param) {
     }
     
     /* 查找电机 */
-    MOTOR_DM_t *motor = NULL;
-    for (int i = 0; i < manager->motor_count; i++) {
-        if (manager->motors[i] && manager->motors[i]->param.master_id == param->master_id) {
-            motor = manager->motors[i];
-            break;
-        }
-    }
-    
+    MOTOR_DM_t *motor = MOTOR_DM_FindMotorByMasterId(manager, param->master_id);
     if (motor == NULL) {
         return DEVICE_ERR_NO_DEV;
     }
@@ -360,6 +440,14 @@ int8_t MOTOR_DM_UpdateAll(void) {
         
         for (int i = 0; i < manager->motor_count; i++) {
             MOTOR_DM_t *motor = manager->motors[i];
+            if (motor != NULL) {
+                if (MOTOR_DM_Update(&motor->param) != DEVICE_OK) {
+                    ret = DEVICE_ERR;
+                }
+            }
+        }
+        for (int i = 0; i < manager->external_motor_count; i++) {
+            MOTOR_DM_t *motor = manager->external_motors[i];
             if (motor != NULL) {
                 if (MOTOR_DM_Update(&motor->param) != DEVICE_OK) {
                     ret = DEVICE_ERR;
@@ -419,13 +507,32 @@ int8_t MOTOR_DM_VelCtrl(MOTOR_DM_Param_t *param, float target_vel) {
     if (param == NULL) {
         return DEVICE_ERR_NULL;
     }
-    
+
     MOTOR_DM_t *motor = MOTOR_DM_GetMotor(param);
     if (motor == NULL) {
         return DEVICE_ERR_NO_DEV;
     }
-    
+
     return MOTOR_DM_SendVelCmd(motor, target_vel);
+}
+
+/**
+ * @brief 力位混控模式控制 (DM-H3510)
+ * @param param 电机参数
+ * @param output 力位混控参数
+ * @return 控制结果
+ */
+int8_t MOTOR_DM_HybridCtrl(MOTOR_DM_Param_t *param, MOTOR_Hybrid_Output_t *output) {
+    if (param == NULL || output == NULL) {
+        return DEVICE_ERR_NULL;
+    }
+
+    MOTOR_DM_t *motor = MOTOR_DM_GetMotor(param);
+    if (motor == NULL) {
+        return DEVICE_ERR_NO_DEV;
+    }
+
+    return MOTOR_DM_SendHybridCmd(motor, output);
 }
 
 /**
@@ -443,18 +550,8 @@ MOTOR_DM_t* MOTOR_DM_GetMotor(MOTOR_DM_Param_t *param) {
         return NULL;
     }
     
-    /* 查找对应的电机 */
-    for (int i = 0; i < manager->motor_count; i++) {
-        MOTOR_DM_t *motor = manager->motors[i];
-        if (motor && motor->param.can == param->can && 
-            motor->param.master_id == param->master_id) {
-            return motor;
-        }
-    }
-    
-    return NULL;
+    return MOTOR_DM_FindMotorByMasterId(manager, param->master_id);
 }
-
 
 int8_t MOTOR_DM_Enable(MOTOR_DM_Param_t *param){
     if (param == NULL) {
@@ -481,6 +578,31 @@ int8_t MOTOR_DM_Enable(MOTOR_DM_Param_t *param){
     return BSP_CAN_TransmitStdDataFrame(motor->param.can, &frame) == BSP_OK ? DEVICE_OK : DEVICE_ERR;
 }
 
+int8_t MOTOR_DM_Disable(MOTOR_DM_Param_t *param) {
+    if (param == NULL) {
+        return DEVICE_ERR_NULL;
+    }
+
+    MOTOR_DM_t *motor = MOTOR_DM_GetMotor(param);
+    if (motor == NULL) {
+        return DEVICE_ERR_NO_DEV;
+    }
+
+    BSP_CAN_StdDataFrame_t frame;
+    frame.id = motor->param.can_id;
+    frame.dlc = 8;
+    frame.data[0] = 0xFF;
+    frame.data[1] = 0xFF;
+    frame.data[2] = 0xFF;
+    frame.data[3] = 0xFF;
+    frame.data[4] = 0xFF;
+    frame.data[5] = 0xFF;
+    frame.data[6] = 0xFF;
+    frame.data[7] = 0xFD;
+
+    return BSP_CAN_TransmitStdDataFrame(motor->param.can, &frame) == BSP_OK ? DEVICE_OK : DEVICE_ERR;
+}
+
 //重新设置角度零点
 int8_t MOTOR_DM_SetZero(MOTOR_DM_Param_t *param){
     if (param == NULL) {
@@ -503,6 +625,36 @@ int8_t MOTOR_DM_SetZero(MOTOR_DM_Param_t *param){
     frame.data[5] = 0xFF;
     frame.data[6] = 0xFF;
     frame.data[7] = 0xFE;
+
+    return BSP_CAN_TransmitStdDataFrame(motor->param.can, &frame) == BSP_OK ? DEVICE_OK : DEVICE_ERR;
+}
+
+/**
+ * @brief 清除电机错误状态 (DM-H3510)
+ * @param param 电机参数
+ * @return 操作结果
+ */
+int8_t MOTOR_DM_ClearFault(MOTOR_DM_Param_t *param) {
+    if (param == NULL) {
+        return DEVICE_ERR_NULL;
+    }
+
+    MOTOR_DM_t *motor = MOTOR_DM_GetMotor(param);
+    if (motor == NULL) {
+        return DEVICE_ERR_NO_DEV;
+    }
+
+    BSP_CAN_StdDataFrame_t frame;
+    frame.id = motor->param.can_id;
+    frame.dlc = 8;
+    frame.data[0] = 0xFF;
+    frame.data[1] = 0xFF;
+    frame.data[2] = 0xFF;
+    frame.data[3] = 0xFF;
+    frame.data[4] = 0xFF;
+    frame.data[5] = 0xFF;
+    frame.data[6] = 0xFF;
+    frame.data[7] = 0xFB;  // 清除错误
 
     return BSP_CAN_TransmitStdDataFrame(motor->param.can, &frame) == BSP_OK ? DEVICE_OK : DEVICE_ERR;
 }
@@ -538,4 +690,33 @@ int8_t MOTOR_DM_Offine(MOTOR_DM_Param_t *param) {
     
     motor->motor.header.online = false;
     return DEVICE_OK;
+}
+
+
+/* -------------------------------------------------------------------------- */
+/* 为 C++ motor 封装层提供服务的 C 接口函数（当前主路径为 protocol/motor_t） */
+/* -------------------------------------------------------------------------- */
+
+/* C++ 驱动层将外部持有的 vendor instance 绑定到 C 管理器。 */
+int8_t MOTOR_DM_AttachExternal(MOTOR_DM_Param_t *param, MOTOR_DM_t *external_motor) {
+    if (param == NULL || external_motor == NULL) {
+        return DEVICE_ERR_NULL;
+    }
+    if (MOTOR_DM_CreateCANManager(param->can) != DEVICE_OK) {
+        return DEVICE_ERR;
+    }
+    MOTOR_DM_CANManager_t *manager = MOTOR_DM_GetCANManager(param->can);
+    if (manager == NULL) {
+        return DEVICE_ERR;
+    }
+    return MOTOR_DM_BindExternalMotor(manager, param, external_motor);
+}
+
+/* C++ 驱动层读取底层原始反馈缓存。 */
+const MOTOR_DM_RawFeedback_t* MOTOR_DM_GetRawFeedback(MOTOR_DM_Param_t *param) {
+    MOTOR_DM_t* motor = MOTOR_DM_GetMotor(param);
+    if (motor == NULL) {
+        return NULL;
+    }
+    return &motor->motor.raw_feedback;
 }
