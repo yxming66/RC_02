@@ -53,8 +53,8 @@ Config_RobotParam_t robot_config = {
         },
         .physical = {
             .wheel_radius_m = 0.076f,
-            .wheelbase_m = 0.23f,
-            .trackwidth_m = 0.325f,
+            .wheelbase_m = 0.2f, //L,旧0.23f, //L,新0.2f
+            .trackwidth_m = 0.345f,//W,旧0.325f, //W,新0.345f
             .wheel_output_max_speed = 5.0f,
         },
         .low_pass_cutoff_freq = {
@@ -71,6 +71,18 @@ Config_RobotParam_t robot_config = {
             .sample_freq = 500.0f,
             .position_to_velocity_limit = 1.2f,
             .velocity_to_torque_limit = 6.0f,
+            .lateral_vy_to_wz_feedforward = 0.10f,//1.1f不会偏航会有-vx
+            .lateral_heading_hold_enable = true,
+            .lateral_heading_hold_kp = 8.0f,
+            .lateral_heading_hold_kd = 0.8f,
+            .lateral_heading_hold_max_wz = 2.5f,
+            .lateral_heading_hold_wz_deadband = 0.03f,
+            .lateral_heading_hold_error_deadband = 0.005f,
+        },
+        .motor_temperature_protection = {
+            .warning_c = 50.0f,
+            .limit_c = 80.0f,
+            .auto_relax_on_limit = true,
         },
         .type = CHASSIS_TYPE_FRONT_OMNI_REAR_MECANUM,
     },
@@ -118,6 +130,56 @@ Config_RobotParam_t robot_config = {
             .support_lift_speed = 70.0f,
         },
     },
+    .ore_store_param = {
+        .motor_param = {
+            [ORE_STORE_AXIS_PLATFORM] = {.can = BSP_CAN_1, .id = 0x205, .module = MOTOR_M3508, .reverse = false, .gear = true},
+            [ORE_STORE_AXIS_GATE_LEFT] = {.can = BSP_CAN_2, .id = 0x205, .module = MOTOR_M2006, .reverse = false, .gear = true},
+            [ORE_STORE_AXIS_GATE_RIGHT] = {.can = BSP_CAN_2, .id = 0x206, .module = MOTOR_M2006, .reverse = false, .gear = true},
+            [ORE_STORE_AXIS_TRACK_LEFT] = {.can = BSP_CAN_2, .id = 0x207, .module = MOTOR_M2006, .reverse = false, .gear = true},
+            [ORE_STORE_AXIS_TRACK_RIGHT] = {.can = BSP_CAN_2, .id = 0x208, .module = MOTOR_M2006, .reverse = false, .gear = true},
+        },
+        .motor_install = {
+            [ORE_STORE_AXIS_PLATFORM] = {.external_ratio = 1.0f, .reverse_output = false},
+            [ORE_STORE_AXIS_GATE_LEFT] = {.external_ratio = 1.0f, .reverse_output = false},
+            [ORE_STORE_AXIS_GATE_RIGHT] = {.external_ratio = 1.0f, .reverse_output = false},
+            [ORE_STORE_AXIS_TRACK_LEFT] = {.external_ratio = 1.0f, .reverse_output = false},
+            [ORE_STORE_AXIS_TRACK_RIGHT] = {.external_ratio = 1.0f, .reverse_output = false},
+        },
+        .pid = {
+            .position_pid = {
+                [ORE_STORE_AXIS_PLATFORM] = {.k = 1.0f, .p = 8.0f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 1.2f, .d_cutoff_freq = 0.0f, .range = 0.0f},
+                [ORE_STORE_AXIS_GATE_LEFT] = {.k = 1.0f, .p = 10.0f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 2.0f, .d_cutoff_freq = 0.0f, .range = 0.0f},
+                [ORE_STORE_AXIS_GATE_RIGHT] = {.k = 1.0f, .p = 10.0f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 2.0f, .d_cutoff_freq = 0.0f, .range = 0.0f},
+                [ORE_STORE_AXIS_TRACK_LEFT] = {.k = 1.0f, .p = 8.0f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 2.5f, .d_cutoff_freq = 0.0f, .range = 0.0f},
+                [ORE_STORE_AXIS_TRACK_RIGHT] = {.k = 1.0f, .p = 8.0f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 2.5f, .d_cutoff_freq = 0.0f, .range = 0.0f},
+            },
+            .velocity_pid = {
+                [ORE_STORE_AXIS_PLATFORM] = {.k = 1.0f, .p = 0.18f, .i = 0.02f, .d = 0.0f, .i_limit = 1.0f, .out_limit = 2.5f, .d_cutoff_freq = 0.0f, .range = 0.0f},
+                [ORE_STORE_AXIS_GATE_LEFT] = {.k = 1.0f, .p = 0.08f, .i = 0.01f, .d = 0.0f, .i_limit = 0.5f, .out_limit = 0.8f, .d_cutoff_freq = 0.0f, .range = 0.0f},
+                [ORE_STORE_AXIS_GATE_RIGHT] = {.k = 1.0f, .p = 0.08f, .i = 0.01f, .d = 0.0f, .i_limit = 0.5f, .out_limit = 0.8f, .d_cutoff_freq = 0.0f, .range = 0.0f},
+                [ORE_STORE_AXIS_TRACK_LEFT] = {.k = 1.0f, .p = 0.08f, .i = 0.01f, .d = 0.0f, .i_limit = 0.5f, .out_limit = 0.8f, .d_cutoff_freq = 0.0f, .range = 0.0f},
+                [ORE_STORE_AXIS_TRACK_RIGHT] = {.k = 1.0f, .p = 0.08f, .i = 0.01f, .d = 0.0f, .i_limit = 0.5f, .out_limit = 0.8f, .d_cutoff_freq = 0.0f, .range = 0.0f},
+            },
+        },
+        .controller = {
+            .sample_freq = 500.0f,
+            .position_to_velocity_limit = {1.2f, 2.0f, 2.0f, 2.5f, 2.5f},
+            .velocity_to_torque_limit = {2.5f, 0.8f, 0.8f, 0.8f, 0.8f},
+        },
+        .limit = {
+            .config = {
+                [ORE_STORE_AXIS_PLATFORM] = {.stall_velocity_threshold_rad_s = 0.04f, .stall_position_window_rad = 0.0015f, .stall_cycles_required = 30u, .seek_timeout_s = 8.0f, .limit_margin_rad = 0.02f, .min_range_rad = 0.01f},
+                [ORE_STORE_AXIS_GATE_LEFT] = {.stall_velocity_threshold_rad_s = 0.04f, .stall_position_window_rad = 0.0015f, .stall_cycles_required = 30u, .seek_timeout_s = 6.0f, .limit_margin_rad = 0.01f, .min_range_rad = 0.01f},
+                [ORE_STORE_AXIS_GATE_RIGHT] = {.stall_velocity_threshold_rad_s = 0.04f, .stall_position_window_rad = 0.0015f, .stall_cycles_required = 30u, .seek_timeout_s = 6.0f, .limit_margin_rad = 0.01f, .min_range_rad = 0.01f},
+                [ORE_STORE_AXIS_TRACK_LEFT] = {.stall_velocity_threshold_rad_s = 0.04f, .stall_position_window_rad = 0.0015f, .stall_cycles_required = 30u, .seek_timeout_s = 6.0f, .limit_margin_rad = 0.02f, .min_range_rad = 0.01f},
+                [ORE_STORE_AXIS_TRACK_RIGHT] = {.stall_velocity_threshold_rad_s = 0.04f, .stall_position_window_rad = 0.0015f, .stall_cycles_required = 30u, .seek_timeout_s = 6.0f, .limit_margin_rad = 0.02f, .min_range_rad = 0.01f},
+            },
+            .travel_rad = {10.0f, 1.57f, 1.57f, 6.28f, 6.28f},
+            .lower_seek_velocity_rad_s = {0.4f, 0.6f, 0.6f, 0.8f, 0.8f},
+            .move_velocity_rad_s = {1.2f, 2.0f, 2.0f, 2.5f, 2.5f},
+            .arrive_threshold_rad = {0.05f, 0.03f, 0.03f, 0.04f, 0.04f},
+        },
+    },
     .arm_param = {
         .joint1_motor_param = {
             .can = BSP_CAN_3,
@@ -140,6 +202,11 @@ Config_RobotParam_t robot_config = {
             .can_id = 0x03,
             .module = MOTOR_DM_J4310P,
             .reverse = false,
+        },
+        .joint_temperature_protection = {
+            [0] = {.warning_c = 70.0f, .limit_c = 85.0f, .auto_relax_on_limit = true},
+            [1] = {.warning_c = 70.0f, .limit_c = 85.0f, .auto_relax_on_limit = true},
+            [2] = {.warning_c = 70.0f, .limit_c = 85.0f, .auto_relax_on_limit = true},
         },
         .joint_kp = {8.0f, 6.0f, 6.0f},
         .joint_kd = {3.35f, 2.65f, 2.45f},

@@ -55,6 +55,15 @@ arm_lib::Vec3 MakeVec3(float x, float y, float z) {
   return v;
 }
 
+mr::motor::MotorTemperatureProtectionConfig MakeTemperatureProtection(
+    const MOTOR_TemperatureProtectionConfig_t& param) {
+  mr::motor::MotorTemperatureProtectionConfig config{};
+  config.warning_c = param.warning_c;
+  config.limit_c = param.limit_c;
+  config.auto_relax_on_limit = param.auto_relax_on_limit;
+  return config;
+}
+
 arm_lib::Transform MakeUrdfTransform(float x,
                                      float y,
                                      float z,
@@ -317,6 +326,10 @@ RuntimeDebugData::RuntimeDebugData()
       control_total_torque_ff{0.0f},
       joint_online{false},
       joint_pending{false},
+      joint_temperature_c{0.0f},
+      joint_temperature_warning{false},
+      joint_temperature_over_limit{false},
+      joint_temperature_limit_latched{false},
       cartesian_state(arm_app::ThreePitCartesianAppState::kIdle),
       cartesian_hold_reason(arm_app::ThreePitCartesianHoldReason::kNone),
       remote_cartesian() {}
@@ -448,13 +461,19 @@ bool Runtime::InitActuatorsAndJoints() {
 
   joint1_motor_ =
       MotorFactory::Create<MotorKind::LZ, MotorModel::RSO3>(lz_cfg,
-                                                            kDirectDriveInstall);
+                                                            kDirectDriveInstall,
+                                                            MakeTemperatureProtection(
+                                                                param_->joint_temperature_protection[0]));
   joint2_motor_ =
       MotorFactory::Create<MotorKind::DM, MotorModel::J4340>(dm2_cfg,
-                                                             kDirectDriveInstall);
+                                                             kDirectDriveInstall,
+                                                             MakeTemperatureProtection(
+                                                                 param_->joint_temperature_protection[1]));
   joint3_motor_ =
       MotorFactory::Create<MotorKind::DM, MotorModel::J4310P>(dm3_cfg,
-                                                             kDirectDriveInstall);
+                                                             kDirectDriveInstall,
+                                                             MakeTemperatureProtection(
+                                                                 param_->joint_temperature_protection[2]));
   if (joint1_motor_ == nullptr || joint2_motor_ == nullptr ||
       joint3_motor_ == nullptr) {
     return false;
@@ -924,6 +943,20 @@ void Runtime::RefreshDebugData() {
     debug_.gravity_torque[i] = robot_.GetGravityTorque(i);
     debug_.joint_online[i] = (joint != nullptr) && joint->IsOnline();
     debug_.joint_pending[i] = (joint != nullptr) && joint->HasPendingControl();
+
+    mr::motor::MotorState motor_state{};
+    if (i == 0U && joint1_motor_ != nullptr) {
+      motor_state = joint1_motor_->GetState();
+    } else if (i == 1U && joint2_motor_ != nullptr) {
+      motor_state = joint2_motor_->GetState();
+    } else if (i == 2U && joint3_motor_ != nullptr) {
+      motor_state = joint3_motor_->GetState();
+    }
+    debug_.joint_temperature_c[i] = motor_state.temperature_c;
+    debug_.joint_temperature_warning[i] = motor_state.temperature_warning;
+    debug_.joint_temperature_over_limit[i] = motor_state.temperature_over_limit;
+    debug_.joint_temperature_limit_latched[i] =
+        motor_state.temperature_limit_latched;
   }
 }
 

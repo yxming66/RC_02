@@ -349,7 +349,7 @@ void Task_rc_main(void *argument) {
         case DR16_SW_UP:
           chassis_cmd.mode = CHASSIS_MODE_INDEPENDENT;
           chassis_cmd.ctrl_vec.vx = 2.0f * dr16.data.ch_r_y;
-          chassis_cmd.ctrl_vec.vy = -2.0f * dr16.data.ch_r_x;
+          chassis_cmd.ctrl_vec.vy = -4.0f * dr16.data.ch_r_x;
           chassis_cmd.ctrl_vec.wz = -2.0f * dr16.data.ch_l_x;
           Rc_SetPoleManual(dr16.data.ch_l_y, dr16.data.ch_l_y);
           break;

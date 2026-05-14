@@ -21,6 +21,15 @@ typedef enum {
     MOTOR_GM6020,
 } MOTOR_RM_Module_t;
 
+typedef enum {
+    MOTOR_RM_C610_ERROR_NONE = 0,
+    MOTOR_RM_C610_ERROR_SUPPLY_OVERVOLTAGE = 2,
+    MOTOR_RM_C610_ERROR_PHASE_LOSS = 3,
+    MOTOR_RM_C610_ERROR_SENSOR_LOST = 4,
+    MOTOR_RM_C610_ERROR_STALL = 6,
+    MOTOR_RM_C610_ERROR_CALIBRATION_FAILED = 7,
+} MOTOR_RM_C610_ErrorCode_t;
+
 /*一个can最多控制11个电机*/
 typedef union {
   int16_t output[MOTOR_RM_MAX_MOTORS];

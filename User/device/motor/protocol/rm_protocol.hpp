@@ -19,6 +19,7 @@ struct RmProtocolDebugSnapshot {
     int8_t last_set_torque_ret = DEVICE_OK;
     int8_t last_commit_ret = DEVICE_OK;
     bool last_commit_skipped = false;
+    uint8_t last_error_code = 0;
 };
 
 template <MotorModel Model>
@@ -55,7 +56,8 @@ private:
     bool TryGetRotorFeedback(float& rotor_position_rad,
                              float& rotor_velocity_rad_s,
                              float& torque_current,
-                             float& temperature_c) const;
+                             float& temperature_c,
+                             uint8_t& error_code) const;
 
     MotorInstanceConfig<MotorKind::RM> config_;
     MotorInstallSpec install_;
@@ -68,6 +70,7 @@ private:
     RmProtocolDebugSnapshot debug_{};
     bool rotor_position_initialized_ = false;
     bool last_online_ = false;
+    MotorProtocolState last_non_fault_protocol_state_ = MotorProtocolState::Unregistered;
     float last_single_turn_rotor_position_rad_ = 0.0f;
     float accumulated_rotor_position_rad_ = 0.0f;
 };

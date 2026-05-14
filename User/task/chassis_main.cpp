@@ -55,7 +55,7 @@ extern "C" void Task_chassis_main(void *argument) {
     osMessageQueueGet(task_runtime.msgq.chassis.imu, &chassis_imu, nullptr, 0);
     osMessageQueueGet(task_runtime.msgq.chassis.cmd, &chassis_cmd, nullptr, 0);
 
-    chassis.SetGimbalYaw(chassis_imu.eulr.yaw);
+    chassis.SetGimbalYaw(chassis_imu.eulr.yaw, chassis_imu.gyro.z);
     (void)chassis.UpdateFeedback();
     (void)chassis.Control(chassis_cmd, osKernelGetTickCount());
     chassis.Output();

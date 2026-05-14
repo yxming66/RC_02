@@ -18,7 +18,10 @@ inline constexpr uint8_t kLzMotorFactoryCapacity = 8;
 class MotorFactory {
 public:
     template <MotorKind Kind, MotorModel Model>
-    static MotorT<Kind, Model>* Create(const MotorInstanceConfig<Kind>& config, const MotorInstallSpec& install = kDirectDriveInstall) {
+    static MotorT<Kind, Model>* Create(
+        const MotorInstanceConfig<Kind>& config,
+        const MotorInstallSpec& install = kDirectDriveInstall,
+        const MotorTemperatureProtectionConfig& temperature_protection = {}) {
         static_assert(MotorModelValidV<Kind, Model>, "Invalid motor kind/model combination");
         using MotorType = MotorT<Kind, Model>;
         static DriverSlot<MotorType> drivers[Capacity<Kind>()];
@@ -26,7 +29,8 @@ public:
         if (count >= Capacity<Kind>()) {
             return nullptr;
         }
-        MotorType* driver = new (&drivers[count].value) MotorType(config, install);
+        MotorType* driver =
+            new (&drivers[count].value) MotorType(config, install, temperature_protection);
         ++count;
         return driver;
     }

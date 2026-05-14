@@ -16,6 +16,12 @@ enum class MotorProtocolState : uint8_t {
     Fault,
 };
 
+struct MotorTemperatureProtectionConfig {
+    float warning_c = 0.0f;
+    float limit_c = 0.0f;
+    bool auto_relax_on_limit = true;
+};
+
 struct MotorState {
     // 统一为输出端反馈；无减速器时等同于电机本体反馈。
     float position_rad = 0.0f;
@@ -32,6 +38,11 @@ struct MotorState {
     uint32_t protocol_status_code = 0;
     uint32_t protocol_fault = 0;
     float device_temperature_c = 0.0f;
+    float temperature_warning_threshold_c = 0.0f;
+    float temperature_limit_threshold_c = 0.0f;
+    bool temperature_warning = false;
+    bool temperature_over_limit = false;
+    bool temperature_limit_latched = false;
 };
 
 } // namespace mr::motor

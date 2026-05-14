@@ -130,6 +130,7 @@ static void Motor_RM_Decode(MOTOR_RM_t *motor, BSP_CAN_Message_t *msg) {
     motor->motor.raw_feedback.raw_speed = raw_speed;
     motor->motor.raw_feedback.raw_current = raw_current;
     motor->motor.raw_feedback.raw_temp = msg->data[6];
+    motor->motor.raw_feedback.raw_error_code = msg->data[7];
 
     if (motor->param.gear) {
         // 多圈累加

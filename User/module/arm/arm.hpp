@@ -93,6 +93,10 @@ struct RuntimeDebugData {
   float control_total_torque_ff[ARM_JOINT_COUNT];
   bool joint_online[ARM_JOINT_COUNT];
   bool joint_pending[ARM_JOINT_COUNT];
+  float joint_temperature_c[ARM_JOINT_COUNT];
+  bool joint_temperature_warning[ARM_JOINT_COUNT];
+  bool joint_temperature_over_limit[ARM_JOINT_COUNT];
+  bool joint_temperature_limit_latched[ARM_JOINT_COUNT];
   mr::robotics::arm::application::ThreePitCartesianAppState cartesian_state;
   mr::robotics::arm::application::ThreePitCartesianHoldReason
       cartesian_hold_reason;

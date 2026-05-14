@@ -30,6 +30,7 @@ typedef struct {
     int16_t raw_speed;       /* 原始转速反馈 */
     int16_t raw_current;     /* 原始电流反馈 */
     uint8_t raw_temp;        /* 原始温度反馈 */
+    uint8_t raw_error_code;  /* Raw protocol error code, 0 means no error. */
 } MOTOR_RawFeedback_t;
 
 /**
@@ -42,6 +43,12 @@ typedef struct {
     float kp;         /* 位置环增益 */
     float kd;         /* 速度环增益 */
 } MOTOR_MIT_Output_t;
+
+typedef struct {
+    float warning_c;
+    float limit_c;
+    bool auto_relax_on_limit;
+} MOTOR_TemperatureProtectionConfig_t;
 
 /**
  * @brief 力位混控模式参数结构体 (DM-H3510)

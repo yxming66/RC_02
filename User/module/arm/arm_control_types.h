@@ -96,6 +96,7 @@ typedef struct {
     MOTOR_LZ_Param_t joint1_motor_param;
     MOTOR_DM_Param_t joint2_motor_param;
     MOTOR_DM_Param_t joint3_motor_param;
+    MOTOR_TemperatureProtectionConfig_t joint_temperature_protection[ARM_JOINT_COUNT];
     float joint_kp[ARM_JOINT_COUNT];
     float joint_kd[ARM_JOINT_COUNT];
     float gravity_comp_scale[ARM_JOINT_COUNT];

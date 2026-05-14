@@ -25,7 +25,6 @@ constexpr float kMaxDtS = 0.050f;
 constexpr float kMinWheelSpeedMps = 1e-4f;
 constexpr float kMinWheelRadiusM = 1e-4f;
 constexpr float kHoldCommandDeadband = 1e-4f;
-constexpr float kLateralHeadingHoldWzGain = 3.0f;
 
 mr::robotics::chassis::FrontOmniRearMecanumGeometry
 MakeGeometry(const Chassis_Params_t *param) {
@@ -45,6 +44,19 @@ mr::motor::MotorInstallSpec MakeInstallSpec(const Chassis_Params_t *param,
     spec.reverse_output = param->motor_install[idx].reverse_output;
   }
   return spec;
+}
+
+mr::motor::MotorTemperatureProtectionConfig MakeTemperatureProtection(
+    const Chassis_Params_t *param) {
+  mr::motor::MotorTemperatureProtectionConfig config{};
+  if (param == nullptr) {
+    return config;
+  }
+  config.warning_c = param->motor_temperature_protection.warning_c;
+  config.limit_c = param->motor_temperature_protection.limit_c;
+  config.auto_relax_on_limit =
+      param->motor_temperature_protection.auto_relax_on_limit;
+  return config;
 }
 
 float ResolveWheelRadius(const Chassis_Params_t *param) {
@@ -87,6 +99,14 @@ float RotorSign(float stored_sign, Chassis_RotorMode_t mode) {
     default:
       return (stored_sign != 0.0f) ? stored_sign : 1.0f;
   }
+}
+
+bool LateralHeadingHoldEnabled(const Chassis_Params_t *param) {
+  return param != nullptr && param->controller.lateral_heading_hold_enable;
+}
+
+float PositiveOr(float value, float fallback) {
+  return scalar::is_positive_scalar(value) ? value : fallback;
 }
 
 }  // namespace
@@ -204,14 +224,29 @@ int8_t FrontOmniRearMecanumController::Control(const Chassis_CMD_t &cmd,
       break;
   }
 
+  debug_.lateral_wz_feedforward = 0.0f;
+  debug_.lateral_heading_hold_enabled = LateralHeadingHoldEnabled(param_);
+  debug_.lateral_heading_hold_active = lateral_heading_hold_active_;
+  debug_.lateral_heading_error_rad = 0.0f;
+  debug_.lateral_yaw_rate_rad_s =
+      scalar::is_finite_scalar(yaw_rate_rad_s_) ? yaw_rate_rad_s_ : 0.0f;
+  debug_.lateral_heading_wz_correction = 0.0f;
+
+  if (ShouldUseLateralYawCorrection(cmd.ctrl_vec.wz)) {
+    debug_.lateral_wz_feedforward = CalcLateralWzFeedforward();
+    move_vec_.wz += debug_.lateral_wz_feedforward;
+  }
+
   if (ShouldUseLateralHeadingHold(cmd.ctrl_vec.wz)) {
     if (!lateral_heading_hold_active_) {
       EnterLateralHeadingHold();
     }
-    move_vec_.wz = CalcLateralHeadingHoldWz();
+    debug_.lateral_heading_wz_correction = CalcLateralHeadingHoldWz();
+    move_vec_.wz += debug_.lateral_heading_wz_correction;
   } else if (lateral_heading_hold_active_) {
     ExitLateralHeadingHold();
   }
+  debug_.lateral_heading_hold_active = lateral_heading_hold_active_;
 
   debug_.cmd_vec_body.wz = move_vec_.wz;
   debug_.rotor_wz_cmd = (mode_ == CHASSIS_MODE_ROTOR) ? move_vec_.wz : 0.0f;
@@ -334,6 +369,7 @@ void FrontOmniRearMecanumController::ResetRuntime() {
   dt_ = 0.0f;
   mech_zero_ = 0.0f;
   wz_multi_ = 1.0f;
+  yaw_rate_rad_s_ = 0.0f;
   wheel_hold_active_ = false;
   lateral_heading_hold_active_ = false;
   lateral_heading_target_rad_ = 0.0f;
@@ -475,14 +511,31 @@ bool FrontOmniRearMecanumController::ShouldHoldZeroCommand() const {
          std::fabs(move_vec_.wz) <= kHoldCommandDeadband;
 }
 
-bool FrontOmniRearMecanumController::ShouldUseLateralHeadingHold(
+bool FrontOmniRearMecanumController::ShouldUseLateralYawCorrection(
     float raw_wz_cmd) const {
   if (mode_ != CHASSIS_MODE_INDEPENDENT && mode_ != CHASSIS_MODE_OPEN) {
     return false;
   }
 
+  const float raw_wz_deadband = PositiveOr(
+      param_->controller.lateral_heading_hold_wz_deadband,
+      kHoldCommandDeadband);
   return std::fabs(move_vec_.vy) > kHoldCommandDeadband &&
-         std::fabs(raw_wz_cmd) <= kHoldCommandDeadband;
+         std::fabs(raw_wz_cmd) <= raw_wz_deadband;
+}
+
+bool FrontOmniRearMecanumController::ShouldUseLateralHeadingHold(
+    float raw_wz_cmd) const {
+  return LateralHeadingHoldEnabled(param_) &&
+         ShouldUseLateralYawCorrection(raw_wz_cmd);
+}
+
+float FrontOmniRearMecanumController::CalcLateralWzFeedforward() const {
+  const float gain = param_->controller.lateral_vy_to_wz_feedforward;
+  if (!scalar::is_finite_scalar(gain)) {
+    return 0.0f;
+  }
+  return ClampSymmetric(gain * move_vec_.vy, param_->limit.max_wz);
 }
 
 void FrontOmniRearMecanumController::EnterWheelHold() {
@@ -518,11 +571,31 @@ void FrontOmniRearMecanumController::ExitLateralHeadingHold() {
 }
 
 float FrontOmniRearMecanumController::CalcLateralHeadingHoldWz() {
-  const float yaw_error = scalar::angle_error(
+  float yaw_error = scalar::angle_error(
       lateral_heading_target_rad_, feedback_.encoder_gimbalYawMotor);
-  const float pid_wz = PID_Calc(&follow_pid_, yaw_error, 0.0f, 0.0f, dt_);
-  return ClampSymmetric(kLateralHeadingHoldWzGain * pid_wz,
-                        param_->limit.max_wz);
+  const float error_deadband =
+      PositiveOr(param_->controller.lateral_heading_hold_error_deadband, 0.0f);
+  if (std::fabs(yaw_error) <= error_deadband) {
+    yaw_error = 0.0f;
+  }
+
+  const float yaw_rate =
+      scalar::is_finite_scalar(yaw_rate_rad_s_) ? yaw_rate_rad_s_ : 0.0f;
+  const float kp = scalar::is_finite_scalar(
+                       param_->controller.lateral_heading_hold_kp)
+                       ? param_->controller.lateral_heading_hold_kp
+                       : 0.0f;
+  const float kd = scalar::is_finite_scalar(
+                       param_->controller.lateral_heading_hold_kd)
+                       ? param_->controller.lateral_heading_hold_kd
+                       : 0.0f;
+  const float correction_wz = kp * yaw_error - kd * yaw_rate;
+  const float limit = PositiveOr(
+      param_->controller.lateral_heading_hold_max_wz, param_->limit.max_wz);
+
+  debug_.lateral_heading_error_rad = yaw_error;
+  debug_.lateral_yaw_rate_rad_s = yaw_rate;
+  return ClampSymmetric(correction_wz, limit);
 }
 
 int8_t FrontOmniRearMecanumController::ControlWheelHold() {
@@ -575,6 +648,7 @@ int8_t FrontOmniRearMecanumController::RegisterWheels(float target_freq) {
     mr::wheel::RmM3508WheelConfig wheel_config{};
     wheel_config.motor_param = param_->motor_param[i];
     wheel_config.install = MakeInstallSpec(param_, i);
+    wheel_config.temperature_protection = MakeTemperatureProtection(param_);
     wheel_config.controller = controller_config;
     wheel_config.radius_m = ResolveWheelRadius(param_);
 
@@ -623,6 +697,10 @@ void FrontOmniRearMecanumController::StoreWheelState(
   feedback_.motor[idx].velocity_rad_s = state.angular_velocity_rad_s;
   feedback_.motor[idx].torque_nm = state.torque_nm;
   feedback_.motor[idx].temperature_c = state.temperature_c;
+  feedback_.motor[idx].temperature_warning = state.temperature_warning;
+  feedback_.motor[idx].temperature_over_limit = state.temperature_over_limit;
+  feedback_.motor[idx].temperature_limit_latched =
+      state.temperature_limit_latched;
   feedback_.motor[idx].online = state.online;
   debug_.wheel_motor_velocity_rad_s[idx] = state.angular_velocity_rad_s;
   debug_.wheel_motor_torque_nm[idx] =

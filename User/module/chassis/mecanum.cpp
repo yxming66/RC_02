@@ -46,6 +46,19 @@ mr::motor::MotorInstallSpec MakeInstallSpec(const Chassis_Params_t *param,
   return spec;
 }
 
+mr::motor::MotorTemperatureProtectionConfig MakeTemperatureProtection(
+    const Chassis_Params_t *param) {
+  mr::motor::MotorTemperatureProtectionConfig config{};
+  if (param == nullptr) {
+    return config;
+  }
+  config.warning_c = param->motor_temperature_protection.warning_c;
+  config.limit_c = param->motor_temperature_protection.limit_c;
+  config.auto_relax_on_limit =
+      param->motor_temperature_protection.auto_relax_on_limit;
+  return config;
+}
+
 float ResolveWheelRadius(const Chassis_Params_t *param) {
   if (param == nullptr || param->physical.wheel_radius_m <= 0.0f) {
     return kMinWheelRadiusM;
@@ -531,6 +544,7 @@ int8_t MecanumController::RegisterWheels(float target_freq) {
     mr::wheel::RmM3508WheelConfig wheel_config{};
     wheel_config.motor_param = param_->motor_param[i];
     wheel_config.install = MakeInstallSpec(param_, i);
+    wheel_config.temperature_protection = MakeTemperatureProtection(param_);
     wheel_config.controller = controller_config;
     wheel_config.radius_m = ResolveWheelRadius(param_);
 
@@ -576,6 +590,10 @@ void MecanumController::StoreWheelState(uint8_t idx, const WheelState &state) {
   feedback_.motor[idx].velocity_rad_s = state.angular_velocity_rad_s;
   feedback_.motor[idx].torque_nm = state.torque_nm;
   feedback_.motor[idx].temperature_c = state.temperature_c;
+  feedback_.motor[idx].temperature_warning = state.temperature_warning;
+  feedback_.motor[idx].temperature_over_limit = state.temperature_over_limit;
+  feedback_.motor[idx].temperature_limit_latched =
+      state.temperature_limit_latched;
   feedback_.motor[idx].online = state.online;
   debug_.wheel_motor_velocity_rad_s[idx] = state.angular_velocity_rad_s;
   debug_.wheel_motor_torque_nm[idx] =

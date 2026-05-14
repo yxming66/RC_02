@@ -392,6 +392,7 @@ float MotorControllerT<MotorType>::ResolveTorqueLimit(float request_limit) const
 }
 
 template class MotorControllerT<mr::motor::DmJ4310Motor>;
+template class MotorControllerT<mr::motor::RmM2006Motor>;
 template class MotorControllerT<mr::motor::RmM3508Motor>;
 
 } // namespace mr::motor

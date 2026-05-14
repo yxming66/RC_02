@@ -97,7 +97,15 @@ typedef struct {
     float sample_freq;
     float position_to_velocity_limit;
     float velocity_to_torque_limit;
+    float lateral_vy_to_wz_feedforward; /* wz_ff = gain * vy, rad/m. */
+    bool lateral_heading_hold_enable;   /* Enable gyro yaw hold during lateral move. */
+    float lateral_heading_hold_kp;       /* yaw error to wz correction gain. */
+    float lateral_heading_hold_kd;       /* gyro z damping gain. */
+    float lateral_heading_hold_max_wz;   /* max gyro correction, rad/s. */
+    float lateral_heading_hold_wz_deadband;    /* raw wz considered zero. */
+    float lateral_heading_hold_error_deadband; /* yaw error deadband, rad. */
   } controller;
+  MOTOR_TemperatureProtectionConfig_t motor_temperature_protection;
 } Chassis_Params_t;
 
 typedef struct {
@@ -111,6 +119,9 @@ typedef struct {
     float velocity_rad_s;
     float torque_nm;
     float temperature_c;
+    bool temperature_warning;
+    bool temperature_over_limit;
+    bool temperature_limit_latched;
     bool online;
   } motor[4];
   float encoder_gimbalYawMotor;
@@ -123,6 +134,12 @@ typedef struct {
   MoveVector_t cmd_vec_raw;
   MoveVector_t cmd_vec_body;
   MoveVector_t cmd_vec_limited;
+  float lateral_wz_feedforward;
+  bool lateral_heading_hold_enabled;
+  bool lateral_heading_hold_active;
+  float lateral_heading_error_rad;
+  float lateral_yaw_rate_rad_s;
+  float lateral_heading_wz_correction;
   float rotor_wz_cmd;
   float wheel_speed_ref_mps[4];
   float wheel_speed_fdb_mps[4];

@@ -19,7 +19,10 @@ class FrontOmniRearMecanumController final {
   void Output();
   void ResetOutput();
 
-  void SetGimbalYaw(float yaw_rad) { feedback_.encoder_gimbalYawMotor = yaw_rad; }
+  void SetGimbalYaw(float yaw_rad, float yaw_rate_rad_s = 0.0f) {
+    feedback_.encoder_gimbalYawMotor = yaw_rad;
+    yaw_rate_rad_s_ = yaw_rate_rad_s;
+  }
 
   Chassis_Mode_t mode() const { return mode_; }
   const Chassis_Feedback_t &feedback() const { return feedback_; }
@@ -44,7 +47,9 @@ class FrontOmniRearMecanumController final {
   void UpdateBodyVelocityFeedback();
   int8_t ComputeWheelSpeeds();
   bool ShouldHoldZeroCommand() const;
+  bool ShouldUseLateralYawCorrection(float raw_wz_cmd) const;
   bool ShouldUseLateralHeadingHold(float raw_wz_cmd) const;
+  float CalcLateralWzFeedforward() const;
   void EnterWheelHold();
   void ExitWheelHold();
   void EnterLateralHeadingHold();
@@ -79,6 +84,7 @@ class FrontOmniRearMecanumController final {
   float dt_ = 0.0f;
   float mech_zero_ = 0.0f;
   float wz_multi_ = 1.0f;
+  float yaw_rate_rad_s_ = 0.0f;
   bool wheel_hold_active_ = false;
   bool lateral_heading_hold_active_ = false;
   float lateral_heading_target_rad_ = 0.0f;

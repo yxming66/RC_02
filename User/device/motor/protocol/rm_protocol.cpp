@@ -33,6 +33,16 @@ float RpmToRadPerSec(float rpm) {
     return rpm * kTwoPi / kSecondsPerMinute;
 }
 
+uint32_t EncodeRmC610Fault(uint8_t error_code) {
+    if (error_code == MOTOR_RM_C610_ERROR_NONE) {
+        return 0u;
+    }
+    if (error_code < 32u) {
+        return (1u << error_code);
+    }
+    return (1u << 31);
+}
+
 } // namespace
 
 template <MotorModel Model>
@@ -129,7 +139,8 @@ template <MotorModel Model>
 bool MotorProtocol<MotorKind::RM, Model>::TryGetRotorFeedback(float& rotor_position_rad,
                                                        float& rotor_velocity_rad_s,
                                                        float& torque_current,
-                                                       float& temperature_c) const {
+                                                       float& temperature_c,
+                                                       uint8_t& error_code) const {
     const MOTOR_RM_RawFeedback_t* raw = MOTOR_RM_GetRawFeedback(const_cast<MOTOR_RM_Param_t*>(&param_));
     if (instance_ == nullptr || raw == nullptr) {
         return false;
@@ -160,6 +171,7 @@ bool MotorProtocol<MotorKind::RM, Model>::TryGetRotorFeedback(float& rotor_posit
     }
 
     temperature_c = static_cast<float>(raw->raw_temp);
+    error_code = raw->raw_error_code;
     return true;
 }
 
@@ -187,7 +199,8 @@ void MotorProtocol<MotorKind::RM, Model>::RefreshStateCache() {
     float rotor_velocity_rad_s = 0.0f;
     float torque_current = 0.0f;
     float temperature_c = 0.0f;
-    if (!TryGetRotorFeedback(rotor_position_rad, rotor_velocity_rad_s, torque_current, temperature_c)) {
+    uint8_t error_code = 0u;
+    if (!TryGetRotorFeedback(rotor_position_rad, rotor_velocity_rad_s, torque_current, temperature_c, error_code)) {
         ResetPositionTracker();
         last_online_ = next.online;
         next.temperature_c = MOTOR_GetTemp(motor);
@@ -204,6 +217,14 @@ void MotorProtocol<MotorKind::RM, Model>::RefreshStateCache() {
     next.velocity_rad_s = ToOutputVelocity(rotor_velocity_rad_s);
     next.torque_nm = ToOutputTorque(torque_current);
     next.temperature_c = temperature_c;
+    next.protocol_status_code = error_code;
+    next.protocol_fault = EncodeRmC610Fault(error_code);
+    if (next.protocol_fault != 0u) {
+        next.protocol_state = MotorProtocolState::Fault;
+    } else if (next.protocol_state == MotorProtocolState::Fault) {
+        next.protocol_state = last_non_fault_protocol_state_;
+    }
+    debug_.last_error_code = error_code;
 
     if (install_.reverse_output) {
         next.position_rad = -next.position_rad;
@@ -220,14 +241,16 @@ int8_t MotorProtocol<MotorKind::RM, Model>::Register() {
     const int8_t ret = MOTOR_RM_AttachExternal(&param_, &vendor_instance_);
     if (ret == DEVICE_OK) {
         instance_ = &vendor_instance_;
-        state_.protocol_state = MotorProtocolState::Registered;
+        last_non_fault_protocol_state_ = MotorProtocolState::Registered;
+        state_.protocol_state = last_non_fault_protocol_state_;
     }
     return ret;
 }
 
 template <MotorModel Model>
 int8_t MotorProtocol<MotorKind::RM, Model>::Enable() {
-    state_.protocol_state = MotorProtocolState::Enabled;
+    last_non_fault_protocol_state_ = MotorProtocolState::Enabled;
+    state_.protocol_state = last_non_fault_protocol_state_;
     return DEVICE_OK;
 }
 
@@ -238,7 +261,8 @@ int8_t MotorProtocol<MotorKind::RM, Model>::Disable() {
     if (ret != DEVICE_OK) {
         return ret;
     }
-    state_.protocol_state = MotorProtocolState::Disabled;
+    last_non_fault_protocol_state_ = MotorProtocolState::Disabled;
+    state_.protocol_state = last_non_fault_protocol_state_;
     return MOTOR_RM_Ctrl(&param_);
 }
 
@@ -249,7 +273,8 @@ int8_t MotorProtocol<MotorKind::RM, Model>::Relax() {
     if (ret != DEVICE_OK) {
         return ret;
     }
-    state_.protocol_state = MotorProtocolState::Enabled;
+    last_non_fault_protocol_state_ = MotorProtocolState::Enabled;
+    state_.protocol_state = last_non_fault_protocol_state_;
     return MOTOR_RM_Ctrl(&param_);
 }
 

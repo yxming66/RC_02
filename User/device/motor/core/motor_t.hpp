@@ -5,6 +5,7 @@
 
 #include <type_traits>
 
+#include "component/math/scalar.hpp"
 #include "device/device.h"
 #include "device/motor/core/motor_instance_config.hpp"
 #include "device/motor/core/motor_install_spec.hpp"
@@ -27,22 +28,51 @@ public:
     using Config = MotorInstanceConfig<Kind>;
     using Protocol = MotorProtocol<Kind, Model>;
 
-    explicit MotorT(const Config& config, const MotorInstallSpec& install = kDirectDriveInstall)
-        : config_(config), install_(install), protocol_(config, install_, state_, Traits::kVendorModule) {}
+    explicit MotorT(const Config& config,
+                    const MotorInstallSpec& install = kDirectDriveInstall,
+                    const MotorTemperatureProtectionConfig& temperature_protection = {})
+        : config_(config),
+          install_(install),
+          temperature_protection_(NormalizeTemperatureProtection(temperature_protection)),
+          state_{},
+          protocol_(config, install_, state_, Traits::kVendorModule) {
+        UpdateTemperatureProtectionFlags();
+    }
 
     int8_t Register() { return protocol_.Register(); }
-    int8_t Enable() { return protocol_.Enable(); }
+    int8_t Enable() {
+        UpdateTemperatureProtectionFlags();
+        if (state_.temperature_limit_latched) {
+            return HoldForTemperatureLimit();
+        }
+        return protocol_.Enable();
+    }
     int8_t Disable() { return protocol_.Disable(); }
     int8_t Relax() { return protocol_.Relax(); }
     int8_t SetZero() {
+        UpdateTemperatureProtectionFlags();
+        if (state_.temperature_limit_latched) {
+            return HoldForTemperatureLimit();
+        }
         if constexpr (Traits::kHasNativeZeroSet) {
             return protocol_.SetZero();
         } else {
             return DEVICE_ERR_UNSUPPORTED;
         }
     }
-    int8_t Update() { return protocol_.Update(); }
+    int8_t Update() {
+        const int8_t ret = protocol_.Update();
+        UpdateTemperatureProtectionFlags();
+        if (ret == DEVICE_OK && state_.temperature_limit_latched) {
+            return HoldForTemperatureLimit();
+        }
+        return ret;
+    }
     int8_t CommitCommand() {
+        UpdateTemperatureProtectionFlags();
+        if (state_.temperature_limit_latched) {
+            return HoldForTemperatureLimit();
+        }
         int8_t ret = protocol_.CommitCommand();
         state_.command_pending = protocol_.HasPendingCommand();
         return ret;
@@ -54,7 +84,33 @@ public:
     }
     const auto& ProtocolDebug() const { return protocol_.GetDebugSnapshot(); }
 
+    void SetTemperatureProtection(const MotorTemperatureProtectionConfig& config) {
+        temperature_protection_ = NormalizeTemperatureProtection(config);
+        UpdateTemperatureProtectionFlags();
+    }
+    void SetTemperatureThresholds(float warning_c,
+                                  float limit_c,
+                                  bool auto_relax_on_limit = true) {
+        SetTemperatureProtection({warning_c, limit_c, auto_relax_on_limit});
+    }
+    void DisableTemperatureProtection() {
+        temperature_protection_ = {};
+        UpdateTemperatureProtectionFlags();
+    }
+    void ClearTemperatureLimitLatch() {
+        state_.temperature_limit_latched = false;
+        UpdateTemperatureProtectionFlags();
+    }
+    MotorTemperatureProtectionConfig GetTemperatureProtectionConfig() const {
+        return temperature_protection_;
+    }
+    bool IsTemperatureLimitActive() const { return state_.temperature_limit_latched; }
+
     int8_t SetTorque(float torque_nm) {
+        UpdateTemperatureProtectionFlags();
+        if (state_.temperature_limit_latched) {
+            return HoldForTemperatureLimit();
+        }
         if constexpr (Traits::kSupportsTorque) {
             return protocol_.SetTorque(torque_nm);
         } else {
@@ -63,6 +119,10 @@ public:
     }
 
     int8_t SetVelocity(float velocity) {
+        UpdateTemperatureProtectionFlags();
+        if (state_.temperature_limit_latched) {
+            return HoldForTemperatureLimit();
+        }
         if constexpr (Traits::kSupportsVelocity) {
             return protocol_.SetVelocity(velocity);
         } else {
@@ -71,6 +131,10 @@ public:
     }
 
     int8_t SetPosition(float position, float max_velocity = 0.0f) {
+        UpdateTemperatureProtectionFlags();
+        if (state_.temperature_limit_latched) {
+            return HoldForTemperatureLimit();
+        }
         if constexpr (Traits::kSupportsPosition) {
             return protocol_.SetPosition(position, max_velocity);
         } else {
@@ -79,6 +143,10 @@ public:
     }
 
     int8_t SetMIT(float position, float velocity, float kp, float kd, float torque_ff) {
+        UpdateTemperatureProtectionFlags();
+        if (state_.temperature_limit_latched) {
+            return HoldForTemperatureLimit();
+        }
         if constexpr (Traits::kSupportsMit) {
             return protocol_.SetMIT(position, velocity, kp, kd, torque_ff);
         } else {
@@ -106,8 +174,70 @@ public:
     static constexpr MotorCapability capabilities() { return Traits::kCapabilities; }
 
 private:
+    static bool TemperatureThresholdEnabled(float threshold_c) {
+        return mr::component::math::is_finite_scalar(threshold_c) &&
+               threshold_c > 0.0f;
+    }
+
+    static MotorTemperatureProtectionConfig NormalizeTemperatureProtection(
+        const MotorTemperatureProtectionConfig& config) {
+        MotorTemperatureProtectionConfig normalized{};
+        normalized.warning_c =
+            TemperatureThresholdEnabled(config.warning_c) ? config.warning_c : 0.0f;
+        normalized.limit_c =
+            TemperatureThresholdEnabled(config.limit_c) ? config.limit_c : 0.0f;
+        normalized.auto_relax_on_limit = config.auto_relax_on_limit;
+        if (normalized.warning_c > 0.0f && normalized.limit_c > 0.0f &&
+            normalized.warning_c > normalized.limit_c) {
+            normalized.warning_c = normalized.limit_c;
+        }
+        return normalized;
+    }
+
+    void UpdateTemperatureProtectionFlags() {
+        state_.temperature_warning_threshold_c = temperature_protection_.warning_c;
+        state_.temperature_limit_threshold_c = temperature_protection_.limit_c;
+
+        const bool primary_temperature_valid =
+            mr::component::math::is_finite_scalar(state_.temperature_c);
+        const bool device_temperature_valid =
+            mr::component::math::is_finite_scalar(state_.device_temperature_c);
+        float protection_temperature_c =
+            primary_temperature_valid ? state_.temperature_c : 0.0f;
+        if (device_temperature_valid &&
+            (!primary_temperature_valid ||
+             state_.device_temperature_c > protection_temperature_c)) {
+            protection_temperature_c = state_.device_temperature_c;
+        }
+        const bool valid_temperature =
+            primary_temperature_valid || device_temperature_valid;
+        state_.temperature_warning =
+            valid_temperature &&
+            TemperatureThresholdEnabled(temperature_protection_.warning_c) &&
+            protection_temperature_c >= temperature_protection_.warning_c;
+        state_.temperature_over_limit =
+            valid_temperature &&
+            TemperatureThresholdEnabled(temperature_protection_.limit_c) &&
+            protection_temperature_c >= temperature_protection_.limit_c;
+
+        if (!TemperatureThresholdEnabled(temperature_protection_.limit_c)) {
+            state_.temperature_limit_latched = false;
+        } else if (state_.temperature_over_limit) {
+            state_.temperature_limit_latched = true;
+        }
+    }
+
+    int8_t HoldForTemperatureLimit() {
+        ClearPendingCommand();
+        if (!temperature_protection_.auto_relax_on_limit) {
+            return DEVICE_ERR;
+        }
+        return protocol_.Relax();
+    }
+
     Config config_;
     MotorInstallSpec install_;
+    MotorTemperatureProtectionConfig temperature_protection_;
     MotorState state_{};
     Protocol protocol_;
 };

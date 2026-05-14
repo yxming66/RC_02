@@ -15,6 +15,9 @@ struct WheelState {
   float linear_velocity_mps = 0.0f;
   float torque_nm = 0.0f;
   float temperature_c = 0.0f;
+  bool temperature_warning = false;
+  bool temperature_over_limit = false;
+  bool temperature_limit_latched = false;
   bool online = false;
 };
 
@@ -30,6 +33,7 @@ struct WheelDebugSnapshot {
 struct RmM3508WheelConfig {
   MOTOR_RM_Param_t motor_param{};
   mr::motor::MotorInstallSpec install{};
+  mr::motor::MotorTemperatureProtectionConfig temperature_protection{};
   mr::motor::MotorControllerConfig controller{};
   float radius_m = 0.0f;
 };

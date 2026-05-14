@@ -11,6 +11,7 @@
 #include "device/motor_rm.h"
 #include "module/arm/arm_control_types.h"
 #include "module/chassis.h"
+#include "module/ore_store.h"
 #include "module/pole.h"
 #include "module/rod.h"
 #include "module/rod_new.h"
@@ -80,6 +81,7 @@ typedef struct {
 typedef struct {
   Chassis_Params_t chassis_param;
   Pole_Params_t pole_param;
+  OreStore_Params_t ore_store_param;
   Arm_Params_t arm_param;
   AutoCtrl_Params_t auto_ctrl_param;
   Rod_Params_t rod_param;

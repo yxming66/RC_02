@@ -32,7 +32,7 @@ RmM3508Wheel::RmM3508Wheel(const RmM3508WheelConfig& config)
   const auto motor_config =
       MotorInstanceConfig<MotorKind::RM>::FromVendorParam(config.motor_param);
   motor_ = MotorFactory::Create<MotorKind::RM, MotorModel::M3508>(
-      motor_config, config.install);
+      motor_config, config.install, config.temperature_protection);
   if (motor_ != nullptr) {
     controller_ =
         new (controller_storage_) Controller(*motor_, config.controller);
@@ -127,6 +127,9 @@ void RmM3508Wheel::RefreshState() {
   state_.linear_velocity_mps = motor_state.velocity_rad_s * radius_m_;
   state_.torque_nm = motor_state.torque_nm;
   state_.temperature_c = motor_state.temperature_c;
+  state_.temperature_warning = motor_state.temperature_warning;
+  state_.temperature_over_limit = motor_state.temperature_over_limit;
+  state_.temperature_limit_latched = motor_state.temperature_limit_latched;
   state_.online = motor_state.online;
 }
 
