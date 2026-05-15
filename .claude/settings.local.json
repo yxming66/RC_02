@@ -51,7 +51,11 @@
       "Bash(mingw32-make User/module/CMakeFiles/RC_02.dir/rod_new.cpp.obj)",
       "Bash(mingw32-make VERBOSE=1)",
       "Bash(mingw32-c++ -c \"../../Middlewares/Third_Party/FreeRTOS/Source/event_groups.c\" -o /tmp/test.o -I\"../../Core/Inc\" -I\"../../Drivers/CMSIS/Include\" -I\"../../Drivers/CMSIS/DSP/Include\" -I\"../../Middlewares/Third_Party/FreeRTOS/Source/include\" -I\"../../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2\" -I\"../../Drivers/STM32H7xx_HAL_Driver/Inc\" -DUSE_HAL_DRIVER -DSTM32H723xx)",
-      "Bash(mingw32-make -j4)"
+      "Bash(mingw32-make -j4)",
+      "Bash(mingw32-make)",
+      "Bash(mingw32-make cmake/stm32cubemx/CMakeFiles/FreeRTOS.dir/__/__/Middlewares/Third_Party/FreeRTOS/Source/event_groups.c.obj)",
+      "Bash(ls -la build)",
+      "Bash(dir build *)"
     ]
   }
 }

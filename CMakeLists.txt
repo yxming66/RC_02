@@ -144,6 +144,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     User/task/sick.c
     User/task/arm_main.cpp
     User/task/rod_main.c
+    User/task/ore_store_main.c
     User/task/atti_esti.c
     User/task/pc_comm_task.c
 )

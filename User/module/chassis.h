@@ -94,17 +94,18 @@ typedef struct {
     float max_torque_cmd;
   } limit;
   struct {
-    float sample_freq;
     float position_to_velocity_limit;
     float velocity_to_torque_limit;
+  } controller;
+  struct {
     float lateral_vy_to_wz_feedforward; /* wz_ff = gain * vy, rad/m. */
     bool lateral_heading_hold_enable;   /* Enable gyro yaw hold during lateral move. */
-    float lateral_heading_hold_kp;       /* yaw error to wz correction gain. */
-    float lateral_heading_hold_kd;       /* gyro z damping gain. */
-    float lateral_heading_hold_max_wz;   /* max gyro correction, rad/s. */
+    float lateral_heading_hold_kp;      /* yaw error to wz correction gain. */
+    float lateral_heading_hold_kd;      /* gyro z damping gain. */
+    float lateral_heading_hold_max_wz;  /* max gyro correction, rad/s. */
     float lateral_heading_hold_wz_deadband;    /* raw wz considered zero. */
-    float lateral_heading_hold_error_deadband; /* yaw error deadband, rad. */
-  } controller;
+    float lateral_heading_hold_error_deadband;  /* yaw error deadband, rad. */
+  } front_omni_rear_mecanum;
   MOTOR_TemperatureProtectionConfig_t motor_temperature_protection;
 } Chassis_Params_t;
 

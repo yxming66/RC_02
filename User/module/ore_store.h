@@ -56,7 +56,6 @@ typedef struct {
   } pid;
 
   struct {
-    float sample_freq;
     float position_to_velocity_limit[ORE_STORE_AXIS_NUM];
     float velocity_to_torque_limit[ORE_STORE_AXIS_NUM];
   } controller;
@@ -99,6 +98,7 @@ typedef struct {
   bool homing_started[ORE_STORE_AXIS_NUM];
   bool axis_failed[ORE_STORE_AXIS_NUM];
   int8_t controller_update_ret[ORE_STORE_AXIS_NUM];
+  int8_t controller_control_ret[ORE_STORE_AXIS_NUM];
   int8_t set_command_ret[ORE_STORE_AXIS_NUM];
   int8_t commit_ret[ORE_STORE_AXIS_NUM];
   bool command_pending[ORE_STORE_AXIS_NUM];

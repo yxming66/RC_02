@@ -9,6 +9,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include "module/autoCtrlAPI/api/auto_ctrl_api.h"
+#include "module/ore_store.h"
 #include "device/buzzer.h"
 
 /* USER INCLUDE END */
@@ -25,10 +26,12 @@ extern "C" {
 #define CMD_MAIN_FREQ (100.0)
 #define SICK_FREQ (100.0)
 #define AUTO_CTRL_FREQ (100.0)
-#define ARM_FREQ (250.0) 
+#define ARM_FREQ (250.0)
+#define ARM_SIMPLE_FREQ (250.0)
 #define ROD_FREQ (200.0)
 #define PC_COMM_FREQ (100.0)
 #define PC_UART_RX_FREQ (50.0)
+#define ORE_STORE_FREQ (500.0)
 /* 任务初始化延时ms */
 #define TASK_INIT_DELAY (100u)
 #define BLINK_INIT_DELAY (0)
@@ -39,9 +42,11 @@ extern "C" {
 #define SICK_INIT_DELAY (0)
 #define AUTO_CTRL_INIT_DELAY (0)
 #define ARM_INIT_DELAY (0)
+#define ARM_SIMPLE_INIT_DELAY (100u)
 #define ROD_INIT_DELAY (0)
 #define PC_COMM_INIT_DELAY (500u)
 #define PC_UART_RX_INIT_DELAY (0)
+#define ORE_STORE_INIT_DELAY (100u)
 /* Exported defines --------------------------------------------------------- */
 /* Exported macro ----------------------------------------------------------- */
 /* Exported types ----------------------------------------------------------- */
@@ -58,9 +63,11 @@ typedef struct {
         osThreadId_t sick;
         osThreadId_t auto_ctrl;
         osThreadId_t arm;
+        osThreadId_t arm_simple;
         osThreadId_t rod;
         osThreadId_t pc_comm;
         osThreadId_t pc_uart_rx;
+        osThreadId_t ore_store;
 
     } thread;
 
@@ -86,7 +93,13 @@ typedef struct {
         } arm;
         struct {
             osMessageQueueId_t cmd;
+        } arm_simple;
+        struct {
+            osMessageQueueId_t cmd;
         } rod;
+        struct {
+            osMessageQueueId_t cmd;
+        } ore_store;
     } msgq;
     /* USER MESSAGE END */
 
@@ -114,6 +127,7 @@ typedef struct {
         UBaseType_t rod;
         UBaseType_t pc_comm;
         UBaseType_t pc_uart_rx;
+        UBaseType_t ore_store;
 
     } stack_water_mark;
 
@@ -163,9 +177,11 @@ extern const osThreadAttr_t attr_cmd_main;
 extern const osThreadAttr_t attr_sick;
 extern const osThreadAttr_t attr_auto_ctrl;
 extern const osThreadAttr_t attr_arm;
+extern const osThreadAttr_t attr_arm_simple;
 extern const osThreadAttr_t attr_rod;
 extern const osThreadAttr_t attr_pc_comm;
 extern const osThreadAttr_t attr_pc_uart_rx;
+extern const osThreadAttr_t attr_ore_store;
 /* 任务函数声明 */
 void Task_Init(void *argument);
 void Task_blink(void *argument);
@@ -176,12 +192,22 @@ void Task_cmd_main(void *argument);
 void Task_sick(void *argument);
 void Task_auto_ctrl(void *argument);
 void Task_arm(void *argument);
+void Task_arm_simple(void *argument);
 void Task_rod(void *argument);
 void Task_pc_comm(void *argument);
 void Task_pc_uart_rx(void *argument);
+void Task_ore_store(void *argument);
 
 bool Task_ChassisMainPoleGroupAtTarget(uint8_t group, float threshold_rad);
 bool Task_ChassisMainPoleAllAtTarget(float threshold_rad);
+int8_t Task_OreStorePostCommand(const OreStore_CMD_t *cmd);
+void Task_OreStoreRequestRehome(void);
+bool Task_OreStoreIsAxisHomed(uint8_t axis);
+bool Task_OreStoreIsAllHomed(void);
+bool Task_OreStoreIsAxisAtTarget(uint8_t axis, float threshold_rad);
+bool Task_OreStoreIsAllAtTarget(float threshold_rad);
+const OreStore_Feedback_t *Task_OreStoreGetFeedback(void);
+const OreStore_Debug_t *Task_OreStoreGetDebug(void);
 #ifdef __cplusplus
 }
 #endif

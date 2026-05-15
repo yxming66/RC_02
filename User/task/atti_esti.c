@@ -72,6 +72,55 @@ static struct {
 
 bool g_buzzer_calib_active = false;
 
+/* 陀螺仪Z轴动态零偏补偿 */
+#define GYRO_Z_CALI_THRESHOLD_SPEED  100.0f   /* 电机速度阈值(rpm)，低于此值认为静止 */
+#define GYRO_Z_CALI_SAMPLE_COUNT     500     /* 静止采样数量(约1.25s @ 400Hz) */
+#define GYRO_Z_CALI_ALPHA            0.02f   /* 零偏更新平滑系数 */
+
+typedef struct {
+    float z_sum;
+    uint16_t sample_count;
+    float z_offset;
+    float z_offset_filtered;
+} GyroZCalib_t;
+
+static GyroZCalib_t gyro_z_calib = {
+    .z_sum = 0.0f,
+    .sample_count = 0,
+    .z_offset = 0.0f,
+    .z_offset_filtered = 0.0f,
+};
+
+static bool is_chassis_stable(void) {
+    extern float chassis_motor_speed_rpm[4];
+    for (int i = 0; i < 4; i++) {
+        if (fabsf(chassis_motor_speed_rpm[i]) > GYRO_Z_CALI_THRESHOLD_SPEED) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static void update_gyro_z_offset(void) {
+    if (is_chassis_stable()) {
+        gyro_z_calib.z_sum += bmi088.gyro.z;
+        gyro_z_calib.sample_count++;
+
+        if (gyro_z_calib.sample_count >= GYRO_Z_CALI_SAMPLE_COUNT) {
+            gyro_z_calib.z_offset = gyro_z_calib.z_sum / gyro_z_calib.sample_count;
+            gyro_z_calib.z_sum = 0.0f;
+            gyro_z_calib.sample_count = 0;
+        }
+    } else {
+        gyro_z_calib.z_sum = 0.0f;
+        gyro_z_calib.sample_count = 0;
+    }
+
+    /* 低通滤波平滑零偏变化 */
+    gyro_z_calib.z_offset_filtered +=
+        GYRO_Z_CALI_ALPHA * (gyro_z_calib.z_offset - gyro_z_calib.z_offset_filtered);
+}
+
 static void start_gyro_calibration(void) {
   calib_request_pending = true;
 }
@@ -270,8 +319,16 @@ void Task_atti_esti(void *argument) {
 
     /* 只有在非校准状态下才进行正常的姿态解析 */
     if (calib_state != CALIB_RUNNING) {
+      /* 动态更新陀螺仪Z轴零偏 */
+      update_gyro_z_offset();
+
+      /* 补偿Z轴零偏后再进行姿态解算 */
+      float gyro_z_corrected = bmi088.gyro.z - gyro_z_calib.z_offset_filtered;
+      AHRS_Gyro_t gyro_corrected = bmi088.gyro;
+      gyro_corrected.z = gyro_z_corrected;
+
       /* 根据设备接收到的数据进行姿态解析 */
-      AHRS_Update(&chassis_ahrs, &bmi088.accl, &bmi088.gyro, NULL);
+      AHRS_Update(&chassis_ahrs, &bmi088.accl, &gyro_corrected, NULL);
 
       /* 根据解析出来的四元数计算欧拉角 */
       AHRS_GetEulr(&eulr_chassis, &chassis_ahrs);

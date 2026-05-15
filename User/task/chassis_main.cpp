@@ -3,6 +3,7 @@
 #include "module/chassis/front_omni_rear_mecanum.hpp"
 #include "module/config.h"
 #include "module/pole.h"
+#include "module/pc_protocol/pc_protocol.h"
 
 namespace {
 
@@ -16,6 +17,9 @@ static Pole_CMD_t pole_cmd{};
 
 extern "C" {
 Chassis_IMU_t chassis_imu{};
+float chassis_motor_speed_rpm[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+
+extern PC_Protocol_t *g_pc_protocol_ptr;
 
 bool Task_ChassisMainPoleGroupAtTarget(uint8_t group, float threshold_rad) {
   return Pole_IsGroupAtFinalTarget(&pole, group, threshold_rad);
@@ -57,6 +61,13 @@ extern "C" void Task_chassis_main(void *argument) {
 
     chassis.SetGimbalYaw(chassis_imu.eulr.yaw, chassis_imu.gyro.z);
     (void)chassis.UpdateFeedback();
+
+    /* Update motor speed for gyro calibration in atti_esti task */
+    const auto &fb = chassis.feedback();
+    for (int i = 0; i < 4; i++) {
+        chassis_motor_speed_rpm[i] = fb.motor[i].velocity_rad_s * 60.0f / (2.0f * 3.14159265358979f);
+    }
+
     (void)chassis.Control(chassis_cmd, osKernelGetTickCount());
     chassis.Output();
 
@@ -64,6 +75,20 @@ extern "C" void Task_chassis_main(void *argument) {
     Pole_UpdateFeedback(&pole);
     Pole_Control(&pole, &pole_cmd, osKernelGetTickCount());
     Pole_Output(&pole);
+
+    /* 上位机反馈数据设置 */
+    if (g_pc_protocol_ptr != nullptr) {
+      PC_ChassisFeedback_t chassis_fb = {0};
+      chassis_fb.vx = fb.chassis_vel.vx;
+      chassis_fb.vy = fb.chassis_vel.vy;
+      chassis_fb.wz = fb.chassis_vel.wz;
+      PC_Protocol_SetChassisFeedback(g_pc_protocol_ptr, &chassis_fb);
+
+      PC_PoleFeedback_t pole_fb = {0};
+      pole_fb.lift[0] = pole.feedback.support_angle_avg;
+      pole_fb.lift[1] = pole.feedback.support_angle_avg;
+      PC_Protocol_SetPoleFeedback(g_pc_protocol_ptr, &pole_fb);
+    }
 
     task_runtime.stack_water_mark.chassis_main =
         uxTaskGetStackHighWaterMark(nullptr);

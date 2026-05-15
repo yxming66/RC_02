@@ -17,7 +17,6 @@ namespace mr::motor {
 struct MotorControllerConfig {
     const KPID_Params_t* velocity_pid;
     const KPID_Params_t* position_pid;
-    float sample_freq;
 
     float position_to_velocity_limit;
     float velocity_to_torque_limit;
@@ -32,6 +31,8 @@ public:
     int8_t Enable();
     int8_t Disable();
     int8_t Relax();
+    int8_t UpdateFeedback();
+    int8_t UpdateControl();
     int8_t Update();
     int8_t CommitCommand();
     bool HasPendingCommand() const;
@@ -66,7 +67,6 @@ private:
     mr::comp::cntlr::pid velocity_pid_;
     mr::comp::cntlr::pid position_pid_;
     mr::comp::timer control_timer_;
-    float control_dt_fallback_s_;
     bool velocity_pid_ready_;
     bool position_pid_ready_;
 

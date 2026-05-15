@@ -44,7 +44,7 @@ Config_RobotParam_t robot_config = {
                 .k = 1.5f,
                 .p = 5.0f,
                 .i = 2.0f,
-                .d = 0.55f,
+                .d = 0.32f,
                 .i_limit = 1.0f,
                 .out_limit = 6.0f,
                 .d_cutoff_freq = 0.0f,
@@ -68,10 +68,11 @@ Config_RobotParam_t robot_config = {
             .max_wz = 6.28f,
         },
         .controller = {
-            .sample_freq = 500.0f,
             .position_to_velocity_limit = 1.2f,
             .velocity_to_torque_limit = 6.0f,
-            .lateral_vy_to_wz_feedforward = 0.10f,//1.1f不会偏航会有-vx
+        },
+        .front_omni_rear_mecanum = {
+            .lateral_vy_to_wz_feedforward = 0.10f, // 1.1f 不会偏航会有 -vx
             .lateral_heading_hold_enable = true,
             .lateral_heading_hold_kp = 8.0f,
             .lateral_heading_hold_kd = 0.8f,
@@ -162,7 +163,6 @@ Config_RobotParam_t robot_config = {
             },
         },
         .controller = {
-            .sample_freq = 500.0f,
             .position_to_velocity_limit = {1.2f, 2.0f, 2.0f, 2.5f, 2.5f},
             .velocity_to_torque_limit = {2.5f, 0.8f, 0.8f, 0.8f, 0.8f},
         },
@@ -178,6 +178,43 @@ Config_RobotParam_t robot_config = {
             .lower_seek_velocity_rad_s = {0.4f, 0.6f, 0.6f, 0.8f, 0.8f},
             .move_velocity_rad_s = {1.2f, 2.0f, 2.0f, 2.5f, 2.5f},
             .arrive_threshold_rad = {0.05f, 0.03f, 0.03f, 0.04f, 0.04f},
+        },
+    },
+    .arm_simple_param = {
+        .dm4310_param = {
+            .can = BSP_CAN_3,
+            .master_id = 0x11,
+            .can_id = 0x01,
+            .reverse = false,
+        },
+        .servo_param = {
+            .pwm_channel = BSP_PWM_ARM_SERVO,
+            .freq_hz = 50.0f,
+        },
+        .suction_param = {
+            .gpio = BSP_GPIO_ARM_SOLENOID,
+        },
+        .pid = {
+            .joint1_pos = {
+                .k = 1.0f, .p = 10.0f, .i = 0.0f, .d = 0.0f,
+                .i_limit = 0.0f, .out_limit = 10.0f,
+                .d_cutoff_freq = 0.0f, .range = 0.0f,
+            },
+            .joint1_vel = {
+                .k = 1.0f, .p = 5.0f, .i = 0.0f, .d = 0.0f,
+                .i_limit = 0.0f, .out_limit = 5.0f,
+                .d_cutoff_freq = 0.0f, .range = 0.0f,
+            },
+        },
+        .soft_limit = {
+            .joint1_min = -3.14f,
+            .joint1_max = 3.14f,
+            .joint2_min = -4.71f,   /* -270° */
+            .joint2_max = 4.71f,    /* +270° */
+        },
+        .vel_limit = {
+            .joint1_max_vel = 5.0f,
+            .joint2_max_vel = 3.0f,
         },
     },
     .arm_param = {
@@ -513,15 +550,15 @@ Config_RobotParam_t robot_config = {
             .angle_grab_low_rad = 0.3f,     /* 低位夹取 */
             .angle_grab_high_rad = 0.8f,     /* 高位夹取 */
             .angle_lift_rad = 1.2f,          /* 抬升位 */
-            .angle_min_rad = -1.57f,         /* 约 -90°，舵机行程下限 */
-            .angle_max_rad = 1.57f,          /* 约 +90°，舵机行程上限 */
+            .angle_min_rad = -2.356f,        /* 约 -135°，270°舵机行程下限(500μs) */
+            .angle_max_rad = 2.356f,         /* 约 +135°，270°舵机行程上限(2500μs) */
             .arrive_threshold_rad = 0.05f,  /* 到位判定阈值 */
             .max_vel_rad_s = 2.0f,           /* 最大角速度 */
             .max_acc_rad_s = 5.0f,          /* 最大角加速度 */
         },
         .gripper = {
             /* TODO: 在gpio.c中配置具体GPIO引脚 */
-            .gripper_gpio = BSP_GPIO_ROD_GRIPPER,
+            .gripper_gpio = BSP_GPIO_ROD_SOLENOID,
             .grip_timeout_ms = 2000u,        /* 夹取超时 */
         },
     },

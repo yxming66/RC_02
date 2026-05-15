@@ -529,13 +529,11 @@ int8_t MecanumController::ControlWheelHold() {
 }
 
 int8_t MecanumController::RegisterWheels(float target_freq) {
+  (void)target_freq;
   for (uint8_t i = 0; i < kWheelCount; ++i) {
     mr::motor::MotorControllerConfig controller_config{};
     controller_config.velocity_pid = &param_->pid.motor_pid_param;
     controller_config.position_pid = &param_->pid.motor_pos_pid_param;
-    controller_config.sample_freq =
-        (param_->controller.sample_freq > 0.0f) ? param_->controller.sample_freq
-                                                : target_freq;
     controller_config.position_to_velocity_limit =
         param_->controller.position_to_velocity_limit;
     controller_config.velocity_to_torque_limit =

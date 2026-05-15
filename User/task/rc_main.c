@@ -272,9 +272,9 @@ static void Rc_TryStartAutoCtrlBySwitch(uint32_t now_ms) {
   float target_yaw_rad = 0.0f;
 
   if (dr16.data.sw_r == DR16_SW_UP) {
-    template_id = AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD;
+    template_id = AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD;
   } else if (dr16.data.sw_r == DR16_SW_DOWN) {
-    template_id = AUTO_CTRL_TEMPLATE_DESCEND_400_HEAD;
+    template_id = AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD;
     
     travel_dir = AUTO_CTRL_TRAVEL_DIR_TAIL_FORWARD;
   }

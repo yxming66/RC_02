@@ -102,7 +102,8 @@ float RotorSign(float stored_sign, Chassis_RotorMode_t mode) {
 }
 
 bool LateralHeadingHoldEnabled(const Chassis_Params_t *param) {
-  return param != nullptr && param->controller.lateral_heading_hold_enable;
+  return param != nullptr &&
+         param->front_omni_rear_mecanum.lateral_heading_hold_enable;
 }
 
 float PositiveOr(float value, float fallback) {
@@ -518,7 +519,7 @@ bool FrontOmniRearMecanumController::ShouldUseLateralYawCorrection(
   }
 
   const float raw_wz_deadband = PositiveOr(
-      param_->controller.lateral_heading_hold_wz_deadband,
+      param_->front_omni_rear_mecanum.lateral_heading_hold_wz_deadband,
       kHoldCommandDeadband);
   return std::fabs(move_vec_.vy) > kHoldCommandDeadband &&
          std::fabs(raw_wz_cmd) <= raw_wz_deadband;
@@ -531,7 +532,8 @@ bool FrontOmniRearMecanumController::ShouldUseLateralHeadingHold(
 }
 
 float FrontOmniRearMecanumController::CalcLateralWzFeedforward() const {
-  const float gain = param_->controller.lateral_vy_to_wz_feedforward;
+  const float gain =
+      param_->front_omni_rear_mecanum.lateral_vy_to_wz_feedforward;
   if (!scalar::is_finite_scalar(gain)) {
     return 0.0f;
   }
@@ -574,7 +576,9 @@ float FrontOmniRearMecanumController::CalcLateralHeadingHoldWz() {
   float yaw_error = scalar::angle_error(
       lateral_heading_target_rad_, feedback_.encoder_gimbalYawMotor);
   const float error_deadband =
-      PositiveOr(param_->controller.lateral_heading_hold_error_deadband, 0.0f);
+      PositiveOr(
+          param_->front_omni_rear_mecanum.lateral_heading_hold_error_deadband,
+          0.0f);
   if (std::fabs(yaw_error) <= error_deadband) {
     yaw_error = 0.0f;
   }
@@ -582,16 +586,17 @@ float FrontOmniRearMecanumController::CalcLateralHeadingHoldWz() {
   const float yaw_rate =
       scalar::is_finite_scalar(yaw_rate_rad_s_) ? yaw_rate_rad_s_ : 0.0f;
   const float kp = scalar::is_finite_scalar(
-                       param_->controller.lateral_heading_hold_kp)
-                       ? param_->controller.lateral_heading_hold_kp
+                       param_->front_omni_rear_mecanum.lateral_heading_hold_kp)
+                       ? param_->front_omni_rear_mecanum.lateral_heading_hold_kp
                        : 0.0f;
   const float kd = scalar::is_finite_scalar(
-                       param_->controller.lateral_heading_hold_kd)
-                       ? param_->controller.lateral_heading_hold_kd
+                       param_->front_omni_rear_mecanum.lateral_heading_hold_kd)
+                       ? param_->front_omni_rear_mecanum.lateral_heading_hold_kd
                        : 0.0f;
   const float correction_wz = kp * yaw_error - kd * yaw_rate;
   const float limit = PositiveOr(
-      param_->controller.lateral_heading_hold_max_wz, param_->limit.max_wz);
+      param_->front_omni_rear_mecanum.lateral_heading_hold_max_wz,
+      param_->limit.max_wz);
 
   debug_.lateral_heading_error_rad = yaw_error;
   debug_.lateral_yaw_rate_rad_s = yaw_rate;
@@ -633,13 +638,11 @@ int8_t FrontOmniRearMecanumController::ControlWheelHold() {
 }
 
 int8_t FrontOmniRearMecanumController::RegisterWheels(float target_freq) {
+  (void)target_freq;
   for (uint8_t i = 0; i < kWheelCount; ++i) {
     mr::motor::MotorControllerConfig controller_config{};
     controller_config.velocity_pid = &param_->pid.motor_pid_param;
     controller_config.position_pid = &param_->pid.motor_pos_pid_param;
-    controller_config.sample_freq =
-        (param_->controller.sample_freq > 0.0f) ? param_->controller.sample_freq
-                                                : target_freq;
     controller_config.position_to_velocity_limit =
         param_->controller.position_to_velocity_limit;
     controller_config.velocity_to_torque_limit =
