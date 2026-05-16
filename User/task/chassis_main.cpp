@@ -1,12 +1,12 @@
 #include "task/user_task.h"
 
-#include "module/chassis/front_omni_rear_mecanum.hpp"
+#include "module/chassis/mecanum.hpp"
 #include "module/config.h"
 #include "module/pole.h"
 
 namespace {
 
-mr::module::chassis::FrontOmniRearMecanumController chassis;
+mr::module::chassis::MecanumController chassis;
 Chassis_CMD_t chassis_cmd{};
 
 Pole_t pole;
@@ -55,7 +55,7 @@ extern "C" void Task_chassis_main(void *argument) {
     osMessageQueueGet(task_runtime.msgq.chassis.imu, &chassis_imu, nullptr, 0);
     osMessageQueueGet(task_runtime.msgq.chassis.cmd, &chassis_cmd, nullptr, 0);
 
-    chassis.SetGimbalYaw(chassis_imu.eulr.yaw, chassis_imu.gyro.z);
+    chassis.SetGimbalYaw(chassis_imu.eulr.yaw);
     (void)chassis.UpdateFeedback();
     (void)chassis.Control(chassis_cmd, osKernelGetTickCount());
     chassis.Output();

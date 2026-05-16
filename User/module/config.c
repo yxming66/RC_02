@@ -84,7 +84,7 @@ Config_RobotParam_t robot_config = {
             .limit_c = 80.0f,
             .auto_relax_on_limit = true,
         },
-        .type = CHASSIS_TYPE_FRONT_OMNI_REAR_MECANUM,
+        .type = CHASSIS_TYPE_MECANUM,
     },
     .pole_param = {
         .motor_param = {
