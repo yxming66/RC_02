@@ -23,7 +23,7 @@ using SmallController = mr::motor::MotorControllerT<SmallMotor>;
 constexpr float kDefaultDtS = 0.001f;
 constexpr float kMinDtS = 0.0005f;
 constexpr float kMaxDtS = 0.050f;
-constexpr float kDefaultSampleFreqHz = 1000.0f;
+constexpr float kDefaultSampleFreqHz = 500.0f;
 constexpr float kDefaultMoveVelocityRadS = 1.0f;
 constexpr float kDefaultArriveThresholdRad = 0.03f;
 
@@ -112,10 +112,14 @@ int8_t ControllerEnable(OreStore_t *store, uint8_t axis) {
                               : SmallControllerPtr(store, axis)->Enable();
 }
 
+int8_t ControllerRelax(OreStore_t *store, uint8_t axis) {
+  return IsPlatformAxis(axis) ? PlatformControllerPtr(store)->Relax()
+                              : SmallControllerPtr(store, axis)->Relax();
+}
+
 int8_t ControllerUpdate(OreStore_t *store, uint8_t axis) {
-  return IsPlatformAxis(axis)
-             ? PlatformControllerPtr(store)->Update()
-             : SmallControllerPtr(store, axis)->Update();
+  return IsPlatformAxis(axis) ? PlatformControllerPtr(store)->Update()
+                              : SmallControllerPtr(store, axis)->Update();
 }
 
 int8_t ControllerCommit(OreStore_t *store, uint8_t axis) {
@@ -128,12 +132,6 @@ int8_t ControllerSetVelocity(OreStore_t *store, uint8_t axis,
   return IsPlatformAxis(axis)
              ? PlatformControllerPtr(store)->SetVelocity(velocity_rad_s)
              : SmallControllerPtr(store, axis)->SetVelocity(velocity_rad_s);
-}
-
-int8_t ControllerSetTorque(OreStore_t *store, uint8_t axis, float torque_nm) {
-  return IsPlatformAxis(axis)
-             ? PlatformControllerPtr(store)->SetTorque(torque_nm)
-             : SmallControllerPtr(store, axis)->SetTorque(torque_nm);
 }
 
 int8_t ControllerSetPosition(OreStore_t *store, uint8_t axis,
@@ -310,7 +308,7 @@ int8_t HomeAxis(OreStore_t *store, uint8_t axis) {
 
   if (store->axis_failed[axis] || limit->IsFailed()) {
     store->axis_failed[axis] = true;
-    (void)ControllerSetTorque(store, axis, 0.0f);
+    (void)ControllerRelax(store, axis);
     return ORE_STORE_ERR;
   }
 
@@ -506,21 +504,12 @@ int8_t OreStore_Control(OreStore_t *store, const OreStore_CMD_t *cmd,
 
   int8_t result = ORE_STORE_OK;
   for (uint8_t axis = 0; axis < ORE_STORE_AXIS_NUM; ++axis) {
-    if (store->controller[axis] == nullptr ||
-        store->soft_limit[axis] == nullptr) {
-      store->debug.set_command_ret[axis] = DEVICE_ERR_NULL;
-      store->debug.controller_control_ret[axis] = DEVICE_ERR_NULL;
-      result = ORE_STORE_ERR;
-      RefreshDebugAxis(store, axis);
-      continue;
-    }
-
     int8_t ret = ORE_STORE_OK;
     switch (store->mode) {
       case ORE_STORE_MODE_RELAX:
         store->target_position_rad[axis] = store->feedback.position_rad[axis];
         store->command_position_rad[axis] = store->feedback.position_rad[axis];
-        ret = ControllerSetTorque(store, axis, 0.0f);
+        ret = ControllerRelax(store, axis);
         break;
       case ORE_STORE_MODE_HOME:
         ret = HomeAxis(store, axis);
@@ -529,16 +518,12 @@ int8_t OreStore_Control(OreStore_t *store, const OreStore_CMD_t *cmd,
         ret = ActiveAxis(store, cmd, axis);
         break;
       default:
-        (void)ControllerSetTorque(store, axis, 0.0f);
         ret = ORE_STORE_ERR;
         break;
     }
 
     store->debug.set_command_ret[axis] = ret;
-    const int8_t control_ret = ControllerUpdate(store, axis);
-    store->debug.controller_control_ret[axis] = control_ret;
-    if ((ret != DEVICE_OK && ret != ORE_STORE_OK) ||
-        control_ret != DEVICE_OK) {
+    if (ret != DEVICE_OK && ret != ORE_STORE_OK) {
       result = ORE_STORE_ERR;
     }
     RefreshDebugAxis(store, axis);
@@ -569,16 +554,11 @@ void OreStore_ResetOutput(OreStore_t *store) {
 
   for (uint8_t axis = 0; axis < ORE_STORE_AXIS_NUM; ++axis) {
     if (store->controller[axis] != nullptr) {
-      store->debug.set_command_ret[axis] =
-          ControllerSetTorque(store, axis, 0.0f);
-      store->debug.controller_control_ret[axis] =
-          ControllerUpdate(store, axis);
-      store->debug.commit_ret[axis] = ControllerCommit(store, axis);
-    } else {
-      store->debug.set_command_ret[axis] = DEVICE_ERR_NULL;
-      store->debug.controller_control_ret[axis] = DEVICE_ERR_NULL;
-      store->debug.commit_ret[axis] = DEVICE_ERR_NULL;
+      (void)ControllerRelax(store, axis);
+      (void)ControllerCommit(store, axis);
     }
+    store->debug.set_command_ret[axis] = DEVICE_OK;
+    store->debug.commit_ret[axis] = DEVICE_OK;
     RefreshDebugAxis(store, axis);
   }
 }
