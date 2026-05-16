@@ -44,7 +44,7 @@ Config_RobotParam_t robot_config = {
                 .k = 1.5f,
                 .p = 5.0f,
                 .i = 2.0f,
-                .d = 0.55f,
+                .d = 0.50f,
                 .i_limit = 1.0f,
                 .out_limit = 6.0f,
                 .d_cutoff_freq = 0.0f,
@@ -267,7 +267,7 @@ Config_RobotParam_t robot_config = {
             .rear_retract_move_ms = 300u,       /* 后光电触发后，全收腿移动持续时间，单位 ms。 */
             .second_photo_retract_move_speed = 0.50f, /* 后一个光电触发收腿时向头向移动 vx，单位 m/s。 */
             .final_move_speed = 1.5f,          /* 收尾离开台阶 vx，单位 m/s。 */
-            .final_move_ms = 500u,               /* 收尾离开台阶持续时间，单位 ms。 */
+            .final_move_ms = 300u,               /* 收尾离开台阶持续时间，单位 ms。 */
             .pole_all_extend_speed = 50.0f,     /* 四杆全伸目标跟随速度，单位 rad/s。 */
             .pole_front_extend_speed = 20.0f,   /* 前杆伸出目标跟随速度，单位 rad/s。 */
             .pole_front_retract_speed = 65.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
@@ -336,7 +336,7 @@ Config_RobotParam_t robot_config = {
             .front_photo_timeout_ms = 5000u,    /* step4 等待 PE13/photo1 下降沿超时，单位 ms。 */
             .rear_photo_timeout_ms = 5000u,     /* step1 等待 PA2/photo3 下降沿超时，单位 ms。 */
             .pole_extend_move_speed = 1.5f,    /* step6 四杆全伸行走 vx，单位 m/s。 */
-            .hold_ms = 250u,                    /* step6 四杆全伸行走持续时间，单位 ms。 */
+            .hold_ms = 100u,                    /* step6 四杆全伸行走持续时间，单位 ms。 */
         },
         /* 头向 / 下台阶 / 400mm 模板参数。 */
         .head_descend_400 = {
