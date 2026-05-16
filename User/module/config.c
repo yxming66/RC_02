@@ -96,7 +96,7 @@ Config_RobotParam_t robot_config = {
         },
         .pid = {
             .support_pos_pid = {
-                .k = 25.0f,
+                .k = 22.0f,//25
                 .p = 10.0f,
                 .i = 0.0f,
                 .d = 0.0f,
