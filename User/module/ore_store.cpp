@@ -23,6 +23,7 @@ using SmallController = mr::motor::MotorControllerT<SmallMotor>;
 constexpr float kDefaultDtS = 0.001f;
 constexpr float kMinDtS = 0.0005f;
 constexpr float kMaxDtS = 0.050f;
+constexpr float kDefaultSampleFreqHz = 1000.0f;
 constexpr float kDefaultMoveVelocityRadS = 1.0f;
 constexpr float kDefaultArriveThresholdRad = 0.03f;
 
@@ -59,10 +60,13 @@ mr::motor::MotorInstallSpec BuildInstall(const OreStore_Params_t *param,
 }
 
 mr::motor::MotorControllerConfig BuildControllerConfig(
-    const OreStore_Params_t *param, uint8_t axis) {
+    const OreStore_Params_t *param, uint8_t axis, float target_freq) {
   mr::motor::MotorControllerConfig config{};
   config.velocity_pid = &param->pid.velocity_pid[axis];
   config.position_pid = &param->pid.position_pid[axis];
+  config.sample_freq =
+      PositiveOr(param->controller.sample_freq,
+                 PositiveOr(target_freq, kDefaultSampleFreqHz));
   config.position_to_velocity_limit =
       scalar::positive_or_zero(param->controller.position_to_velocity_limit[axis]);
   config.velocity_to_torque_limit =
@@ -108,16 +112,10 @@ int8_t ControllerEnable(OreStore_t *store, uint8_t axis) {
                               : SmallControllerPtr(store, axis)->Enable();
 }
 
-int8_t ControllerUpdateFeedback(OreStore_t *store, uint8_t axis) {
+int8_t ControllerUpdate(OreStore_t *store, uint8_t axis) {
   return IsPlatformAxis(axis)
-             ? PlatformControllerPtr(store)->UpdateFeedback()
-             : SmallControllerPtr(store, axis)->UpdateFeedback();
-}
-
-int8_t ControllerUpdateControl(OreStore_t *store, uint8_t axis) {
-  return IsPlatformAxis(axis)
-             ? PlatformControllerPtr(store)->UpdateControl()
-             : SmallControllerPtr(store, axis)->UpdateControl();
+             ? PlatformControllerPtr(store)->Update()
+             : SmallControllerPtr(store, axis)->Update();
 }
 
 int8_t ControllerCommit(OreStore_t *store, uint8_t axis) {
@@ -366,13 +364,13 @@ int8_t ActiveAxis(OreStore_t *store, const OreStore_CMD_t *cmd, uint8_t axis) {
                                AxisMoveVelocity(store->param, axis));
 }
 
-int8_t ConstructAxis(OreStore_t *store, uint8_t axis) {
+int8_t ConstructAxis(OreStore_t *store, uint8_t axis, float target_freq) {
   const auto motor_config =
       mr::motor::MotorInstanceConfig<mr::motor::MotorKind::RM>::
           FromVendorParam(store->param->motor_param[axis]);
   const mr::motor::MotorInstallSpec install = BuildInstall(store->param, axis);
   const mr::motor::MotorControllerConfig controller_config =
-      BuildControllerConfig(store->param, axis);
+      BuildControllerConfig(store->param, axis, target_freq);
 
   if (IsPlatformAxis(axis)) {
     PlatformMotor *motor =
@@ -424,7 +422,6 @@ int8_t OreStore_Init(OreStore_t *store, const OreStore_Params_t *param,
   if (store == nullptr || param == nullptr) {
     return ORE_STORE_ERR_NULL;
   }
-  (void)target_freq;
 
   memset(store, 0, sizeof(OreStore_t));
   BSP_CAN_Init();
@@ -433,7 +430,7 @@ int8_t OreStore_Init(OreStore_t *store, const OreStore_Params_t *param,
   store->mode = ORE_STORE_MODE_RELAX;
 
   for (uint8_t axis = 0; axis < ORE_STORE_AXIS_NUM; ++axis) {
-    const int8_t ret = ConstructAxis(store, axis);
+    const int8_t ret = ConstructAxis(store, axis, target_freq);
     if (ret != ORE_STORE_OK) {
       return ret;
     }
@@ -457,7 +454,7 @@ int8_t OreStore_UpdateFeedback(OreStore_t *store) {
       continue;
     }
 
-    const int8_t update_ret = ControllerUpdateFeedback(store, axis);
+    const int8_t update_ret = ControllerUpdate(store, axis);
     store->debug.controller_update_ret[axis] = update_ret;
     if (update_ret != DEVICE_OK) {
       result = ORE_STORE_ERR;
@@ -538,7 +535,7 @@ int8_t OreStore_Control(OreStore_t *store, const OreStore_CMD_t *cmd,
     }
 
     store->debug.set_command_ret[axis] = ret;
-    const int8_t control_ret = ControllerUpdateControl(store, axis);
+    const int8_t control_ret = ControllerUpdate(store, axis);
     store->debug.controller_control_ret[axis] = control_ret;
     if ((ret != DEVICE_OK && ret != ORE_STORE_OK) ||
         control_ret != DEVICE_OK) {
@@ -575,7 +572,7 @@ void OreStore_ResetOutput(OreStore_t *store) {
       store->debug.set_command_ret[axis] =
           ControllerSetTorque(store, axis, 0.0f);
       store->debug.controller_control_ret[axis] =
-          ControllerUpdateControl(store, axis);
+          ControllerUpdate(store, axis);
       store->debug.commit_ret[axis] = ControllerCommit(store, axis);
     } else {
       store->debug.set_command_ret[axis] = DEVICE_ERR_NULL;

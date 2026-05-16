@@ -17,9 +17,27 @@ float ResolvePositiveRatio(float ratio) {
     return (ratio > 0.0f) ? ratio : 1.0f;
 }
 
-mr::comp::timer::Config BuildControlTimerConfig() {
+float Maxf(float lhs, float rhs) {
+    return (lhs > rhs) ? lhs : rhs;
+}
+
+float ResolveControlFreqHz(float sample_freq) {
+    return (scalar::is_finite_scalar(sample_freq) && sample_freq > 0.0f)
+               ? sample_freq
+               : cntlr::kDefaultSampleFreqHz;
+}
+
+float ResolveDefaultDtS(float sample_freq) {
+    return 1.0f / ResolveControlFreqHz(sample_freq);
+}
+
+mr::comp::timer::Config BuildControlTimerConfig(float sample_freq) {
+    const float default_dt_s = ResolveDefaultDtS(sample_freq);
     mr::comp::timer::Config timer_config{};
-    timer_config.max_dt_us = mr::comp::timer::SecondsToUs(kControllerMaxDtS);
+    timer_config.first_dt_us = mr::comp::timer::SecondsToUs(default_dt_s);
+    timer_config.min_dt_us = mr::comp::timer::SecondsToUs(default_dt_s);
+    timer_config.max_dt_us =
+        mr::comp::timer::SecondsToUs(Maxf(default_dt_s, kControllerMaxDtS));
     return timer_config;
 }
 
@@ -35,8 +53,10 @@ bool PidParamsUsable(const KPID_Params_t* params) {
            scalar::is_finite_scalar(params->range);
 }
 
-cntlr::pid::Config BuildPidConfig(const KPID_Params_t* params) {
+cntlr::pid::Config BuildPidConfig(const KPID_Params_t* params,
+                                  float sample_freq) {
     cntlr::pid::Config pid_config{};
+    pid_config.control_freq_hz = ResolveControlFreqHz(sample_freq);
     pid_config.derivative_mode = cntlr::DerivativeMode::kOnMeasurement;
     pid_config.hold_integral_on_saturation = true;
 
@@ -79,9 +99,10 @@ MotorControllerT<MotorType>::MotorControllerT(MotorType& motor,
                                               const MotorControllerConfig& config)
     : motor_(motor),
       config_(config),
-      velocity_pid_(BuildPidConfig(config.velocity_pid)),
-      position_pid_(BuildPidConfig(config.position_pid)),
-      control_timer_(mr::comp::timer::Build(BuildControlTimerConfig())),
+      velocity_pid_(BuildPidConfig(config.velocity_pid, config.sample_freq)),
+      position_pid_(BuildPidConfig(config.position_pid, config.sample_freq)),
+      control_timer_(mr::comp::timer::Build(BuildControlTimerConfig(config.sample_freq))),
+      control_dt_fallback_s_(ResolveDefaultDtS(config.sample_freq)),
       velocity_pid_ready_(PidParamsUsable(config.velocity_pid)),
       position_pid_ready_(PidParamsUsable(config.position_pid)),
       mode_(ControlMode::Torque),
@@ -132,13 +153,12 @@ int8_t MotorControllerT<MotorType>::Relax() {
 }
 
 template <typename MotorType>
-int8_t MotorControllerT<MotorType>::UpdateFeedback() {
-    return motor_.Update();
-}
-
-template <typename MotorType>
-int8_t MotorControllerT<MotorType>::UpdateControl() {
+int8_t MotorControllerT<MotorType>::Update() {
     const float dt = UpdateControlDt();
+    int8_t ret = motor_.Update();
+    if (ret != DEVICE_OK) {
+        return ret;
+    }
 
     const MotorState state = motor_.GetState();
 
@@ -184,15 +204,6 @@ int8_t MotorControllerT<MotorType>::UpdateControl() {
     }
 
     return DEVICE_ERR;
-}
-
-template <typename MotorType>
-int8_t MotorControllerT<MotorType>::Update() {
-    const int8_t ret = UpdateFeedback();
-    if (ret != DEVICE_OK) {
-        return ret;
-    }
-    return UpdateControl();
 }
 
 template <typename MotorType>
@@ -312,13 +323,13 @@ int8_t MotorControllerT<MotorType>::ResetControllers() {
     if (position_pid_ready_) {
         position_pid_.Reset();
     }
-    control_timer_.Reset();
+    control_timer_.Configure(BuildControlTimerConfig(config_.sample_freq));
     return DEVICE_OK;
 }
 
 template <typename MotorType>
 float MotorControllerT<MotorType>::UpdateControlDt() {
-    return cntlr::SanitizeDt(control_timer_.Update());
+    return cntlr::SanitizeDt(control_timer_.Update(), control_dt_fallback_s_);
 }
 
 template <typename MotorType>
