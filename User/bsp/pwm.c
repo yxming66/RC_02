@@ -27,9 +27,10 @@ typedef struct {
 
 /* Private variables -------------------------------------------------------- */
 static const BSP_PWM_Config_t PWM_Map[BSP_PWM_NUM] = {
-  {&htim12, TIM_CHANNEL_2},
-    {&htim3, TIM_CHANNEL_4},
-    {&htim12, TIM_CHANNEL_1},   /* RodNew舵机PWM */
+    {&htim12, TIM_CHANNEL_2},   /* 蜂鸣器 */
+    {&htim3, TIM_CHANNEL_4},    /* IMU加热 */
+    {&htim4, TIM_CHANNEL_3},    /* 取矛头舵机 */
+    {&htim4, TIM_CHANNEL_4},    /* 取矿舵机 */
 };
 
 static uint32_t BSP_PWM_GetTimerClock(TIM_HandleTypeDef *htim) {

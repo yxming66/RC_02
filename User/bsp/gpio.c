@@ -34,8 +34,8 @@ static const BSP_GPIO_MAP_t GPIO_Map[BSP_GPIO_NUM] = {
   {USER_KEY_Pin, USER_KEY_GPIO_Port},
     {ACCL_INT_Pin, ACCL_INT_GPIO_Port},
     {GYRO_INT_Pin, GYRO_INT_GPIO_Port},
-    /* TODO: RodNew气动夹爪GPIO，后续配置具体引脚 */
-    {0, 0},
+    {GPIO_PIN_10, GPIOC},    /* 取矛头电磁阀 PC10 */
+    {GPIO_PIN_11, GPIOC},    /* 取矿电磁阀 PC11 */
 };
 
 static void (*GPIO_Callback[16])(void);

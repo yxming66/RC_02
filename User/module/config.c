@@ -180,6 +180,43 @@ Config_RobotParam_t robot_config = {
             .arrive_threshold_rad = {0.05f, 0.03f, 0.03f, 0.04f, 0.04f},
         },
     },
+    .arm_simple_param = {
+        .dm4310_param = {
+            .can = BSP_CAN_3,
+            .master_id = 0x11,
+            .can_id = 0x01,
+            .reverse = false,
+        },
+        .servo_param = {
+            .pwm_channel = BSP_PWM_ARM_SERVO,
+            .freq_hz = 50.0f,
+        },
+        .suction_param = {
+            .gpio = BSP_GPIO_ARM_SOLENOID,
+        },
+        .pid = {
+            .joint1_pos = {
+                .k = 1.0f, .p = 10.0f, .i = 0.0f, .d = 0.0f,
+                .i_limit = 0.0f, .out_limit = 10.0f,
+                .d_cutoff_freq = 0.0f, .range = 0.0f,
+            },
+            .joint1_vel = {
+                .k = 1.0f, .p = 5.0f, .i = 0.0f, .d = 0.0f,
+                .i_limit = 0.0f, .out_limit = 5.0f,
+                .d_cutoff_freq = 0.0f, .range = 0.0f,
+            },
+        },
+        .soft_limit = {
+            .joint1_min = -3.14f,
+            .joint1_max = 3.14f,
+            .joint2_min = -4.71f,   /* -270° */
+            .joint2_max = 4.71f,    /* +270° */
+        },
+        .vel_limit = {
+            .joint1_max_vel = 5.0f,
+            .joint2_max_vel = 3.0f,
+        },
+    },
     .arm_param = {
         .joint1_motor_param = {
             .can = BSP_CAN_3,
@@ -513,15 +550,15 @@ Config_RobotParam_t robot_config = {
             .angle_grab_low_rad = 0.3f,     /* 低位夹取 */
             .angle_grab_high_rad = 0.8f,     /* 高位夹取 */
             .angle_lift_rad = 1.2f,          /* 抬升位 */
-            .angle_min_rad = -1.57f,         /* 约 -90°，舵机行程下限 */
-            .angle_max_rad = 1.57f,          /* 约 +90°，舵机行程上限 */
+            .angle_min_rad = -2.356f,        /* 约 -135°，270°舵机行程下限(500μs) */
+            .angle_max_rad = 2.356f,         /* 约 +135°，270°舵机行程上限(2500μs) */
             .arrive_threshold_rad = 0.05f,  /* 到位判定阈值 */
             .max_vel_rad_s = 2.0f,           /* 最大角速度 */
             .max_acc_rad_s = 5.0f,          /* 最大角加速度 */
         },
         .gripper = {
             /* TODO: 在gpio.c中配置具体GPIO引脚 */
-            .gripper_gpio = BSP_GPIO_ROD_GRIPPER,
+            .gripper_gpio = BSP_GPIO_ROD_SOLENOID,
             .grip_timeout_ms = 2000u,        /* 夹取超时 */
         },
     },
