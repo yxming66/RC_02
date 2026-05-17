@@ -25,7 +25,7 @@ static void OreStoreTask_SetDefaultCommand(OreStore_CMD_t *cmd) {
   }
 
   memset(cmd, 0, sizeof(*cmd));
-  cmd->mode = ORE_STORE_MODE_RELAX;
+  cmd->mode = ORE_STORE_MODE_HOME;
 }
 
 static bool OreStoreTask_ModeIsValid(OreStore_Mode_t mode) {

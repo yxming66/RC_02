@@ -102,6 +102,9 @@ void SoftLimitLearning::Configure(const SoftLimitLearningConfig& config) {
         ClampFiniteNonNegative(config_.seek_timeout_s, kDefaultSeekTimeoutS);
     config_.limit_margin_rad =
         ClampFiniteNonNegative(config_.limit_margin_rad, 0.0f);
+    config_.learned_limit_margin_rad =
+        ClampFiniteNonNegative(config_.learned_limit_margin_rad,
+                               config_.limit_margin_rad);
     config_.min_range_rad =
         ClampFiniteNonNegative(config_.min_range_rad, 0.0f);
     observe_timer_.Configure(BuildObserveTimerConfig(config_));
@@ -149,16 +152,16 @@ void SoftLimitLearning::Observe(const MotorState& state, float dt_s) {
         return;
     }
 
+    if (!state.online || !IsFiniteMotorState(state)) {
+        stall_cycles_ = 0u;
+        seek_position_initialized_ = false;
+        return;
+    }
+
     const float dt = ClampFiniteNonNegative(dt_s, 0.0f);
     elapsed_seek_s_ += dt;
     if (config_.seek_timeout_s > 0.0f && elapsed_seek_s_ >= config_.seek_timeout_s) {
         MarkFailed();
-        return;
-    }
-
-    if (!state.online || !IsFiniteMotorState(state)) {
-        stall_cycles_ = 0u;
-        seek_position_initialized_ = false;
         return;
     }
 
@@ -277,7 +280,11 @@ bool SoftLimitLearning::SetRangeByLowerAndTravel(float lower_rad, float travel_r
         travel_rad < 0.0f) {
         return false;
     }
-    return SetRange(lower_rad, lower_rad + travel_rad);
+    const float margin = ClampNonNegative(config_.learned_limit_margin_rad);
+    if (travel_rad < 2.0f * margin) {
+        return false;
+    }
+    return SetRange(lower_rad + margin, lower_rad + travel_rad - margin);
 }
 
 bool SoftLimitLearning::SetRangeByUpperAndTravel(float upper_rad, float travel_rad) {
@@ -285,7 +292,11 @@ bool SoftLimitLearning::SetRangeByUpperAndTravel(float upper_rad, float travel_r
         travel_rad < 0.0f) {
         return false;
     }
-    return SetRange(upper_rad - travel_rad, upper_rad);
+    const float margin = ClampNonNegative(config_.learned_limit_margin_rad);
+    if (travel_rad < 2.0f * margin) {
+        return false;
+    }
+    return SetRange(upper_rad - travel_rad + margin, upper_rad - margin);
 }
 
 bool SoftLimitLearning::HasObservedState() const {

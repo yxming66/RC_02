@@ -116,8 +116,8 @@ Config_RobotParam_t robot_config = {
             },
         },
         .preset = {
-            .step_200_all_extend = {13.3f, 13.3f},
-            .step_200_front_retract = {0.0f, 13.3f},
+            .step_200_all_extend = {13.8f, 13.8f},//13.3f
+            .step_200_front_retract = {0.0f, 13.8f},
             .step_200_all_retract = {0.0f, 0.0f},
             .step_200_small = {3.0f, 3.0f},
             .step_400_all_extend = {26.7f, 26.7f},
@@ -168,11 +168,11 @@ Config_RobotParam_t robot_config = {
         },
         .limit = {
             .config = {
-                [ORE_STORE_AXIS_PLATFORM] = {.stall_velocity_threshold_rad_s = 0.04f, .stall_position_window_rad = 0.0015f, .stall_cycles_required = 30u, .seek_timeout_s = 8.0f, .limit_margin_rad = 0.02f, .min_range_rad = 0.01f},
-                [ORE_STORE_AXIS_GATE_LEFT] = {.stall_velocity_threshold_rad_s = 0.04f, .stall_position_window_rad = 0.0015f, .stall_cycles_required = 30u, .seek_timeout_s = 6.0f, .limit_margin_rad = 0.01f, .min_range_rad = 0.01f},
-                [ORE_STORE_AXIS_GATE_RIGHT] = {.stall_velocity_threshold_rad_s = 0.04f, .stall_position_window_rad = 0.0015f, .stall_cycles_required = 30u, .seek_timeout_s = 6.0f, .limit_margin_rad = 0.01f, .min_range_rad = 0.01f},
-                [ORE_STORE_AXIS_TRACK_LEFT] = {.stall_velocity_threshold_rad_s = 0.04f, .stall_position_window_rad = 0.0015f, .stall_cycles_required = 30u, .seek_timeout_s = 6.0f, .limit_margin_rad = 0.02f, .min_range_rad = 0.01f},
-                [ORE_STORE_AXIS_TRACK_RIGHT] = {.stall_velocity_threshold_rad_s = 0.04f, .stall_position_window_rad = 0.0015f, .stall_cycles_required = 30u, .seek_timeout_s = 6.0f, .limit_margin_rad = 0.02f, .min_range_rad = 0.01f},
+                [ORE_STORE_AXIS_PLATFORM] = {.stall_velocity_threshold_rad_s = 0.04f, .stall_position_window_rad = 0.0015f, .stall_cycles_required = 30u, .seek_timeout_s = 8.0f, .online_wait_timeout_s = 1.5f, .limit_margin_rad = 0.02f, .learned_limit_margin_rad = 0.02f, .min_range_rad = 0.01f},
+                [ORE_STORE_AXIS_GATE_LEFT] = {.stall_velocity_threshold_rad_s = 0.04f, .stall_position_window_rad = 0.0015f, .stall_cycles_required = 30u, .seek_timeout_s = 6.0f, .online_wait_timeout_s = 1.5f, .limit_margin_rad = 0.01f, .learned_limit_margin_rad = 0.01f, .min_range_rad = 0.01f},
+                [ORE_STORE_AXIS_GATE_RIGHT] = {.stall_velocity_threshold_rad_s = 0.04f, .stall_position_window_rad = 0.0015f, .stall_cycles_required = 30u, .seek_timeout_s = 6.0f, .online_wait_timeout_s = 1.5f, .limit_margin_rad = 0.01f, .learned_limit_margin_rad = 0.01f, .min_range_rad = 0.01f},
+                [ORE_STORE_AXIS_TRACK_LEFT] = {.stall_velocity_threshold_rad_s = 0.04f, .stall_position_window_rad = 0.0015f, .stall_cycles_required = 30u, .seek_timeout_s = 6.0f, .online_wait_timeout_s = 1.5f, .limit_margin_rad = 0.02f, .learned_limit_margin_rad = 0.02f, .min_range_rad = 0.01f},
+                [ORE_STORE_AXIS_TRACK_RIGHT] = {.stall_velocity_threshold_rad_s = 0.04f, .stall_position_window_rad = 0.0015f, .stall_cycles_required = 30u, .seek_timeout_s = 6.0f, .online_wait_timeout_s = 1.5f, .limit_margin_rad = 0.02f, .learned_limit_margin_rad = 0.02f, .min_range_rad = 0.01f},
             },
             .travel_rad = {10.0f, 1.57f, 1.57f, 6.28f, 6.28f},
             .lower_seek_velocity_rad_s = {0.4f, 0.6f, 0.6f, 0.8f, 0.8f},
@@ -274,7 +274,7 @@ Config_RobotParam_t robot_config = {
     },
     .auto_ctrl_param = {
         .common = {
-            .prealign_kp = 8.0f,             /* yaw 误差到 wz 指令的比例系数。 */
+            .prealign_kp = 13.0f,             /* yaw 误差到 wz 指令的比例系数。 */
             .prealign_wz_limit = 5.0f,       /* yaw 对正最大角速度，单位 rad/s。 */
             .sick_valid_min_cm = 1.0f,       /* SICK 测距有效下限，单位 cm。 */
             .sick_valid_max_cm = 650.0f,     /* SICK 测距有效上限，单位 cm。 */
@@ -303,7 +303,7 @@ Config_RobotParam_t robot_config = {
             .rear_retract_timeout_ms = 5000u,   /* 后光电触发后，全收腿动作超时，单位 ms。 */
             .rear_retract_move_ms = 300u,       /* 后光电触发后，全收腿移动持续时间，单位 ms。 */
             .second_photo_retract_move_speed = 0.50f, /* 后一个光电触发收腿时向头向移动 vx，单位 m/s。 */
-            .final_move_speed = 1.5f,          /* 收尾离开台阶 vx，单位 m/s。 */
+            .final_move_speed = 1.8f,          /* 收尾离开台阶 vx，单位 m/s。 */
             .final_move_ms = 400u,               /* 收尾离开台阶持续时间，单位 ms。 */
             .pole_all_extend_speed = 50.0f,     /* 四杆全伸目标跟随速度，单位 rad/s。 */
             .pole_front_extend_speed = 20.0f,   /* 前杆伸出目标跟随速度，单位 rad/s。 */

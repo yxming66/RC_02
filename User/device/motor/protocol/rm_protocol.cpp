@@ -79,6 +79,7 @@ void MotorProtocol<MotorKind::RM, Model>::ResetPositionTracker() {
     rotor_position_initialized_ = false;
     last_single_turn_rotor_position_rad_ = 0.0f;
     accumulated_rotor_position_rad_ = 0.0f;
+    rotor_zero_offset_rad_ = 0.0f;
 }
 
 template <MotorModel Model>
@@ -86,6 +87,14 @@ void MotorProtocol<MotorKind::RM, Model>::SyncRotorPosition(float single_turn_ro
     rotor_position_initialized_ = true;
     last_single_turn_rotor_position_rad_ = single_turn_rotor_position_rad;
     accumulated_rotor_position_rad_ = single_turn_rotor_position_rad;
+}
+
+template <MotorModel Model>
+void MotorProtocol<MotorKind::RM, Model>::SetRotorPositionZero(float single_turn_rotor_position_rad) {
+    rotor_position_initialized_ = true;
+    last_single_turn_rotor_position_rad_ = single_turn_rotor_position_rad;
+    accumulated_rotor_position_rad_ = single_turn_rotor_position_rad;
+    rotor_zero_offset_rad_ = single_turn_rotor_position_rad;
 }
 
 template <MotorModel Model>
@@ -108,6 +117,11 @@ float MotorProtocol<MotorKind::RM, Model>::AccumulateRotorPosition(float single_
     accumulated_rotor_position_rad_ += delta;
     last_single_turn_rotor_position_rad_ = single_turn_rotor_position_rad;
     return accumulated_rotor_position_rad_;
+}
+
+template <MotorModel Model>
+float MotorProtocol<MotorKind::RM, Model>::ApplyRotorPositionOffset(float rotor_position_rad) const {
+    return rotor_position_rad - rotor_zero_offset_rad_;
 }
 
 template <MotorModel Model>
@@ -209,10 +223,15 @@ void MotorProtocol<MotorKind::RM, Model>::RefreshStateCache() {
     }
 
     if (!last_online_) {
-        SyncRotorPosition(rotor_position_rad);
+        if constexpr (Model == MotorModel::M2006 || Model == MotorModel::M3508) {
+            SetRotorPositionZero(rotor_position_rad);
+        } else {
+            SyncRotorPosition(rotor_position_rad);
+        }
     }
 
-    next.position_rad = ToOutputPosition(AccumulateRotorPosition(rotor_position_rad, rotor_velocity_rad_s));
+    next.position_rad = ToOutputPosition(ApplyRotorPositionOffset(
+        AccumulateRotorPosition(rotor_position_rad, rotor_velocity_rad_s)));
     next.position_single_turn_rad = WrapToPi(next.position_rad);
     next.velocity_rad_s = ToOutputVelocity(rotor_velocity_rad_s);
     next.torque_nm = ToOutputTorque(torque_current);
@@ -238,6 +257,11 @@ void MotorProtocol<MotorKind::RM, Model>::RefreshStateCache() {
 
 template <MotorModel Model>
 int8_t MotorProtocol<MotorKind::RM, Model>::Register() {
+    if (instance_ != nullptr) {
+        last_non_fault_protocol_state_ = MotorProtocolState::Registered;
+        state_.protocol_state = last_non_fault_protocol_state_;
+        return DEVICE_OK;
+    }
     const int8_t ret = MOTOR_RM_AttachExternal(&param_, &vendor_instance_);
     if (ret == DEVICE_OK) {
         instance_ = &vendor_instance_;
@@ -344,6 +368,32 @@ int8_t MotorProtocol<MotorKind::RM, Model>::SetTorque(float torque_nm) {
     debug_.last_set_torque_ret = DEVICE_OK;
     state_.command_pending = true;
     return DEVICE_OK;
+}
+
+template <MotorModel Model>
+int8_t MotorProtocol<MotorKind::RM, Model>::SetZero() {
+    if constexpr (!(Model == MotorModel::M2006 || Model == MotorModel::M3508)) {
+        return DEVICE_ERR_UNSUPPORTED;
+    } else {
+        float rotor_position_rad = 0.0f;
+        float rotor_velocity_rad_s = 0.0f;
+        float torque_current = 0.0f;
+        float temperature_c = 0.0f;
+        uint8_t error_code = 0u;
+        if (!TryGetRotorFeedback(rotor_position_rad, rotor_velocity_rad_s, torque_current, temperature_c, error_code)) {
+            return DEVICE_ERR;
+        }
+
+        SetRotorPositionZero(rotor_position_rad);
+        state_.position_rad = 0.0f;
+        state_.position_single_turn_rad = 0.0f;
+        state_.velocity_rad_s = ToOutputVelocity(rotor_velocity_rad_s);
+        state_.torque_nm = ToOutputTorque(torque_current);
+        state_.temperature_c = temperature_c;
+        state_.protocol_status_code = error_code;
+        state_.protocol_fault = EncodeRmC610Fault(error_code);
+        return DEVICE_OK;
+    }
 }
 
 template <MotorModel Model>

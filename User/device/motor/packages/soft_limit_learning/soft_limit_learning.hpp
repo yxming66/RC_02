@@ -20,6 +20,7 @@ struct SoftLimitLearningConfig {
     uint16_t stall_cycles_required = 20u;
     float seek_timeout_s = 8.0f;
     float limit_margin_rad = 0.0f;
+    float learned_limit_margin_rad = 0.0f;
     float min_range_rad = 0.0f;
 };
 

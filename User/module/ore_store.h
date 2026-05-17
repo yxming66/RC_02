@@ -38,7 +38,9 @@ typedef struct {
   float stall_position_window_rad;
   uint16_t stall_cycles_required;
   float seek_timeout_s;
+  float online_wait_timeout_s;
   float limit_margin_rad;
+  float learned_limit_margin_rad;
   float min_range_rad;
 } OreStore_SoftLimitConfig_t;
 
@@ -92,8 +94,10 @@ typedef struct {
   float target_position_rad[ORE_STORE_AXIS_NUM];
   float command_position_rad[ORE_STORE_AXIS_NUM];
   float zero_offset_rad[ORE_STORE_AXIS_NUM];
+  float learned_lower_raw_rad[ORE_STORE_AXIS_NUM];
   float travel_rad[ORE_STORE_AXIS_NUM];
   float seek_velocity_rad_s[ORE_STORE_AXIS_NUM];
+  float online_wait_s[ORE_STORE_AXIS_NUM];
   uint8_t soft_limit_state[ORE_STORE_AXIS_NUM];
   uint16_t stall_cycles[ORE_STORE_AXIS_NUM];
   bool homing_started[ORE_STORE_AXIS_NUM];
@@ -121,6 +125,8 @@ typedef struct {
   bool homing_started[ORE_STORE_AXIS_NUM];
   bool axis_failed[ORE_STORE_AXIS_NUM];
   float zero_offset_rad[ORE_STORE_AXIS_NUM];
+  float learned_lower_raw_rad[ORE_STORE_AXIS_NUM];
+  float homing_online_wait_s[ORE_STORE_AXIS_NUM];
   float target_position_rad[ORE_STORE_AXIS_NUM];
   float command_position_rad[ORE_STORE_AXIS_NUM];
 

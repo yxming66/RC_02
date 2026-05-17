@@ -156,12 +156,16 @@ void MotorProtocol<MotorKind::LZ, Model>::RefreshStateCache() {
 
 template <MotorModel Model>
 int8_t MotorProtocol<MotorKind::LZ, Model>::Register() {
-    const int8_t ret = MOTOR_LZ_AttachExternal(&param_, &vendor_instance_);
-    if (ret == DEVICE_OK) {
-        instance_ = &vendor_instance_;
-        state_.protocol_state = MotorProtocolState::Registered;
-    }
-    return ret;
+  if (instance_ != nullptr) {
+    state_.protocol_state = MotorProtocolState::Registered;
+    return DEVICE_OK;
+  }
+  const int8_t ret = MOTOR_LZ_AttachExternal(&param_, &vendor_instance_);
+  if (ret == DEVICE_OK) {
+    instance_ = &vendor_instance_;
+    state_.protocol_state = MotorProtocolState::Registered;
+  }
+  return ret;
 }
 
 template <MotorModel Model>
@@ -169,17 +173,12 @@ int8_t MotorProtocol<MotorKind::LZ, Model>::Enable() {
     if (instance_ != nullptr && instance_->motor.header.online) {
         const uint32_t fault_code = EncodeFaultBits(instance_->lz_feedback.fault_bits);
         if (fault_code == 0u && instance_->lz_feedback.state_bits == MOTOR_LZ_STATE_MOTOR) {
-            state_.protocol_state = MotorProtocolState::Enabled;
             state_.protocol_status_code = instance_->lz_feedback.state_bits;
             state_.protocol_fault = fault_code;
             return DEVICE_OK;
         }
     }
-    const int8_t ret = MOTOR_LZ_Enable(&param_);
-    if (ret == DEVICE_OK) {
-        state_.protocol_state = MotorProtocolState::Enabled;
-    }
-    return ret;
+    return MOTOR_LZ_Enable(&param_);
 }
 
 template <MotorModel Model>
@@ -188,27 +187,18 @@ int8_t MotorProtocol<MotorKind::LZ, Model>::Disable() {
     if (instance_ != nullptr && instance_->motor.header.online) {
         const uint32_t fault_code = EncodeFaultBits(instance_->lz_feedback.fault_bits);
         if (fault_code == 0u && instance_->lz_feedback.state_bits == MOTOR_LZ_STATE_RESET) {
-            state_.protocol_state = MotorProtocolState::Disabled;
             state_.protocol_status_code = instance_->lz_feedback.state_bits;
             state_.protocol_fault = fault_code;
             return DEVICE_OK;
         }
     }
-    const int8_t ret = MOTOR_LZ_Disable(&param_, false);
-    if (ret == DEVICE_OK) {
-        state_.protocol_state = MotorProtocolState::Disabled;
-    }
-    return ret;
+    return MOTOR_LZ_Disable(&param_, false);
 }
 
 template <MotorModel Model>
 int8_t MotorProtocol<MotorKind::LZ, Model>::Relax() {
     ClearPendingCommand();
-    const int8_t ret = MOTOR_LZ_Relax(&param_);
-    if (ret == DEVICE_OK) {
-        state_.protocol_state = MotorProtocolState::Enabled;
-    }
-    return ret;
+    return MOTOR_LZ_Relax(&param_);
 }
 
 template <MotorModel Model>

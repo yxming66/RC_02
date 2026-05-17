@@ -40,6 +40,7 @@ public:
     void ClearPendingCommand();
 
     int8_t SetTorque(float torque_nm);
+    int8_t SetZero();
     const RmProtocolDebugSnapshot& GetDebugSnapshot() const;
 
 private:
@@ -49,7 +50,9 @@ private:
     void RefreshStateCache();
     void ResetPositionTracker();
     void SyncRotorPosition(float single_turn_rotor_position_rad);
+    void SetRotorPositionZero(float single_turn_rotor_position_rad);
     float AccumulateRotorPosition(float single_turn_rotor_position_rad, float rotor_velocity_rad_s);
+    float ApplyRotorPositionOffset(float rotor_position_rad) const;
     float ToOutputPosition(float rotor_position_rad) const;
     float ToOutputVelocity(float rotor_velocity_rad_s) const;
     float ToOutputTorque(float torque_current) const;
@@ -73,6 +76,7 @@ private:
     MotorProtocolState last_non_fault_protocol_state_ = MotorProtocolState::Unregistered;
     float last_single_turn_rotor_position_rad_ = 0.0f;
     float accumulated_rotor_position_rad_ = 0.0f;
+    float rotor_zero_offset_rad_ = 0.0f;
 };
 
 } // namespace mr::motor

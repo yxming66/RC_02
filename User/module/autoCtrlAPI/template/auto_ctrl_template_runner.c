@@ -445,7 +445,8 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
       return false;
 
     case 6:
-      AutoCtrlPrimitive_CommandFlatMove(ctrl, param->final_move_speed);
+      AutoCtrlPrimitive_ApplyPrealignWithMove(ctrl, param->final_move_speed,
+                                              0.0f);
       AutoCtrlTemplate_CommandPole(ctrl, pole.all_retract[0],
                                    pole.all_retract[1],
                                    param->pole_front_retract_speed,

@@ -26,6 +26,7 @@ constexpr float kMaxDtS = 0.050f;
 constexpr float kDefaultSampleFreqHz = 500.0f;
 constexpr float kDefaultMoveVelocityRadS = 1.0f;
 constexpr float kDefaultArriveThresholdRad = 0.03f;
+constexpr float kDefaultOnlineWaitTimeoutS = 1.5f;
 
 alignas(PlatformController) unsigned char
     g_platform_controller_storage[sizeof(PlatformController)];
@@ -83,6 +84,8 @@ mr::motor::SoftLimitLearningConfig BuildSoftLimitConfig(
   out.stall_cycles_required = config.stall_cycles_required;
   out.seek_timeout_s = config.seek_timeout_s;
   out.limit_margin_rad = config.limit_margin_rad;
+  out.learned_limit_margin_rad =
+      PositiveOr(config.learned_limit_margin_rad, config.limit_margin_rad);
   out.min_range_rad = config.min_range_rad;
   return out;
 }
@@ -187,6 +190,16 @@ float AxisArriveThreshold(const OreStore_Params_t *param, uint8_t axis,
   return PositiveOr(param->limit.arrive_threshold_rad[axis], fallback);
 }
 
+float AxisOnlineWaitTimeout(const OreStore_Params_t *param, uint8_t axis) {
+  return PositiveOr(param->limit.config[axis].online_wait_timeout_s,
+                    kDefaultOnlineWaitTimeoutS);
+}
+
+bool AxisFeedbackReady(const OreStore_t *store, uint8_t axis) {
+  return store != nullptr && AxisValid(axis) && store->feedback.online[axis] &&
+         store->debug.controller_update_ret[axis] == DEVICE_OK;
+}
+
 float CommandTarget(const OreStore_CMD_t *cmd, uint8_t axis) {
   switch (axis) {
     case ORE_STORE_AXIS_PLATFORM:
@@ -213,7 +226,9 @@ void RefreshDebugAxis(OreStore_t *store, uint8_t axis) {
   store->debug.target_position_rad[axis] = store->target_position_rad[axis];
   store->debug.command_position_rad[axis] = store->command_position_rad[axis];
   store->debug.zero_offset_rad[axis] = store->zero_offset_rad[axis];
+  store->debug.learned_lower_raw_rad[axis] = store->learned_lower_raw_rad[axis];
   store->debug.travel_rad[axis] = AxisTravel(store->param, axis);
+  store->debug.online_wait_s[axis] = store->homing_online_wait_s[axis];
   store->debug.seek_velocity_rad_s[axis] =
       (limit != nullptr) ? limit->GetSeekVelocity() : 0.0f;
   store->debug.soft_limit_state[axis] =
@@ -244,6 +259,8 @@ void ResetAxisHoming(OreStore_t *store, uint8_t axis) {
   store->homing_started[axis] = false;
   store->axis_failed[axis] = false;
   store->zero_offset_rad[axis] = 0.0f;
+  store->learned_lower_raw_rad[axis] = 0.0f;
+  store->homing_online_wait_s[axis] = 0.0f;
   store->target_position_rad[axis] = 0.0f;
   store->command_position_rad[axis] = 0.0f;
   RefreshDebugAxis(store, axis);
@@ -290,13 +307,16 @@ int8_t FinishAxisHome(OreStore_t *store, uint8_t axis, float raw_lower_rad) {
     return ORE_STORE_ERR;
   }
 
-  store->zero_offset_rad[axis] = raw_lower_rad;
+  const float learned_lower = limit->GetRange().lower_rad;
+  store->learned_lower_raw_rad[axis] = raw_lower_rad;
+  store->zero_offset_rad[axis] = raw_lower_rad - learned_lower;
   store->axis_homed[axis] = true;
   store->homing_started[axis] = false;
   store->axis_failed[axis] = false;
-  store->target_position_rad[axis] = 0.0f;
-  store->command_position_rad[axis] = 0.0f;
-  return ControllerSetPosition(store, axis, store->zero_offset_rad[axis],
+  store->homing_online_wait_s[axis] = 0.0f;
+  store->target_position_rad[axis] = learned_lower;
+  store->command_position_rad[axis] = learned_lower;
+  return ControllerSetPosition(store, axis, store->zero_offset_rad[axis] + learned_lower,
                                AxisMoveVelocity(store->param, axis));
 }
 
@@ -312,10 +332,28 @@ int8_t HomeAxis(OreStore_t *store, uint8_t axis) {
     return ORE_STORE_ERR;
   }
 
+  if (!AxisFeedbackReady(store, axis)) {
+    (void)ControllerRelax(store, axis);
+    store->target_position_rad[axis] = store->feedback.position_rad[axis];
+    store->command_position_rad[axis] = store->feedback.position_rad[axis];
+    store->homing_online_wait_s[axis] += store->dt;
+    if (store->homing_online_wait_s[axis] >=
+        AxisOnlineWaitTimeout(store->param, axis)) {
+      store->axis_failed[axis] = true;
+      store->homing_started[axis] = false;
+      limit->MarkFailed();
+      return ORE_STORE_ERR;
+    }
+    return ORE_STORE_OK;
+  }
+  store->homing_online_wait_s[axis] = 0.0f;
+
   if (AxisHomed(store, axis)) {
-    store->target_position_rad[axis] = 0.0f;
-    store->command_position_rad[axis] = 0.0f;
-    return ControllerSetPosition(store, axis, store->zero_offset_rad[axis],
+    const float home_position = limit->GetRange().lower_rad;
+    store->target_position_rad[axis] = home_position;
+    store->command_position_rad[axis] = home_position;
+    return ControllerSetPosition(store, axis,
+                                 store->zero_offset_rad[axis] + home_position,
                                  AxisMoveVelocity(store->param, axis));
   }
 
@@ -473,6 +511,7 @@ int8_t OreStore_UpdateFeedback(OreStore_t *store) {
 
     mr::motor::MotorState observed_state = raw_state;
     observed_state.position_rad = local_position;
+    observed_state.online = raw_state.online && update_ret == DEVICE_OK;
     SoftLimitPtr(store, axis)->Observe(observed_state);
 
     if (!store->feedback.homed[axis]) {

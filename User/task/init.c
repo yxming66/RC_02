@@ -55,7 +55,7 @@ void Task_Init(void *argument) {
   BUZZER_Init(&buzzer, BSP_PWM_BUZZER);
 
   BSP_GPIO_WritePin(BSP_GPIO_POWER_24V_1, 1);
-  BSP_GPIO_WritePin(BSP_GPIO_POWER_24V_1, 1);
+  BSP_GPIO_WritePin(BSP_GPIO_POWER_24V_2, 1);
   BSP_GPIO_WritePin(BSP_GPIO_POWER_5V, 1);
 
   osKernelUnlock();
