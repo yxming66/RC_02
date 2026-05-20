@@ -64,6 +64,8 @@ typedef struct {
     float velocity_to_torque_limit[ORE_STORE_AXIS_NUM];
     float feedback_lowpass_cutoff_hz[ORE_STORE_AXIS_NUM];
     float output_lowpass_cutoff_hz[ORE_STORE_AXIS_NUM];
+    float normalized_output_limit[ORE_STORE_AXIS_NUM];
+    float normalized_to_torque_nm[ORE_STORE_AXIS_NUM];
   } controller;
 
   struct {
@@ -115,6 +117,7 @@ typedef struct {
   float filtered_velocity_rad_s[ORE_STORE_AXIS_NUM];
   float filtered_output_torque_nm[ORE_STORE_AXIS_NUM];
   float motor_torque_nm[ORE_STORE_AXIS_NUM];
+  float normalized_output[ORE_STORE_AXIS_NUM];
   float rm_last_set_torque_nm[ORE_STORE_AXIS_NUM];
   float rm_pending_current_a[ORE_STORE_AXIS_NUM];
   int16_t rm_output_raw[ORE_STORE_AXIS_NUM];
@@ -141,6 +144,7 @@ typedef struct {
   float learned_lower_raw_rad[ORE_STORE_AXIS_NUM];
   float homing_online_wait_s[ORE_STORE_AXIS_NUM];
   float target_position_rad[ORE_STORE_AXIS_NUM];
+  float tracked_position_rad[ORE_STORE_AXIS_NUM];
   float command_position_rad[ORE_STORE_AXIS_NUM];
 
   OreStore_Feedback_t feedback;

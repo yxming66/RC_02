@@ -51,6 +51,8 @@ public:
     float GetLastFeedbackPosition() const;
     float GetLastFeedbackVelocity() const;
     float GetLastOutputTorque() const;
+    float CalculatePositionOutput(float target, float feedback, float dt_s);
+    float CalculateVelocityOutput(float target, float feedback, float dt_s);
 
 private:
     enum class ControlMode : uint8_t {

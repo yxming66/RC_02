@@ -387,6 +387,22 @@ float MotorControllerT<MotorType>::GetLastOutputTorque() const {
 }
 
 template <typename MotorType>
+float MotorControllerT<MotorType>::CalculatePositionOutput(float target,
+                                                           float feedback,
+                                                           float dt_s) {
+    return position_pid_ready_ ? position_pid_.Update(target, feedback, dt_s)
+                               : 0.0f;
+}
+
+template <typename MotorType>
+float MotorControllerT<MotorType>::CalculateVelocityOutput(float target,
+                                                           float feedback,
+                                                           float dt_s) {
+    return velocity_pid_ready_ ? velocity_pid_.Update(target, feedback, dt_s)
+                               : 0.0f;
+}
+
+template <typename MotorType>
 float MotorControllerT<MotorType>::LowpassAlpha(float cutoff_hz,
                                                 float dt_s) const {
     const float cutoff = ResolveCutoffHz(cutoff_hz);

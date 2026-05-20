@@ -209,6 +209,32 @@ float ControllerFilteredOutputTorque(const OreStore_t *store, uint8_t axis) {
                               : SmallControllerPtr(store, axis)->GetLastOutputTorque();
 }
 
+float AxisNormalizedOutputLimit(const OreStore_Params_t *param, uint8_t axis) {
+  return scalar::positive_or(param->controller.normalized_output_limit[axis], 0.2f);
+}
+
+float AxisNormalizedToTorqueNm(const OreStore_Params_t *param, uint8_t axis) {
+  return scalar::positive_or(param->controller.normalized_to_torque_nm[axis],
+                             param->controller.velocity_to_torque_limit[axis]);
+}
+
+int8_t ControllerSetNormalizedOutput(OreStore_t *store, uint8_t axis,
+                                     float output) {
+  if (store == nullptr || store->param == nullptr || !AxisValid(axis)) {
+    return ORE_STORE_ERR_NULL;
+  }
+
+  const float clipped = scalar::clamp_scalar(
+      output, -AxisNormalizedOutputLimit(store->param, axis),
+      AxisNormalizedOutputLimit(store->param, axis));
+  store->debug.normalized_output[axis] = clipped;
+  return IsPlatformAxis(axis)
+             ? PlatformControllerPtr(store)->SetTorque(
+                   clipped * AxisNormalizedToTorqueNm(store->param, axis))
+             : SmallControllerPtr(store, axis)->SetTorque(
+                   clipped * AxisNormalizedToTorqueNm(store->param, axis));
+}
+
 mr::motor::MotorState ControllerState(const OreStore_t *store, uint8_t axis) {
   return IsPlatformAxis(axis) ? PlatformControllerPtr(store)->GetState()
                               : SmallControllerPtr(store, axis)->GetState();
@@ -234,6 +260,10 @@ float AxisTravel(const OreStore_Params_t *param, uint8_t axis) {
 float AxisMoveVelocity(const OreStore_Params_t *param, uint8_t axis) {
   return PositiveOr(param->limit.move_velocity_rad_s[axis],
                     kDefaultMoveVelocityRadS);
+}
+
+float AxisTrackStep(const OreStore_Params_t *param, uint8_t axis, float dt_s) {
+  return AxisMoveVelocity(param, axis) * scalar::positive_or_zero(dt_s);
 }
 
 float AxisSeekVelocity(const OreStore_Params_t *param, uint8_t axis) {
@@ -353,6 +383,7 @@ void ResetAxisHoming(OreStore_t *store, uint8_t axis) {
   store->learned_lower_raw_rad[axis] = 0.0f;
   store->homing_online_wait_s[axis] = 0.0f;
   store->target_position_rad[axis] = 0.0f;
+  store->tracked_position_rad[axis] = 0.0f;
   store->command_position_rad[axis] = 0.0f;
   RefreshDebugAxis(store, axis);
 }
@@ -406,6 +437,7 @@ int8_t FinishAxisHome(OreStore_t *store, uint8_t axis, float raw_lower_rad) {
   store->axis_failed[axis] = false;
   store->homing_online_wait_s[axis] = 0.0f;
   store->target_position_rad[axis] = learned_lower;
+  store->tracked_position_rad[axis] = learned_lower;
   store->command_position_rad[axis] = learned_lower;
   return ControllerSetPosition(store, axis, store->zero_offset_rad[axis] + learned_lower,
                                AxisMoveVelocity(store->param, axis));
@@ -426,6 +458,7 @@ int8_t HomeAxis(OreStore_t *store, uint8_t axis) {
   if (!AxisFeedbackReady(store, axis)) {
     (void)ControllerRelax(store, axis);
     store->target_position_rad[axis] = store->feedback.position_rad[axis];
+    store->tracked_position_rad[axis] = store->feedback.position_rad[axis];
     store->command_position_rad[axis] = store->feedback.position_rad[axis];
     store->homing_online_wait_s[axis] += store->dt;
     if (store->homing_online_wait_s[axis] >=
@@ -442,6 +475,7 @@ int8_t HomeAxis(OreStore_t *store, uint8_t axis) {
   if (AxisHomed(store, axis)) {
     const float home_position = limit->GetRange().lower_rad;
     store->target_position_rad[axis] = home_position;
+    store->tracked_position_rad[axis] = home_position;
     store->command_position_rad[axis] = home_position;
     return ControllerSetPosition(store, axis,
                                  store->zero_offset_rad[axis] + home_position,
@@ -468,6 +502,7 @@ int8_t HomeAxis(OreStore_t *store, uint8_t axis) {
   }
 
   store->target_position_rad[axis] = 0.0f;
+  store->tracked_position_rad[axis] = 0.0f;
   store->command_position_rad[axis] = 0.0f;
   return ControllerSetVelocity(store, axis, limit->GetSeekVelocity());
 }
@@ -485,8 +520,23 @@ int8_t ActiveAxis(OreStore_t *store, const OreStore_CMD_t *cmd, uint8_t axis) {
   const float requested_target = CommandTarget(cmd, axis);
   store->target_position_rad[axis] = requested_target;
   const float limited_target = limit->ClampPosition(requested_target);
-  store->command_position_rad[axis] = limited_target;
-  const float raw_target = store->zero_offset_rad[axis] + limited_target;
+  store->tracked_position_rad[axis] = scalar::move_towards(
+      store->tracked_position_rad[axis], limited_target,
+      AxisTrackStep(store->param, axis, store->dt));
+  store->command_position_rad[axis] = limit->ClampPosition(store->tracked_position_rad[axis]);
+  const float raw_target = store->zero_offset_rad[axis] + store->command_position_rad[axis];
+  if (IsPlatformAxis(axis)) {
+    const float velocity_target =
+      PlatformControllerPtr(store)->CalculatePositionOutput(
+        raw_target, store->feedback.raw_position_rad[axis], store->dt);
+    const float limited_velocity_target = scalar::abs_clip_scalar(
+        velocity_target, AxisMoveVelocity(store->param, axis));
+    const float output =
+      PlatformControllerPtr(store)->CalculateVelocityOutput(
+        limited_velocity_target, store->feedback.velocity_rad_s[axis],
+        store->dt);
+    return ControllerSetNormalizedOutput(store, axis, output);
+  }
   return ControllerSetPosition(store, axis, raw_target,
                                AxisMoveVelocity(store->param, axis));
 }
@@ -740,6 +790,7 @@ int8_t OreStore_AssumeAxisHomedAtCurrent(OreStore_t *store, uint8_t axis,
   store->axis_failed[axis] = false;
   store->homing_online_wait_s[axis] = 0.0f;
   store->target_position_rad[axis] = position_rad;
+  store->tracked_position_rad[axis] = position_rad;
   store->command_position_rad[axis] = position_rad;
   RefreshDebugAxis(store, axis);
   return ORE_STORE_OK;
