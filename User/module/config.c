@@ -138,10 +138,10 @@ Config_RobotParam_t robot_config = {
         },
         .motor_param = {
             [ORE_STORE_AXIS_PLATFORM] =    {.can = BSP_CAN_1, .id = 0x205, .module = MOTOR_M3508, .reverse = false, .gear = true},
-            [ORE_STORE_AXIS_GATE_LEFT] =   {.can = BSP_CAN_3, .id = 0x205, .module = MOTOR_M2006, .reverse = false, .gear = true},
-            [ORE_STORE_AXIS_GATE_RIGHT] =  {.can = BSP_CAN_3, .id = 0x206, .module = MOTOR_M2006, .reverse = false, .gear = true},
-            [ORE_STORE_AXIS_TRACK_LEFT] =  {.can = BSP_CAN_3, .id = 0x207, .module = MOTOR_M2006, .reverse = false, .gear = true},
-            [ORE_STORE_AXIS_TRACK_RIGHT] = {.can = BSP_CAN_3, .id = 0x208, .module = MOTOR_M2006, .reverse = false, .gear = true},
+            [ORE_STORE_AXIS_GATE_LEFT] =   {.can = BSP_CAN_3, .id = 0x201, .module = MOTOR_M2006, .reverse = false, .gear = true},
+            [ORE_STORE_AXIS_GATE_RIGHT] =  {.can = BSP_CAN_3, .id = 0x202, .module = MOTOR_M2006, .reverse = false, .gear = true},
+            [ORE_STORE_AXIS_TRACK_LEFT] =  {.can = BSP_CAN_3, .id = 0x203, .module = MOTOR_M2006, .reverse = false, .gear = true},
+            [ORE_STORE_AXIS_TRACK_RIGHT] = {.can = BSP_CAN_3, .id = 0x204, .module = MOTOR_M2006, .reverse = false, .gear = true},
         },
         .motor_install = {
             [ORE_STORE_AXIS_PLATFORM] = {.external_ratio = 1.0f, .reverse_output = false},
