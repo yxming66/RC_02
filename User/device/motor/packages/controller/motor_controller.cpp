@@ -8,6 +8,7 @@ namespace cntlr = mr::comp::cntlr;
 namespace scalar = mr::component::math;
 
 constexpr float kControllerMaxDtS = 0.05f;
+constexpr float kTwoPi = 6.28318530717958647692f;
 
 float ClampLimit(float value) {
     return (scalar::is_finite_scalar(value) && value > 0.0f) ? value : 0.0f;
@@ -92,6 +93,12 @@ float ApplyRequiredAbsLimit(float value, float limit) {
     return cntlr::SymmetricLimit::Abs(positive_limit).Apply(value);
 }
 
+float ResolveCutoffHz(float cutoff_hz) {
+    return (scalar::is_finite_scalar(cutoff_hz) && cutoff_hz > 0.0f)
+               ? cutoff_hz
+               : 0.0f;
+}
+
 } // namespace
 
 template <typename MotorType>
@@ -105,6 +112,13 @@ MotorControllerT<MotorType>::MotorControllerT(MotorType& motor,
       control_dt_fallback_s_(ResolveDefaultDtS(config.sample_freq)),
       velocity_pid_ready_(PidParamsUsable(config.velocity_pid)),
       position_pid_ready_(PidParamsUsable(config.position_pid)),
+    feedback_lowpass_cutoff_hz_(ResolveCutoffHz(config.feedback_lowpass_cutoff_hz)),
+    output_lowpass_cutoff_hz_(ResolveCutoffHz(config.output_lowpass_cutoff_hz)),
+    feedback_filter_initialized_(false),
+    output_filter_initialized_(false),
+    filtered_position_(0.0f),
+    filtered_velocity_(0.0f),
+    filtered_output_torque_(0.0f),
       mode_(ControlMode::Torque),
       target_torque_(0.0f),
       target_velocity_(0.0f),
@@ -113,7 +127,10 @@ MotorControllerT<MotorType>::MotorControllerT(MotorType& motor,
       velocity_torque_limit_(config.velocity_to_torque_limit),
       target_mit_kp_(0.0f),
       target_mit_kd_(0.0f),
-      target_mit_torque_ff_(0.0f) {
+    target_mit_torque_ff_(0.0f),
+    last_feedback_position_(0.0f),
+    last_feedback_velocity_(0.0f),
+    last_output_torque_(0.0f) {
 }
 
 template <typename MotorType>
@@ -133,6 +150,7 @@ int8_t MotorControllerT<MotorType>::Enable() {
     target_mit_kd_ = 0.0f;
     target_mit_torque_ff_ = 0.0f;
     ResetControllers();
+    ResetFiltersToState();
     return motor_.Enable();
 }
 
@@ -141,6 +159,7 @@ int8_t MotorControllerT<MotorType>::Disable() {
     mode_ = ControlMode::Torque;
     target_torque_ = 0.0f;
     ResetControllers();
+    ResetFiltersToState();
     return motor_.Disable();
 }
 
@@ -149,6 +168,7 @@ int8_t MotorControllerT<MotorType>::Relax() {
     mode_ = ControlMode::Torque;
     target_torque_ = 0.0f;
     ResetControllers();
+    ResetFiltersToState();
     return motor_.Relax();
 }
 
@@ -160,11 +180,11 @@ int8_t MotorControllerT<MotorType>::Update() {
         return ret;
     }
 
-    const MotorState state = motor_.GetState();
+    const MotorState state = FilterFeedback(motor_.GetState(), dt);
 
     switch (mode_) {
     case ControlMode::Torque:
-        return motor_.SetTorque(target_torque_);
+        return motor_.SetTorque(FilterOutputTorque(target_torque_, dt));
 
     case ControlMode::NativeVelocity:
         return motor_.SetVelocity(target_velocity_);
@@ -177,7 +197,7 @@ int8_t MotorControllerT<MotorType>::Update() {
             velocity_pid_.Update(target_velocity_, state.velocity_rad_s, dt);
         torque_cmd = ApplyRequiredAbsLimit(
             torque_cmd, ResolveTorqueLimit(velocity_torque_limit_));
-        return motor_.SetTorque(torque_cmd);
+        return motor_.SetTorque(FilterOutputTorque(torque_cmd, dt));
     }
 
     case ControlMode::NativePosition:
@@ -195,7 +215,18 @@ int8_t MotorControllerT<MotorType>::Update() {
             velocity_pid_.Update(velocity_cmd, state.velocity_rad_s, dt);
         torque_cmd = ApplyRequiredAbsLimit(
             torque_cmd, ResolveTorqueLimit(velocity_torque_limit_));
-        return motor_.SetTorque(torque_cmd);
+        return motor_.SetTorque(FilterOutputTorque(torque_cmd, dt));
+    }
+
+    case ControlMode::EmulatedPositionTorque: {
+        if (!position_pid_ready_) {
+            return DEVICE_ERR_UNSUPPORTED;
+        }
+        float torque_cmd =
+            position_pid_.Update(target_position_, state.position_rad, dt);
+        torque_cmd = ApplyRequiredAbsLimit(
+            torque_cmd, ResolveTorqueLimit(velocity_torque_limit_));
+        return motor_.SetTorque(FilterOutputTorque(torque_cmd, dt));
     }
 
     case ControlMode::NativeMit:
@@ -286,6 +317,26 @@ int8_t MotorControllerT<MotorType>::SetPosition(float position,
 }
 
 template <typename MotorType>
+int8_t MotorControllerT<MotorType>::SetPositionTorque(float position,
+                                                      float torque_limit) {
+    target_position_ = position;
+    target_velocity_ = 0.0f;
+    position_velocity_limit_ = config_.position_to_velocity_limit;
+    velocity_torque_limit_ =
+        (torque_limit > 0.0f) ? torque_limit : config_.velocity_to_torque_limit;
+
+    if (!position_pid_ready_) {
+        return DEVICE_ERR_UNSUPPORTED;
+    }
+
+    if (mode_ != ControlMode::EmulatedPositionTorque) {
+        ResetControllers();
+    }
+    mode_ = ControlMode::EmulatedPositionTorque;
+    return DEVICE_OK;
+}
+
+template <typename MotorType>
 int8_t MotorControllerT<MotorType>::SetMIT(float position, float velocity,
                                            float kp, float kd,
                                            float torque_ff) {
@@ -313,6 +364,86 @@ MotorState MotorControllerT<MotorType>::GetState() const {
 template <typename MotorType>
 const MotorInstallSpec& MotorControllerT<MotorType>::GetInstallConfig() const {
     return motor_.GetInstallConfig();
+}
+
+template <typename MotorType>
+const MotorType& MotorControllerT<MotorType>::GetMotor() const {
+    return motor_;
+}
+
+template <typename MotorType>
+float MotorControllerT<MotorType>::GetLastFeedbackPosition() const {
+    return last_feedback_position_;
+}
+
+template <typename MotorType>
+float MotorControllerT<MotorType>::GetLastFeedbackVelocity() const {
+    return last_feedback_velocity_;
+}
+
+template <typename MotorType>
+float MotorControllerT<MotorType>::GetLastOutputTorque() const {
+    return last_output_torque_;
+}
+
+template <typename MotorType>
+float MotorControllerT<MotorType>::LowpassAlpha(float cutoff_hz,
+                                                float dt_s) const {
+    const float cutoff = ResolveCutoffHz(cutoff_hz);
+    if (cutoff <= 0.0f || dt_s <= 0.0f) {
+        return 1.0f;
+    }
+    const float rc = 1.0f / (kTwoPi * cutoff);
+    return dt_s / (rc + dt_s);
+}
+
+template <typename MotorType>
+void MotorControllerT<MotorType>::ResetFiltersToState() {
+    const MotorState state = motor_.GetState();
+    filtered_position_ = state.position_rad;
+    filtered_velocity_ = state.velocity_rad_s;
+    filtered_output_torque_ = 0.0f;
+    last_feedback_position_ = filtered_position_;
+    last_feedback_velocity_ = filtered_velocity_;
+    last_output_torque_ = filtered_output_torque_;
+    feedback_filter_initialized_ = true;
+    output_filter_initialized_ = false;
+}
+
+template <typename MotorType>
+MotorState MotorControllerT<MotorType>::FilterFeedback(const MotorState& state,
+                                                       float dt_s) {
+    if (!feedback_filter_initialized_ || feedback_lowpass_cutoff_hz_ <= 0.0f) {
+        filtered_position_ = state.position_rad;
+        filtered_velocity_ = state.velocity_rad_s;
+        feedback_filter_initialized_ = true;
+    } else {
+        const float alpha = LowpassAlpha(feedback_lowpass_cutoff_hz_, dt_s);
+        filtered_position_ += alpha * (state.position_rad - filtered_position_);
+        filtered_velocity_ += alpha * (state.velocity_rad_s - filtered_velocity_);
+    }
+
+    last_feedback_position_ = filtered_position_;
+    last_feedback_velocity_ = filtered_velocity_;
+
+    MotorState filtered_state = state;
+    filtered_state.position_rad = filtered_position_;
+    filtered_state.velocity_rad_s = filtered_velocity_;
+    return filtered_state;
+}
+
+template <typename MotorType>
+float MotorControllerT<MotorType>::FilterOutputTorque(float torque_nm,
+                                                      float dt_s) {
+    if (!output_filter_initialized_ || output_lowpass_cutoff_hz_ <= 0.0f) {
+        filtered_output_torque_ = torque_nm;
+        output_filter_initialized_ = true;
+    } else {
+        const float alpha = LowpassAlpha(output_lowpass_cutoff_hz_, dt_s);
+        filtered_output_torque_ += alpha * (torque_nm - filtered_output_torque_);
+    }
+    last_output_torque_ = filtered_output_torque_;
+    return filtered_output_torque_;
 }
 
 template <typename MotorType>

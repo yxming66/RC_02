@@ -19,6 +19,59 @@ volatile int8_t g_ore_store_init_ret = ORE_STORE_ERR_NULL;
 volatile int8_t g_ore_store_update_ret = ORE_STORE_ERR_NULL;
 volatile int8_t g_ore_store_control_ret = ORE_STORE_ERR_NULL;
 
+typedef struct {
+  volatile bool inited;
+  volatile OreStore_Mode_t mode;
+  volatile bool platform_online;
+  volatile bool platform_homed;
+  volatile bool all_homed;
+  volatile float platform_position_rad;
+  volatile float platform_filtered_position_rad;
+  volatile float platform_filtered_velocity_rad_s;
+  volatile float platform_target_rad;
+  volatile float platform_command_rad;
+  volatile int8_t platform_update_ret;
+  volatile int8_t platform_set_ret;
+  volatile int8_t platform_commit_ret;
+  volatile bool platform_command_pending;
+  volatile uint8_t platform_soft_limit_state;
+  volatile float platform_feedback_torque_nm;
+  volatile float platform_filtered_output_torque_nm;
+  volatile float platform_cmd_torque_nm;
+  volatile float platform_cmd_current_a;
+  volatile int16_t platform_rm_output_raw;
+  volatile uint16_t platform_rm_tx_frame_id;
+} OreStoreTask_DebugView_t;
+
+volatile OreStoreTask_DebugView_t g_ore_store_debug_view = {0};
+
+typedef struct {
+  volatile bool enable;
+  volatile OreStore_Mode_t mode;
+  volatile bool force_rehome;
+  volatile float platform_target_rad;
+  volatile float gate_target_rad[ORE_STORE_GATE_NUM];
+  volatile float track_target_rad[ORE_STORE_TRACK_NUM];
+  volatile bool direct_output_enable;
+  volatile uint8_t direct_output_axis;
+  volatile float direct_output;
+  volatile int8_t direct_set_ret;
+  volatile int8_t direct_ctrl_ret;
+  volatile bool assume_homed_trigger;
+  volatile uint8_t assume_homed_axis;
+  volatile float assume_homed_position_rad;
+  volatile int8_t assume_homed_ret;
+  volatile uint32_t applied_count;
+} OreStore_DebugCommand_t;
+
+volatile OreStore_DebugCommand_t g_ore_store_debug_command = {
+    .enable = false,
+    .mode = ORE_STORE_MODE_RELAX,
+  .direct_set_ret = ORE_STORE_ERR_NULL,
+  .direct_ctrl_ret = ORE_STORE_ERR_NULL,
+  .assume_homed_ret = ORE_STORE_ERR_NULL,
+};
+
 #define ORE_STORE_TEMP_WARNING_ALARM_MS (3000u)
 #define ORE_STORE_TEMP_OVER_LIMIT_ALARM_MS (5000u)
 
@@ -70,6 +123,117 @@ static void OreStoreTask_SanitizeCommand(OreStore_CMD_t *cmd) {
        !OreStoreTask_TargetsAreFinite(cmd))) {
     OreStoreTask_SetDefaultCommand(cmd);
   }
+}
+
+static bool OreStoreTask_TryApplyDebugCommand(OreStore_CMD_t *cmd) {
+  if (cmd == NULL || !g_ore_store_debug_command.enable) {
+    return false;
+  }
+
+  cmd->mode = g_ore_store_debug_command.mode;
+  cmd->force_rehome = g_ore_store_debug_command.force_rehome;
+  cmd->platform_target_rad = g_ore_store_debug_command.platform_target_rad;
+  for (uint8_t i = 0; i < ORE_STORE_GATE_NUM; ++i) {
+    cmd->gate_target_rad[i] = g_ore_store_debug_command.gate_target_rad[i];
+  }
+  for (uint8_t i = 0; i < ORE_STORE_TRACK_NUM; ++i) {
+    cmd->track_target_rad[i] = g_ore_store_debug_command.track_target_rad[i];
+  }
+
+  OreStoreTask_SanitizeCommand(cmd);
+  ++g_ore_store_debug_command.applied_count;
+  return true;
+}
+
+static float OreStoreTask_ClampDirectOutput(float value) {
+  if (!isfinite(value)) {
+    return 0.0f;
+  }
+  if (value > 0.2f) {
+    return 0.2f;
+  }
+  if (value < -0.2f) {
+    return -0.2f;
+  }
+  return value;
+}
+
+static void OreStoreTask_ApplyDirectDebugOutput(void) {
+  if (!g_ore_store_debug_command.direct_output_enable) {
+    g_ore_store_debug_command.direct_set_ret = ORE_STORE_ERR_NULL;
+    g_ore_store_debug_command.direct_ctrl_ret = ORE_STORE_ERR_NULL;
+    return;
+  }
+
+  if (ore_store.param == NULL ||
+      g_ore_store_debug_command.direct_output_axis >= ORE_STORE_AXIS_NUM) {
+    g_ore_store_debug_command.direct_set_ret = ORE_STORE_ERR_NULL;
+    g_ore_store_debug_command.direct_ctrl_ret = ORE_STORE_ERR_NULL;
+    return;
+  }
+
+  MOTOR_RM_Param_t *motor_param =
+      (MOTOR_RM_Param_t *)&ore_store.param
+           ->motor_param[g_ore_store_debug_command.direct_output_axis];
+  const float output =
+      OreStoreTask_ClampDirectOutput(g_ore_store_debug_command.direct_output);
+  g_ore_store_debug_command.direct_set_ret =
+      MOTOR_RM_SetOutput(motor_param, output);
+  g_ore_store_debug_command.direct_ctrl_ret = MOTOR_RM_Ctrl(motor_param);
+}
+
+static void OreStoreTask_ApplyAssumeHomedDebug(void) {
+  if (!g_ore_store_debug_command.assume_homed_trigger) {
+    return;
+  }
+
+  g_ore_store_debug_command.assume_homed_ret =
+      OreStore_AssumeAxisHomedAtCurrent(
+          &ore_store, g_ore_store_debug_command.assume_homed_axis,
+          g_ore_store_debug_command.assume_homed_position_rad);
+  g_ore_store_debug_command.assume_homed_trigger = false;
+}
+
+static void OreStoreTask_UpdateDebugView(void) {
+  g_ore_store_debug_view.inited = ore_store_inited;
+  g_ore_store_debug_view.mode = ore_store.mode;
+  g_ore_store_debug_view.platform_online =
+      ore_store.feedback.online[ORE_STORE_AXIS_PLATFORM];
+  g_ore_store_debug_view.platform_homed =
+      ore_store.feedback.homed[ORE_STORE_AXIS_PLATFORM];
+  g_ore_store_debug_view.all_homed = ore_store.feedback.all_homed;
+  g_ore_store_debug_view.platform_position_rad =
+      ore_store.feedback.position_rad[ORE_STORE_AXIS_PLATFORM];
+  g_ore_store_debug_view.platform_filtered_position_rad =
+      ore_store.debug.filtered_position_rad[ORE_STORE_AXIS_PLATFORM];
+  g_ore_store_debug_view.platform_filtered_velocity_rad_s =
+      ore_store.debug.filtered_velocity_rad_s[ORE_STORE_AXIS_PLATFORM];
+  g_ore_store_debug_view.platform_target_rad =
+      ore_store.debug.target_position_rad[ORE_STORE_AXIS_PLATFORM];
+  g_ore_store_debug_view.platform_command_rad =
+      ore_store.debug.command_position_rad[ORE_STORE_AXIS_PLATFORM];
+  g_ore_store_debug_view.platform_update_ret =
+      ore_store.debug.controller_update_ret[ORE_STORE_AXIS_PLATFORM];
+  g_ore_store_debug_view.platform_set_ret =
+      ore_store.debug.set_command_ret[ORE_STORE_AXIS_PLATFORM];
+  g_ore_store_debug_view.platform_commit_ret =
+      ore_store.debug.commit_ret[ORE_STORE_AXIS_PLATFORM];
+  g_ore_store_debug_view.platform_command_pending =
+      ore_store.debug.command_pending[ORE_STORE_AXIS_PLATFORM];
+  g_ore_store_debug_view.platform_soft_limit_state =
+      ore_store.debug.soft_limit_state[ORE_STORE_AXIS_PLATFORM];
+  g_ore_store_debug_view.platform_feedback_torque_nm =
+      ore_store.debug.motor_torque_nm[ORE_STORE_AXIS_PLATFORM];
+  g_ore_store_debug_view.platform_filtered_output_torque_nm =
+      ore_store.debug.filtered_output_torque_nm[ORE_STORE_AXIS_PLATFORM];
+  g_ore_store_debug_view.platform_cmd_torque_nm =
+      ore_store.debug.rm_last_set_torque_nm[ORE_STORE_AXIS_PLATFORM];
+  g_ore_store_debug_view.platform_cmd_current_a =
+      ore_store.debug.rm_pending_current_a[ORE_STORE_AXIS_PLATFORM];
+  g_ore_store_debug_view.platform_rm_output_raw =
+      ore_store.debug.rm_output_raw[ORE_STORE_AXIS_PLATFORM];
+  g_ore_store_debug_view.platform_rm_tx_frame_id =
+      ore_store.debug.rm_tx_frame_id[ORE_STORE_AXIS_PLATFORM];
 }
 
 static void OreStoreTask_UpdateTemperatureAlarm(uint32_t now_tick) {
@@ -145,17 +309,22 @@ void Task_ore_store(void *argument) {
       ore_store_cmd = next_cmd;
     }
 
+    (void)OreStoreTask_TryApplyDebugCommand(&ore_store_cmd);
+
     if (ore_store_rehome_requested) {
       OreStore_RequestRehome(&ore_store);
       ore_store_rehome_requested = false;
     }
 
     g_ore_store_update_ret = OreStore_UpdateFeedback(&ore_store);
+    OreStoreTask_ApplyAssumeHomedDebug();
     const uint32_t now_tick = osKernelGetTickCount();
     OreStoreTask_UpdateTemperatureAlarm(now_tick);
     g_ore_store_control_ret =
         OreStore_Control(&ore_store, &ore_store_cmd, now_tick);
     OreStore_Output(&ore_store);
+    OreStoreTask_ApplyDirectDebugOutput();
+    OreStoreTask_UpdateDebugView();
     ore_store_cmd.force_rehome = false;
 
     task_runtime.stack_water_mark.ore_store =
@@ -180,6 +349,14 @@ int8_t Task_OreStorePostCommand(const OreStore_CMD_t *cmd) {
 
 void Task_OreStoreRequestRehome(void) {
   ore_store_rehome_requested = true;
+}
+
+int8_t Task_OreStoreAssumeAxisHomedAtCurrent(uint8_t axis,
+                                             float position_rad) {
+  if (!ore_store_inited) {
+    return ORE_STORE_ERR_NULL;
+  }
+  return OreStore_AssumeAxisHomedAtCurrent(&ore_store, axis, position_rad);
 }
 
 bool Task_OreStoreIsAxisHomed(uint8_t axis) {

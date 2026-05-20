@@ -72,6 +72,10 @@ mr::motor::MotorControllerConfig BuildControllerConfig(
       scalar::positive_or_zero(param->controller.position_to_velocity_limit[axis]);
   config.velocity_to_torque_limit =
       scalar::positive_or_zero(param->controller.velocity_to_torque_limit[axis]);
+    config.feedback_lowpass_cutoff_hz =
+      scalar::positive_or_zero(param->controller.feedback_lowpass_cutoff_hz[axis]);
+    config.output_lowpass_cutoff_hz =
+      scalar::positive_or_zero(param->controller.output_lowpass_cutoff_hz[axis]);
   return config;
 }
 
@@ -166,6 +170,45 @@ bool ControllerHasPendingCommand(const OreStore_t *store, uint8_t axis) {
              : SmallControllerPtr(store, axis)->HasPendingCommand();
 }
 
+float ControllerLastSetTorqueNm(const OreStore_t *store, uint8_t axis) {
+  return IsPlatformAxis(axis)
+     ? PlatformControllerPtr(store)
+       ->GetMotor()
+       .ProtocolDebug()
+       .last_set_torque_nm
+     : SmallControllerPtr(store, axis)
+       ->GetMotor()
+       .ProtocolDebug()
+       .last_set_torque_nm;
+}
+
+float ControllerPendingCurrentA(const OreStore_t *store, uint8_t axis) {
+  return IsPlatformAxis(axis)
+     ? PlatformControllerPtr(store)
+       ->GetMotor()
+       .ProtocolDebug()
+       .pending_torque_current
+     : SmallControllerPtr(store, axis)
+       ->GetMotor()
+       .ProtocolDebug()
+       .pending_torque_current;
+}
+
+float ControllerFilteredPosition(const OreStore_t *store, uint8_t axis) {
+  return IsPlatformAxis(axis) ? PlatformControllerPtr(store)->GetLastFeedbackPosition()
+                              : SmallControllerPtr(store, axis)->GetLastFeedbackPosition();
+}
+
+float ControllerFilteredVelocity(const OreStore_t *store, uint8_t axis) {
+  return IsPlatformAxis(axis) ? PlatformControllerPtr(store)->GetLastFeedbackVelocity()
+                              : SmallControllerPtr(store, axis)->GetLastFeedbackVelocity();
+}
+
+float ControllerFilteredOutputTorque(const OreStore_t *store, uint8_t axis) {
+  return IsPlatformAxis(axis) ? PlatformControllerPtr(store)->GetLastOutputTorque()
+                              : SmallControllerPtr(store, axis)->GetLastOutputTorque();
+}
+
 mr::motor::MotorState ControllerState(const OreStore_t *store, uint8_t axis) {
   return IsPlatformAxis(axis) ? PlatformControllerPtr(store)->GetState()
                               : SmallControllerPtr(store, axis)->GetState();
@@ -256,6 +299,41 @@ void RefreshDebugAxis(OreStore_t *store, uint8_t axis) {
       (store->controller[axis] != nullptr)
           ? ControllerHasPendingCommand(store, axis)
           : false;
+  if (store->controller[axis] != nullptr) {
+    store->debug.filtered_position_rad[axis] =
+        ControllerFilteredPosition(store, axis);
+    store->debug.filtered_velocity_rad_s[axis] =
+        ControllerFilteredVelocity(store, axis);
+    store->debug.filtered_output_torque_nm[axis] =
+        ControllerFilteredOutputTorque(store, axis);
+  } else {
+    store->debug.filtered_position_rad[axis] = store->feedback.position_rad[axis];
+    store->debug.filtered_velocity_rad_s[axis] = store->feedback.velocity_rad_s[axis];
+    store->debug.filtered_output_torque_nm[axis] = 0.0f;
+  }
+  store->debug.motor_torque_nm[axis] = store->feedback.motor[axis].torque_current;
+  if (store->controller[axis] != nullptr) {
+    store->debug.rm_last_set_torque_nm[axis] =
+        ControllerLastSetTorqueNm(store, axis);
+    store->debug.rm_pending_current_a[axis] =
+        ControllerPendingCurrentA(store, axis);
+  } else {
+    store->debug.rm_last_set_torque_nm[axis] = 0.0f;
+    store->debug.rm_pending_current_a[axis] = 0.0f;
+  }
+  const MOTOR_RM_Param_t *motor_param = &store->param->motor_param[axis];
+  const int8_t logical_index = (motor_param->id >= 0x201u &&
+                               motor_param->id <= 0x208u)
+                                  ? (int8_t)(motor_param->id - 0x201u)
+                                  : -1;
+  if (logical_index >= 0) {
+    const MOTOR_RM_SlotTxDebug_t *tx_debug =
+        MOTOR_RM_GetSlotTxDebug((uint8_t)logical_index);
+    if (tx_debug != nullptr && tx_debug->valid && tx_debug->can == motor_param->can) {
+      store->debug.rm_output_raw[axis] = tx_debug->output_value;
+      store->debug.rm_tx_frame_id[axis] = tx_debug->tx_frame_id;
+    }
+  }
 }
 
 void ResetAxisHoming(OreStore_t *store, uint8_t axis) {
@@ -625,6 +703,46 @@ void OreStore_RequestRehome(OreStore_t *store) {
     return;
   }
   ResetAllHoming(store);
+}
+
+int8_t OreStore_AssumeAxisHomedAtCurrent(OreStore_t *store, uint8_t axis,
+                                         float position_rad) {
+  if (store == nullptr || store->param == nullptr || !AxisValid(axis)) {
+    return ORE_STORE_ERR_NULL;
+  }
+
+  mr::motor::SoftLimitLearning *limit = SoftLimitPtr(store, axis);
+  if (limit == nullptr) {
+    return ORE_STORE_ERR_NULL;
+  }
+
+  const float travel_rad = AxisTravel(store->param, axis);
+  if (!scalar::is_finite_scalar(position_rad) || position_rad < 0.0f ||
+      position_rad > travel_rad) {
+    return ORE_STORE_ERR;
+  }
+
+  limit->Reset();
+  limit->Configure(BuildSoftLimitConfig(store->param->limit.config[axis]));
+  if (!limit->SetRangeByLowerAndTravel(0.0f, travel_rad)) {
+    store->axis_failed[axis] = true;
+    limit->MarkFailed();
+    RefreshDebugAxis(store, axis);
+    return ORE_STORE_ERR;
+  }
+
+  store->learned_lower_raw_rad[axis] =
+      store->feedback.raw_position_rad[axis] - position_rad;
+  store->zero_offset_rad[axis] =
+      store->feedback.raw_position_rad[axis] - position_rad;
+  store->axis_homed[axis] = true;
+  store->homing_started[axis] = false;
+  store->axis_failed[axis] = false;
+  store->homing_online_wait_s[axis] = 0.0f;
+  store->target_position_rad[axis] = position_rad;
+  store->command_position_rad[axis] = position_rad;
+  RefreshDebugAxis(store, axis);
+  return ORE_STORE_OK;
 }
 
 bool OreStore_IsAxisHomed(const OreStore_t *store, uint8_t axis) {

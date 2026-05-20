@@ -62,6 +62,8 @@ typedef struct {
     float sample_freq;
     float position_to_velocity_limit[ORE_STORE_AXIS_NUM];
     float velocity_to_torque_limit[ORE_STORE_AXIS_NUM];
+    float feedback_lowpass_cutoff_hz[ORE_STORE_AXIS_NUM];
+    float output_lowpass_cutoff_hz[ORE_STORE_AXIS_NUM];
   } controller;
 
   struct {
@@ -109,6 +111,14 @@ typedef struct {
   int8_t set_command_ret[ORE_STORE_AXIS_NUM];
   int8_t commit_ret[ORE_STORE_AXIS_NUM];
   bool command_pending[ORE_STORE_AXIS_NUM];
+  float filtered_position_rad[ORE_STORE_AXIS_NUM];
+  float filtered_velocity_rad_s[ORE_STORE_AXIS_NUM];
+  float filtered_output_torque_nm[ORE_STORE_AXIS_NUM];
+  float motor_torque_nm[ORE_STORE_AXIS_NUM];
+  float rm_last_set_torque_nm[ORE_STORE_AXIS_NUM];
+  float rm_pending_current_a[ORE_STORE_AXIS_NUM];
+  int16_t rm_output_raw[ORE_STORE_AXIS_NUM];
+  uint16_t rm_tx_frame_id[ORE_STORE_AXIS_NUM];
   float dt_s;
 } OreStore_Debug_t;
 
@@ -145,6 +155,8 @@ int8_t OreStore_Control(OreStore_t *store, const OreStore_CMD_t *cmd,
 void OreStore_Output(OreStore_t *store);
 void OreStore_ResetOutput(OreStore_t *store);
 void OreStore_RequestRehome(OreStore_t *store);
+int8_t OreStore_AssumeAxisHomedAtCurrent(OreStore_t *store, uint8_t axis,
+                                         float position_rad);
 bool OreStore_IsAxisHomed(const OreStore_t *store, uint8_t axis);
 bool OreStore_IsAllHomed(const OreStore_t *store);
 bool OreStore_IsAxisAtTarget(const OreStore_t *store, uint8_t axis,

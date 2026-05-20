@@ -66,6 +66,24 @@ volatile ArmTaskDebugPoseControl_t g_arm_task_debug_pose_control = {0};
 extern PC_Protocol_t* g_pc_protocol_ptr;
 volatile PC_CommandSource_t g_pc_command_source = PC_COMMAND_SOURCE_RC;
 volatile int8_t g_rc_ore_store_post_ret = ORE_STORE_ERR_NULL;
+volatile int8_t g_rc_ore_store_assume_home_ret = ORE_STORE_ERR_NULL;
+volatile uint32_t g_rc_ore_store_assume_home_count = 0u;
+
+typedef struct {
+  volatile bool online;
+  volatile DR16_SwitchPos_t sw_l;
+  volatile DR16_SwitchPos_t sw_r;
+  volatile DR16_SwitchPos_t last_sw_l;
+  volatile DR16_SwitchPos_t last_sw_r;
+  volatile OreStore_Mode_t cmd_mode;
+  volatile bool cmd_force_rehome;
+  volatile float platform_target_rad; 
+  volatile bool assume_home_event;
+  volatile int8_t assume_home_ret;
+  volatile int8_t post_ret;
+} RcOreStoreDebug_t;
+
+volatile RcOreStoreDebug_t g_rc_ore_store_debug = {0};
 
 static bool ore_store_active_initialized = false;
 
@@ -131,11 +149,19 @@ static void Rc_SetOreStoreRelax(void) {
   ore_store_active_initialized = false;
 }
 
-static void Rc_SetOreStoreHome(bool force_rehome) {
-  memset(&ore_store_cmd, 0, sizeof(ore_store_cmd));
-  ore_store_cmd.mode = ORE_STORE_MODE_HOME;
-  ore_store_cmd.force_rehome = force_rehome;
-  ore_store_active_initialized = false;
+static void Rc_AssumeOreStorePlatformHomeAtPowerOn(void) {
+  if (!dr16.header.online || dr16.data.sw_l != DR16_SW_MID ||
+      dr16.data.sw_r != DR16_SW_UP || last_sw_r == DR16_SW_UP) {
+    return;
+  }
+
+  g_rc_ore_store_assume_home_ret = Task_OreStoreAssumeAxisHomedAtCurrent(
+      ORE_STORE_AXIS_PLATFORM, 0.0f);
+  g_rc_ore_store_debug.assume_home_event = true;
+  g_rc_ore_store_debug.assume_home_ret = g_rc_ore_store_assume_home_ret;
+  if (g_rc_ore_store_assume_home_ret == ORE_STORE_OK) {
+    ++g_rc_ore_store_assume_home_count;
+  }
 }
 
 static void Rc_InitOreStoreActiveTargets(void) {
@@ -469,6 +495,7 @@ void Task_rc_main(void *argument) {
 
     now_ms = osKernelGetTickCount();
     g_pc_command_source = PC_COMMAND_SOURCE_RC;
+    g_rc_ore_store_debug.assume_home_event = false;
 
     Rc_TryStartAutoCtrlBySwitch(now_ms);
 
@@ -531,7 +558,8 @@ void Task_rc_main(void *argument) {
         }
         Rc_SetChassisRelax();
         Rc_SetPoleAuto(0.0f, 0.0f);
-        Rc_SetOreStoreHome(last_sw_r != DR16_SW_UP);
+        Rc_AssumeOreStorePlatformHomeAtPowerOn();
+        Rc_SetOreStoreRelax();
       } else if (dr16.data.sw_r == DR16_SW_DOWN) {
         if (auto_ctrl_inited && AutoCtrl_IsBusy(&auto_ctrl)) {
           AutoCtrl_Abort(&auto_ctrl);
@@ -627,6 +655,15 @@ void Task_rc_main(void *argument) {
     osMessageQueueReset(task_runtime.msgq.rod.cmd);
     osMessageQueuePut(task_runtime.msgq.rod.cmd, &rod_cmd, 0, 0);
     g_rc_ore_store_post_ret = Task_OreStorePostCommand(&ore_store_cmd);
+    g_rc_ore_store_debug.online = dr16.header.online;
+    g_rc_ore_store_debug.sw_l = dr16.data.sw_l;
+    g_rc_ore_store_debug.sw_r = dr16.data.sw_r;
+    g_rc_ore_store_debug.last_sw_l = last_sw_l;
+    g_rc_ore_store_debug.last_sw_r = last_sw_r;
+    g_rc_ore_store_debug.cmd_mode = ore_store_cmd.mode;
+    g_rc_ore_store_debug.cmd_force_rehome = ore_store_cmd.force_rehome;
+    g_rc_ore_store_debug.platform_target_rad = ore_store_cmd.platform_target_rad;
+    g_rc_ore_store_debug.post_ret = g_rc_ore_store_post_ret;
 
     if (dr16.header.online) {
       if (dr16.data.sw_l == DR16_SW_UP && dr16.data.sw_r == DR16_SW_DOWN &&

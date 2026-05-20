@@ -220,6 +220,8 @@ bool Task_ChassisMainPoleGroupAtTarget(uint8_t group, float threshold_rad);
 bool Task_ChassisMainPoleAllAtTarget(float threshold_rad);
 int8_t Task_OreStorePostCommand(const OreStore_CMD_t *cmd);
 void Task_OreStoreRequestRehome(void);
+int8_t Task_OreStoreAssumeAxisHomedAtCurrent(uint8_t axis,
+                                             float position_rad);
 bool Task_OreStoreIsAxisHomed(uint8_t axis);
 bool Task_OreStoreIsAllHomed(void);
 bool Task_OreStoreIsAxisAtTarget(uint8_t axis, float threshold_rad);

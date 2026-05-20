@@ -152,14 +152,14 @@ Config_RobotParam_t robot_config = {
         },
         .pid = {
             .position_pid = {
-                [ORE_STORE_AXIS_PLATFORM] = {.k = 1.0f, .p = 8.0f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 1.2f, .d_cutoff_freq = 0.0f, .range = 0.0f},
+                [ORE_STORE_AXIS_PLATFORM] = {.k = 1.0f, .p = 18.0f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 2.0f, .d_cutoff_freq = 0.0f, .range = 0.0f},
                 [ORE_STORE_AXIS_GATE_LEFT] = {.k = 1.0f, .p = 10.0f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 2.0f, .d_cutoff_freq = 0.0f, .range = 0.0f},
                 [ORE_STORE_AXIS_GATE_RIGHT] = {.k = 1.0f, .p = 10.0f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 2.0f, .d_cutoff_freq = 0.0f, .range = 0.0f},
                 [ORE_STORE_AXIS_TRACK_LEFT] = {.k = 1.0f, .p = 8.0f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 2.5f, .d_cutoff_freq = 0.0f, .range = 0.0f},
                 [ORE_STORE_AXIS_TRACK_RIGHT] = {.k = 1.0f, .p = 8.0f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 2.5f, .d_cutoff_freq = 0.0f, .range = 0.0f},
             },
             .velocity_pid = {
-                [ORE_STORE_AXIS_PLATFORM] = {.k = 1.0f, .p = 0.18f, .i = 0.02f, .d = 0.0f, .i_limit = 1.0f, .out_limit = 2.5f, .d_cutoff_freq = 0.0f, .range = 0.0f},
+                [ORE_STORE_AXIS_PLATFORM] = {.k = 1.0f, .p = 0.80f, .i = 0.05f, .d = 0.0f, .i_limit = 1.5f, .out_limit = 8.0f, .d_cutoff_freq = 0.0f, .range = 0.0f},
                 [ORE_STORE_AXIS_GATE_LEFT] = {.k = 1.0f, .p = 0.08f, .i = 0.01f, .d = 0.0f, .i_limit = 0.5f, .out_limit = 0.8f, .d_cutoff_freq = 0.0f, .range = 0.0f},
                 [ORE_STORE_AXIS_GATE_RIGHT] = {.k = 1.0f, .p = 0.08f, .i = 0.01f, .d = 0.0f, .i_limit = 0.5f, .out_limit = 0.8f, .d_cutoff_freq = 0.0f, .range = 0.0f},
                 [ORE_STORE_AXIS_TRACK_LEFT] = {.k = 1.0f, .p = 0.08f, .i = 0.01f, .d = 0.0f, .i_limit = 0.5f, .out_limit = 0.8f, .d_cutoff_freq = 0.0f, .range = 0.0f},
@@ -168,8 +168,10 @@ Config_RobotParam_t robot_config = {
         },
         .controller = {
             .sample_freq = 500.0f,
-            .position_to_velocity_limit = {1.2f, 2.0f, 2.0f, 2.5f, 2.5f},
-            .velocity_to_torque_limit = {2.5f, 0.8f, 0.8f, 0.8f, 0.8f},
+            .position_to_velocity_limit = {2.0f, 2.0f, 2.0f, 2.5f, 2.5f},
+            .velocity_to_torque_limit = {8.0f, 0.8f, 0.8f, 0.8f, 0.8f},
+            .feedback_lowpass_cutoff_hz = {30.0f, 30.0f, 30.0f, 30.0f, 30.0f},
+            .output_lowpass_cutoff_hz = {30.0f, 20.0f, 20.0f, 20.0f, 20.0f},
         },
         .limit = {
             .config = {

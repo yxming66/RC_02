@@ -21,6 +21,8 @@ struct MotorControllerConfig {
 
     float position_to_velocity_limit;
     float velocity_to_torque_limit;
+    float feedback_lowpass_cutoff_hz;
+    float output_lowpass_cutoff_hz;
 };
 
 template <typename MotorType>
@@ -40,10 +42,15 @@ public:
     int8_t SetTorque(float torque_nm);
     int8_t SetVelocity(float velocity);
     int8_t SetPosition(float position, float max_velocity = 0.0f);
+    int8_t SetPositionTorque(float position, float torque_limit = 0.0f);
     int8_t SetMIT(float position, float velocity, float kp, float kd, float torque_ff);
 
     MotorState GetState() const;
     const MotorInstallSpec& GetInstallConfig() const;
+    const MotorType& GetMotor() const;
+    float GetLastFeedbackPosition() const;
+    float GetLastFeedbackVelocity() const;
+    float GetLastOutputTorque() const;
 
 private:
     enum class ControlMode : uint8_t {
@@ -52,6 +59,7 @@ private:
         EmulatedVelocity,
         NativePosition,
         EmulatedPosition,
+        EmulatedPositionTorque,
         NativeMit,
     };
 
@@ -59,6 +67,10 @@ private:
     float UpdateControlDt();
     float ResolveVelocityLimit(float request_limit) const;
     float ResolveTorqueLimit(float request_limit) const;
+    float LowpassAlpha(float cutoff_hz, float dt_s) const;
+    void ResetFiltersToState();
+    MotorState FilterFeedback(const MotorState& state, float dt_s);
+    float FilterOutputTorque(float torque_nm, float dt_s);
 
     MotorType& motor_;
     MotorControllerConfig config_;
@@ -69,6 +81,13 @@ private:
     float control_dt_fallback_s_;
     bool velocity_pid_ready_;
     bool position_pid_ready_;
+    float feedback_lowpass_cutoff_hz_;
+    float output_lowpass_cutoff_hz_;
+    bool feedback_filter_initialized_;
+    bool output_filter_initialized_;
+    float filtered_position_;
+    float filtered_velocity_;
+    float filtered_output_torque_;
 
     ControlMode mode_;
     float target_torque_;
@@ -79,6 +98,9 @@ private:
     float target_mit_kp_;
     float target_mit_kd_;
     float target_mit_torque_ff_;
+    float last_feedback_position_;
+    float last_feedback_velocity_;
+    float last_output_torque_;
 };
 
 using MotorController = MotorControllerT<mr::motor::RmM3508Motor>;
