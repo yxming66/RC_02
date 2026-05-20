@@ -20,7 +20,6 @@
 // 灵足电机协议参数
 #define LZ_ANGLE_RANGE_RAD          (12.57f)        /* 角度范围 ±12.57 rad */
 #define LZ_VELOCITY_RANGE_RAD_S     (20.0f)         /* 角速度范围 ±20 rad/s */
-#define LZ_TORQUE_RANGE_NM          (60.0f)         /* 力矩范围 ±60 Nm */
 #define LZ_KP_MAX                   (5000.0f)       /* Kp最大值 */
 #define LZ_KD_MAX                   (100.0f)        /* Kd最大值 */
 
@@ -54,7 +53,7 @@ static int8_t MOTOR_LZ_CreateCANManager(BSP_CAN_t can);
 static void MOTOR_LZ_Decode(MOTOR_LZ_t *motor, BSP_CAN_Message_t *msg);
 static uint32_t MOTOR_LZ_BuildExtID(MOTOR_LZ_CmdType_t cmd_type, uint16_t data2, uint8_t target_id);
 static uint16_t MOTOR_LZ_FloatToRaw(float value, float max_value);
-static float MOTOR_LZ_RawToFloat(uint16_t raw_value, float max_value);
+static float MOTOR_LZ_GetTorqueRangeNm(MOTOR_LZ_Module_t module);
 static int8_t MOTOR_LZ_SendExtFrame(BSP_CAN_t can, uint32_t ext_id, uint8_t *data, uint8_t dlc);
 static uint32_t MOTOR_LZ_IdParser(uint32_t original_id, BSP_CAN_FrameType_t frame_type);
 
@@ -173,12 +172,19 @@ static uint16_t MOTOR_LZ_FloatToRawPositive(float value, float max_value) {
     return (uint16_t)(value / max_value * (float)LZ_RAW_VALUE_MAX);
 }
 
-/**
- * @brief 原始值转换为浮点值
- */
-static float MOTOR_LZ_RawToFloat(uint16_t raw_value, float max_value) {
-    // 将0~65535范围转换为-max_value~max_value
-    return ((float)raw_value / (float)LZ_RAW_VALUE_MAX) * (2.0f * max_value) - max_value;
+static float MOTOR_LZ_GetTorqueRangeNm(MOTOR_LZ_Module_t module) {
+    switch (module) {
+        case MOTOR_LZ_RSO5:
+            return 5.5f;
+        case MOTOR_LZ_RSO0:
+        case MOTOR_LZ_RSO1:
+        case MOTOR_LZ_RSO2:
+        case MOTOR_LZ_RSO3:
+        case MOTOR_LZ_RSO4:
+        case MOTOR_LZ_RSO6:
+        default:
+            return 60.0f;
+    }
 }
 
 /**
@@ -360,7 +366,8 @@ int8_t MOTOR_LZ_MotionControl(MOTOR_LZ_Param_t *param, MOTOR_LZ_MotionParam_t *m
 
     memcpy(&motor->motion_param, motion_param, sizeof(MOTOR_LZ_MotionParam_t));
 
-    uint16_t raw_torque = MOTOR_LZ_FloatToRaw(send_param.torque, LZ_TORQUE_RANGE_NM);
+    uint16_t raw_torque = MOTOR_LZ_FloatToRaw(send_param.torque,
+                                             MOTOR_LZ_GetTorqueRangeNm(param->module));
     uint32_t ext_id = MOTOR_LZ_BuildExtID(MOTOR_LZ_CMD_MOTION, raw_torque, param->motor_id);
     uint8_t data[8];
     uint16_t raw_angle = MOTOR_LZ_FloatToRaw(send_param.target_angle, LZ_ANGLE_RANGE_RAD);
@@ -471,14 +478,6 @@ int8_t MOTOR_LZ_Offline(MOTOR_LZ_Param_t *param) {
         return DEVICE_OK;
     }
     return DEVICE_ERR_NO_DEV;
-}
-
-static MOTOR_LZ_Feedback_t* MOTOR_LZ_GetFeedback(MOTOR_LZ_Param_t *param) {
-    MOTOR_LZ_t *motor = MOTOR_LZ_GetMotor(param);
-    if (motor && motor->motor.header.online) {
-        return &motor->lz_feedback;
-    }
-    return NULL;
 }
 
 /* -------------------------------------------------------------------------- */

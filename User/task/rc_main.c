@@ -28,6 +28,10 @@
 #define AUTO_CTRL_OUTPUT_ENABLE (1u)
 #endif
 
+#if !AUTO_CTRL_OUTPUT_ENABLE
+#define RC_AUTO_CTRL_DRY_RUN_ENABLED (1u)
+#endif
+
 #define AUTO_CTRL_RC_PI_RAD (3.14159265358979323846f)
 #define RC_ARM_FINE_SCALE (0.35f)
 
@@ -36,6 +40,7 @@ DR16_t dr16;
 static Chassis_CMD_t chassis_cmd;
 static Pole_CMD_t pole_cmd;
 static Arm_CMD_t arm_cmd;
+static OreStore_CMD_t ore_store_cmd;
 static DR16_SwitchPos_t last_sw_l = DR16_SW_ERR;
 static DR16_SwitchPos_t last_sw_r = DR16_SW_ERR;
 static Rod_CMD_t rod_cmd;
@@ -60,6 +65,12 @@ volatile ArmTaskDebugPoseControl_t g_arm_task_debug_pose_control = {0};
 #define RC_PC_ENABLE_SWITCH (DR16_SW_UP)  /* sw_l DOWN 且 sw_r UP 时允许PC接管 */
 extern PC_Protocol_t* g_pc_protocol_ptr;
 volatile PC_CommandSource_t g_pc_command_source = PC_COMMAND_SOURCE_RC;
+volatile int8_t g_rc_ore_store_post_ret = ORE_STORE_ERR_NULL;
+
+static bool ore_store_active_initialized = false;
+
+#define RC_ORE_STORE_DEADBAND (0.05f)
+#define RC_ORE_STORE_FALLBACK_MOVE_SPEED_RAD_S (0.5f)
 
 static bool Rc_ArmPoseIsFinite(const ArmPose_t* pose) {
   return pose != NULL && isfinite(pose->x) && isfinite(pose->y) &&
@@ -72,6 +83,130 @@ static void Rc_SetRodRelax(void) {
   rod_cmd.pose = ROD_POSE_DOWN;
   rod_cmd.sequence_trigger = false;
   rod_cmd.grip_done = false;
+}
+
+static float Rc_ApplyOreStoreDeadband(float value) {
+  return (fabsf(value) < RC_ORE_STORE_DEADBAND) ? 0.0f : value;
+}
+
+static float Rc_OreStoreAxisMoveSpeed(uint8_t axis) {
+  Config_RobotParam_t* robot_param = Config_GetRobotParam();
+  if (robot_param == NULL || axis >= ORE_STORE_AXIS_NUM) {
+    return RC_ORE_STORE_FALLBACK_MOVE_SPEED_RAD_S;
+  }
+
+  const float speed = robot_param->ore_store_param.limit.move_velocity_rad_s[axis];
+  return (speed > 0.0f && isfinite(speed)) ? speed
+                                           : RC_ORE_STORE_FALLBACK_MOVE_SPEED_RAD_S;
+}
+
+static float Rc_OreStoreAxisTravel(uint8_t axis) {
+  Config_RobotParam_t* robot_param = Config_GetRobotParam();
+  if (robot_param == NULL || axis >= ORE_STORE_AXIS_NUM) {
+    return 0.0f;
+  }
+
+  const float travel = robot_param->ore_store_param.limit.travel_rad[axis];
+  return (travel > 0.0f && isfinite(travel)) ? travel : 0.0f;
+}
+
+static float Rc_ClampOreStoreTarget(uint8_t axis, float target_rad) {
+  const float travel_rad = Rc_OreStoreAxisTravel(axis);
+  if (!isfinite(target_rad) || travel_rad <= 0.0f) {
+    return 0.0f;
+  }
+
+  if (target_rad < 0.0f) {
+    return 0.0f;
+  }
+  if (target_rad > travel_rad) {
+    return travel_rad;
+  }
+  return target_rad;
+}
+
+static void Rc_SetOreStoreRelax(void) {
+  memset(&ore_store_cmd, 0, sizeof(ore_store_cmd));
+  ore_store_cmd.mode = ORE_STORE_MODE_RELAX;
+  ore_store_active_initialized = false;
+}
+
+static void Rc_SetOreStoreHome(bool force_rehome) {
+  memset(&ore_store_cmd, 0, sizeof(ore_store_cmd));
+  ore_store_cmd.mode = ORE_STORE_MODE_HOME;
+  ore_store_cmd.force_rehome = force_rehome;
+  ore_store_active_initialized = false;
+}
+
+static void Rc_InitOreStoreActiveTargets(void) {
+  const OreStore_Feedback_t* feedback = Task_OreStoreGetFeedback();
+
+  memset(&ore_store_cmd, 0, sizeof(ore_store_cmd));
+  ore_store_cmd.mode = ORE_STORE_MODE_ACTIVE;
+
+  if (feedback != NULL && feedback->all_homed) {
+    ore_store_cmd.platform_target_rad =
+        feedback->position_rad[ORE_STORE_AXIS_PLATFORM];
+    ore_store_cmd.gate_target_rad[0] =
+        feedback->position_rad[ORE_STORE_AXIS_GATE_LEFT];
+    ore_store_cmd.gate_target_rad[1] =
+        feedback->position_rad[ORE_STORE_AXIS_GATE_RIGHT];
+    ore_store_cmd.track_target_rad[0] =
+        feedback->position_rad[ORE_STORE_AXIS_TRACK_LEFT];
+    ore_store_cmd.track_target_rad[1] =
+        feedback->position_rad[ORE_STORE_AXIS_TRACK_RIGHT];
+  }
+
+  ore_store_cmd.platform_target_rad = Rc_ClampOreStoreTarget(
+      ORE_STORE_AXIS_PLATFORM, ore_store_cmd.platform_target_rad);
+  ore_store_cmd.gate_target_rad[0] = Rc_ClampOreStoreTarget(
+      ORE_STORE_AXIS_GATE_LEFT, ore_store_cmd.gate_target_rad[0]);
+  ore_store_cmd.gate_target_rad[1] = Rc_ClampOreStoreTarget(
+      ORE_STORE_AXIS_GATE_RIGHT, ore_store_cmd.gate_target_rad[1]);
+  ore_store_cmd.track_target_rad[0] = Rc_ClampOreStoreTarget(
+      ORE_STORE_AXIS_TRACK_LEFT, ore_store_cmd.track_target_rad[0]);
+  ore_store_cmd.track_target_rad[1] = Rc_ClampOreStoreTarget(
+      ORE_STORE_AXIS_TRACK_RIGHT, ore_store_cmd.track_target_rad[1]);
+  ore_store_active_initialized = true;
+}
+
+static void Rc_SetOreStoreActiveManual(void) {
+  const float dt_s = 1.0f / (float)RC_MAIN_FREQ;
+  const float platform_delta = Rc_ApplyOreStoreDeadband(dr16.data.ch_r_y) *
+                               Rc_OreStoreAxisMoveSpeed(
+                                   ORE_STORE_AXIS_PLATFORM) *
+                               dt_s;
+  const float gate_common_delta = Rc_ApplyOreStoreDeadband(dr16.data.ch_l_y) *
+                                  Rc_OreStoreAxisMoveSpeed(
+                                      ORE_STORE_AXIS_GATE_LEFT) *
+                                  dt_s;
+  const float gate_diff_delta = Rc_ApplyOreStoreDeadband(dr16.data.ch_r_x) *
+                                Rc_OreStoreAxisMoveSpeed(
+                                    ORE_STORE_AXIS_GATE_LEFT) *
+                                dt_s;
+  const float track_delta = Rc_ApplyOreStoreDeadband(dr16.data.ch_l_x) *
+                            Rc_OreStoreAxisMoveSpeed(
+                                ORE_STORE_AXIS_TRACK_LEFT) *
+                            dt_s;
+
+  if (!ore_store_active_initialized) {
+    Rc_InitOreStoreActiveTargets();
+  }
+
+  ore_store_cmd.mode = ORE_STORE_MODE_ACTIVE;
+  ore_store_cmd.force_rehome = false;
+  ore_store_cmd.platform_target_rad = Rc_ClampOreStoreTarget(
+      ORE_STORE_AXIS_PLATFORM, ore_store_cmd.platform_target_rad + platform_delta);
+  ore_store_cmd.gate_target_rad[0] = Rc_ClampOreStoreTarget(
+      ORE_STORE_AXIS_GATE_LEFT,
+      ore_store_cmd.gate_target_rad[0] + gate_common_delta + gate_diff_delta);
+  ore_store_cmd.gate_target_rad[1] = Rc_ClampOreStoreTarget(
+      ORE_STORE_AXIS_GATE_RIGHT,
+      ore_store_cmd.gate_target_rad[1] + gate_common_delta - gate_diff_delta);
+  ore_store_cmd.track_target_rad[0] = Rc_ClampOreStoreTarget(
+      ORE_STORE_AXIS_TRACK_LEFT, ore_store_cmd.track_target_rad[0] + track_delta);
+  ore_store_cmd.track_target_rad[1] = Rc_ClampOreStoreTarget(
+      ORE_STORE_AXIS_TRACK_RIGHT, ore_store_cmd.track_target_rad[1] + track_delta);
 }
 
 static void Rc_SetPoleManual(float left, float right) {
@@ -200,12 +335,14 @@ static void Rc_SetChassisRemote(void) {
   chassis_cmd.ctrl_vec.wz = -dr16.data.ch_l_x;
 }
 
+#if defined(RC_AUTO_CTRL_DRY_RUN_ENABLED)
 static void Rc_SetAutoDryRunCommands(void) {
   Rc_SetChassisRelax();
 
   Rc_SetPoleManual(0.0f, 0.0f);
   pole_cmd.mode = POLE_MODE_RELAX;
 }
+#endif
 
 static bool Rc_ShouldExitAutoCtrlBySwitch(void) {
   return dr16.header.online &&
@@ -256,6 +393,11 @@ static float Rc_SelectLocalAutoTargetYawRad(float head_yaw_rad,
 
 static void Rc_TryStartAutoCtrlBySwitch(uint32_t now_ms) {
   if (!dr16.header.online || !auto_ctrl_inited || AutoCtrl_IsBusy(&auto_ctrl)) {
+    return;
+  }
+
+  if (dr16.data.sw_l == DR16_SW_MID &&
+      (dr16.data.sw_r == DR16_SW_UP || dr16.data.sw_r == DR16_SW_DOWN)) {
     return;
   }
 
@@ -312,6 +454,7 @@ void Task_rc_main(void *argument) {
     return;
   }
   Rc_SetArmDisabled();
+  Rc_SetOreStoreRelax();
 
   while (1) {
     uint32_t now_ms;
@@ -380,21 +523,39 @@ void Task_rc_main(void *argument) {
 
       Rc_SetArmDisabled();
       Rc_SetRodRelax();
+      Rc_SetOreStoreRelax();
     } else if (dr16.data.sw_l == DR16_SW_MID) {
-      if (auto_ctrl_inited && AutoCtrl_IsBusy(&auto_ctrl)) {
+      if (dr16.data.sw_r == DR16_SW_UP) {
+        if (auto_ctrl_inited && AutoCtrl_IsBusy(&auto_ctrl)) {
+          AutoCtrl_Abort(&auto_ctrl);
+        }
+        Rc_SetChassisRelax();
+        Rc_SetPoleAuto(0.0f, 0.0f);
+        Rc_SetOreStoreHome(last_sw_r != DR16_SW_UP);
+      } else if (dr16.data.sw_r == DR16_SW_DOWN) {
+        if (auto_ctrl_inited && AutoCtrl_IsBusy(&auto_ctrl)) {
+          AutoCtrl_Abort(&auto_ctrl);
+        }
+        Rc_SetChassisRelax();
+        Rc_SetPoleAuto(0.0f, 0.0f);
+        Rc_SetOreStoreActiveManual();
+      } else if (auto_ctrl_inited && AutoCtrl_IsBusy(&auto_ctrl)) {
 #if AUTO_CTRL_OUTPUT_ENABLE
         chassis_cmd = auto_ctrl.chassis_cmd;
         pole_cmd = auto_ctrl.pole_cmd;
 #else
         Rc_SetAutoDryRunCommands();
 #endif
+        Rc_SetOreStoreRelax();
       } else if (dr16.data.sw_r == DR16_SW_MID) {
         /* 左MID右MID：底盘控制，pole用左摇杆Y轴同时控制 */
         Rc_SetChassisRemote();
         Rc_SetPoleManual(dr16.data.ch_l_y, dr16.data.ch_l_y);
+        Rc_SetOreStoreRelax();
       } else {
         Rc_SetChassisRelax();
         Rc_SetPoleAuto(0.0f, 0.0f);
+        Rc_SetOreStoreRelax();
       }
 
       Rc_SetArmDisabled();
@@ -452,6 +613,7 @@ void Task_rc_main(void *argument) {
             (dr16.data.sw_r == DR16_SW_UP) ? 1.0f : RC_ARM_FINE_SCALE);
       }
       Rc_SetRodRelax();
+      Rc_SetOreStoreRelax();
     }
 
     Rc_ApplyArmDebugPoseOverride();
@@ -464,6 +626,7 @@ void Task_rc_main(void *argument) {
     osMessageQueuePut(task_runtime.msgq.arm.cmd, &arm_cmd, 0, 0);
     osMessageQueueReset(task_runtime.msgq.rod.cmd);
     osMessageQueuePut(task_runtime.msgq.rod.cmd, &rod_cmd, 0, 0);
+    g_rc_ore_store_post_ret = Task_OreStorePostCommand(&ore_store_cmd);
 
     if (dr16.header.online) {
       if (dr16.data.sw_l == DR16_SW_UP && dr16.data.sw_r == DR16_SW_DOWN &&

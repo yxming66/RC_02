@@ -16,9 +16,6 @@ constexpr float kPi = 3.14159265358979323846f;
 constexpr float kTwoPi = 6.28318530717958647692f;
 constexpr float kLzAngleRangeRad = 12.57f;
 constexpr float kLzVelocityRangeRadS = 20.0f;
-constexpr float kLzTorqueRangeNm = 60.0f;
-constexpr float kLzTorqueHoldKp = 3.0f;
-constexpr float kLzTorqueHoldKd = 0.2f;
 constexpr float kLzRawValueMax = 65535.0f;
 constexpr float kLzTempScale = 10.0f;
 
@@ -118,7 +115,8 @@ bool MotorProtocol<MotorKind::LZ, Model>::TryGetRotorFeedback(float& rotor_posit
         rotor_velocity_rad_s = -rotor_velocity_rad_s;
     }
 
-    torque_current = RawToFloat(static_cast<uint16_t>(raw->raw_current), kLzTorqueRangeNm);
+    torque_current = RawToFloat(static_cast<uint16_t>(raw->raw_current),
+                                MotorTraits<MotorKind::LZ, Model>::kPeakTorque);
     if (param_.reverse) {
         torque_current = -torque_current;
     }
@@ -156,16 +154,16 @@ void MotorProtocol<MotorKind::LZ, Model>::RefreshStateCache() {
 
 template <MotorModel Model>
 int8_t MotorProtocol<MotorKind::LZ, Model>::Register() {
-  if (instance_ != nullptr) {
-    state_.protocol_state = MotorProtocolState::Registered;
-    return DEVICE_OK;
-  }
-  const int8_t ret = MOTOR_LZ_AttachExternal(&param_, &vendor_instance_);
-  if (ret == DEVICE_OK) {
-    instance_ = &vendor_instance_;
-    state_.protocol_state = MotorProtocolState::Registered;
-  }
-  return ret;
+    if (instance_ != nullptr) {
+        state_.protocol_state = MotorProtocolState::Registered;
+        return DEVICE_OK;
+    }
+    const int8_t ret = MOTOR_LZ_AttachExternal(&param_, &vendor_instance_);
+    if (ret == DEVICE_OK) {
+        instance_ = &vendor_instance_;
+        state_.protocol_state = MotorProtocolState::Registered;
+    }
+    return ret;
 }
 
 template <MotorModel Model>
@@ -267,13 +265,11 @@ int8_t MotorProtocol<MotorKind::LZ, Model>::SetTorque(float torque_nm) {
         return DEVICE_ERR;
     }
 
-    // Keep a low-impedance pose reference around the latest feedback so
-    // torque-only commands in LZ motion mode still act around the current pose.
     const float hold_position = state_.online ? state_.position_rad : 0.0f;
     return SetMIT(hold_position,
                   0.0f,
-                  kLzTorqueHoldKp,
-                  kLzTorqueHoldKd,
+                  0.0f,
+                  0.0f,
                   AbsClip(torque_nm, max_torque_nm));
 }
 

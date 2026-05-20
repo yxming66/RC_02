@@ -19,6 +19,9 @@ volatile int8_t g_ore_store_init_ret = ORE_STORE_ERR_NULL;
 volatile int8_t g_ore_store_update_ret = ORE_STORE_ERR_NULL;
 volatile int8_t g_ore_store_control_ret = ORE_STORE_ERR_NULL;
 
+#define ORE_STORE_TEMP_WARNING_ALARM_MS (3000u)
+#define ORE_STORE_TEMP_OVER_LIMIT_ALARM_MS (5000u)
+
 static void OreStoreTask_SetDefaultCommand(OreStore_CMD_t *cmd) {
   if (cmd == NULL) {
     return;
@@ -69,6 +72,46 @@ static void OreStoreTask_SanitizeCommand(OreStore_CMD_t *cmd) {
   }
 }
 
+static void OreStoreTask_UpdateTemperatureAlarm(uint32_t now_tick) {
+  bool has_warning = false;
+  bool has_over_limit = false;
+  float max_temperature_c = 0.0f;
+
+  for (uint8_t axis = 0; axis < ORE_STORE_AXIS_NUM; ++axis) {
+    const bool axis_warning = ore_store.feedback.temperature_warning[axis];
+    const bool axis_over_limit =
+        ore_store.feedback.temperature_over_limit[axis];
+    const float temperature_c = ore_store.feedback.motor[axis].temp;
+
+    task_runtime.status.ore_store_alarm.axis_temperature_warning[axis] =
+        axis_warning;
+    task_runtime.status.ore_store_alarm.axis_temperature_over_limit[axis] =
+        axis_over_limit;
+
+    has_warning = has_warning || axis_warning;
+    has_over_limit = has_over_limit || axis_over_limit;
+    if (axis == 0u || temperature_c > max_temperature_c) {
+      max_temperature_c = temperature_c;
+    }
+  }
+
+  task_runtime.status.ore_store_alarm.max_temperature_c = max_temperature_c;
+  if (has_over_limit) {
+    task_runtime.status.ore_store_alarm.level = BUZZER_ALARM_TEMP_OVER_LIMIT;
+    g_buzzer_alarm_request.level = BUZZER_ALARM_TEMP_OVER_LIMIT;
+    g_buzzer_alarm_request.min_duration_ms =
+        ORE_STORE_TEMP_OVER_LIMIT_ALARM_MS;
+    g_buzzer_alarm_request.request_tick = now_tick;
+  } else if (has_warning) {
+    task_runtime.status.ore_store_alarm.level = BUZZER_ALARM_TEMP_WARNING;
+    g_buzzer_alarm_request.level = BUZZER_ALARM_TEMP_WARNING;
+    g_buzzer_alarm_request.min_duration_ms = ORE_STORE_TEMP_WARNING_ALARM_MS;
+    g_buzzer_alarm_request.request_tick = now_tick;
+  } else {
+    task_runtime.status.ore_store_alarm.level = BUZZER_ALARM_NONE;
+  }
+}
+
 void Task_ore_store(void *argument) {
   (void)argument;
 
@@ -108,9 +151,11 @@ void Task_ore_store(void *argument) {
     }
 
     g_ore_store_update_ret = OreStore_UpdateFeedback(&ore_store);
+    const uint32_t now_tick = osKernelGetTickCount();
+    OreStoreTask_UpdateTemperatureAlarm(now_tick);
     g_ore_store_control_ret =
-        OreStore_Control(&ore_store, &ore_store_cmd, osKernelGetTickCount());
-    // OreStore_Output(&ore_store);
+        OreStore_Control(&ore_store, &ore_store_cmd, now_tick);
+    OreStore_Output(&ore_store);
     ore_store_cmd.force_rehome = false;
 
     task_runtime.stack_water_mark.ore_store =

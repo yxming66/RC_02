@@ -56,6 +56,15 @@
 #define BREATH_RESPONSE_FREQ_HIGH_HZ 659.25f
 #define BREATH_RESPONSE_VOLUME 0.12f
 
+#define TEMP_ALARM_TONE_LOW_HZ 800.0f
+#define TEMP_ALARM_TONE_HIGH_HZ 1000.0f
+#define TEMP_ALARM_DUTY 0.50f
+#define TEMP_ALARM_TONE_MS 80U
+
+#ifndef TEMP_ALARM_REQUEST_TIMEOUT_MS
+#define TEMP_ALARM_REQUEST_TIMEOUT_MS 250U
+#endif
+
 /* Private macro ------------------------------------------------------------ */
 #define ARRAY_LEN(arr) (sizeof(arr) / sizeof((arr)[0]))
 
@@ -97,6 +106,11 @@ static const MUSIC_t buzzer_playlist[] = {
 #endif
 
 static BUZZER_MusicPlayer_t music_player;
+static Buzzer_AlarmLevel_t temp_alarm_level = BUZZER_ALARM_NONE;
+static uint32_t temp_alarm_start_tick;
+static uint32_t temp_alarm_last_toggle_tick;
+static uint32_t temp_alarm_min_duration_ticks;
+static bool temp_alarm_tone_high;
 #if BLINK_USE_MUSIC_LOOP
 static size_t music_playlist_index;
 static bool music_user_paused;
@@ -117,7 +131,6 @@ static uint32_t breath_response_next_update_tick;
 /* USER STRUCT END */
 
 /* Private function --------------------------------------------------------- */
-#if BLINK_USE_MUSIC_LOOP || BLINK_USE_BREATH_RESPONSE
 static uint32_t Blink_MsToTicks(uint32_t ms) {
   uint32_t tick_freq = osKernelGetTickFreq();
   uint64_t ticks = ((uint64_t)ms * tick_freq + 999ULL) / 1000ULL;
@@ -133,7 +146,95 @@ static uint32_t Blink_MsToTicks(uint32_t ms) {
 static bool Blink_TickReached(uint32_t now_tick, uint32_t target_tick) {
   return (int32_t)(now_tick - target_tick) >= 0;
 }
+
+#if BLINK_USE_BREATH_RESPONSE
+static void Blink_BreathResponseStop(void);
 #endif
+
+#if BLINK_USE_MUSIC_LOOP
+static void Blink_ResetMusicSwitchGesture(void);
+#endif
+
+static bool Blink_TempAlarmRequestActive(uint32_t now_tick) {
+  const Buzzer_AlarmLevel_t request_level = g_buzzer_alarm_request.level;
+  if (request_level == BUZZER_ALARM_NONE) {
+    return false;
+  }
+
+  const uint32_t timeout_ticks = Blink_MsToTicks(TEMP_ALARM_REQUEST_TIMEOUT_MS);
+  const uint32_t request_tick = g_buzzer_alarm_request.request_tick;
+  return (uint32_t)(now_tick - request_tick) <= timeout_ticks;
+}
+
+static void Blink_TempAlarmStop(void) {
+  if (temp_alarm_level != BUZZER_ALARM_NONE) {
+    BUZZER_Stop(&buzzer);
+  }
+  temp_alarm_level = BUZZER_ALARM_NONE;
+  temp_alarm_start_tick = 0U;
+  temp_alarm_last_toggle_tick = 0U;
+  temp_alarm_min_duration_ticks = 0U;
+  temp_alarm_tone_high = false;
+}
+
+static void Blink_TempAlarmStart(Buzzer_AlarmLevel_t level,
+                                 uint32_t now_tick) {
+  temp_alarm_level = level;
+  temp_alarm_start_tick = now_tick;
+  temp_alarm_last_toggle_tick = now_tick;
+  temp_alarm_min_duration_ticks =
+      Blink_MsToTicks(g_buzzer_alarm_request.min_duration_ms);
+  temp_alarm_tone_high = true;
+  if (BUZZER_Set(&buzzer, TEMP_ALARM_TONE_HIGH_HZ, TEMP_ALARM_DUTY) ==
+      DEVICE_OK) {
+    BUZZER_Start(&buzzer);
+  }
+}
+
+static bool Blink_TempAlarmUpdate(uint32_t now_tick) {
+  const Buzzer_AlarmLevel_t request_level = g_buzzer_alarm_request.level;
+  const bool request_active = Blink_TempAlarmRequestActive(now_tick);
+  Buzzer_AlarmLevel_t target_level = BUZZER_ALARM_NONE;
+
+  if (request_active) {
+    target_level = request_level;
+  } else if (temp_alarm_level != BUZZER_ALARM_NONE &&
+             !Blink_TickReached(now_tick,
+                                temp_alarm_start_tick +
+                                    temp_alarm_min_duration_ticks)) {
+    target_level = temp_alarm_level;
+  }
+
+  if (target_level == BUZZER_ALARM_NONE) {
+    Blink_TempAlarmStop();
+    return false;
+  }
+
+  BUZZER_MusicPlayerSilence(&music_player, &buzzer);
+#if BLINK_USE_BREATH_RESPONSE
+  Blink_BreathResponseStop();
+#endif
+#if BLINK_USE_MUSIC_LOOP
+  Blink_ResetMusicSwitchGesture();
+#endif
+
+  if (temp_alarm_level != target_level) {
+    Blink_TempAlarmStart(target_level, now_tick);
+    return true;
+  }
+
+  const uint32_t tone_ticks = Blink_MsToTicks(TEMP_ALARM_TONE_MS);
+  if (Blink_TickReached(now_tick, temp_alarm_last_toggle_tick + tone_ticks)) {
+    temp_alarm_tone_high = !temp_alarm_tone_high;
+    temp_alarm_last_toggle_tick = now_tick;
+    const float freq = temp_alarm_tone_high ? TEMP_ALARM_TONE_HIGH_HZ
+                                            : TEMP_ALARM_TONE_LOW_HZ;
+    if (BUZZER_Set(&buzzer, freq, TEMP_ALARM_DUTY) == DEVICE_OK) {
+      BUZZER_Start(&buzzer);
+    }
+  }
+  return true;
+}
 
 #if BLINK_USE_MUSIC_LOOP
 static void Blink_StartPlaylistTrack(uint32_t now_tick, bool keep_pause_state) {
@@ -310,6 +411,7 @@ static void Blink_UpdateAudio(uint32_t now_tick) {
   (void)now_tick;
 
   if (g_buzzer_calib_active) {
+    Blink_TempAlarmStop();
     BUZZER_MusicPlayerSilence(&music_player, &buzzer);
 #if BLINK_USE_BREATH_RESPONSE
     Blink_BreathResponseStop();
@@ -317,6 +419,10 @@ static void Blink_UpdateAudio(uint32_t now_tick) {
 #if BLINK_USE_MUSIC_LOOP
     Blink_ResetMusicSwitchGesture();
 #endif
+    return;
+  }
+
+  if (Blink_TempAlarmUpdate(now_tick)) {
     return;
   }
 

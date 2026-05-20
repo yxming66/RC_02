@@ -46,6 +46,7 @@ typedef struct {
 
 typedef struct {
   MOTOR_RM_Param_t motor_param[ORE_STORE_AXIS_NUM];
+  MOTOR_TemperatureProtectionConfig_t motor_temperature_protection;
 
   struct {
     float external_ratio;
@@ -85,6 +86,8 @@ typedef struct {
   float raw_position_rad[ORE_STORE_AXIS_NUM];
   float position_rad[ORE_STORE_AXIS_NUM];
   float velocity_rad_s[ORE_STORE_AXIS_NUM];
+  bool temperature_warning[ORE_STORE_AXIS_NUM];
+  bool temperature_over_limit[ORE_STORE_AXIS_NUM];
   bool online[ORE_STORE_AXIS_NUM];
   bool homed[ORE_STORE_AXIS_NUM];
   bool all_homed;

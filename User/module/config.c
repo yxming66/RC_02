@@ -131,12 +131,17 @@ Config_RobotParam_t robot_config = {
         },
     },
     .ore_store_param = {
+        .motor_temperature_protection = {
+            .warning_c = 50.0f,
+            .limit_c = 80.0f,
+            .auto_relax_on_limit = true,
+        },
         .motor_param = {
-            [ORE_STORE_AXIS_PLATFORM] = {.can = BSP_CAN_1, .id = 0x205, .module = MOTOR_M3508, .reverse = false, .gear = true},
-            [ORE_STORE_AXIS_GATE_LEFT] = {.can = BSP_CAN_2, .id = 0x205, .module = MOTOR_M2006, .reverse = false, .gear = true},
-            [ORE_STORE_AXIS_GATE_RIGHT] = {.can = BSP_CAN_2, .id = 0x206, .module = MOTOR_M2006, .reverse = false, .gear = true},
-            [ORE_STORE_AXIS_TRACK_LEFT] = {.can = BSP_CAN_2, .id = 0x207, .module = MOTOR_M2006, .reverse = false, .gear = true},
-            [ORE_STORE_AXIS_TRACK_RIGHT] = {.can = BSP_CAN_2, .id = 0x208, .module = MOTOR_M2006, .reverse = false, .gear = true},
+            [ORE_STORE_AXIS_PLATFORM] =    {.can = BSP_CAN_1, .id = 0x205, .module = MOTOR_M3508, .reverse = false, .gear = true},
+            [ORE_STORE_AXIS_GATE_LEFT] =   {.can = BSP_CAN_3, .id = 0x205, .module = MOTOR_M2006, .reverse = false, .gear = true},
+            [ORE_STORE_AXIS_GATE_RIGHT] =  {.can = BSP_CAN_3, .id = 0x206, .module = MOTOR_M2006, .reverse = false, .gear = true},
+            [ORE_STORE_AXIS_TRACK_LEFT] =  {.can = BSP_CAN_3, .id = 0x207, .module = MOTOR_M2006, .reverse = false, .gear = true},
+            [ORE_STORE_AXIS_TRACK_RIGHT] = {.can = BSP_CAN_3, .id = 0x208, .module = MOTOR_M2006, .reverse = false, .gear = true},
         },
         .motor_install = {
             [ORE_STORE_AXIS_PLATFORM] = {.external_ratio = 1.0f, .reverse_output = false},
@@ -297,13 +302,13 @@ Config_RobotParam_t robot_config = {
             .pole_extend_move_speed = 0.50f,    /* 撑杆伸出阶段 vx，单位 m/s。 */
             .front_retract_move_speed = 0.50f,  /* 前杆动作阶段 vx，单位 m/s。 */
             .front_retract_timeout_ms = 5000u,  /* 前光电触发后，等待前杆收回到位超时，单位 ms。 */
-            .mid_move_speed = 1.5f,             /* 前杆收回到位后的中段平移 vx，单位 m/s。 */
-            .mid_move_ms = 250u,                  /* 中段平移持续时间，单位 ms。 */
-            .rear_retract_move_speed = 0.20f,   /* 等待后光电触发的低速 vx，单位 m/s。 */
+            .mid_move_speed = 3.0f,             /* 前杆收回到位后的中段平移 vx，单位 m/s。 */
+            .mid_move_ms = 350u,                  /* 中段平移持续时间，单位 ms。 */
+            .rear_retract_move_speed = 0.40f,   /* 等待后光电触发的低速 vx，单位 m/s。 */
             .rear_retract_timeout_ms = 5000u,   /* 后光电触发后，全收腿动作超时，单位 ms。 */
             .rear_retract_move_ms = 300u,       /* 后光电触发后，全收腿移动持续时间，单位 ms。 */
             .second_photo_retract_move_speed = 0.50f, /* 后一个光电触发收腿时向头向移动 vx，单位 m/s。 */
-            .final_move_speed = 1.8f,          /* 收尾离开台阶 vx，单位 m/s。 */
+            .final_move_speed = 2.5f,          /* 收尾离开台阶 vx，单位 m/s。 */
             .final_move_ms = 400u,               /* 收尾离开台阶持续时间，单位 ms。 */
             .pole_all_extend_speed = 50.0f,     /* 四杆全伸目标跟随速度，单位 rad/s。 */
             .pole_front_extend_speed = 20.0f,   /* 前杆伸出目标跟随速度，单位 rad/s。 */
@@ -358,10 +363,10 @@ Config_RobotParam_t robot_config = {
              */
             /* Active fields used by AutoCtrlTemplate_RunHeadDescend200Optimized. */
             .prealign_move_speed = 0.20f,       /* PREALIGN yaw 对正时叠加的前进 vx，单位 m/s。 */
-            .front_retract_move_speed = 0.15f,  /* step4 等待 PE13/photo1 下降沿的慢速 vx，单位 m/s。 */
+            .front_retract_move_speed = 0.3f,  /* step4 等待 PE13/photo1 下降沿的慢速 vx，单位 m/s。 */
             .mid_move_speed = 1.50f,            /* step0/step3 两段固定快跑 vx，单位 m/s。 */
             .mid_move_ms = 280u,                /* step0 第一次固定快跑持续时间，单位 ms。 */
-            .rear_retract_move_speed = 0.15f,   /* step1 等待 PA2/photo3 下降沿的慢速 vx，单位 m/s。 */
+            .rear_retract_move_speed = 0.3f,   /* step1 等待 PA2/photo3 下降沿的慢速 vx，单位 m/s。 */
             .rear_retract_move_ms = 280u,       /* step3 第二次固定快跑持续时间，单位 ms。 */
             .second_photo_retract_move_speed = 0.20f, /* step7 第二个下降沿后全收杆离开 vx，单位 m/s。 */
             .final_move_speed = 0.05f,          /* step7 离开 vx 的备用值；second_photo_retract_move_speed <= 0 时使用。 */

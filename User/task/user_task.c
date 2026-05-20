@@ -1,6 +1,7 @@
 #include "task/user_task.h"
 
 Task_Runtime_t task_runtime;
+Buzzer_AlarmRequest_t g_buzzer_alarm_request;
 
 const osThreadAttr_t attr_init = {
     .name = "Task_Init",

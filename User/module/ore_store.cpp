@@ -75,6 +75,19 @@ mr::motor::MotorControllerConfig BuildControllerConfig(
   return config;
 }
 
+mr::motor::MotorTemperatureProtectionConfig BuildTemperatureProtectionConfig(
+    const OreStore_Params_t *param) {
+  mr::motor::MotorTemperatureProtectionConfig config{};
+  if (param == nullptr) {
+    return config;
+  }
+  config.warning_c = param->motor_temperature_protection.warning_c;
+  config.limit_c = param->motor_temperature_protection.limit_c;
+  config.auto_relax_on_limit =
+      param->motor_temperature_protection.auto_relax_on_limit;
+  return config;
+}
+
 mr::motor::SoftLimitLearningConfig BuildSoftLimitConfig(
     const OreStore_SoftLimitConfig_t &config) {
   mr::motor::SoftLimitLearningConfig out{};
@@ -407,12 +420,14 @@ int8_t ConstructAxis(OreStore_t *store, uint8_t axis, float target_freq) {
   const mr::motor::MotorInstallSpec install = BuildInstall(store->param, axis);
   const mr::motor::MotorControllerConfig controller_config =
       BuildControllerConfig(store->param, axis, target_freq);
+  const mr::motor::MotorTemperatureProtectionConfig temperature_config =
+      BuildTemperatureProtectionConfig(store->param);
 
   if (IsPlatformAxis(axis)) {
     PlatformMotor *motor =
         mr::motor::MotorFactory::Create<mr::motor::MotorKind::RM,
                                         mr::motor::MotorModel::M3508>(
-            motor_config, install);
+            motor_config, install, temperature_config);
     if (motor == nullptr) {
       return ORE_STORE_ERR;
     }
@@ -426,7 +441,7 @@ int8_t ConstructAxis(OreStore_t *store, uint8_t axis, float target_freq) {
     SmallMotor *motor =
         mr::motor::MotorFactory::Create<mr::motor::MotorKind::RM,
                                         mr::motor::MotorModel::M2006>(
-            motor_config, install);
+        motor_config, install, temperature_config);
     if (motor == nullptr) {
       return ORE_STORE_ERR;
     }
@@ -505,6 +520,9 @@ int8_t OreStore_UpdateFeedback(OreStore_t *store) {
     store->feedback.raw_position_rad[axis] = raw_state.position_rad;
     store->feedback.position_rad[axis] = local_position;
     store->feedback.velocity_rad_s[axis] = raw_state.velocity_rad_s;
+    store->feedback.temperature_warning[axis] = raw_state.temperature_warning;
+    store->feedback.temperature_over_limit[axis] =
+      raw_state.temperature_over_limit;
     store->feedback.online[axis] = raw_state.online;
     store->feedback.homed[axis] = AxisHomed(store, axis);
     StoreFeedback(&store->feedback.motor[axis], raw_state, local_position);

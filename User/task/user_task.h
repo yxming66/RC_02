@@ -50,6 +50,17 @@ extern "C" {
 /* Exported defines --------------------------------------------------------- */
 /* Exported macro ----------------------------------------------------------- */
 /* Exported types ----------------------------------------------------------- */
+typedef enum {
+    BUZZER_ALARM_NONE = 0,
+    BUZZER_ALARM_TEMP_WARNING,
+    BUZZER_ALARM_TEMP_OVER_LIMIT,
+} Buzzer_AlarmLevel_t;
+
+typedef struct {
+    volatile Buzzer_AlarmLevel_t level;
+    volatile uint32_t request_tick;
+    volatile uint32_t min_duration_ms;
+} Buzzer_AlarmRequest_t;
 
 /* 任务运行时结构体 */
 typedef struct {
@@ -108,6 +119,12 @@ typedef struct {
         float battery; /* 电池电量百分比 */
         float vbat; /* 电池电压 */
         float cpu_temp; /* CPU温度 */
+        struct {
+            Buzzer_AlarmLevel_t level;
+            bool axis_temperature_warning[ORE_STORE_AXIS_NUM];
+            bool axis_temperature_over_limit[ORE_STORE_AXIS_NUM];
+            float max_temperature_c;
+        } ore_store_alarm;
     } status;
 
     /* USER CONFIG BEGIN */
@@ -166,6 +183,7 @@ extern bool auto_ctrl_local_yaw_zero_initialized;
 extern float auto_ctrl_local_yaw_zero_rad;
 extern BUZZER_t buzzer;
 extern bool g_buzzer_calib_active;
+extern Buzzer_AlarmRequest_t g_buzzer_alarm_request;
 
 /* 初始化任务句柄 */
 extern const osThreadAttr_t attr_init;
