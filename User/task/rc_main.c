@@ -170,17 +170,27 @@ static void Rc_InitOreStoreActiveTargets(void) {
   memset(&ore_store_cmd, 0, sizeof(ore_store_cmd));
   ore_store_cmd.mode = ORE_STORE_MODE_ACTIVE;
 
-  if (feedback != NULL && feedback->all_homed) {
+    if (feedback != NULL) {
+    if (feedback->homed[ORE_STORE_AXIS_PLATFORM]) {
     ore_store_cmd.platform_target_rad =
         feedback->position_rad[ORE_STORE_AXIS_PLATFORM];
+    }
+    if (feedback->homed[ORE_STORE_AXIS_GATE_LEFT]) {
     ore_store_cmd.gate_target_rad[0] =
         feedback->position_rad[ORE_STORE_AXIS_GATE_LEFT];
+    }
+    if (feedback->homed[ORE_STORE_AXIS_GATE_RIGHT]) {
     ore_store_cmd.gate_target_rad[1] =
         feedback->position_rad[ORE_STORE_AXIS_GATE_RIGHT];
+    }
+    if (feedback->homed[ORE_STORE_AXIS_TRACK_LEFT]) {
     ore_store_cmd.track_target_rad[0] =
         feedback->position_rad[ORE_STORE_AXIS_TRACK_LEFT];
+    }
+    if (feedback->homed[ORE_STORE_AXIS_TRACK_RIGHT]) {
     ore_store_cmd.track_target_rad[1] =
         feedback->position_rad[ORE_STORE_AXIS_TRACK_RIGHT];
+    }
   }
 
   ore_store_cmd.platform_target_rad = Rc_ClampOreStoreTarget(

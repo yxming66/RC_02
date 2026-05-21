@@ -209,32 +209,6 @@ float ControllerFilteredOutputTorque(const OreStore_t *store, uint8_t axis) {
                               : SmallControllerPtr(store, axis)->GetLastOutputTorque();
 }
 
-float AxisNormalizedOutputLimit(const OreStore_Params_t *param, uint8_t axis) {
-  return scalar::positive_or(param->controller.normalized_output_limit[axis], 0.2f);
-}
-
-float AxisNormalizedToTorqueNm(const OreStore_Params_t *param, uint8_t axis) {
-  return scalar::positive_or(param->controller.normalized_to_torque_nm[axis],
-                             param->controller.velocity_to_torque_limit[axis]);
-}
-
-int8_t ControllerSetNormalizedOutput(OreStore_t *store, uint8_t axis,
-                                     float output) {
-  if (store == nullptr || store->param == nullptr || !AxisValid(axis)) {
-    return ORE_STORE_ERR_NULL;
-  }
-
-  const float clipped = scalar::clamp_scalar(
-      output, -AxisNormalizedOutputLimit(store->param, axis),
-      AxisNormalizedOutputLimit(store->param, axis));
-  store->debug.normalized_output[axis] = clipped;
-  return IsPlatformAxis(axis)
-             ? PlatformControllerPtr(store)->SetTorque(
-                   clipped * AxisNormalizedToTorqueNm(store->param, axis))
-             : SmallControllerPtr(store, axis)->SetTorque(
-                   clipped * AxisNormalizedToTorqueNm(store->param, axis));
-}
-
 mr::motor::MotorState ControllerState(const OreStore_t *store, uint8_t axis) {
   return IsPlatformAxis(axis) ? PlatformControllerPtr(store)->GetState()
                               : SmallControllerPtr(store, axis)->GetState();
@@ -414,6 +388,17 @@ bool AllHomed(const OreStore_t *store) {
   return true;
 }
 
+void SyncAxisTargetToFeedback(OreStore_t *store, uint8_t axis) {
+  if (store == nullptr || !AxisValid(axis) || !AxisHomed(store, axis)) {
+    return;
+  }
+
+  const float position = store->feedback.position_rad[axis];
+  store->target_position_rad[axis] = position;
+  store->tracked_position_rad[axis] = position;
+  store->command_position_rad[axis] = position;
+}
+
 int8_t FinishAxisHome(OreStore_t *store, uint8_t axis, float raw_lower_rad) {
   mr::motor::SoftLimitLearning *limit = SoftLimitPtr(store, axis);
   if (limit == nullptr) {
@@ -526,16 +511,12 @@ int8_t ActiveAxis(OreStore_t *store, const OreStore_CMD_t *cmd, uint8_t axis) {
   store->command_position_rad[axis] = limit->ClampPosition(store->tracked_position_rad[axis]);
   const float raw_target = store->zero_offset_rad[axis] + store->command_position_rad[axis];
   if (IsPlatformAxis(axis)) {
-    const float velocity_target =
-      PlatformControllerPtr(store)->CalculatePositionOutput(
-        raw_target, store->feedback.raw_position_rad[axis], store->dt);
-    const float limited_velocity_target = scalar::abs_clip_scalar(
-        velocity_target, AxisMoveVelocity(store->param, axis));
-    const float output =
-      PlatformControllerPtr(store)->CalculateVelocityOutput(
-        limited_velocity_target, store->feedback.velocity_rad_s[axis],
-        store->dt);
-    return ControllerSetNormalizedOutput(store, axis, output);
+    store->debug.normalized_output[axis] = 0.0f;
+    const float torque_nm =
+        PlatformControllerPtr(store)->CalculatePositionOutput(
+            raw_target,
+            PlatformControllerPtr(store)->GetLastFeedbackPosition(), store->dt);
+    return PlatformControllerPtr(store)->SetTorque(torque_nm);
   }
   return ControllerSetPosition(store, axis, raw_target,
                                AxisMoveVelocity(store->param, axis));
@@ -680,7 +661,15 @@ int8_t OreStore_Control(OreStore_t *store, const OreStore_CMD_t *cmd,
                                   kDefaultDtS, kMinDtS, kMaxDtS);
   store->last_wakeup = now;
   store->debug.dt_s = store->dt;
+  const OreStore_Mode_t previous_mode = store->mode;
   store->mode = cmd->mode;
+
+  if (previous_mode != ORE_STORE_MODE_ACTIVE &&
+      store->mode == ORE_STORE_MODE_ACTIVE) {
+    for (uint8_t axis = 0; axis < ORE_STORE_AXIS_NUM; ++axis) {
+      SyncAxisTargetToFeedback(store, axis);
+    }
+  }
 
   if (cmd->force_rehome && !store->rehome_latched) {
     ResetAllHoming(store);
