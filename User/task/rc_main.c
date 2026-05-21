@@ -149,21 +149,6 @@ static void Rc_SetOreStoreRelax(void) {
   ore_store_active_initialized = false;
 }
 
-static void Rc_AssumeOreStorePlatformHomeAtPowerOn(void) {
-  if (!dr16.header.online || dr16.data.sw_l != DR16_SW_MID ||
-      dr16.data.sw_r != DR16_SW_UP || last_sw_r == DR16_SW_UP) {
-    return;
-  }
-
-  g_rc_ore_store_assume_home_ret = Task_OreStoreAssumeAxisHomedAtCurrent(
-      ORE_STORE_AXIS_PLATFORM, 0.0f);
-  g_rc_ore_store_debug.assume_home_event = true;
-  g_rc_ore_store_debug.assume_home_ret = g_rc_ore_store_assume_home_ret;
-  if (g_rc_ore_store_assume_home_ret == ORE_STORE_OK) {
-    ++g_rc_ore_store_assume_home_count;
-  }
-}
-
 static void Rc_InitOreStoreActiveTargets(void) {
   const OreStore_Feedback_t* feedback = Task_OreStoreGetFeedback();
 
@@ -568,7 +553,6 @@ void Task_rc_main(void *argument) {
         }
         Rc_SetChassisRelax();
         Rc_SetPoleAuto(0.0f, 0.0f);
-        Rc_AssumeOreStorePlatformHomeAtPowerOn();
         Rc_SetOreStoreRelax();
       } else if (dr16.data.sw_r == DR16_SW_DOWN) {
         if (auto_ctrl_inited && AutoCtrl_IsBusy(&auto_ctrl)) {

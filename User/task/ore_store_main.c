@@ -45,25 +45,6 @@ typedef struct {
 
 volatile OreStoreTask_DebugView_t g_ore_store_debug_view = {0};
 
-typedef struct {
-  volatile bool enable;
-  volatile OreStore_Mode_t mode;
-  volatile bool force_rehome;
-  volatile float platform_target_rad;
-  volatile float gate_target_rad[ORE_STORE_GATE_NUM];
-  volatile float track_target_rad[ORE_STORE_TRACK_NUM];
-  volatile bool direct_output_enable;
-  volatile uint8_t direct_output_axis;
-  volatile float direct_output;
-  volatile int8_t direct_set_ret;
-  volatile int8_t direct_ctrl_ret;
-  volatile bool assume_homed_trigger;
-  volatile uint8_t assume_homed_axis;
-  volatile float assume_homed_position_rad;
-  volatile int8_t assume_homed_ret;
-  volatile uint32_t applied_count;
-} OreStore_DebugCommand_t;
-
 volatile OreStore_DebugCommand_t g_ore_store_debug_command = {
     .enable = false,
     .mode = ORE_STORE_MODE_RELAX,
@@ -81,7 +62,7 @@ static void OreStoreTask_SetDefaultCommand(OreStore_CMD_t *cmd) {
   }
 
   memset(cmd, 0, sizeof(*cmd));
-  cmd->mode = ORE_STORE_MODE_HOME;
+  cmd->mode = ORE_STORE_MODE_RELAX;
 }
 
 static bool OreStoreTask_ModeIsValid(OreStore_Mode_t mode) {

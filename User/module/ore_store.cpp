@@ -267,6 +267,58 @@ float AxisOnlineWaitTimeout(const OreStore_Params_t *param, uint8_t axis) {
                     kDefaultOnlineWaitTimeoutS);
 }
 
+bool AxisFixedPowerOnEnabled(const OreStore_t *store, uint8_t axis) {
+  return store != nullptr && store->param != nullptr && AxisValid(axis) &&
+         store->param->power_on.fixed_position_enable[axis];
+}
+
+float AxisFixedPowerOnPosition(const OreStore_t *store, uint8_t axis) {
+  if (!AxisFixedPowerOnEnabled(store, axis)) {
+    return 0.0f;
+  }
+  const float position = store->param->power_on.fixed_position_rad[axis];
+  return scalar::is_finite_scalar(position) ? position : 0.0f;
+}
+
+void SyncAxisTargetFromPosition(OreStore_t *store, uint8_t axis,
+                                float position) {
+  if (store == nullptr || !AxisValid(axis)) {
+    return;
+  }
+  store->target_position_rad[axis] = position;
+  store->tracked_position_rad[axis] = position;
+  store->command_position_rad[axis] = position;
+}
+
+bool AxisCanUseFixedAssume(const OreStore_t *store, uint8_t axis) {
+  return AxisFixedPowerOnEnabled(store, axis) &&
+         store->feedback.online[axis] &&
+         store->debug.controller_update_ret[axis] == DEVICE_OK &&
+         !store->axis_failed[axis];
+}
+
+bool AxisCanUseFixedHome(const OreStore_t *store, uint8_t axis) {
+  return AxisFixedPowerOnEnabled(store, axis) &&
+         store->param->power_on.home_mode_uses_fixed_position &&
+         store->feedback.online[axis] &&
+         store->debug.controller_update_ret[axis] == DEVICE_OK &&
+         !store->axis_failed[axis];
+}
+
+int8_t ApplyFixedPowerOnAssume(OreStore_t *store, uint8_t axis) {
+  if (!AxisCanUseFixedAssume(store, axis)) {
+    return ORE_STORE_ERR;
+  }
+
+  const float fixed_position = AxisFixedPowerOnPosition(store, axis);
+  const int8_t ret = OreStore_AssumeAxisHomedAtCurrent(store, axis, fixed_position);
+  store->power_on_assume_ret[axis] = ret;
+  if (ret == ORE_STORE_OK) {
+    SyncAxisTargetFromPosition(store, axis, fixed_position);
+  }
+  return ret;
+}
+
 bool AxisFeedbackReady(const OreStore_t *store, uint8_t axis) {
   return store != nullptr && AxisValid(axis) && store->feedback.online[axis] &&
          store->debug.controller_update_ret[axis] == DEVICE_OK;
@@ -337,6 +389,10 @@ void RefreshDebugAxis(OreStore_t *store, uint8_t axis) {
     store->debug.rm_last_set_torque_nm[axis] = 0.0f;
     store->debug.rm_pending_current_a[axis] = 0.0f;
   }
+  store->debug.power_on_fixed_position_rad[axis] =
+      AxisFixedPowerOnPosition(store, axis);
+  store->debug.power_on_assume_ret[axis] = store->power_on_assume_ret[axis];
+  store->debug.power_on_assume_count[axis] = store->power_on_assume_count[axis];
   const MOTOR_RM_Param_t *motor_param = &store->param->motor_param[axis];
   const int8_t logical_index = (motor_param->id >= 0x201u &&
                                motor_param->id <= 0x208u)
@@ -368,6 +424,7 @@ void ResetAxisHoming(OreStore_t *store, uint8_t axis) {
   store->zero_offset_rad[axis] = 0.0f;
   store->learned_lower_raw_rad[axis] = 0.0f;
   store->homing_online_wait_s[axis] = 0.0f;
+  store->power_on_assume_ret[axis] = ORE_STORE_ERR_NULL;
   store->target_position_rad[axis] = 0.0f;
   store->tracked_position_rad[axis] = 0.0f;
   store->command_position_rad[axis] = 0.0f;
@@ -446,6 +503,10 @@ int8_t HomeAxis(OreStore_t *store, uint8_t axis) {
     return ORE_STORE_ERR_NULL;
   }
 
+  if (AxisCanUseFixedHome(store, axis)) {
+    return ApplyFixedPowerOnAssume(store, axis);
+  }
+
   if (store->axis_failed[axis] || limit->IsFailed()) {
     store->axis_failed[axis] = true;
     (void)ControllerRelax(store, axis);
@@ -511,7 +572,19 @@ int8_t ActiveAxis(OreStore_t *store, const OreStore_CMD_t *cmd, uint8_t axis) {
   }
 
   if (!AxisHomed(store, axis)) {
-    return HomeAxis(store, axis);
+    if (store->param->power_on.auto_assume_on_active &&
+      AxisCanUseFixedAssume(store, axis)) {
+      const int8_t assume_ret = ApplyFixedPowerOnAssume(store, axis);
+      if (assume_ret != ORE_STORE_OK) {
+        (void)ControllerRelax(store, axis);
+        SyncAxisTargetFromPosition(store, axis, store->feedback.position_rad[axis]);
+        return assume_ret;
+      }
+    } else {
+      (void)ControllerRelax(store, axis);
+      SyncAxisTargetFromPosition(store, axis, store->feedback.position_rad[axis]);
+      return ORE_STORE_ERR;
+    }
   }
 
   const float requested_target = CommandTarget(cmd, axis);
@@ -597,6 +670,8 @@ int8_t ConstructAxis(OreStore_t *store, uint8_t axis, float target_freq) {
 
 extern "C" {
 
+extern volatile OreStore_DebugCommand_t g_ore_store_debug_command;
+
 int8_t OreStore_Init(OreStore_t *store, const OreStore_Params_t *param,
                      float target_freq) {
   if (store == nullptr || param == nullptr) {
@@ -608,6 +683,7 @@ int8_t OreStore_Init(OreStore_t *store, const OreStore_Params_t *param,
 
   store->param = param;
   store->mode = ORE_STORE_MODE_RELAX;
+  store->control_mode = ORE_STORE_CONTROL_MIT_STYLE;
 
   for (uint8_t axis = 0; axis < ORE_STORE_AXIS_NUM; ++axis) {
     const int8_t ret = ConstructAxis(store, axis, target_freq);
@@ -617,7 +693,6 @@ int8_t OreStore_Init(OreStore_t *store, const OreStore_Params_t *param,
   }
 
   ResetAllHoming(store);
-  OreStore_SetControlMode(store, ORE_STORE_CONTROL_MIT_STYLE);
   return ORE_STORE_OK;
 }
 
@@ -688,6 +763,11 @@ int8_t OreStore_Control(OreStore_t *store, const OreStore_CMD_t *cmd,
   if (previous_mode != ORE_STORE_MODE_ACTIVE &&
       store->mode == ORE_STORE_MODE_ACTIVE) {
     for (uint8_t axis = 0; axis < ORE_STORE_AXIS_NUM; ++axis) {
+        if (!AxisHomed(store, axis) &&
+          store->param->power_on.auto_assume_on_active &&
+          AxisCanUseFixedAssume(store, axis)) {
+        (void)ApplyFixedPowerOnAssume(store, axis);
+      }
       SyncAxisTargetToFeedback(store, axis);
     }
   }
@@ -799,6 +879,8 @@ int8_t OreStore_AssumeAxisHomedAtCurrent(OreStore_t *store, uint8_t axis,
   store->homing_started[axis] = false;
   store->axis_failed[axis] = false;
   store->homing_online_wait_s[axis] = 0.0f;
+  store->power_on_assume_ret[axis] = ORE_STORE_OK;
+  ++store->power_on_assume_count[axis];
   store->target_position_rad[axis] = position_rad;
   store->tracked_position_rad[axis] = position_rad;
   store->command_position_rad[axis] = position_rad;
@@ -858,14 +940,6 @@ OreStore_ControlMode_t OreStore_GetControlMode(const OreStore_t *store) {
 void OreStore_SetDebugCommand(bool enable, OreStore_Mode_t mode,
                               float platform_target, const float gate_target[2],
                               const float track_target[2]) {
-  extern volatile struct {
-    volatile bool enable;
-    volatile OreStore_Mode_t mode;
-    volatile bool force_rehome;
-    volatile float platform_target_rad;
-    volatile float gate_target_rad[2];
-    volatile float track_target_rad[2];
-  } g_ore_store_debug_command;
   g_ore_store_debug_command.enable = enable;
   g_ore_store_debug_command.mode = mode;
   g_ore_store_debug_command.platform_target_rad = platform_target;
@@ -882,9 +956,6 @@ void OreStore_SetDebugCommand(bool enable, OreStore_Mode_t mode,
 }
 
 void OreStore_DisableDebugCommand(void) {
-  extern volatile struct {
-    volatile bool enable;
-  } g_ore_store_debug_command;
   g_ore_store_debug_command.enable = false;
 }
 

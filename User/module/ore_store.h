@@ -83,6 +83,13 @@ typedef struct {
     float move_velocity_rad_s[ORE_STORE_AXIS_NUM];
     float arrive_threshold_rad[ORE_STORE_AXIS_NUM];
   } limit;
+
+  struct {
+    bool fixed_position_enable[ORE_STORE_AXIS_NUM];
+    float fixed_position_rad[ORE_STORE_AXIS_NUM];
+    bool auto_assume_on_active;
+    bool home_mode_uses_fixed_position;
+  } power_on;
 } OreStore_Params_t;
 
 typedef struct {
@@ -130,6 +137,9 @@ typedef struct {
   float rm_pending_current_a[ORE_STORE_AXIS_NUM];
   int16_t rm_output_raw[ORE_STORE_AXIS_NUM];
   uint16_t rm_tx_frame_id[ORE_STORE_AXIS_NUM];
+  float power_on_fixed_position_rad[ORE_STORE_AXIS_NUM];
+  int8_t power_on_assume_ret[ORE_STORE_AXIS_NUM];
+  uint32_t power_on_assume_count[ORE_STORE_AXIS_NUM];
   float dt_s;
 } OreStore_Debug_t;
 
@@ -155,6 +165,8 @@ typedef struct {
   float target_position_rad[ORE_STORE_AXIS_NUM];
   float tracked_position_rad[ORE_STORE_AXIS_NUM];
   float command_position_rad[ORE_STORE_AXIS_NUM];
+  int8_t power_on_assume_ret[ORE_STORE_AXIS_NUM];
+  uint32_t power_on_assume_count[ORE_STORE_AXIS_NUM];
 
   // MIT控制模式状态
   float mit_target_rad[ORE_STORE_AXIS_NUM];
@@ -183,6 +195,25 @@ const OreStore_Debug_t *OreStore_GetDebug(const OreStore_t *store);
 // MIT风格控制API
 void OreStore_SetControlMode(OreStore_t *store, OreStore_ControlMode_t mode);
 OreStore_ControlMode_t OreStore_GetControlMode(const OreStore_t *store);
+
+typedef struct OreStore_DebugCommand_t {
+  volatile bool enable;
+  volatile OreStore_Mode_t mode;
+  volatile bool force_rehome;
+  volatile float platform_target_rad;
+  volatile float gate_target_rad[ORE_STORE_GATE_NUM];
+  volatile float track_target_rad[ORE_STORE_TRACK_NUM];
+  volatile bool direct_output_enable;
+  volatile uint8_t direct_output_axis;
+  volatile float direct_output;
+  volatile int8_t direct_set_ret;
+  volatile int8_t direct_ctrl_ret;
+  volatile bool assume_homed_trigger;
+  volatile uint8_t assume_homed_axis;
+  volatile float assume_homed_position_rad;
+  volatile int8_t assume_homed_ret;
+  volatile uint32_t applied_count;
+} OreStore_DebugCommand_t;
 
 // 调试命令API（用于阶跃测试）
 void OreStore_SetDebugCommand(bool enable, OreStore_Mode_t mode,
