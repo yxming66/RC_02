@@ -232,6 +232,17 @@ int8_t MotorControllerT<MotorType>::Update() {
     case ControlMode::NativeMit:
         return motor_.SetMIT(target_position_, target_velocity_, target_mit_kp_,
                              target_mit_kd_, target_mit_torque_ff_);
+
+    case ControlMode::EmulatedMit: {
+        // MIT 控制律: torque = Kp * (target_pos - current_pos) - Kd * current_velocity + torque_ff
+        float pos_error = target_position_ - state.position_rad;
+        float torque_cmd = target_mit_kp_ * pos_error
+                         - target_mit_kd_ * state.velocity_rad_s
+                         + target_mit_torque_ff_;
+        torque_cmd = ApplyRequiredAbsLimit(
+            torque_cmd, ResolveTorqueLimit(velocity_torque_limit_));
+        return motor_.SetTorque(FilterOutputTorque(torque_cmd, dt));
+    }
     }
 
     return DEVICE_ERR;
@@ -340,14 +351,22 @@ template <typename MotorType>
 int8_t MotorControllerT<MotorType>::SetMIT(float position, float velocity,
                                            float kp, float kd,
                                            float torque_ff) {
-    if constexpr (!MotorType::Traits::kSupportsMit) {
+    if constexpr (MotorType::Traits::kSupportsMit) {
+        // 原生支持 MIT 控制的电机 (DM/LZ 系列)
+        if (mode_ != ControlMode::NativeMit) {
+            ResetControllers();
+        }
+        mode_ = ControlMode::NativeMit;
+    } else if constexpr (MotorType::Traits::kSupportsTorque) {
+        // 不支持原生 MIT，但支持力矩控制，使用模拟 MIT
+        if (mode_ != ControlMode::EmulatedMit) {
+            ResetControllers();
+        }
+        mode_ = ControlMode::EmulatedMit;
+    } else {
         return DEVICE_ERR_UNSUPPORTED;
     }
 
-    if (mode_ != ControlMode::NativeMit) {
-        ResetControllers();
-    }
-    mode_ = ControlMode::NativeMit;
     target_position_ = position;
     target_velocity_ = velocity;
     target_mit_kp_ = kp;
@@ -508,7 +527,8 @@ float MotorControllerT<MotorType>::ResolveTorqueLimit(float request_limit) const
     }
 
     if (mode_ == ControlMode::EmulatedVelocity ||
-        mode_ == ControlMode::EmulatedPosition) {
+        mode_ == ControlMode::EmulatedPosition ||
+        mode_ == ControlMode::EmulatedMit) {
         const float ratio = ResolvePositiveRatio(MotorType::gear_ratio());
         const float output_ratio =
             ratio * ResolvePositiveRatio(motor_.GetInstallConfig().external_ratio);

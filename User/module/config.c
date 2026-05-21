@@ -152,7 +152,7 @@ Config_RobotParam_t robot_config = {
         },
         .pid = {
             .position_pid = {
-                [ORE_STORE_AXIS_PLATFORM] = {.k = 1.0f, .p = 2.0f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 1.2f, .d_cutoff_freq = 0.0f, .range = 0.0f},
+                [ORE_STORE_AXIS_PLATFORM] = {.k = 1.0f, .p = 0.35f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 0.35f, .d_cutoff_freq = 0.0f, .range = 0.0f},
                 [ORE_STORE_AXIS_GATE_LEFT] = {.k = 1.0f, .p = 10.0f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 2.0f, .d_cutoff_freq = 0.0f, .range = 0.0f},
                 [ORE_STORE_AXIS_GATE_RIGHT] = {.k = 1.0f, .p = 10.0f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 2.0f, .d_cutoff_freq = 0.0f, .range = 0.0f},
                 [ORE_STORE_AXIS_TRACK_LEFT] = {.k = 1.0f, .p = 8.0f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 2.5f, .d_cutoff_freq = 0.0f, .range = 0.0f},
@@ -165,6 +165,14 @@ Config_RobotParam_t robot_config = {
                 [ORE_STORE_AXIS_TRACK_LEFT] = {.k = 1.0f, .p = 0.08f, .i = 0.01f, .d = 0.0f, .i_limit = 0.5f, .out_limit = 0.8f, .d_cutoff_freq = 0.0f, .range = 0.0f},
                 [ORE_STORE_AXIS_TRACK_RIGHT] = {.k = 1.0f, .p = 0.08f, .i = 0.01f, .d = 0.0f, .i_limit = 0.5f, .out_limit = 0.8f, .d_cutoff_freq = 0.0f, .range = 0.0f},
             },
+            // MIT风格控制参数 (Kp/Kd)，用于 MIT_STYLE 模式
+            // MIT控制律: torque = Kp * (target_pos - current_pos) - Kd * velocity + torque_ff
+            // Kp 单位: N·m/rad (每弧度位置误差产生 N·m 力矩)
+            // Kd 单位: N·m·s/rad (每 rad/s 速度产生 N·m 阻尼)
+            // PLATFORM 惯量大(减速器)，需要较小 Kp + 较大 Kd 阻尼；GATE/TRACK 惯量小
+            // 震荡时优先增大 Kd 阻尼，Kp 适中即可
+            .mit_kp = {1.0f, 1.5f, 1.5f, 1.5f, 1.5f},
+            .mit_kd = {4.0f, 0.8f, 0.8f, 0.8f, 0.8f},
         },
         .controller = { 
             .sample_freq = 500.0f,

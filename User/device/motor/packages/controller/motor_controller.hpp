@@ -63,6 +63,7 @@ private:
         EmulatedPosition,
         EmulatedPositionTorque,
         NativeMit,
+        EmulatedMit,
     };
 
     int8_t ResetControllers();

@@ -164,6 +164,18 @@ int8_t ControllerSetPosition(OreStore_t *store, uint8_t axis,
                                                             max_velocity_rad_s);
 }
 
+int8_t ControllerSetMIT(OreStore_t *store, uint8_t axis,
+                       float target_position_rad, float target_velocity_rad_s,
+                       float kp, float kd, float torque_ff) {
+  return IsPlatformAxis(axis)
+             ? PlatformControllerPtr(store)->SetMIT(target_position_rad,
+                                                    target_velocity_rad_s,
+                                                    kp, kd, torque_ff)
+             : SmallControllerPtr(store, axis)->SetMIT(target_position_rad,
+                                                        target_velocity_rad_s,
+                                                        kp, kd, torque_ff);
+}
+
 bool ControllerHasPendingCommand(const OreStore_t *store, uint8_t axis) {
   return IsPlatformAxis(axis)
              ? PlatformControllerPtr(store)->HasPendingCommand()
@@ -510,13 +522,21 @@ int8_t ActiveAxis(OreStore_t *store, const OreStore_CMD_t *cmd, uint8_t axis) {
       AxisTrackStep(store->param, axis, store->dt));
   store->command_position_rad[axis] = limit->ClampPosition(store->tracked_position_rad[axis]);
   const float raw_target = store->zero_offset_rad[axis] + store->command_position_rad[axis];
+
+  if (store->control_mode == ORE_STORE_CONTROL_MIT_STYLE) {
+    // MIT风格控制: 直接设置位置/速度目标，由controller计算力矩
+    const float kp = store->param->pid.mit_kp[axis];
+    const float kd = store->param->pid.mit_kd[axis];
+    const float target_velocity = AxisMoveVelocity(store->param, axis);
+    return ControllerSetMIT(store, axis, raw_target, target_velocity, kp, kd, 0.0f);
+  }
+
+  // 默认双环PID控制
   if (IsPlatformAxis(axis)) {
-    store->debug.normalized_output[axis] = 0.0f;
-    const float torque_nm =
-        PlatformControllerPtr(store)->CalculatePositionOutput(
-            raw_target,
-            PlatformControllerPtr(store)->GetLastFeedbackPosition(), store->dt);
-    return PlatformControllerPtr(store)->SetTorque(torque_nm);
+    // Use proper cascade: SetPosition sets the target and velocity limit,
+    // Update() runs position PID + velocity PID in series.
+    return PlatformControllerPtr(store)->SetPosition(
+        raw_target, AxisMoveVelocity(store->param, axis));
   }
   return ControllerSetPosition(store, axis, raw_target,
                                AxisMoveVelocity(store->param, axis));
@@ -597,6 +617,7 @@ int8_t OreStore_Init(OreStore_t *store, const OreStore_Params_t *param,
   }
 
   ResetAllHoming(store);
+  OreStore_SetControlMode(store, ORE_STORE_CONTROL_MIT_STYLE);
   return ORE_STORE_OK;
 }
 
@@ -822,6 +843,49 @@ bool OreStore_IsAllAtTarget(const OreStore_t *store, float threshold_rad) {
 
 const OreStore_Debug_t *OreStore_GetDebug(const OreStore_t *store) {
   return (store != nullptr) ? &store->debug : nullptr;
+}
+
+void OreStore_SetControlMode(OreStore_t *store, OreStore_ControlMode_t mode) {
+  if (store != nullptr) {
+    store->control_mode = mode;
+  }
+}
+
+OreStore_ControlMode_t OreStore_GetControlMode(const OreStore_t *store) {
+  return (store != nullptr) ? store->control_mode : ORE_STORE_CONTROL_PID_DUAL;
+}
+
+void OreStore_SetDebugCommand(bool enable, OreStore_Mode_t mode,
+                              float platform_target, const float gate_target[2],
+                              const float track_target[2]) {
+  extern volatile struct {
+    volatile bool enable;
+    volatile OreStore_Mode_t mode;
+    volatile bool force_rehome;
+    volatile float platform_target_rad;
+    volatile float gate_target_rad[2];
+    volatile float track_target_rad[2];
+  } g_ore_store_debug_command;
+  g_ore_store_debug_command.enable = enable;
+  g_ore_store_debug_command.mode = mode;
+  g_ore_store_debug_command.platform_target_rad = platform_target;
+  if (gate_target != nullptr) {
+    for (int i = 0; i < 2; ++i) {
+      g_ore_store_debug_command.gate_target_rad[i] = gate_target[i];
+    }
+  }
+  if (track_target != nullptr) {
+    for (int i = 0; i < 2; ++i) {
+      g_ore_store_debug_command.track_target_rad[i] = track_target[i];
+    }
+  }
+}
+
+void OreStore_DisableDebugCommand(void) {
+  extern volatile struct {
+    volatile bool enable;
+  } g_ore_store_debug_command;
+  g_ore_store_debug_command.enable = false;
 }
 
 }  // extern "C"

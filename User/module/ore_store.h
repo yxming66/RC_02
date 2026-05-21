@@ -33,6 +33,11 @@ typedef enum {
   ORE_STORE_MODE_ACTIVE,
 } OreStore_Mode_t;
 
+typedef enum {
+  ORE_STORE_CONTROL_PID_DUAL = 0,  // 双环: 位置PID → 速度PID → 力矩
+  ORE_STORE_CONTROL_MIT_STYLE,      // MIT风格: Kp*error - Kd*velocity
+} OreStore_ControlMode_t;
+
 typedef struct {
   float stall_velocity_threshold_rad_s;
   float stall_position_window_rad;
@@ -56,6 +61,9 @@ typedef struct {
   struct {
     KPID_Params_t position_pid[ORE_STORE_AXIS_NUM];
     KPID_Params_t velocity_pid[ORE_STORE_AXIS_NUM];
+    // MIT风格控制参数 (Kp/Kd)
+    float mit_kp[ORE_STORE_AXIS_NUM];
+    float mit_kd[ORE_STORE_AXIS_NUM];
   } pid;
 
   struct {
@@ -131,6 +139,7 @@ typedef struct {
 
   const OreStore_Params_t *param;
   OreStore_Mode_t mode;
+  OreStore_ControlMode_t control_mode;
   bool rehome_latched;
 
   void *motor[ORE_STORE_AXIS_NUM];
@@ -146,6 +155,9 @@ typedef struct {
   float target_position_rad[ORE_STORE_AXIS_NUM];
   float tracked_position_rad[ORE_STORE_AXIS_NUM];
   float command_position_rad[ORE_STORE_AXIS_NUM];
+
+  // MIT控制模式状态
+  float mit_target_rad[ORE_STORE_AXIS_NUM];
 
   OreStore_Feedback_t feedback;
   OreStore_Debug_t debug;
@@ -167,6 +179,16 @@ bool OreStore_IsAxisAtTarget(const OreStore_t *store, uint8_t axis,
                              float threshold_rad);
 bool OreStore_IsAllAtTarget(const OreStore_t *store, float threshold_rad);
 const OreStore_Debug_t *OreStore_GetDebug(const OreStore_t *store);
+
+// MIT风格控制API
+void OreStore_SetControlMode(OreStore_t *store, OreStore_ControlMode_t mode);
+OreStore_ControlMode_t OreStore_GetControlMode(const OreStore_t *store);
+
+// 调试命令API（用于阶跃测试）
+void OreStore_SetDebugCommand(bool enable, OreStore_Mode_t mode,
+                              float platform_target, const float gate_target[2],
+                              const float track_target[2]);
+void OreStore_DisableDebugCommand(void);
 
 #ifdef __cplusplus
 }
