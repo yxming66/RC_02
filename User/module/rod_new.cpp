@@ -80,7 +80,7 @@ int8_t RodNew_Control(RodNew_t *r, RodNew_Mode_t mode, RodNew_Pose_t pose,
   }
 
   r->now_tick = now;
-  r->dt = (float)(now - r->last_wakeup) / 1000.0f;
+  r->dt = (r->last_wakeup == 0U) ? 0.001f : (float)(now - r->last_wakeup) / 1000.0f;
   r->last_wakeup = now;
   r->dt = mr::component::math::sanitize_dt(r->dt, 0.001f, 0.0005f, 0.050f);
 
@@ -225,19 +225,28 @@ float RodNew_AngleToPulseUs(float angle_rad,
     return ROD_NEW_SERVO_PULSE_NEUTRAL_US;
   }
 
-  /* 映射角度到脉宽 */
-  float clamped = Clamp(angle_rad, param->angle_min_rad, param->angle_max_rad);
+  float clamped = Clamp(-angle_rad, param->angle_min_rad, param->angle_max_rad);
 
-  /* 线性映射：angle_min -> 500us, angle_max -> 2500us */
-  float range = param->angle_max_rad - param->angle_min_rad;
-  if (fabsf(range) < 1e-6f) {
-    return ROD_NEW_SERVO_PULSE_NEUTRAL_US;
+  uint32_t zero_pulse_us = param->zero_pulse_us;
+  if (zero_pulse_us < ROD_NEW_SERVO_PULSE_MIN_US ||
+      zero_pulse_us > ROD_NEW_SERVO_PULSE_MAX_US) {
+    zero_pulse_us = ROD_NEW_SERVO_PULSE_NEUTRAL_US;
   }
 
-  float t = (clamped - param->angle_min_rad) / range;
-  float pulse_us = (float)ROD_NEW_SERVO_PULSE_MIN_US +
-                   t * ((float)ROD_NEW_SERVO_PULSE_MAX_US -
-                        (float)ROD_NEW_SERVO_PULSE_MIN_US);
+  float pulse_us = (float)zero_pulse_us;
+  if (clamped >= 0.0f) {
+    const float pos_range = param->angle_max_rad;
+    if (fabsf(pos_range) > 1e-6f) {
+      pulse_us += (clamped / pos_range) *
+                  ((float)ROD_NEW_SERVO_PULSE_MAX_US - (float)zero_pulse_us);
+    }
+  } else {
+    const float neg_range = -param->angle_min_rad;
+    if (fabsf(neg_range) > 1e-6f) {
+      pulse_us -= ((-clamped) / neg_range) *
+                  ((float)zero_pulse_us - (float)ROD_NEW_SERVO_PULSE_MIN_US);
+    }
+  }
 
   return pulse_us;
 }

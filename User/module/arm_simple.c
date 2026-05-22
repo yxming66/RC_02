@@ -15,6 +15,46 @@ static float ClampAngle(float angle, float min_angle, float max_angle)
     return angle;
 }
 
+static uint32_t ClampPulseUs(uint32_t pulse_us)
+{
+    if (pulse_us < SERVO_JS6660_PULSE_MIN_US) return SERVO_JS6660_PULSE_MIN_US;
+    if (pulse_us > SERVO_JS6660_PULSE_MAX_US) return SERVO_JS6660_PULSE_MAX_US;
+    return pulse_us;
+}
+
+static float ClampFloat(float value, float min_value, float max_value)
+{
+    if (value < min_value) return min_value;
+    if (value > max_value) return max_value;
+    return value;
+}
+
+static float ArmSimple_Joint1GravityTorque(const ArmSimple_t *a)
+{
+    if (a == NULL || a->param == NULL) {
+        return 0.0f;
+    }
+
+    if (a->mode == ARM_SIMPLE_MODE_RELAX) {
+        return 0.0f;
+    }
+
+    const float mass_kg = a->param->mit.joint1_gravity_mass_kg;
+    const float com_m = a->param->mit.joint1_gravity_com_m;
+    if (fabsf(mass_kg) <= 1e-6f || com_m <= 0.0f) {
+        return 0.0f;
+    }
+
+    const float angle_rad = a->target.joint1_target -
+                            a->param->mit.joint1_gravity_zero_rad;
+    float torque_nm = mass_kg * 9.80665f * com_m * cosf(angle_rad);
+    const float limit_nm = a->param->mit.joint1_gravity_ff_limit_nm;
+    if (limit_nm > 0.0f) {
+        torque_nm = ClampFloat(torque_nm, -limit_nm, limit_nm);
+    }
+    return torque_nm;
+}
+
 int8_t ArmSimple_Init(ArmSimple_t *a, ArmSimple_Params_t *param, float target_freq)
 {
     if (a == NULL || param == NULL || target_freq <= 0.0f) {
@@ -40,10 +80,6 @@ int8_t ArmSimple_Init(ArmSimple_t *a, ArmSimple_Params_t *param, float target_fr
     a->target.joint1_target = 0.0f;
     a->target.joint2_target = 0.0f;
     a->target.joint1_vel_target = 0.0f;
-
-    /* 初始化PID，保留配置兼容，但当前角度链路主要使用DM MIT位置环 */
-    PID_Init(&a->pid.joint1_pos, KPID_MODE_CALC_D, target_freq, &param->pid.joint1_pos);
-    PID_Init(&a->pid.joint1_vel, KPID_MODE_CALC_D, target_freq, &param->pid.joint1_vel);
 
     MOTOR_DM_Register(&param->dm4340_param);
 
@@ -89,7 +125,7 @@ int8_t ArmSimple_UpdateFeedback(ArmSimple_t *a)
         a->feedback.joint1_angle = motor->motor.feedback.rotor_abs_angle;
         a->feedback.joint1_vel = motor->motor.feedback.rotor_speed;
     }
-
+ 
     return ARM_SIMPLE_OK;
 }
 
@@ -136,7 +172,21 @@ int8_t ArmSimple_Output(ArmSimple_t *a)
         return ARM_SIMPLE_ERR;
     }
 
-    MOTOR_DM_Relax(&a->param->dm4340_param);
+    if (a->mode == ARM_SIMPLE_MODE_RELAX) {
+        MOTOR_DM_Relax(&a->param->dm4340_param);
+    } else {
+        MOTOR_MIT_Output_t joint1_output = {
+            .torque = a->param->mit.joint1_torque_ff +
+                      ArmSimple_Joint1GravityTorque(a),
+            .velocity = a->target.joint1_vel_target,
+            .angle = a->target.joint1_target,
+            .kp = a->param->mit.joint1_kp,
+            .kd = a->param->mit.joint1_kd,
+        };
+        MOTOR_DM_MITCtrl(&a->param->dm4340_param, &joint1_output);
+    }
+    BSP_PWM_SetPulseUs(a->param->servo_param.pwm_channel,
+                       ArmSimple_AngleToPulseUs(a->target.joint2_target, a->param));
 
     return ARM_SIMPLE_OK;
 }
@@ -170,4 +220,40 @@ bool ArmSimple_Joint2AtTarget(ArmSimple_t *a, float threshold_rad)
     if (a == NULL) return false;
     float err = fabsf(a->target.joint2_target - a->feedback.joint2_angle);
     return (err < threshold_rad);
+}
+
+uint32_t ArmSimple_AngleToPulseUs(float angle_rad, const ArmSimple_Params_t *param)
+{
+    if (param != NULL && param->servo_param.reverse) {
+        angle_rad = -angle_rad;
+    }
+
+    float min_angle = SERVO_JS6660_MIN_ANGLE_RAD;
+    float max_angle = SERVO_JS6660_MAX_ANGLE_RAD;
+    if (param != NULL) {
+        min_angle = param->soft_limit.joint2_min;
+        max_angle = param->soft_limit.joint2_max;
+    }
+
+    if (min_angle >= 0.0f || max_angle <= 0.0f || min_angle >= max_angle) {
+        min_angle = SERVO_JS6660_MIN_ANGLE_RAD;
+        max_angle = SERVO_JS6660_MAX_ANGLE_RAD;
+    }
+
+    const float clamped = ClampAngle(angle_rad, min_angle, max_angle);
+    float pulse_us = (float)SERVO_JS6660_PULSE_NEUTRAL_US;
+
+    if (clamped >= 0.0f) {
+        if (fabsf(max_angle) > 1e-6f) {
+            pulse_us += (clamped / max_angle) *
+                        ((float)SERVO_JS6660_PULSE_MAX_US - (float)SERVO_JS6660_PULSE_NEUTRAL_US);
+        }
+    } else {
+        if (fabsf(min_angle) > 1e-6f) {
+            pulse_us -= ((-clamped) / (-min_angle)) *
+                        ((float)SERVO_JS6660_PULSE_NEUTRAL_US - (float)SERVO_JS6660_PULSE_MIN_US);
+        }
+    }
+
+    return ClampPulseUs((uint32_t)(pulse_us + 0.5f));
 }

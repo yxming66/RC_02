@@ -26,6 +26,7 @@ void Task_rod(void *argument) {
   osDelay(ROD_INIT_DELAY);
 
   uint32_t tick = osKernelGetTickCount();
+  uint32_t last_control_tick = tick;
   Config_RobotParam_t *cfg = Config_GetRobotParam();
   if (cfg == NULL ||
       RodNew_Init(&rod_new, &cfg->rod_new_param) != ROD_NEW_OK) {
@@ -44,7 +45,8 @@ void Task_rod(void *argument) {
 
     if (!g_rod_new_debug.enable) {
       RodNew_Control(&rod_new, rod_new_cmd.mode, rod_new_cmd.pose,
-                     rod_new_cmd.grip, osKernelGetTickCount());
+                     rod_new_cmd.grip, last_control_tick);
+      last_control_tick = tick;
     }
     RodNew_Output(&rod_new);
 

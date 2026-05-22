@@ -276,39 +276,37 @@ Config_RobotParam_t robot_config = {
     .arm_simple_param = {
         .dm4340_param = {
             .can = BSP_CAN_3,
-            .master_id = 0x13,
-            .can_id = 0x03,
+            .master_id = 0x12,
+            .can_id = 0x02,
             .module = MOTOR_DM_J4340,
             .reverse = false,
         },
         .servo_param = {
             .pwm_channel = BSP_PWM_ARM_SERVO,
             .freq_hz = 50.0f,
+            .reverse = true,
         },
         .suction_param = {
             .gpio = BSP_GPIO_ARM_SOLENOID,
         },
-        .pid = {
-            .joint1_pos = {
-                .k = 1.0f, .p = 10.0f, .i = 0.0f, .d = 0.0f,
-                .i_limit = 0.0f, .out_limit = 10.0f,
-                .d_cutoff_freq = 0.0f, .range = 0.0f,
-            },
-            .joint1_vel = {
-                .k = 1.0f, .p = 5.0f, .i = 0.0f, .d = 0.0f,
-                .i_limit = 0.0f, .out_limit = 5.0f,
-                .d_cutoff_freq = 0.0f, .range = 0.0f,
-            },
+        .mit = {
+            .joint1_kp = 30.5f,
+            .joint1_kd = 5.0f,
+            .joint1_torque_ff = 0.0f,
+            .joint1_gravity_mass_kg = -1.0f,
+            .joint1_gravity_com_m = 0.32f,
+            .joint1_gravity_zero_rad = 0.0f,
+            .joint1_gravity_ff_limit_nm = 3.0f,
         },
         .soft_limit = {
-            .joint1_min = -3.14f,
-            .joint1_max = 3.14f,
+            .joint1_min = -0.14f,
+            .joint1_max = 1.57f,
             .joint2_min = -4.71f,   /* -270° */
             .joint2_max = 4.71f,    /* +270° */
         },
         .vel_limit = {
-            .joint1_max_vel = 5.0f,
-            .joint2_max_vel = 3.0f,
+            .joint1_max_vel = 9.5f,
+            .joint2_max_vel = 25.0f,
         },
     },
     .auto_ctrl_param = {
@@ -585,6 +583,7 @@ Config_RobotParam_t robot_config = {
         .servo = {
             .pwm_channel = BSP_PWM_ROD_SERVO,
             .freq_hz = 50.0f,
+            .zero_pulse_us = ROD_NEW_SERVO_PULSE_NEUTRAL_US,
             /* TODO: 根据实际机构调整角度参数 */
             .angle_standby_rad = 0.0f,       /* 待机位：放平 */
             .angle_ready_rad = 0.5f,          /* 预备位 */

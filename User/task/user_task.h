@@ -27,7 +27,7 @@ extern "C" {
 #define SICK_FREQ (100.0)
 #define AUTO_CTRL_FREQ (100.0)
 #define ARM_FREQ (250.0) 
-#define ARM_SIMPLE_FREQ (250.0)
+#define ARM_SIMPLE_FREQ (500.0)
 #define ROD_FREQ (200.0)
 #define PC_COMM_FREQ (100.0)
 #define PC_UART_RX_FREQ (50.0)

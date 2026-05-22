@@ -12,7 +12,6 @@ extern "C" {
 #include "device/motor_dm.h"
 #include "bsp/pwm.h"
 #include "bsp/gpio.h"
-#include "component/pid.h"
 
 #define ARM_SIMPLE_OK (0)
 #define ARM_SIMPLE_ERR (-1)
@@ -62,6 +61,14 @@ typedef struct {
     float joint1_vel;                     /* 兼容旧字段，角度控制链路不使用 */
 } ArmSimple_CMD_t;
 
+typedef struct {
+    bool enable;
+    ArmSimple_Mode_t mode;
+    float target_joint1_rad;
+    float target_joint2_rad;
+    Suction_State_t suction;
+} ArmSimple_DebugControl_t;
+
 /* 预设姿态点 */
 typedef struct {
     float joint1_pos;
@@ -77,6 +84,7 @@ typedef struct {
     struct {
         BSP_PWM_Channel_t pwm_channel;
         float freq_hz;
+        bool reverse;
     } servo_param;
 
     /* 吸盘GPIO参数 */
@@ -84,11 +92,16 @@ typedef struct {
         BSP_GPIO_t gpio;
     } suction_param;
 
-    /* PID参数 */
+    /* DM MIT 原生位置控制参数 */
     struct {
-        KPID_Params_t joint1_pos;
-        KPID_Params_t joint1_vel;
-    } pid;
+        float joint1_kp;
+        float joint1_kd;
+        float joint1_torque_ff;
+        float joint1_gravity_mass_kg;
+        float joint1_gravity_com_m;
+        float joint1_gravity_zero_rad;
+        float joint1_gravity_ff_limit_nm;
+    } mit;
 
     /* 软限位 */
     struct {
@@ -109,6 +122,8 @@ typedef struct {
 typedef struct {
     ArmSimple_Params_t *param;
     ArmSimple_Mode_t mode;
+    ArmSimple_Mode_t last_output_mode;
+    bool dm_enabled;
     Suction_State_t suction;
 
     struct {
@@ -131,12 +146,6 @@ typedef struct {
         float joint1_vel_target;
     } target;
 
-    /* PID */
-    struct {
-        KPID_t joint1_pos;
-        KPID_t joint1_vel;
-    } pid;
-
     /* 预设姿态 */
     ArmSimple_Point2Point_t point2point[ARM_SIMPLE_POINT_NONE];
 
@@ -152,6 +161,9 @@ void ArmSimple_Relax(ArmSimple_t *a);
 void ArmSimple_SetSuction(ArmSimple_t *a, Suction_State_t state);
 bool ArmSimple_Joint1AtTarget(ArmSimple_t *a, float threshold_rad);
 bool ArmSimple_Joint2AtTarget(ArmSimple_t *a, float threshold_rad);
+uint32_t ArmSimple_AngleToPulseUs(float angle_rad, const ArmSimple_Params_t *param);
+
+extern volatile ArmSimple_DebugControl_t g_arm_simple_debug;
 
 #ifdef __cplusplus
 }

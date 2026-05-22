@@ -22,10 +22,10 @@ extern "C" {
 #define ROD_NEW_ERR_NULL (-2)
 
 /* 舵机PWM参数 ----------------------------------------------------------- */
-#define ROD_NEW_SERVO_PULSE_MIN_US 500U    /* 最小脉宽 */
-#define ROD_NEW_SERVO_PULSE_MAX_US 2500U   /* 最大脉宽 */
-#define ROD_NEW_SERVO_PULSE_NEUTRAL_US 1500U /* 中位脉宽 */
-#define ROD_NEW_SERVO_DEADBAND_US 3U        /* 死区 */
+#define ROD_NEW_SERVO_PULSE_MIN_US 850U    /* 最小脉宽 */
+#define ROD_NEW_SERVO_PULSE_MAX_US 1550U   /* 最大脉宽 */
+#define ROD_NEW_SERVO_PULSE_NEUTRAL_US 850U /* 中位脉宽 */
+#define ROD_NEW_SERVO_DEADBAND_US 1U        /* 死区 */
 #define ROD_NEW_SERVO_DEFAULT_FREQ_HZ 50U   /* 默认频率 50Hz */
 
 typedef enum {
@@ -50,6 +50,7 @@ typedef struct {
   /* PWM输出 */
   BSP_PWM_Channel_t pwm_channel;
   float freq_hz;
+  uint32_t zero_pulse_us; /* 结构0位对应脉宽 */
 
   /* 角度参数（弧度） */
   float angle_standby_rad;

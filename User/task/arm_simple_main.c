@@ -9,10 +9,19 @@
 #include "task/user_task.h"
 #include "module/arm_simple.h"
 #include "module/config.h"
+#include "bsp/time.h"
 
 /* Private variables --------------------------------------------------------- */
 static ArmSimple_t arm_simple;
 static bool set_zero_requested = false;
+
+volatile ArmSimple_DebugControl_t g_arm_simple_debug = {
+    false,
+    ARM_SIMPLE_MODE_RELAX,
+    0.0f,
+    0.0f,
+    SUCTION_OFF,
+};
 
 /* Exported functions ------------------------------------------------------- */
 void Task_arm_simple(void *argument)
@@ -30,10 +39,56 @@ void Task_arm_simple(void *argument)
         osThreadTerminate(osThreadGetId());
     }
 
-    MOTOR_DM_Enable(&arm_simple.param->dm4340_param);
+    if (MOTOR_DM_Enable(&arm_simple.param->dm4340_param) == DEVICE_OK) {
+        arm_simple.dm_enabled = true;
+    }
+    for (uint8_t i = 0U; i < 50U; ++i) {
+        if (ArmSimple_UpdateFeedback(&arm_simple) == ARM_SIMPLE_OK) {
+            break;
+        }
+        osDelay(2U);
+    }
+    ArmSimple_CMD_t startup_cmd = {
+        .mode = ARM_SIMPLE_MODE_JOINT,
+        .point_mode = ARM_SIMPLE_POINT_NONE,
+        .suction = SUCTION_OFF,
+        .target_joint = {
+            .joint1 = arm_simple.feedback.joint1_angle,
+            .joint2 = 0.0f,
+        },
+        .joint1_vel = 0.0f,
+    };
+    ArmSimple_Control(&arm_simple, &startup_cmd);
 
     while (1) {
         tick += delay_tick;
+
+        const uint64_t now_us = BSP_TIME_Get_us();
+        arm_simple.timer.now = (float)now_us * 0.000001f;
+        arm_simple.timer.last_wakeup_us = now_us;
+
+        /* 先更新反馈，后续任何保持目标都使用最新电机角度 */
+        ArmSimple_UpdateFeedback(&arm_simple);
+
+        ArmSimple_CMD_t cmd;
+        if (task_runtime.msgq.arm_simple.cmd != NULL &&
+            osMessageQueueGet(task_runtime.msgq.arm_simple.cmd, &cmd, NULL, 0U) == osOK) {
+            ArmSimple_Control(&arm_simple, &cmd);
+        }
+
+        if (g_arm_simple_debug.enable) {
+            ArmSimple_CMD_t debug_cmd = {
+                .mode = g_arm_simple_debug.mode,
+                .point_mode = ARM_SIMPLE_POINT_NONE,
+                .suction = g_arm_simple_debug.suction,
+                .target_joint = {
+                    .joint1 = g_arm_simple_debug.target_joint1_rad,
+                    .joint2 = g_arm_simple_debug.target_joint2_rad,
+                },
+                .joint1_vel = 0.0f,
+            };
+            ArmSimple_Control(&arm_simple, &debug_cmd);
+        }
 
         /* 处理零位设置请求 */
         if (set_zero_requested) {
@@ -41,10 +96,6 @@ void Task_arm_simple(void *argument)
             set_zero_requested = false;
         }
 
-        /* 更新反馈 */
-        ArmSimple_UpdateFeedback(&arm_simple);
-
-        /* 观察反馈阶段：只持续发送MIT零输出帧 */
         ArmSimple_Output(&arm_simple);
 
         osDelayUntil(tick);

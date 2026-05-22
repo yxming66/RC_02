@@ -68,6 +68,9 @@ bool RmParamsShareOutputFrame(const MOTOR_RM_Param_t &lhs,
          (lhs_high_group && rhs_high_group);
 }
 
+int8_t ControllerSetLegacyNormalizedOutput(OreStore_t *store, uint8_t axis,
+                                           float output);
+
 uint8_t SmallAxisIndex(uint8_t axis) {
   return (axis > 0u) ? static_cast<uint8_t>(axis - 1u) : 0u;
 }
@@ -188,6 +191,10 @@ int8_t ControllerEnable(OreStore_t *store, uint8_t axis) {
 }
 
 int8_t ControllerRelax(OreStore_t *store, uint8_t axis) {
+  if (store != nullptr && store->control_mode == ORE_STORE_CONTROL_POLE_STYLE) {
+    store->pole_style_output[axis] = 0.0f;
+    return ControllerSetLegacyNormalizedOutput(store, axis, 0.0f);
+  }
   return IsPlatformAxis(axis) ? PlatformControllerPtr(store)->Relax()
                               : SmallControllerPtr(store, axis)->Relax();
 }
@@ -998,14 +1005,14 @@ void OreStore_Output(OreStore_t *store) {
     return;
   }
 
-  bool rm_frame_sent[ORE_STORE_AXIS_NUM] = {false};
+  if (store->control_mode == ORE_STORE_CONTROL_POLE_STYLE) {
+    bool rm_frame_sent[ORE_STORE_AXIS_NUM] = {false};
 
-  for (uint8_t axis = 0; axis < ORE_STORE_AXIS_NUM; ++axis) {
-    if (store->controller[axis] == nullptr) {
-      store->debug.commit_ret[axis] = DEVICE_ERR_NULL;
-      continue;
-    }
-    if (store->control_mode == ORE_STORE_CONTROL_POLE_STYLE) {
+    for (uint8_t axis = 0; axis < ORE_STORE_AXIS_NUM; ++axis) {
+      if (store->controller[axis] == nullptr) {
+        store->debug.commit_ret[axis] = DEVICE_ERR_NULL;
+        continue;
+      }
       const MOTOR_RM_Param_t *axis_param = &store->param->motor_param[axis];
       bool already_sent = false;
       for (uint8_t prev_axis = 0; prev_axis < axis; ++prev_axis) {
@@ -1015,13 +1022,33 @@ void OreStore_Output(OreStore_t *store) {
           break;
         }
       }
-      if (already_sent) {
-        store->debug.commit_ret[axis] = DEVICE_OK;
-      } else {
+      if (!already_sent) {
         store->debug.commit_ret[axis] = MOTOR_RM_Ctrl(
             const_cast<MOTOR_RM_Param_t *>(axis_param));
         rm_frame_sent[axis] = store->debug.commit_ret[axis] == DEVICE_OK;
       }
+      RefreshDebugAxis(store, axis);
+    }
+
+    for (uint8_t axis = 0; axis < ORE_STORE_AXIS_NUM; ++axis) {
+      if (store->debug.commit_ret[axis] == DEVICE_ERR_NULL) {
+        continue;
+      }
+      for (uint8_t prev_axis = 0; prev_axis < axis; ++prev_axis) {
+        if (RmParamsShareOutputFrame(store->param->motor_param[prev_axis],
+                                     store->param->motor_param[axis])) {
+          store->debug.commit_ret[axis] = store->debug.commit_ret[prev_axis];
+          break;
+        }
+      }
+      RefreshDebugAxis(store, axis);
+    }
+    return;
+  }
+
+  for (uint8_t axis = 0; axis < ORE_STORE_AXIS_NUM; ++axis) {
+    if (store->controller[axis] == nullptr) {
+      store->debug.commit_ret[axis] = DEVICE_ERR_NULL;
     } else {
       store->debug.commit_ret[axis] = ControllerCommit(store, axis);
     }
@@ -1037,12 +1064,12 @@ void OreStore_ResetOutput(OreStore_t *store) {
   for (uint8_t axis = 0; axis < ORE_STORE_AXIS_NUM; ++axis) {
     if (store->controller[axis] != nullptr) {
       (void)ControllerRelax(store, axis);
-      (void)ControllerCommit(store, axis);
     }
     store->debug.set_command_ret[axis] = DEVICE_OK;
-    store->debug.commit_ret[axis] = DEVICE_OK;
+    store->debug.commit_ret[axis] = ORE_STORE_ERR_NULL;
     RefreshDebugAxis(store, axis);
   }
+  OreStore_Output(store);
 }
 
 void OreStore_RequestRehome(OreStore_t *store) {
