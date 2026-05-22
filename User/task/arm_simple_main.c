@@ -67,6 +67,7 @@ void Task_arm_simple(void *argument)
         arm_simple.timer.now = (float)now_us * 0.000001f;
         arm_simple.timer.last_wakeup_us = now_us;
 
+        
         /* 先更新反馈，后续任何保持目标都使用最新电机角度 */
         ArmSimple_UpdateFeedback(&arm_simple);
 

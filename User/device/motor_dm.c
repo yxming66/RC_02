@@ -566,10 +566,14 @@ int8_t MOTOR_DM_Enable(MOTOR_DM_Param_t *param){
     if (param == NULL) {
         return DEVICE_ERR_NULL;
     }
-    
+
     MOTOR_DM_t *motor = MOTOR_DM_GetMotor(param);
     if (motor == NULL) {
         return DEVICE_ERR_NO_DEV;
+    }
+
+    if (motor->motor.header.online && motor->status == MOTOR_DM_STATUS_ENABLED) {
+        return DEVICE_OK;
     }
 
     BSP_CAN_StdDataFrame_t frame;
@@ -595,6 +599,10 @@ int8_t MOTOR_DM_Disable(MOTOR_DM_Param_t *param) {
     MOTOR_DM_t *motor = MOTOR_DM_GetMotor(param);
     if (motor == NULL) {
         return DEVICE_ERR_NO_DEV;
+    }
+
+    if (motor->motor.header.online && motor->status == MOTOR_DM_STATUS_DISABLED) {
+        return DEVICE_OK;
     }
 
     BSP_CAN_StdDataFrame_t frame;

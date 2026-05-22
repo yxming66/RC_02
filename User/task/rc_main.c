@@ -6,6 +6,7 @@
 #include "task/user_task.h"
 /* USER INCLUDE BEGIN */
 #include "bsp/uart.h"
+#include "bsp/gpio.h"
 #include "device/dr16.h"
 #include "module/chassis.h"
 #include "module/pole.h"
@@ -151,6 +152,11 @@ static void Rc_SetRodHold(void) {
     return;
   }
   Rc_SetRodRelax();
+}
+
+/* 辅助函数：检测拨杆从目标状态切换到MID的边缘 */
+static bool Rc_SwitchJustReleasedToMid(DR16_SwitchPos_t current, DR16_SwitchPos_t last, DR16_SwitchPos_t from_pos) {
+  return (current == DR16_SW_MID && last == from_pos);
 }
 
 static void Rc_SetRodOperator(void) {
@@ -547,7 +553,7 @@ static bool Rc_ShouldExitAutoCtrlBySwitch(void) {
 static bool Rc_ShouldUsePcCommand(void) {
   return g_pc_protocol_ptr != NULL &&
          PC_Protocol_IsPCControlMode(g_pc_protocol_ptr) &&
-         dr16.data.sw_l == DR16_SW_DOWN &&
+         dr16.data.sw_l == DR16_SW_UP &&
          dr16.data.sw_r == RC_PC_ENABLE_SWITCH;
 }
 
@@ -589,10 +595,12 @@ static void Rc_TryStartAutoCtrlBySwitch(uint32_t now_ms) {
     return;
   }
 
-  if (dr16.data.sw_l != DR16_SW_MID) {
+  /* 左拨杆必须在UP，且从UP切换才触发 */
+  if (dr16.data.sw_l != DR16_SW_UP || last_sw_l != DR16_SW_UP) {
     return;
   }
 
+  /* 右拨杆从MID切换到UP/DOWN才触发 */
   if (last_sw_r != DR16_SW_MID) {
     return;
   }
@@ -602,10 +610,12 @@ static void Rc_TryStartAutoCtrlBySwitch(uint32_t now_ms) {
   float target_yaw_rad = 0.0f;
 
   if (dr16.data.sw_r == DR16_SW_UP) {
+    /* 左UP + 右MID->UP：头向上200台阶 */
     template_id = AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD;
   } else if (dr16.data.sw_r == DR16_SW_DOWN) {
+    /* 左UP + 右MID->DOWN：头向下200台阶 */
     template_id = AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD;
-    
+
     travel_dir = AUTO_CTRL_TRAVEL_DIR_TAIL_FORWARD;
   }
 
@@ -731,7 +741,19 @@ void Task_rc_main(void *argument) {
         AutoCtrl_Abort(&auto_ctrl);
       }
 
-      /* sw_l DOWN 且 sw_r UP 时才允许使用上位机命令。 */
+      /* 左DOWN + 右UP → MID：切换ARM_SOLENOID */
+      if (Rc_SwitchJustReleasedToMid(dr16.data.sw_r, last_sw_r, DR16_SW_UP) && dr16.data.sw_l == DR16_SW_DOWN) {
+        bool current = BSP_GPIO_ReadPin(BSP_GPIO_ARM_SOLENOID);
+        BSP_GPIO_WritePin(BSP_GPIO_ARM_SOLENOID, !current);
+      }
+
+      /* 左DOWN + 右DOWN → MID：切换ROD_SOLENOID */
+      if (Rc_SwitchJustReleasedToMid(dr16.data.sw_r, last_sw_r, DR16_SW_DOWN) && dr16.data.sw_l == DR16_SW_DOWN) {
+        bool current = BSP_GPIO_ReadPin(BSP_GPIO_ROD_SOLENOID);
+        BSP_GPIO_WritePin(BSP_GPIO_ROD_SOLENOID, !current);
+      }
+
+      /* 左UP + 右UP 时允许使用上位机命令。 */
       if (use_pc_command) {
         g_rc_control_debug.page = RC_CONTROL_PAGE_PC;
         g_pc_command_source = PC_COMMAND_SOURCE_PC;
