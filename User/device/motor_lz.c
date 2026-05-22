@@ -174,14 +174,19 @@ static uint16_t MOTOR_LZ_FloatToRawPositive(float value, float max_value) {
 
 static float MOTOR_LZ_GetTorqueRangeNm(MOTOR_LZ_Module_t module) {
     switch (module) {
-        case MOTOR_LZ_RSO5:
-            return 5.5f;
         case MOTOR_LZ_RSO0:
+            return 14.0f;
         case MOTOR_LZ_RSO1:
         case MOTOR_LZ_RSO2:
+            return 17.0f;
         case MOTOR_LZ_RSO3:
+            return 60.0f;
         case MOTOR_LZ_RSO4:
+            return 120.0f;
+        case MOTOR_LZ_RSO5:
+            return 5.5f;
         case MOTOR_LZ_RSO6:
+            return 36.0f;
         default:
             return 60.0f;
     }

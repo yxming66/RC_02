@@ -1,5 +1,5 @@
 /*
- * Arm Simple: DM4310关节1 + JS6660舵机关节2 + 电磁阀吸盘
+ * Arm Simple: DM4340关节1 + JS6660舵机关节2 + 电磁阀吸盘
  */
 #pragma once
 
@@ -35,12 +35,12 @@ typedef enum {
 typedef enum {
     ARM_SIMPLE_MODE_RELAX = 0,    /* 松弛，所有输出归零 */
     ARM_SIMPLE_MODE_JOINT,        /* 关节角度控制 */
-    ARM_SIMPLE_MODE_POS_VEL,      /* 位置+速度控制 */
+    ARM_SIMPLE_MODE_POS_VEL,      /* 兼容旧命令：按角度控制处理 */
 } ArmSimple_Mode_t;
 
 /* 关节角度（弧度） */
 typedef struct {
-    float joint1;  /* DM4310关节1角度（绝对值） */
+    float joint1;  /* DM4340关节1角度（绝对值） */
     float joint2;  /* 舵机关节2角度（-270° ~ +270°） */
 } ArmSimple_JointAngle_t;
 
@@ -56,10 +56,10 @@ typedef enum {
 /* 控制命令 */
 typedef struct {
     ArmSimple_Mode_t mode;
-    ArmSimple_PointMode_t point_mode;
+    ArmSimple_PointMode_t point_mode;   /* ARM_SIMPLE_POINT_NONE表示使用target_joint */
     Suction_State_t suction;
     ArmSimple_JointAngle_t target_joint;  /* 目标关节角度 */
-    float joint1_vel;                     /* 关节1速度 */
+    float joint1_vel;                     /* 兼容旧字段，角度控制链路不使用 */
 } ArmSimple_CMD_t;
 
 /* 预设姿态点 */
@@ -70,13 +70,8 @@ typedef struct {
 
 /* 初始化参数 */
 typedef struct {
-    /* DM4310参数 */
-    struct {
-        BSP_CAN_t can;
-        uint16_t master_id;
-        uint16_t can_id;
-        bool reverse;
-    } dm4310_param;
+    /* DM4340参数 */
+    MOTOR_DM_Param_t dm4340_param;
 
     /* 舵机PWM参数 */
     struct {
@@ -124,8 +119,8 @@ typedef struct {
 
     /* 反馈 */
     struct {
-        float joint1_angle;   /* DM4310当前角度 */
-        float joint1_vel;     /* DM4310当前速度 */
+        float joint1_angle;   /* DM4340当前角度 */
+        float joint1_vel;     /* DM4340当前速度 */
         float joint2_angle;   /* 舵机当前角度 */
     } feedback;
 

@@ -11,7 +11,7 @@
 #include "module/pole.h"
 #include "module/arm/arm_control_types.h"
 #include "module/config.h"
-#include "module/rod.h"
+#include "module/rod_new.h"
 #include "module/autoCtrlAPI/api/auto_ctrl_api.h"
 #include "module/autoCtrlAPI/core/auto_ctrl_def.h"
 #include "module/pc_protocol/pc_protocol.h"
@@ -43,7 +43,7 @@ static Arm_CMD_t arm_cmd;
 static OreStore_CMD_t ore_store_cmd;
 static DR16_SwitchPos_t last_sw_l = DR16_SW_ERR;
 static DR16_SwitchPos_t last_sw_r = DR16_SW_ERR;
-static Rod_CMD_t rod_cmd;
+static RodNew_CMD_t rod_cmd;
 extern bool reset;
 extern auto_ctrl_t auto_ctrl;
 extern bool auto_ctrl_inited;
@@ -78,6 +78,8 @@ typedef struct {
   volatile OreStore_Mode_t cmd_mode;
   volatile bool cmd_force_rehome;
   volatile float platform_target_rad; 
+  volatile float gate_target_rad[ORE_STORE_GATE_NUM];
+  volatile float track_target_rad[ORE_STORE_TRACK_NUM];
   volatile bool assume_home_event;
   volatile int8_t assume_home_ret;
   volatile int8_t post_ret;
@@ -97,10 +99,9 @@ static bool Rc_ArmPoseIsFinite(const ArmPose_t* pose) {
 }
 
 static void Rc_SetRodRelax(void) {
-  rod_cmd.mode = ROD_MODE_RELAX;
-  rod_cmd.pose = ROD_POSE_DOWN;
-  rod_cmd.sequence_trigger = false;
-  rod_cmd.grip_done = false;
+  rod_cmd.mode = ROD_NEW_MODE_RELAX;
+  rod_cmd.pose = ROD_NEW_POSE_STANDBY;
+  rod_cmd.grip = ROD_NEW_GRIP_RELEASE;
 }
 
 static float Rc_ApplyOreStoreDeadband(float value) {
@@ -193,22 +194,18 @@ static void Rc_InitOreStoreActiveTargets(void) {
 
 static void Rc_SetOreStoreActiveManual(void) {
   const float dt_s = 1.0f / (float)RC_MAIN_FREQ;
-  const float platform_delta = Rc_ApplyOreStoreDeadband(dr16.data.ch_r_y) *
-                               Rc_OreStoreAxisMoveSpeed(
-                                   ORE_STORE_AXIS_PLATFORM) *
-                               dt_s;
-  const float gate_common_delta = Rc_ApplyOreStoreDeadband(dr16.data.ch_l_y) *
-                                  Rc_OreStoreAxisMoveSpeed(
-                                      ORE_STORE_AXIS_GATE_LEFT) *
-                                  dt_s;
-  const float gate_diff_delta = Rc_ApplyOreStoreDeadband(dr16.data.ch_r_x) *
-                                Rc_OreStoreAxisMoveSpeed(
-                                    ORE_STORE_AXIS_GATE_LEFT) *
-                                dt_s;
-  const float track_delta = Rc_ApplyOreStoreDeadband(dr16.data.ch_l_x) *
-                            Rc_OreStoreAxisMoveSpeed(
-                                ORE_STORE_AXIS_TRACK_LEFT) *
-                            dt_s;
+  const float platform_velocity =
+    Rc_ApplyOreStoreDeadband(dr16.data.ch_r_y) *
+    Rc_OreStoreAxisMoveSpeed(ORE_STORE_AXIS_PLATFORM);
+  const float gate_velocity =
+    Rc_ApplyOreStoreDeadband(dr16.data.ch_r_x) *
+    Rc_OreStoreAxisMoveSpeed(ORE_STORE_AXIS_GATE_LEFT);
+  const float track_velocity =
+    Rc_ApplyOreStoreDeadband(dr16.data.ch_l_y) *
+    Rc_OreStoreAxisMoveSpeed(ORE_STORE_AXIS_TRACK_LEFT);
+  const float platform_delta = platform_velocity * dt_s;
+  const float gate_delta = gate_velocity * dt_s;
+  const float track_delta = track_velocity * dt_s;
 
   if (!ore_store_active_initialized) {
     Rc_InitOreStoreActiveTargets();
@@ -219,11 +216,9 @@ static void Rc_SetOreStoreActiveManual(void) {
   ore_store_cmd.platform_target_rad = Rc_ClampOreStoreTarget(
       ORE_STORE_AXIS_PLATFORM, ore_store_cmd.platform_target_rad + platform_delta);
   ore_store_cmd.gate_target_rad[0] = Rc_ClampOreStoreTarget(
-      ORE_STORE_AXIS_GATE_LEFT,
-      ore_store_cmd.gate_target_rad[0] + gate_common_delta + gate_diff_delta);
+      ORE_STORE_AXIS_GATE_LEFT, ore_store_cmd.gate_target_rad[0] + gate_delta);
   ore_store_cmd.gate_target_rad[1] = Rc_ClampOreStoreTarget(
-      ORE_STORE_AXIS_GATE_RIGHT,
-      ore_store_cmd.gate_target_rad[1] + gate_common_delta - gate_diff_delta);
+      ORE_STORE_AXIS_GATE_RIGHT, ore_store_cmd.gate_target_rad[1] + gate_delta);
   ore_store_cmd.track_target_rad[0] = Rc_ClampOreStoreTarget(
       ORE_STORE_AXIS_TRACK_LEFT, ore_store_cmd.track_target_rad[0] + track_delta);
   ore_store_cmd.track_target_rad[1] = Rc_ClampOreStoreTarget(
@@ -657,6 +652,10 @@ void Task_rc_main(void *argument) {
     g_rc_ore_store_debug.cmd_mode = ore_store_cmd.mode;
     g_rc_ore_store_debug.cmd_force_rehome = ore_store_cmd.force_rehome;
     g_rc_ore_store_debug.platform_target_rad = ore_store_cmd.platform_target_rad;
+    g_rc_ore_store_debug.gate_target_rad[0] = ore_store_cmd.gate_target_rad[0];
+    g_rc_ore_store_debug.gate_target_rad[1] = ore_store_cmd.gate_target_rad[1];
+    g_rc_ore_store_debug.track_target_rad[0] = ore_store_cmd.track_target_rad[0];
+    g_rc_ore_store_debug.track_target_rad[1] = ore_store_cmd.track_target_rad[1];
     g_rc_ore_store_debug.post_ret = g_rc_ore_store_post_ret;
 
     if (dr16.header.online) {

@@ -64,7 +64,7 @@ MotorProtocol<MotorKind::LZ, Model>::MotorProtocol(const MotorInstanceConfig<Mot
 
 template <MotorModel Model>
 float MotorProtocol<MotorKind::LZ, Model>::TotalRatio() const {
-    return ResolvePositiveRatio(MotorTraits<MotorKind::LZ, Model>::kGearRatio) * ResolvePositiveRatio(install_.external_ratio);
+    return ResolvePositiveRatio(install_.external_ratio);
 }
 
 template <MotorModel Model>

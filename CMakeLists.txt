@@ -126,6 +126,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     User/module/autoCtrlAPI/primitive/auto_ctrl_primitive.cpp
     User/module/autoCtrlAPI/step/auto_ctrl_step.c
     User/module/autoCtrlAPI/template/auto_ctrl_template_runner.c
+    User/module/arm_simple.c
 
     # User/module sources
     User/module/arm/arm.cpp
@@ -142,6 +143,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     User/task/auto_ctrl_feed.c
     User/task/user_task.c
     User/task/sick.c
+    User/task/arm_simple_main.c
     User/task/arm_main.cpp
     User/task/rod_main.c
     User/task/ore_store_main.c

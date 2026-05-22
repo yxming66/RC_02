@@ -81,11 +81,11 @@ void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : photo2_Pin photo1_Pin */
-  GPIO_InitStruct.Pin = photo2_Pin|photo1_Pin;
+  /*Configure GPIO pin : photo2_Pin */
+  GPIO_InitStruct.Pin = photo2_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
+  HAL_GPIO_Init(photo2_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pins : ACCL_INT_Pin GYRO_INT_Pin */
   GPIO_InitStruct.Pin = ACCL_INT_Pin|GYRO_INT_Pin;

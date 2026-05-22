@@ -89,6 +89,15 @@ static int8_t MOTOR_DM_ParseFeedbackFrame(MOTOR_DM_t *motor, const uint8_t *data
     motor->motor.raw_feedback.raw_speed = (int16_t)v_int;
     motor->motor.raw_feedback.raw_current = (int16_t)t_int;
     motor->motor.raw_feedback.raw_temp = data[6];
+    motor->motor.feedback.rotor_abs_angle = UINT_TO_FLOAT(p_int, DM_P_MIN, DM_P_MAX, 16);
+    motor->motor.feedback.rotor_speed = UINT_TO_FLOAT(v_int, DM_V_MIN, DM_V_MAX, 12);
+    motor->motor.feedback.torque_current = UINT_TO_FLOAT(t_int, DM_T_MIN, DM_T_MAX, 12);
+    if (motor->param.reverse) {
+        motor->motor.feedback.rotor_abs_angle = -motor->motor.feedback.rotor_abs_angle;
+        motor->motor.feedback.rotor_speed = -motor->motor.feedback.rotor_speed;
+        motor->motor.feedback.torque_current = -motor->motor.feedback.torque_current;
+    }
+    motor->motor.feedback.temp = (float)data[7];
     motor->mos_temp = data[6];
     motor->rotor_temp = data[7];
     return DEVICE_OK;

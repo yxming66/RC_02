@@ -21,10 +21,10 @@ extern "C" {
 
 typedef enum {
   ORE_STORE_AXIS_PLATFORM = 0,
-  ORE_STORE_AXIS_GATE_LEFT,
-  ORE_STORE_AXIS_GATE_RIGHT,
-  ORE_STORE_AXIS_TRACK_LEFT,
-  ORE_STORE_AXIS_TRACK_RIGHT,
+  ORE_STORE_AXIS_GATE_LEFT,   // 兜底矿机构左 2006，行程约 2 rad
+  ORE_STORE_AXIS_GATE_RIGHT,  // 兜底矿机构右 2006，行程约 2 rad
+  ORE_STORE_AXIS_TRACK_LEFT,  // 滑轨机构左 2006，行程约 37 rad
+  ORE_STORE_AXIS_TRACK_RIGHT, // 滑轨机构右 2006，行程约 37 rad
 } OreStore_Axis_t;
 
 typedef enum {
@@ -36,6 +36,7 @@ typedef enum {
 typedef enum {
   ORE_STORE_CONTROL_PID_DUAL = 0,  // 双环: 位置PID → 速度PID → 力矩
   ORE_STORE_CONTROL_MIT_STYLE,      // MIT风格: Kp*error - Kd*velocity
+  ORE_STORE_CONTROL_POLE_STYLE,      // 仿Pole: 位置PID → 速度PID → RM归一化输出
 } OreStore_ControlMode_t;
 
 typedef struct {
@@ -61,6 +62,8 @@ typedef struct {
   struct {
     KPID_Params_t position_pid[ORE_STORE_AXIS_NUM];
     KPID_Params_t velocity_pid[ORE_STORE_AXIS_NUM];
+    KPID_Params_t pole_position_pid[ORE_STORE_AXIS_NUM];
+    KPID_Params_t pole_velocity_pid[ORE_STORE_AXIS_NUM];
     // MIT风格控制参数 (Kp/Kd)
     float mit_kp[ORE_STORE_AXIS_NUM];
     float mit_kd[ORE_STORE_AXIS_NUM];
@@ -81,6 +84,7 @@ typedef struct {
     float travel_rad[ORE_STORE_AXIS_NUM];
     float lower_seek_velocity_rad_s[ORE_STORE_AXIS_NUM];
     float move_velocity_rad_s[ORE_STORE_AXIS_NUM];
+    float move_accel_rad_s2[ORE_STORE_AXIS_NUM];
     float arrive_threshold_rad[ORE_STORE_AXIS_NUM];
   } limit;
 
@@ -118,6 +122,7 @@ typedef struct {
   float zero_offset_rad[ORE_STORE_AXIS_NUM];
   float learned_lower_raw_rad[ORE_STORE_AXIS_NUM];
   float travel_rad[ORE_STORE_AXIS_NUM];
+  float velocity_setpoint_rad_s[ORE_STORE_AXIS_NUM];
   float seek_velocity_rad_s[ORE_STORE_AXIS_NUM];
   float online_wait_s[ORE_STORE_AXIS_NUM];
   uint8_t soft_limit_state[ORE_STORE_AXIS_NUM];
@@ -131,6 +136,7 @@ typedef struct {
   float filtered_position_rad[ORE_STORE_AXIS_NUM];
   float filtered_velocity_rad_s[ORE_STORE_AXIS_NUM];
   float filtered_output_torque_nm[ORE_STORE_AXIS_NUM];
+  float pole_style_output[ORE_STORE_AXIS_NUM];
   float motor_torque_nm[ORE_STORE_AXIS_NUM];
   float normalized_output[ORE_STORE_AXIS_NUM];
   float rm_last_set_torque_nm[ORE_STORE_AXIS_NUM];
@@ -165,6 +171,9 @@ typedef struct {
   float target_position_rad[ORE_STORE_AXIS_NUM];
   float tracked_position_rad[ORE_STORE_AXIS_NUM];
   float command_position_rad[ORE_STORE_AXIS_NUM];
+  float command_velocity_rad_s[ORE_STORE_AXIS_NUM];
+  float velocity_setpoint_rad_s[ORE_STORE_AXIS_NUM];
+  float pole_style_output[ORE_STORE_AXIS_NUM];
   int8_t power_on_assume_ret[ORE_STORE_AXIS_NUM];
   uint32_t power_on_assume_count[ORE_STORE_AXIS_NUM];
 

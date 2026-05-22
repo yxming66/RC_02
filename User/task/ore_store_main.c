@@ -37,10 +37,26 @@ typedef struct {
   volatile uint8_t platform_soft_limit_state;
   volatile float platform_feedback_torque_nm;
   volatile float platform_filtered_output_torque_nm;
+  volatile float platform_velocity_setpoint_rad_s;
+  volatile float platform_pole_style_output;
   volatile float platform_cmd_torque_nm;
   volatile float platform_cmd_current_a;
   volatile int16_t platform_rm_output_raw;
   volatile uint16_t platform_rm_tx_frame_id;
+  volatile bool track_left_online;
+  volatile bool track_left_homed;
+  volatile float track_left_position_rad;
+  volatile float track_left_target_rad;
+  volatile float track_left_command_rad;
+  volatile float track_left_pole_style_output;
+  volatile int16_t track_left_rm_output_raw;
+  volatile bool track_right_online;
+  volatile bool track_right_homed;
+  volatile float track_right_position_rad;
+  volatile float track_right_target_rad;
+  volatile float track_right_command_rad;
+  volatile float track_right_pole_style_output;
+  volatile int16_t track_right_rm_output_raw;
 } OreStoreTask_DebugView_t;
 
 volatile OreStoreTask_DebugView_t g_ore_store_debug_view = {0};
@@ -207,6 +223,10 @@ static void OreStoreTask_UpdateDebugView(void) {
       ore_store.debug.motor_torque_nm[ORE_STORE_AXIS_PLATFORM];
   g_ore_store_debug_view.platform_filtered_output_torque_nm =
       ore_store.debug.filtered_output_torque_nm[ORE_STORE_AXIS_PLATFORM];
+  g_ore_store_debug_view.platform_velocity_setpoint_rad_s =
+      ore_store.debug.velocity_setpoint_rad_s[ORE_STORE_AXIS_PLATFORM];
+  g_ore_store_debug_view.platform_pole_style_output =
+      ore_store.debug.pole_style_output[ORE_STORE_AXIS_PLATFORM];
   g_ore_store_debug_view.platform_cmd_torque_nm =
       ore_store.debug.rm_last_set_torque_nm[ORE_STORE_AXIS_PLATFORM];
   g_ore_store_debug_view.platform_cmd_current_a =
@@ -215,6 +235,34 @@ static void OreStoreTask_UpdateDebugView(void) {
       ore_store.debug.rm_output_raw[ORE_STORE_AXIS_PLATFORM];
   g_ore_store_debug_view.platform_rm_tx_frame_id =
       ore_store.debug.rm_tx_frame_id[ORE_STORE_AXIS_PLATFORM];
+    g_ore_store_debug_view.track_left_online =
+      ore_store.feedback.online[ORE_STORE_AXIS_TRACK_LEFT];
+    g_ore_store_debug_view.track_left_homed =
+      ore_store.feedback.homed[ORE_STORE_AXIS_TRACK_LEFT];
+    g_ore_store_debug_view.track_left_position_rad =
+      ore_store.feedback.position_rad[ORE_STORE_AXIS_TRACK_LEFT];
+    g_ore_store_debug_view.track_left_target_rad =
+      ore_store.debug.target_position_rad[ORE_STORE_AXIS_TRACK_LEFT];
+    g_ore_store_debug_view.track_left_command_rad =
+      ore_store.debug.command_position_rad[ORE_STORE_AXIS_TRACK_LEFT];
+    g_ore_store_debug_view.track_left_pole_style_output =
+      ore_store.debug.pole_style_output[ORE_STORE_AXIS_TRACK_LEFT];
+    g_ore_store_debug_view.track_left_rm_output_raw =
+      ore_store.debug.rm_output_raw[ORE_STORE_AXIS_TRACK_LEFT];
+    g_ore_store_debug_view.track_right_online =
+      ore_store.feedback.online[ORE_STORE_AXIS_TRACK_RIGHT];
+    g_ore_store_debug_view.track_right_homed =
+      ore_store.feedback.homed[ORE_STORE_AXIS_TRACK_RIGHT];
+    g_ore_store_debug_view.track_right_position_rad =
+      ore_store.feedback.position_rad[ORE_STORE_AXIS_TRACK_RIGHT];
+    g_ore_store_debug_view.track_right_target_rad =
+      ore_store.debug.target_position_rad[ORE_STORE_AXIS_TRACK_RIGHT];
+    g_ore_store_debug_view.track_right_command_rad =
+      ore_store.debug.command_position_rad[ORE_STORE_AXIS_TRACK_RIGHT];
+    g_ore_store_debug_view.track_right_pole_style_output =
+      ore_store.debug.pole_style_output[ORE_STORE_AXIS_TRACK_RIGHT];
+    g_ore_store_debug_view.track_right_rm_output_raw =
+      ore_store.debug.rm_output_raw[ORE_STORE_AXIS_TRACK_RIGHT];
 }
 
 static void OreStoreTask_UpdateTemperatureAlarm(uint32_t now_tick) {

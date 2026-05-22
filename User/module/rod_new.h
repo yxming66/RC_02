@@ -47,6 +47,10 @@ typedef enum {
 } RodNew_Pose_t;
 
 typedef struct {
+  /* PWM输出 */
+  BSP_PWM_Channel_t pwm_channel;
+  float freq_hz;
+
   /* 角度参数（弧度） */
   float angle_standby_rad;
   float angle_ready_rad;
@@ -80,8 +84,24 @@ typedef struct {
 } RodNew_Params_t;
 
 typedef struct {
+  RodNew_Mode_t mode;
+  RodNew_Pose_t pose;
+  RodNew_GripState_t grip;
+} RodNew_CMD_t;
+
+typedef struct {
+  volatile bool enable;
+  volatile bool direct_pulse_enable;
+  volatile BSP_PWM_Channel_t pwm_channel;
+  volatile float target_angle_rad;
+  volatile uint32_t pulse_us;
+  volatile RodNew_GripState_t grip;
+} RodNew_DebugControl_t;
+
+typedef struct {
   float target_angle_rad;   /* 目标角度（弧度） */
   float tracked_angle_rad;   /* 跟踪目标（带速度限幅） */
+  float tracked_vel_rad_s;   /* 跟踪速度 */
   float feedback_angle_rad; /* 反馈角度 */
   bool at_target;
 } RodNew_ServoState_t;
@@ -117,6 +137,8 @@ void RodNew_Reset(RodNew_t *r);
 float RodNew_AngleToPulseUs(float angle_rad, const RodNew_ServoParams_t *param);
 bool RodNew_IsAtTarget(const RodNew_t *r);
 bool RodNew_IsGripDone(const RodNew_t *r);
+
+extern volatile RodNew_DebugControl_t g_rod_new_debug;
 
 #ifdef __cplusplus
 }

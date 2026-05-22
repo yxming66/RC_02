@@ -53,6 +53,7 @@ public:
     float GetLastOutputTorque() const;
     float CalculatePositionOutput(float target, float feedback, float dt_s);
     float CalculateVelocityOutput(float target, float feedback, float dt_s);
+    int8_t ResetControllers();
 
 private:
     enum class ControlMode : uint8_t {
@@ -66,7 +67,6 @@ private:
         EmulatedMit,
     };
 
-    int8_t ResetControllers();
     float UpdateControlDt();
     float ResolveVelocityLimit(float request_limit) const;
     float ResolveTorqueLimit(float request_limit) const;

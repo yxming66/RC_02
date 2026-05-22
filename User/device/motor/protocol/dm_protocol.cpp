@@ -81,7 +81,7 @@ MotorProtocol<MotorKind::DM, Model>::MotorProtocol(const MotorInstanceConfig<Mot
 
 template <MotorModel Model>
 float MotorProtocol<MotorKind::DM, Model>::TotalRatio() const {
-    return ResolvePositiveRatio(MotorTraits<MotorKind::DM, Model>::kGearRatio) * ResolvePositiveRatio(install_.external_ratio);
+    return ResolvePositiveRatio(install_.external_ratio);
 }
 
 template <MotorModel Model>
@@ -387,8 +387,18 @@ int8_t MotorProtocol<MotorKind::DM, Model>::SetMIT(float position, float velocit
     return DEVICE_OK;
 }
 
+template class MotorProtocol<MotorKind::DM, MotorModel::J10010>;
+template class MotorProtocol<MotorKind::DM, MotorModel::J10010L>;
+template class MotorProtocol<MotorKind::DM, MotorModel::J10422P>;
+template class MotorProtocol<MotorKind::DM, MotorModel::J3507>;
 template class MotorProtocol<MotorKind::DM, MotorModel::J4310>;
 template class MotorProtocol<MotorKind::DM, MotorModel::J4310P>;
 template class MotorProtocol<MotorKind::DM, MotorModel::J4340>;
+template class MotorProtocol<MotorKind::DM, MotorModel::J4340P>;
+template class MotorProtocol<MotorKind::DM, MotorModel::J6006>;
+template class MotorProtocol<MotorKind::DM, MotorModel::J6248P>;
+template class MotorProtocol<MotorKind::DM, MotorModel::J8006>;
+template class MotorProtocol<MotorKind::DM, MotorModel::J8009>;
+template class MotorProtocol<MotorKind::DM, MotorModel::J8009P>;
 
 } // namespace mr::motor

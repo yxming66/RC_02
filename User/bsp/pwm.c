@@ -29,8 +29,8 @@ typedef struct {
 static const BSP_PWM_Config_t PWM_Map[BSP_PWM_NUM] = {
     {&htim12, TIM_CHANNEL_2},   /* 蜂鸣器 */
     {&htim3, TIM_CHANNEL_4},    /* IMU加热 */
-    {&htim4, TIM_CHANNEL_3},    /* 取矛头舵机 */
     {&htim4, TIM_CHANNEL_4},    /* 取矿舵机 */
+    {&htim4, TIM_CHANNEL_3},    /* 取矛头舵机 */
 };
 
 static uint32_t BSP_PWM_GetTimerClock(TIM_HandleTypeDef *htim) {
@@ -134,12 +134,9 @@ int8_t BSP_PWM_SetPulseUs(BSP_PWM_Channel_t ch, uint32_t pulse_us) {
   uint32_t timer_clock = BSP_PWM_GetTimerClock(PWM_Map[ch].tim);
   uint32_t timer_freq = timer_clock / (psc + 1U);
 
-  /* 计算周期 (us) = 1 / freq * 1e6 = 1e6 / freq */
-  float period_us = 1e6f / (float)timer_freq;
-
-  /* CCR = pulse_us / period_us * (ARR + 1) */
-  float duty_ratio = (float)pulse_us / period_us;
-  uint32_t ccr = (uint32_t)(duty_ratio * (arr + 1U));
+  /* CCR = pulse_us / timer_tick_us */
+  uint32_t ccr = (uint32_t)(((uint64_t)pulse_us * (uint64_t)timer_freq) /
+                            1000000ULL);
 
   /* 限幅到有效范围 */
   if (ccr > arr) ccr = arr;

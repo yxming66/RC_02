@@ -10,6 +10,7 @@
 #include "device/motor/factory/motor_factory.hpp"
 #include "device/motor/packages/controller/motor_controller.hpp"
 #include "device/motor/packages/soft_limit_learning/soft_limit_learning.hpp"
+#include "device/motor_rm.h"
 
 namespace {
 
@@ -25,8 +26,13 @@ constexpr float kMinDtS = 0.0005f;
 constexpr float kMaxDtS = 0.050f;
 constexpr float kDefaultSampleFreqHz = 500.0f;
 constexpr float kDefaultMoveVelocityRadS = 1.0f;
+constexpr float kDefaultMoveAccelRadS2 = 30.0f;
 constexpr float kDefaultArriveThresholdRad = 0.03f;
 constexpr float kDefaultOnlineWaitTimeoutS = 1.5f;
+constexpr uint16_t kRmM3508M2006LowGroupFirstId = 0x201u;
+constexpr uint16_t kRmM3508M2006LowGroupLastId = 0x204u;
+constexpr uint16_t kRmM3508M2006HighGroupFirstId = 0x205u;
+constexpr uint16_t kRmM3508M2006HighGroupLastId = 0x208u;
 
 alignas(PlatformController) unsigned char
     g_platform_controller_storage[sizeof(PlatformController)];
@@ -34,6 +40,8 @@ alignas(SmallController) unsigned char
     g_small_controller_storage[ORE_STORE_AXIS_NUM - 1u][sizeof(SmallController)];
 alignas(mr::motor::SoftLimitLearning) unsigned char
     g_soft_limit_storage[ORE_STORE_AXIS_NUM][sizeof(mr::motor::SoftLimitLearning)];
+KPID_t g_pole_style_position_pid[ORE_STORE_AXIS_NUM];
+KPID_t g_pole_style_velocity_pid[ORE_STORE_AXIS_NUM];
 
 bool AxisValid(uint8_t axis) {
   return axis < ORE_STORE_AXIS_NUM;
@@ -43,12 +51,59 @@ bool IsPlatformAxis(uint8_t axis) {
   return axis == ORE_STORE_AXIS_PLATFORM;
 }
 
+bool RmParamsShareOutputFrame(const MOTOR_RM_Param_t &lhs,
+                              const MOTOR_RM_Param_t &rhs) {
+  if (lhs.can != rhs.can || lhs.module != rhs.module) {
+    return false;
+  }
+  const bool lhs_low_group = lhs.id >= kRmM3508M2006LowGroupFirstId &&
+                             lhs.id <= kRmM3508M2006LowGroupLastId;
+  const bool rhs_low_group = rhs.id >= kRmM3508M2006LowGroupFirstId &&
+                             rhs.id <= kRmM3508M2006LowGroupLastId;
+  const bool lhs_high_group = lhs.id >= kRmM3508M2006HighGroupFirstId &&
+                              lhs.id <= kRmM3508M2006HighGroupLastId;
+  const bool rhs_high_group = rhs.id >= kRmM3508M2006HighGroupFirstId &&
+                              rhs.id <= kRmM3508M2006HighGroupLastId;
+  return (lhs_low_group && rhs_low_group) ||
+         (lhs_high_group && rhs_high_group);
+}
+
 uint8_t SmallAxisIndex(uint8_t axis) {
   return (axis > 0u) ? static_cast<uint8_t>(axis - 1u) : 0u;
 }
 
 float PositiveOr(float value, float fallback) {
   return scalar::positive_or(value, fallback);
+}
+
+float RmCurrentRangeA(MOTOR_RM_Module_t module) {
+  switch (module) {
+    case MOTOR_M2006:
+      return 10.0f;
+    case MOTOR_M3508:
+      return 20.0f;
+    case MOTOR_GM6020:
+      return 3.0f;
+    default:
+      return 0.0f;
+  }
+}
+
+float AxisNormalizedToTorqueNm(const OreStore_Params_t *param, uint8_t axis,
+                               float normalized_output) {
+  if (param == nullptr || !AxisValid(axis)) {
+    return 0.0f;
+  }
+  return normalized_output *
+         scalar::positive_or_zero(param->controller.normalized_to_torque_nm[axis]);
+}
+
+float AxisNormalizedToCurrentA(const OreStore_Params_t *param, uint8_t axis,
+                               float normalized_output) {
+  if (param == nullptr || !AxisValid(axis)) {
+    return 0.0f;
+  }
+  return normalized_output * RmCurrentRangeA(param->motor_param[axis].module);
 }
 
 mr::motor::MotorInstallSpec BuildInstall(const OreStore_Params_t *param,
@@ -72,9 +127,9 @@ mr::motor::MotorControllerConfig BuildControllerConfig(
       scalar::positive_or_zero(param->controller.position_to_velocity_limit[axis]);
   config.velocity_to_torque_limit =
       scalar::positive_or_zero(param->controller.velocity_to_torque_limit[axis]);
-    config.feedback_lowpass_cutoff_hz =
+  config.feedback_lowpass_cutoff_hz =
       scalar::positive_or_zero(param->controller.feedback_lowpass_cutoff_hz[axis]);
-    config.output_lowpass_cutoff_hz =
+  config.output_lowpass_cutoff_hz =
       scalar::positive_or_zero(param->controller.output_lowpass_cutoff_hz[axis]);
   return config;
 }
@@ -176,6 +231,28 @@ int8_t ControllerSetMIT(OreStore_t *store, uint8_t axis,
                                                         kp, kd, torque_ff);
 }
 
+void ResetAxisPid(OreStore_t *store, uint8_t axis) {
+  if (store == nullptr || !AxisValid(axis)) {
+    return;
+  }
+  if (IsPlatformAxis(axis)) {
+    (void)PlatformControllerPtr(store)->ResetControllers();
+  } else {
+    (void)SmallControllerPtr(store, axis)->ResetControllers();
+  }
+  (void)PID_Reset(&g_pole_style_position_pid[axis]);
+  (void)PID_Reset(&g_pole_style_velocity_pid[axis]);
+}
+
+int8_t ControllerSetLegacyNormalizedOutput(OreStore_t *store, uint8_t axis,
+                                           float output) {
+  if (store == nullptr || store->param == nullptr || !AxisValid(axis)) {
+    return ORE_STORE_ERR_NULL;
+  }
+  return MOTOR_RM_SetOutput(
+      const_cast<MOTOR_RM_Param_t *>(&store->param->motor_param[axis]), output);
+}
+
 bool ControllerHasPendingCommand(const OreStore_t *store, uint8_t axis) {
   return IsPlatformAxis(axis)
              ? PlatformControllerPtr(store)->HasPendingCommand()
@@ -248,8 +325,62 @@ float AxisMoveVelocity(const OreStore_Params_t *param, uint8_t axis) {
                     kDefaultMoveVelocityRadS);
 }
 
-float AxisTrackStep(const OreStore_Params_t *param, uint8_t axis, float dt_s) {
-  return AxisMoveVelocity(param, axis) * scalar::positive_or_zero(dt_s);
+float AxisMoveAccel(const OreStore_Params_t *param, uint8_t axis) {
+  return PositiveOr(param->limit.move_accel_rad_s2[axis],
+                    kDefaultMoveAccelRadS2);
+}
+
+float UpdateAxisMotionProfile(OreStore_t *store, uint8_t axis,
+                              float target_position_rad) {
+  const float dt_s = scalar::positive_or_zero(store->dt);
+  const float max_velocity = AxisMoveVelocity(store->param, axis);
+  const float max_accel = AxisMoveAccel(store->param, axis);
+  if (dt_s <= 0.0f || max_velocity <= 0.0f || max_accel <= 0.0f) {
+    store->command_velocity_rad_s[axis] = 0.0f;
+    store->tracked_position_rad[axis] = target_position_rad;
+    return target_position_rad;
+  }
+
+  const float position_error = target_position_rad - store->tracked_position_rad[axis];
+  const float stop_distance =
+      (store->command_velocity_rad_s[axis] * store->command_velocity_rad_s[axis]) /
+      (2.0f * max_accel);
+  float desired_velocity = 0.0f;
+  if (fabsf(position_error) > 0.0001f) {
+    desired_velocity = (position_error > 0.0f) ? max_velocity : -max_velocity;
+    if (fabsf(position_error) <= stop_distance) {
+      desired_velocity = 0.0f;
+    }
+  }
+
+  const float max_delta_velocity = max_accel * dt_s;
+  store->command_velocity_rad_s[axis] = scalar::move_towards(
+      store->command_velocity_rad_s[axis], desired_velocity, max_delta_velocity);
+
+  float next_position =
+      store->tracked_position_rad[axis] + store->command_velocity_rad_s[axis] * dt_s;
+  if ((position_error > 0.0f && next_position > target_position_rad) ||
+      (position_error < 0.0f && next_position < target_position_rad)) {
+    next_position = target_position_rad;
+    store->command_velocity_rad_s[axis] = 0.0f;
+  }
+
+  store->tracked_position_rad[axis] = next_position;
+  return next_position;
+}
+
+float AxisControlRawPositionFeedback(OreStore_t *store, uint8_t axis) {
+  if (store == nullptr || !AxisValid(axis)) {
+    return 0.0f;
+  }
+  return store->feedback.raw_position_rad[axis];
+}
+
+float AxisControlVelocityFeedback(OreStore_t *store, uint8_t axis) {
+  if (store == nullptr || !AxisValid(axis)) {
+    return 0.0f;
+  }
+  return store->feedback.velocity_rad_s[axis];
 }
 
 float AxisSeekVelocity(const OreStore_Params_t *param, uint8_t axis) {
@@ -352,6 +483,8 @@ void RefreshDebugAxis(OreStore_t *store, uint8_t axis) {
   store->debug.zero_offset_rad[axis] = store->zero_offset_rad[axis];
   store->debug.learned_lower_raw_rad[axis] = store->learned_lower_raw_rad[axis];
   store->debug.travel_rad[axis] = AxisTravel(store->param, axis);
+  store->debug.velocity_setpoint_rad_s[axis] =
+      store->velocity_setpoint_rad_s[axis];
   store->debug.online_wait_s[axis] = store->homing_online_wait_s[axis];
   store->debug.seek_velocity_rad_s[axis] =
       (limit != nullptr) ? limit->GetSeekVelocity() : 0.0f;
@@ -379,8 +512,22 @@ void RefreshDebugAxis(OreStore_t *store, uint8_t axis) {
     store->debug.filtered_velocity_rad_s[axis] = store->feedback.velocity_rad_s[axis];
     store->debug.filtered_output_torque_nm[axis] = 0.0f;
   }
+  store->debug.pole_style_output[axis] = store->pole_style_output[axis];
+  store->debug.normalized_output[axis] =
+      (store->control_mode == ORE_STORE_CONTROL_POLE_STYLE)
+          ? store->pole_style_output[axis]
+          : 0.0f;
+  if (store->control_mode == ORE_STORE_CONTROL_POLE_STYLE) {
+    store->debug.filtered_output_torque_nm[axis] = AxisNormalizedToTorqueNm(
+        store->param, axis, store->pole_style_output[axis]);
+  }
   store->debug.motor_torque_nm[axis] = store->feedback.motor[axis].torque_current;
-  if (store->controller[axis] != nullptr) {
+  if (store->control_mode == ORE_STORE_CONTROL_POLE_STYLE) {
+    store->debug.rm_last_set_torque_nm[axis] = AxisNormalizedToTorqueNm(
+        store->param, axis, store->pole_style_output[axis]);
+    store->debug.rm_pending_current_a[axis] = AxisNormalizedToCurrentA(
+        store->param, axis, store->pole_style_output[axis]);
+  } else if (store->controller[axis] != nullptr) {
     store->debug.rm_last_set_torque_nm[axis] =
         ControllerLastSetTorqueNm(store, axis);
     store->debug.rm_pending_current_a[axis] =
@@ -428,6 +575,9 @@ void ResetAxisHoming(OreStore_t *store, uint8_t axis) {
   store->target_position_rad[axis] = 0.0f;
   store->tracked_position_rad[axis] = 0.0f;
   store->command_position_rad[axis] = 0.0f;
+  store->velocity_setpoint_rad_s[axis] = 0.0f;
+  store->pole_style_output[axis] = 0.0f;
+  ResetAxisPid(store, axis);
   RefreshDebugAxis(store, axis);
 }
 
@@ -466,6 +616,32 @@ void SyncAxisTargetToFeedback(OreStore_t *store, uint8_t axis) {
   store->target_position_rad[axis] = position;
   store->tracked_position_rad[axis] = position;
   store->command_position_rad[axis] = position;
+  store->velocity_setpoint_rad_s[axis] = 0.0f;
+  store->pole_style_output[axis] = 0.0f;
+  ResetAxisPid(store, axis);
+}
+
+int8_t ActiveAxisPoleStyle(OreStore_t *store, uint8_t axis,
+                           float raw_target) {
+  float velocity_setpoint = PID_Calc(&g_pole_style_position_pid[axis],
+                                     raw_target,
+                                     AxisControlRawPositionFeedback(store, axis),
+                                     0.0f, store->dt);
+  float output = PID_Calc(&g_pole_style_velocity_pid[axis],
+                          velocity_setpoint,
+                          AxisControlVelocityFeedback(store, axis),
+                          0.0f, store->dt);
+
+  const float output_limit = scalar::positive_or_zero(
+      store->param->controller.normalized_output_limit[axis]);
+  if (output_limit > 0.0f) {
+    output = scalar::clamp_scalar(output, -output_limit, output_limit);
+  } else {
+    output = scalar::clamp_scalar(output, -1.0f, 1.0f);
+  }
+  store->velocity_setpoint_rad_s[axis] = velocity_setpoint;
+  store->pole_style_output[axis] = output;
+  return ControllerSetLegacyNormalizedOutput(store, axis, output);
 }
 
 int8_t FinishAxisHome(OreStore_t *store, uint8_t axis, float raw_lower_rad) {
@@ -590,9 +766,7 @@ int8_t ActiveAxis(OreStore_t *store, const OreStore_CMD_t *cmd, uint8_t axis) {
   const float requested_target = CommandTarget(cmd, axis);
   store->target_position_rad[axis] = requested_target;
   const float limited_target = limit->ClampPosition(requested_target);
-  store->tracked_position_rad[axis] = scalar::move_towards(
-      store->tracked_position_rad[axis], limited_target,
-      AxisTrackStep(store->param, axis, store->dt));
+  (void)UpdateAxisMotionProfile(store, axis, limited_target);
   store->command_position_rad[axis] = limit->ClampPosition(store->tracked_position_rad[axis]);
   const float raw_target = store->zero_offset_rad[axis] + store->command_position_rad[axis];
 
@@ -602,6 +776,10 @@ int8_t ActiveAxis(OreStore_t *store, const OreStore_CMD_t *cmd, uint8_t axis) {
     const float kd = store->param->pid.mit_kd[axis];
     const float target_velocity = AxisMoveVelocity(store->param, axis);
     return ControllerSetMIT(store, axis, raw_target, target_velocity, kp, kd, 0.0f);
+  }
+
+  if (store->control_mode == ORE_STORE_CONTROL_POLE_STYLE) {
+    return ActiveAxisPoleStyle(store, axis, raw_target);
   }
 
   // 默认双环PID控制
@@ -683,9 +861,17 @@ int8_t OreStore_Init(OreStore_t *store, const OreStore_Params_t *param,
 
   store->param = param;
   store->mode = ORE_STORE_MODE_RELAX;
-  store->control_mode = ORE_STORE_CONTROL_MIT_STYLE;
+  store->control_mode = ORE_STORE_CONTROL_POLE_STYLE;
 
   for (uint8_t axis = 0; axis < ORE_STORE_AXIS_NUM; ++axis) {
+    const float sample_freq = PositiveOr(param->controller.sample_freq,
+                                         PositiveOr(target_freq, kDefaultSampleFreqHz));
+    if (PID_Init(&g_pole_style_position_pid[axis], KPID_MODE_CALC_D,
+                 sample_freq, &param->pid.pole_position_pid[axis]) != DEVICE_OK ||
+        PID_Init(&g_pole_style_velocity_pid[axis], KPID_MODE_CALC_D,
+                 sample_freq, &param->pid.pole_velocity_pid[axis]) != DEVICE_OK) {
+      return ORE_STORE_ERR;
+    }
     const int8_t ret = ConstructAxis(store, axis, target_freq);
     if (ret != ORE_STORE_OK) {
       return ret;
@@ -812,12 +998,33 @@ void OreStore_Output(OreStore_t *store) {
     return;
   }
 
+  bool rm_frame_sent[ORE_STORE_AXIS_NUM] = {false};
+
   for (uint8_t axis = 0; axis < ORE_STORE_AXIS_NUM; ++axis) {
     if (store->controller[axis] == nullptr) {
       store->debug.commit_ret[axis] = DEVICE_ERR_NULL;
       continue;
     }
-    store->debug.commit_ret[axis] = ControllerCommit(store, axis);
+    if (store->control_mode == ORE_STORE_CONTROL_POLE_STYLE) {
+      const MOTOR_RM_Param_t *axis_param = &store->param->motor_param[axis];
+      bool already_sent = false;
+      for (uint8_t prev_axis = 0; prev_axis < axis; ++prev_axis) {
+        const MOTOR_RM_Param_t *prev_param = &store->param->motor_param[prev_axis];
+        if (RmParamsShareOutputFrame(*prev_param, *axis_param)) {
+          already_sent = rm_frame_sent[prev_axis];
+          break;
+        }
+      }
+      if (already_sent) {
+        store->debug.commit_ret[axis] = DEVICE_OK;
+      } else {
+        store->debug.commit_ret[axis] = MOTOR_RM_Ctrl(
+            const_cast<MOTOR_RM_Param_t *>(axis_param));
+        rm_frame_sent[axis] = store->debug.commit_ret[axis] == DEVICE_OK;
+      }
+    } else {
+      store->debug.commit_ret[axis] = ControllerCommit(store, axis);
+    }
     RefreshDebugAxis(store, axis);
   }
 }
