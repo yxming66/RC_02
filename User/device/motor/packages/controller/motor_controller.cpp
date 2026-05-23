@@ -1,5 +1,51 @@
 #include "device/motor/packages/controller/motor_controller.hpp"
 
+// MotorControllerT 控制律说明
+//
+// 周期时序:
+//   UpdateControlDt() -> motor_.Update() -> FilterFeedback() -> 按 mode_ 计算命令。
+//   计算出的命令只写入底层协议待发送缓存；真正发送由 CommitCommand() 完成。
+//   简化接口 Step(command_fn) 会按 Update -> command_fn -> CommitCommand 的顺序执行。
+//
+// 控制模式:
+//   Torque:
+//     u_torque = target_torque
+//     经过输出低通后调用 motor_.SetTorque()。
+//
+//   NativeVelocity:
+//     电机协议原生支持速度闭环时，直接 motor_.SetVelocity(target_velocity)。
+//
+//   EmulatedVelocity:
+//     u_torque = velocity_pid(target_velocity - feedback_velocity)
+//     再按 velocity_to_torque_limit 或电机 Traits 回退限幅裁剪，最后 SetTorque。
+//
+//   NativePosition:
+//     电机协议原生支持位置闭环时，直接 motor_.SetPosition(target_position, velocity_limit)。
+//
+//   EmulatedPosition:
+//     velocity_cmd = position_pid(target_position - feedback_position)
+//     u_torque     = velocity_pid(velocity_cmd - feedback_velocity)
+//     位置环输出速度目标，速度环输出力矩目标，是当前通用软件串级闭环。
+//
+//   EmulatedPositionTorque:
+//     u_torque = position_pid(target_position - feedback_position)
+//     不经过速度内环，适合把位置环当“虚拟弹簧”直接输出力矩的场景。
+//
+//   NativeMit:
+//     电机协议原生支持 MIT 时，透传 target_position / target_velocity / Kp / Kd / torque_ff。
+//
+//   EmulatedMit:
+//     u_torque = Kp * (target_position - feedback_position)
+//              - Kd * feedback_velocity
+//              + torque_ff
+//     target_velocity 当前仅保留接口语义，模拟实现不引入速度误差项。
+//
+// 滤波与限幅:
+//   feedback_lowpass_cutoff_hz 对闭环使用的 position/velocity 做一阶低通；<=0 时直通。
+//   output_lowpass_cutoff_hz 只作用于最终力矩命令；原生速度/位置/MIT 不经过输出滤波。
+//   速度限幅回退: 显式限幅 -> 推荐速度 -> 额定速度 -> 最大速度。
+//   力矩限幅回退: 显式限幅 -> 推荐/额定/峰值电流结合力矩常数估算；仍无有效值时输出压为 0。
+
 namespace mr::motor {
 
 namespace {
@@ -102,6 +148,11 @@ float ResolveCutoffHz(float cutoff_hz) {
 } // namespace
 
 template <typename MotorType>
+MotorControllerT<MotorType>::MotorControllerT(MotorType& motor)
+    : MotorControllerT(motor, MotorControllerDefaults<MotorType>::Config()) {
+}
+
+template <typename MotorType>
 MotorControllerT<MotorType>::MotorControllerT(MotorType& motor,
                                               const MotorControllerConfig& config)
     : motor_(motor),
@@ -112,13 +163,13 @@ MotorControllerT<MotorType>::MotorControllerT(MotorType& motor,
       control_dt_fallback_s_(ResolveDefaultDtS(config.sample_freq)),
       velocity_pid_ready_(PidParamsUsable(config.velocity_pid)),
       position_pid_ready_(PidParamsUsable(config.position_pid)),
-    feedback_lowpass_cutoff_hz_(ResolveCutoffHz(config.feedback_lowpass_cutoff_hz)),
-    output_lowpass_cutoff_hz_(ResolveCutoffHz(config.output_lowpass_cutoff_hz)),
-    feedback_filter_initialized_(false),
-    output_filter_initialized_(false),
-    filtered_position_(0.0f),
-    filtered_velocity_(0.0f),
-    filtered_output_torque_(0.0f),
+            feedback_lowpass_cutoff_hz_(ResolveCutoffHz(config.feedback_lowpass_cutoff_hz)),
+            output_lowpass_cutoff_hz_(ResolveCutoffHz(config.output_lowpass_cutoff_hz)),
+            feedback_filter_initialized_(false),
+            output_filter_initialized_(false),
+            filtered_position_(0.0f),
+            filtered_velocity_(0.0f),
+            filtered_output_torque_(0.0f),
       mode_(ControlMode::Torque),
       target_torque_(0.0f),
       target_velocity_(0.0f),
@@ -127,10 +178,28 @@ MotorControllerT<MotorType>::MotorControllerT(MotorType& motor,
       velocity_torque_limit_(config.velocity_to_torque_limit),
       target_mit_kp_(0.0f),
       target_mit_kd_(0.0f),
-    target_mit_torque_ff_(0.0f),
-    last_feedback_position_(0.0f),
-    last_feedback_velocity_(0.0f),
-    last_output_torque_(0.0f) {
+            target_mit_torque_ff_(0.0f),
+            last_feedback_position_(0.0f),
+            last_feedback_velocity_(0.0f),
+            last_output_torque_(0.0f) {
+}
+
+template <typename MotorType>
+int8_t MotorControllerT<MotorType>::Initialize() {
+    const int8_t register_ret = Register();
+    if (register_ret != DEVICE_OK) {
+        return register_ret;
+    }
+    return Enable();
+}
+
+template <typename MotorType>
+int8_t MotorControllerT<MotorType>::Tick() {
+    const int8_t update_ret = Update();
+    if (update_ret != DEVICE_OK) {
+        return update_ret;
+    }
+    return CommitCommand();
 }
 
 template <typename MotorType>
@@ -234,7 +303,6 @@ int8_t MotorControllerT<MotorType>::Update() {
                              target_mit_kd_, target_mit_torque_ff_);
 
     case ControlMode::EmulatedMit: {
-        // MIT 控制律: torque = Kp * (target_pos - current_pos) - Kd * current_velocity + torque_ff
         float pos_error = target_position_ - state.position_rad;
         float torque_cmd = target_mit_kp_ * pos_error
                          - target_mit_kd_ * state.velocity_rad_s

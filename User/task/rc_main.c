@@ -201,14 +201,21 @@ static bool Rc_SwitchJustReleasedToMid(DR16_SwitchPos_t current, DR16_SwitchPos_
   return (current == DR16_SW_MID && last == from_pos);
 }
 
+static bool Rc_AutoCtrlSwitchGestureActive(void) {
+  return dr16.header.online &&
+         dr16.data.sw_l == DR16_SW_MID &&
+         last_sw_l == DR16_SW_MID &&
+         last_sw_r == DR16_SW_MID &&
+         (dr16.data.sw_r == DR16_SW_UP || dr16.data.sw_r == DR16_SW_DOWN);
+}
+
 static RcAutoCtrlStartConfig_t Rc_SelectAutoCtrlStartConfig(void) {
   RcAutoCtrlStartConfig_t config = {
       AUTO_CTRL_TEMPLATE_NONE,
       AUTO_CTRL_TRAVEL_DIR_HEAD_FORWARD,
   };
 
-  if (dr16.data.sw_l != DR16_SW_MID || last_sw_l != DR16_SW_MID ||
-      last_sw_r != DR16_SW_MID) {
+  if (!Rc_AutoCtrlSwitchGestureActive()) {
     return config;
   }
 

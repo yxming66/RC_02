@@ -400,5 +400,6 @@ template class MotorProtocol<MotorKind::DM, MotorModel::J6248P>;
 template class MotorProtocol<MotorKind::DM, MotorModel::J8006>;
 template class MotorProtocol<MotorKind::DM, MotorModel::J8009>;
 template class MotorProtocol<MotorKind::DM, MotorModel::J8009P>;
+template class MotorProtocol<MotorKind::DM, MotorModel::H3510>;
 
 } // namespace mr::motor

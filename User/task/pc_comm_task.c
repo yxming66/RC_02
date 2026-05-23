@@ -275,8 +275,8 @@ void Task_pc_comm(void *argument) {
             last_tx_tick = now;
         }
 
-        /* 处理PC自动上台阶命令 */
-        if (auto_ctrl_inited &&
+        /* 上下台阶只允许由遥控器 RC 拨杆触发，不再消费 PC 自动台阶命令。 */
+        if (false && auto_ctrl_inited &&
             g_pc_command_source == PC_COMMAND_SOURCE_PC &&
             PC_Protocol_IsPCControlMode(&comm->protocol)) {
             const PC_AutoStepParams_t *step_params = PC_Protocol_GetAutoStepParams(&comm->protocol);

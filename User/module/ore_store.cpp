@@ -153,14 +153,9 @@ mr::motor::MotorTemperatureProtectionConfig BuildTemperatureProtectionConfig(
 mr::motor::SoftLimitLearningConfig BuildSoftLimitConfig(
     const OreStore_SoftLimitConfig_t &config) {
   mr::motor::SoftLimitLearningConfig out{};
-  out.stall_velocity_threshold_rad_s =
-      config.stall_velocity_threshold_rad_s;
-  out.stall_position_window_rad = config.stall_position_window_rad;
-  out.stall_cycles_required = config.stall_cycles_required;
-  out.seek_timeout_s = config.seek_timeout_s;
+  out.seek_velocity_rad_s = 0.0f;
+  out.known_travel_rad = 0.0f;
   out.limit_margin_rad = config.limit_margin_rad;
-  out.learned_limit_margin_rad =
-      PositiveOr(config.learned_limit_margin_rad, config.limit_margin_rad);
   out.min_range_rad = config.min_range_rad;
   return out;
 }
@@ -725,7 +720,10 @@ int8_t HomeAxis(OreStore_t *store, uint8_t axis) {
 
   if (!store->homing_started[axis]) {
     limit->ClearRange();
-    if (!limit->StartSeekLower(AxisSeekVelocity(store->param, axis))) {
+    mr::motor::SoftLimitLearningConfig config = limit->GetConfig();
+    config.seek_velocity_rad_s = AxisSeekVelocity(store->param, axis);
+    limit->Configure(config);
+    if (!limit->StartSeekLower()) {
       store->axis_failed[axis] = true;
       limit->MarkFailed();
       return ORE_STORE_ERR;

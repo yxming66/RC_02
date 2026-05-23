@@ -24,6 +24,7 @@ using DmJ6248PMotor = MotorT<MotorKind::DM, MotorModel::J6248P>;
 using DmJ8006Motor = MotorT<MotorKind::DM, MotorModel::J8006>;
 using DmJ8009Motor = MotorT<MotorKind::DM, MotorModel::J8009>;
 using DmJ8009PMotor = MotorT<MotorKind::DM, MotorModel::J8009P>;
+using DmH3510Motor = MotorT<MotorKind::DM, MotorModel::H3510>;
 
 using LzRso0Motor = MotorT<MotorKind::LZ, MotorModel::RSO0>;
 using LzRso1Motor = MotorT<MotorKind::LZ, MotorModel::RSO1>;

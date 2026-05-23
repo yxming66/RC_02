@@ -124,14 +124,14 @@ struct MotorTraits<MotorKind::RM, MotorModel::M2006> : MotorTraitsBase<MotorKind
     static constexpr bool kIsMultiTurn = true;
     static constexpr bool kHasNativeZeroSet = true;
     static constexpr float kMaxTorque = 1.8f;
-    static constexpr float kMaxVelocity = 43.56f;
+    static constexpr float kMaxVelocity = 45.0f;
     static constexpr float kRecommendedCurrent = 3.0f;
     static constexpr float kRatedCurrent = 3.0f;
     static constexpr float kPeakCurrent = 10.0f;
     static constexpr float kRawCurrentRange = 10000.0f;
     static constexpr float kCurrentRangeAmp = 10.0f;
-    static constexpr float kRecommendedVelocity = 43.56f;
-    static constexpr float kRatedVelocity = 43.56f;
+    static constexpr float kRecommendedVelocity = 45.0f;
+    static constexpr float kRatedVelocity = 45.0f;
     static constexpr float kNoLoadVelocity = 52.36f;
     static constexpr float kRatedTorque = 1.0f;
     static constexpr float kPeakTorque = 1.8f;
