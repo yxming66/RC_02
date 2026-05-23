@@ -123,6 +123,7 @@ static bool ore_store_active_initialized = false;
 static bool arm_simple_target_initialized = false;
 static RodNew_Pose_t rod_pose_latched = ROD_NEW_POSE_STANDBY;
 static RodNew_GripState_t rod_grip_latched = ROD_NEW_GRIP_RELEASE;
+static Suction_State_t arm_simple_suction_latched = SUCTION_OFF;
 
 #define RC_ORE_STORE_DEADBAND (0.05f)
 #define RC_ORE_STORE_FALLBACK_MOVE_SPEED_RAD_S (0.5f)
@@ -144,7 +145,21 @@ static float Rc_ApplyDeadband(float value, float deadband) {
 static void Rc_SetRodRelax(void) {
   rod_cmd.mode = ROD_NEW_MODE_RELAX;
   rod_cmd.pose = ROD_NEW_POSE_STANDBY;
-  rod_cmd.grip = ROD_NEW_GRIP_RELEASE;
+  rod_cmd.grip = rod_grip_latched;
+}
+
+static void Rc_ToggleArmSimpleSuction(void) {
+  arm_simple_suction_latched = (arm_simple_suction_latched == SUCTION_ON)
+                                   ? SUCTION_OFF
+                                   : SUCTION_ON;
+  arm_simple_cmd.suction = arm_simple_suction_latched;
+}
+
+static void Rc_ToggleRodGrip(void) {
+  rod_grip_latched = (rod_grip_latched == ROD_NEW_GRIP_GRAB)
+                         ? ROD_NEW_GRIP_RELEASE
+                         : ROD_NEW_GRIP_GRAB;
+  rod_cmd.grip = rod_grip_latched;
 }
 
 static void Rc_SetRodHold(void) {
@@ -363,13 +378,14 @@ static void Rc_SetArmSimpleRelax(void) {
   memset(&arm_simple_cmd, 0, sizeof(arm_simple_cmd));
   arm_simple_cmd.mode = ARM_SIMPLE_MODE_RELAX;
   arm_simple_cmd.point_mode = ARM_SIMPLE_POINT_NONE;
-  arm_simple_cmd.suction = SUCTION_OFF;
+  arm_simple_cmd.suction = arm_simple_suction_latched;
   arm_simple_target_initialized = false;
 }
 
 static void Rc_SetArmSimpleHold(void) {
   arm_simple_cmd.mode = ARM_SIMPLE_MODE_JOINT;
   arm_simple_cmd.point_mode = ARM_SIMPLE_POINT_NONE;
+  arm_simple_cmd.suction = arm_simple_suction_latched;
   arm_simple_target_initialized = true;
 }
 
@@ -475,10 +491,11 @@ static void Rc_SetArmSimpleOperator(float scale) {
   }
 
   if (dr16.data.mouse.l_click || Rc_KeyDown(DR16_KEY_Q)) {
-    arm_simple_cmd.suction = SUCTION_OFF;
+    arm_simple_suction_latched = SUCTION_OFF;
   } else if (dr16.data.mouse.r_click || Rc_KeyDown(DR16_KEY_E)) {
-    arm_simple_cmd.suction = SUCTION_ON;
+    arm_simple_suction_latched = SUCTION_ON;
   }
+  arm_simple_cmd.suction = arm_simple_suction_latched;
 }
 
 static void Rc_SetArmPoseAbsolute(const ArmPose_t* target_pose,
@@ -554,7 +571,7 @@ static bool Rc_ShouldUsePcCommand(void) {
   return g_pc_protocol_ptr != NULL &&
          PC_Protocol_IsPCControlMode(g_pc_protocol_ptr) &&
          dr16.data.sw_l == DR16_SW_UP &&
-         dr16.data.sw_r == RC_PC_ENABLE_SWITCH;
+         dr16.data.sw_r == DR16_SW_UP;
 }
 
 static bool Rc_PrepareLocalAutoYawFeedback(void) {
@@ -658,7 +675,6 @@ void Task_rc_main(void *argument) {
   while (1) {
     uint32_t now_ms;
     tick += delay_tick;
-
     DR16_StartDmaRecv(&dr16);
     if (DR16_WaitDmaCplt(100)) {
       DR16_ParseData(&dr16);
@@ -734,26 +750,13 @@ void Task_rc_main(void *argument) {
       Rc_SetArmDisabled();
       Rc_SetArmSimpleHold();
       Rc_SetRodHold();
-    } else if (dr16.data.sw_l == DR16_SW_DOWN) {
+    } else if (dr16.data.sw_l == DR16_SW_UP) {
       const bool use_pc_command = Rc_ShouldUsePcCommand();
 
       if (!use_pc_command && auto_ctrl_inited && AutoCtrl_IsBusy(&auto_ctrl)) {
         AutoCtrl_Abort(&auto_ctrl);
       }
 
-      /* 左DOWN + 右UP → MID：切换ARM_SOLENOID */
-      if (Rc_SwitchJustReleasedToMid(dr16.data.sw_r, last_sw_r, DR16_SW_UP) && dr16.data.sw_l == DR16_SW_DOWN) {
-        bool current = BSP_GPIO_ReadPin(BSP_GPIO_ARM_SOLENOID);
-        BSP_GPIO_WritePin(BSP_GPIO_ARM_SOLENOID, !current);
-      }
-
-      /* 左DOWN + 右DOWN → MID：切换ROD_SOLENOID */
-      if (Rc_SwitchJustReleasedToMid(dr16.data.sw_r, last_sw_r, DR16_SW_DOWN) && dr16.data.sw_l == DR16_SW_DOWN) {
-        bool current = BSP_GPIO_ReadPin(BSP_GPIO_ROD_SOLENOID);
-        BSP_GPIO_WritePin(BSP_GPIO_ROD_SOLENOID, !current);
-      }
-
-      /* 左UP + 右UP 时允许使用上位机命令。 */
       if (use_pc_command) {
         g_rc_control_debug.page = RC_CONTROL_PAGE_PC;
         g_pc_command_source = PC_COMMAND_SOURCE_PC;
@@ -765,38 +768,64 @@ void Task_rc_main(void *argument) {
           Rc_SetAutoDryRunCommands();
 #endif
         } else {
-        /* 上位机控制模式 */
-        const PC_ChassisCMD_t* pc_chassis_cmd = PC_Protocol_GetChassisCMD(g_pc_protocol_ptr);
-        const PC_PoleCMD_t* pc_pole_cmd = PC_Protocol_GetPoleCMD(g_pc_protocol_ptr);
+          /* 上位机控制模式 */
+          const PC_ChassisCMD_t* pc_chassis_cmd = PC_Protocol_GetChassisCMD(g_pc_protocol_ptr);
+          const PC_PoleCMD_t* pc_pole_cmd = PC_Protocol_GetPoleCMD(g_pc_protocol_ptr);
 
-        /* 使用上位机Chassis命令 */
-        if (pc_chassis_cmd != NULL) {
-          chassis_cmd.mode = CHASSIS_MODE_INDEPENDENT;
-          chassis_cmd.ctrl_vec.vx = pc_chassis_cmd->vx;
-          chassis_cmd.ctrl_vec.vy = pc_chassis_cmd->vy;
-          chassis_cmd.ctrl_vec.wz = pc_chassis_cmd->wz;
-        } else {
-          Rc_SetChassisRelax();
-        }
+          /* 使用上位机Chassis命令 */
+          if (pc_chassis_cmd != NULL) {
+            chassis_cmd.mode = CHASSIS_MODE_INDEPENDENT;
+            chassis_cmd.ctrl_vec.vx = pc_chassis_cmd->vx;
+            chassis_cmd.ctrl_vec.vy = pc_chassis_cmd->vy;
+            chassis_cmd.ctrl_vec.wz = pc_chassis_cmd->wz;
+          } else {
+            Rc_SetChassisRelax();
+          }
 
-        /* 使用上位机Pole命令 */
-        if (pc_pole_cmd != NULL) {
-          pole_cmd.mode = (pc_pole_cmd->mode == 0) ? POLE_MODE_RELAX : POLE_MODE_ACTIVE;
-          pole_cmd.lift[0] = 0.0f;
-          pole_cmd.lift[1] = 0.0f;
-          pole_cmd.auto_target_enable[0] = (pole_cmd.mode == POLE_MODE_ACTIVE);
-          pole_cmd.auto_target_enable[1] = (pole_cmd.mode == POLE_MODE_ACTIVE);
-          pole_cmd.auto_target_lift[0] = pc_pole_cmd->lift[0];
-          pole_cmd.auto_target_lift[1] = pc_pole_cmd->lift[1];
-          pole_cmd.auto_lift_speed[0] = 0.0f;
-          pole_cmd.auto_lift_speed[1] = 0.0f;
-        }
+          /* 使用上位机Pole命令 */
+          if (pc_pole_cmd != NULL) {
+            pole_cmd.mode = (pc_pole_cmd->mode == 0) ? POLE_MODE_RELAX : POLE_MODE_ACTIVE;
+            pole_cmd.lift[0] = 0.0f;
+            pole_cmd.lift[1] = 0.0f;
+            pole_cmd.auto_target_enable[0] = (pole_cmd.mode == POLE_MODE_ACTIVE);
+            pole_cmd.auto_target_enable[1] = (pole_cmd.mode == POLE_MODE_ACTIVE);
+            pole_cmd.auto_target_lift[0] = pc_pole_cmd->lift[0];
+            pole_cmd.auto_target_lift[1] = pc_pole_cmd->lift[1];
+            pole_cmd.auto_lift_speed[0] = 0.0f;
+            pole_cmd.auto_lift_speed[1] = 0.0f;
+          }
         }
         Rc_SetArmDisabled();
         Rc_SetArmSimpleHold();
         Rc_SetRodHold();
         Rc_SetOreStoreHold();
-      } else if (dr16.data.sw_r == DR16_SW_MID) {
+      } else {
+        g_rc_control_debug.page = RC_CONTROL_PAGE_ARM_SIMPLE;
+        Rc_SetChassisRelax();
+        Rc_SetPoleHold();
+        Rc_SetArmDisabled();
+        Rc_SetArmSimpleOperator(RC_ARM_FINE_SCALE);
+        Rc_SetRodHold();
+        Rc_SetOreStoreHold();
+        g_rc_control_debug.arm_simple_active = true;
+      }
+    } else if (dr16.data.sw_l == DR16_SW_DOWN) {
+      if (auto_ctrl_inited && AutoCtrl_IsBusy(&auto_ctrl)) {
+        AutoCtrl_Abort(&auto_ctrl);
+      }
+
+      /* 左DOWN + 右UP → MID：切换ARM_SOLENOID */
+      if (Rc_SwitchJustReleasedToMid(dr16.data.sw_r, last_sw_r, DR16_SW_UP) && dr16.data.sw_l == DR16_SW_DOWN) {
+        Rc_ToggleArmSimpleSuction();
+      }
+
+      /* 左DOWN + 右DOWN → MID：切换ROD_SOLENOID */
+      if (Rc_SwitchJustReleasedToMid(dr16.data.sw_r, last_sw_r, DR16_SW_DOWN) && dr16.data.sw_l == DR16_SW_DOWN) {
+        Rc_ToggleRodGrip();
+      }
+
+      /* 左DOWN + 右UP：ARM_SIMPLE 操作模式 */
+      if (dr16.data.sw_r == DR16_SW_UP) {
         g_rc_control_debug.page = RC_CONTROL_PAGE_ARM_SIMPLE;
         Rc_SetChassisRelax();
         Rc_SetPoleHold();
@@ -815,14 +844,6 @@ void Task_rc_main(void *argument) {
         Rc_SetRodOperator();
         g_rc_control_debug.rod_active = true;
         g_rc_control_debug.ore_store_active = true;
-      } else {
-        g_rc_control_debug.page = RC_CONTROL_PAGE_SAFE;
-        Rc_SetChassisRelax();
-        Rc_SetPoleHold();
-        Rc_SetArmDisabled();
-        Rc_SetArmSimpleHold();
-        Rc_SetRodHold();
-        Rc_SetOreStoreHold();
       }
     }
 

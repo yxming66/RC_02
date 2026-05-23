@@ -39,9 +39,6 @@ void Task_arm_simple(void *argument)
         osThreadTerminate(osThreadGetId());
     }
 
-    if (MOTOR_DM_Enable(&arm_simple.param->dm4340_param) == DEVICE_OK) {
-        arm_simple.dm_enabled = true;
-    }
     for (uint8_t i = 0U; i < 50U; ++i) {
         if (ArmSimple_UpdateFeedback(&arm_simple) == ARM_SIMPLE_OK) {
             break;
@@ -93,7 +90,7 @@ void Task_arm_simple(void *argument)
 
         /* 处理零位设置请求 */
         if (set_zero_requested) {
-            MOTOR_DM_SetZero(&arm_simple.param->dm4340_param);
+            (void)ArmSimple_SetJoint1Zero(&arm_simple);
             set_zero_requested = false;
         }
 

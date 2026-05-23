@@ -121,6 +121,7 @@ typedef struct {
 /* 臂实例 */
 typedef struct {
     ArmSimple_Params_t *param;
+    void *dm_motor;
     ArmSimple_Mode_t mode;
     ArmSimple_Mode_t last_output_mode;
     bool dm_enabled;
@@ -157,6 +158,7 @@ int8_t ArmSimple_Init(ArmSimple_t *a, ArmSimple_Params_t *param, float target_fr
 int8_t ArmSimple_UpdateFeedback(ArmSimple_t *a);
 int8_t ArmSimple_Control(ArmSimple_t *a, const ArmSimple_CMD_t *cmd);
 int8_t ArmSimple_Output(ArmSimple_t *a);
+int8_t ArmSimple_SetJoint1Zero(ArmSimple_t *a);
 void ArmSimple_Relax(ArmSimple_t *a);
 void ArmSimple_SetSuction(ArmSimple_t *a, Suction_State_t state);
 bool ArmSimple_Joint1AtTarget(ArmSimple_t *a, float threshold_rad);

@@ -5,8 +5,20 @@
 #include "module/arm_simple.h"
 #include "bsp/pwm.h"
 #include "bsp/gpio.h"
+#include "device/device.h"
+#include "device/motor/core/motor_aliases.hpp"
+#include "device/motor/core/motor_instance_config.hpp"
+#include "device/motor/core/motor_state.hpp"
+#include "device/motor/factory/motor_factory.hpp"
 #include <string.h>
 #include <math.h>
+
+using ArmSimpleDmMotor = mr::motor::DmJ4340Motor;
+
+static ArmSimpleDmMotor *ArmSimple_GetDmMotor(ArmSimple_t *a)
+{
+    return (a == NULL) ? NULL : reinterpret_cast<ArmSimpleDmMotor *>(a->dm_motor);
+}
 
 static float ClampAngle(float angle, float min_angle, float max_angle)
 {
@@ -81,7 +93,16 @@ int8_t ArmSimple_Init(ArmSimple_t *a, ArmSimple_Params_t *param, float target_fr
     a->target.joint2_target = 0.0f;
     a->target.joint1_vel_target = 0.0f;
 
-    MOTOR_DM_Register(&param->dm4340_param);
+    const auto dm_config =
+        mr::motor::MotorInstanceConfig<mr::motor::MotorKind::DM>::FromVendorParam(
+            param->dm4340_param);
+    ArmSimpleDmMotor *dm_motor =
+        mr::motor::MotorFactory::Create<mr::motor::MotorKind::DM,
+                                        mr::motor::MotorModel::J4340>(dm_config);
+    if (dm_motor == NULL || dm_motor->Register() != DEVICE_OK) {
+        return ARM_SIMPLE_ERR;
+    }
+    a->dm_motor = dm_motor;
 
     /* 初始化舵机PWM */
     BSP_PWM_SetFreq(param->servo_param.pwm_channel,
@@ -118,15 +139,22 @@ int8_t ArmSimple_UpdateFeedback(ArmSimple_t *a)
         return ARM_SIMPLE_ERR;
     }
 
-    MOTOR_DM_Update(&a->param->dm4340_param);
-
-    MOTOR_DM_t *motor = MOTOR_DM_GetMotor(&a->param->dm4340_param);
-    if (motor != NULL) {
-        a->feedback.joint1_angle = motor->motor.feedback.rotor_abs_angle;
-        a->feedback.joint1_vel = motor->motor.feedback.rotor_speed;
+    ArmSimpleDmMotor *motor = ArmSimple_GetDmMotor(a);
+    if (motor == NULL) {
+        return ARM_SIMPLE_ERR;
     }
+
+    const int8_t ret = motor->Update();
+    if (a->mode != ARM_SIMPLE_MODE_RELAX) {
+        (void)motor->Enable();
+    }
+    const mr::motor::MotorState state = motor->GetState();
+    a->feedback.joint1_angle = state.position_rad;
+    a->feedback.joint1_vel = state.velocity_rad_s;
+    a->dm_enabled = state.online &&
+                    state.protocol_state == mr::motor::MotorProtocolState::Enabled;
  
-    return ARM_SIMPLE_OK;
+    return (ret == DEVICE_OK) ? ARM_SIMPLE_OK : ARM_SIMPLE_ERR;
 }
 
 int8_t ArmSimple_Control(ArmSimple_t *a, const ArmSimple_CMD_t *cmd)
@@ -172,18 +200,22 @@ int8_t ArmSimple_Output(ArmSimple_t *a)
         return ARM_SIMPLE_ERR;
     }
 
+    ArmSimpleDmMotor *motor = ArmSimple_GetDmMotor(a);
+    if (motor == NULL) {
+        return ARM_SIMPLE_ERR;
+    }
+
     if (a->mode == ARM_SIMPLE_MODE_RELAX) {
-        MOTOR_DM_Relax(&a->param->dm4340_param);
+        (void)motor->Relax();
+        a->dm_enabled = false;
     } else {
-        MOTOR_MIT_Output_t joint1_output = {
-            .torque = a->param->mit.joint1_torque_ff +
-                      ArmSimple_Joint1GravityTorque(a),
-            .velocity = a->target.joint1_vel_target,
-            .angle = a->target.joint1_target,
-            .kp = a->param->mit.joint1_kp,
-            .kd = a->param->mit.joint1_kd,
-        };
-        MOTOR_DM_MITCtrl(&a->param->dm4340_param, &joint1_output);
+        (void)motor->SetMIT(a->target.joint1_target,
+                            a->target.joint1_vel_target,
+                            a->param->mit.joint1_kp,
+                            a->param->mit.joint1_kd,
+                            a->param->mit.joint1_torque_ff +
+                                ArmSimple_Joint1GravityTorque(a));
+        (void)motor->CommitCommand();
     }
     BSP_PWM_SetPulseUs(a->param->servo_param.pwm_channel,
                        ArmSimple_AngleToPulseUs(a->target.joint2_target, a->param));
@@ -191,11 +223,25 @@ int8_t ArmSimple_Output(ArmSimple_t *a)
     return ARM_SIMPLE_OK;
 }
 
+int8_t ArmSimple_SetJoint1Zero(ArmSimple_t *a)
+{
+    ArmSimpleDmMotor *motor = ArmSimple_GetDmMotor(a);
+    if (motor == NULL) {
+        return ARM_SIMPLE_ERR;
+    }
+
+    return (motor->SetZero() == DEVICE_OK) ? ARM_SIMPLE_OK : ARM_SIMPLE_ERR;
+}
+
 void ArmSimple_Relax(ArmSimple_t *a)
 {
     if (a == NULL || a->param == NULL) return;
 
-    MOTOR_DM_Relax(&a->param->dm4340_param);
+    ArmSimpleDmMotor *motor = ArmSimple_GetDmMotor(a);
+    if (motor != NULL) {
+        (void)motor->Relax();
+        a->dm_enabled = false;
+    }
 
     a->target.joint2_target = a->feedback.joint2_angle;
 }

@@ -53,7 +53,8 @@
       "Bash(mingw32-c++ -c \"../../Middlewares/Third_Party/FreeRTOS/Source/event_groups.c\" -o /tmp/test.o -I\"../../Core/Inc\" -I\"../../Drivers/CMSIS/Include\" -I\"../../Drivers/CMSIS/DSP/Include\" -I\"../../Middlewares/Third_Party/FreeRTOS/Source/include\" -I\"../../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2\" -I\"../../Drivers/STM32H7xx_HAL_Driver/Inc\" -DUSE_HAL_DRIVER -DSTM32H723xx)",
       "Bash(mingw32-make -j4)",
       "Bash(arm-none-eabi-g++ -c -std=c++17 -fsyntax-only -I. -IUser -ICore/Inc -IDrivers/CMSIS/Include -IDrivers/CMSIS/Device/ST/STM32H7xx/Include User/device/motor/packages/controller/motor_controller.cpp)",
-      "Bash(arm-none-eabi-g++ -c -mcpu=cortex-m7 -mthumb -mfloat-abi=hard -mfpu=fpv5-d16 -DUSE_HAL_DRIVER -DSTM32H723xx -I\"Core/Inc\" -I\"User\" -I\"cmake/stm32cubemx\" -fsyntax-only User/module/ore_store.cpp)"
+      "Bash(arm-none-eabi-g++ -c -mcpu=cortex-m7 -mthumb -mfloat-abi=hard -mfpu=fpv5-d16 -DUSE_HAL_DRIVER -DSTM32H723xx -I\"Core/Inc\" -I\"User\" -I\"cmake/stm32cubemx\" -fsyntax-only User/module/ore_store.cpp)",
+      "Bash(ta)"
     ]
   }
 }
