@@ -44,6 +44,7 @@ typedef enum {
   ROD_NEW_POSE_GRAB_LOW,      /* 低位夹取 */
   ROD_NEW_POSE_GRAB_HIGH,     /* 高位夹取 */
   ROD_NEW_POSE_LIFT,          /* 抬升 */
+  ROD_NEW_POSE_MANUAL,        /* 手动角度 */
 } RodNew_Pose_t;
 
 typedef struct {
@@ -88,6 +89,7 @@ typedef struct {
   RodNew_Mode_t mode;
   RodNew_Pose_t pose;
   RodNew_GripState_t grip;
+  float target_angle_rad;
 } RodNew_CMD_t;
 
 typedef struct {
@@ -130,7 +132,8 @@ typedef struct {
 /* Exported functions prototypes -------------------------------------------- */
 int8_t RodNew_Init(RodNew_t *r, const RodNew_Params_t *param);
 int8_t RodNew_Control(RodNew_t *r, RodNew_Mode_t mode, RodNew_Pose_t pose,
-                      RodNew_GripState_t grip, uint32_t now);
+                      RodNew_GripState_t grip, float target_angle_rad,
+                      uint32_t now);
 void RodNew_Output(RodNew_t *r);
 void RodNew_Reset(RodNew_t *r);
 

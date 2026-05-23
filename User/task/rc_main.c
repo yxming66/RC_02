@@ -45,6 +45,10 @@
 #define RC_ARM_SIMPLE_POINT_LIFT_J2 (0.0f)
 #define RC_ARM_SIMPLE_POINT_RELEASE_J1 (1.0f)
 #define RC_ARM_SIMPLE_POINT_RELEASE_J2 (1.57f)
+#define RC_ROD_NEW_DEADBAND (0.05f)
+#define RC_ROD_NEW_MANUAL_SPEED_RAD_S (1.0f)
+#define RC_ROD_NEW_TARGET_MIN_RAD (-2.356f)
+#define RC_ROD_NEW_TARGET_MAX_RAD (2.356f)
 
 /* USER STRUCT BEGIN */
 DR16_t dr16;
@@ -88,12 +92,16 @@ typedef enum {
   RC_CONTROL_PAGE_AUTO_200_DOWN,
   RC_CONTROL_PAGE_PC,
   RC_CONTROL_PAGE_ARM_SIMPLE,
-  RC_CONTROL_PAGE_ORE_STORE_ROD,
+  RC_CONTROL_PAGE_ORE_STORE,
+  RC_CONTROL_PAGE_ROD_NEW,
 } RcControlPage_t;
 
 typedef struct {
   volatile RcControlPage_t page;
   volatile bool reset_event;
+  volatile bool auto_200_start_event;
+  volatile bool auto_200_start_ok;
+  volatile auto_ctrl_template_e auto_200_template;
   volatile bool arm_simple_active;
   volatile bool rod_active;
   volatile bool ore_store_active;
@@ -121,9 +129,14 @@ volatile RcOreStoreDebug_t g_rc_ore_store_debug = {0};
 
 static bool ore_store_active_initialized = false;
 static bool arm_simple_target_initialized = false;
-static RodNew_Pose_t rod_pose_latched = ROD_NEW_POSE_STANDBY;
 static RodNew_GripState_t rod_grip_latched = ROD_NEW_GRIP_RELEASE;
+static float rod_target_angle_latched_rad = 0.0f;
 static Suction_State_t arm_simple_suction_latched = SUCTION_OFF;
+
+typedef struct {
+  auto_ctrl_template_e template_id;
+  auto_ctrl_travel_dir_e travel_dir;
+} RcAutoCtrlStartConfig_t;
 
 #define RC_ORE_STORE_DEADBAND (0.05f)
 #define RC_ORE_STORE_FALLBACK_MOVE_SPEED_RAD_S (0.5f)
@@ -142,10 +155,24 @@ static float Rc_ApplyDeadband(float value, float deadband) {
   return (fabsf(value) < deadband) ? 0.0f : value;
 }
 
+static float Rc_ClampRodNewTarget(float target_rad) {
+  if (!isfinite(target_rad)) {
+    return 0.0f;
+  }
+  if (target_rad < RC_ROD_NEW_TARGET_MIN_RAD) {
+    return RC_ROD_NEW_TARGET_MIN_RAD;
+  }
+  if (target_rad > RC_ROD_NEW_TARGET_MAX_RAD) {
+    return RC_ROD_NEW_TARGET_MAX_RAD;
+  }
+  return target_rad;
+}
+
 static void Rc_SetRodRelax(void) {
   rod_cmd.mode = ROD_NEW_MODE_RELAX;
   rod_cmd.pose = ROD_NEW_POSE_STANDBY;
   rod_cmd.grip = rod_grip_latched;
+  rod_cmd.target_angle_rad = rod_target_angle_latched_rad;
 }
 
 static void Rc_ToggleArmSimpleSuction(void) {
@@ -174,30 +201,50 @@ static bool Rc_SwitchJustReleasedToMid(DR16_SwitchPos_t current, DR16_SwitchPos_
   return (current == DR16_SW_MID && last == from_pos);
 }
 
+static RcAutoCtrlStartConfig_t Rc_SelectAutoCtrlStartConfig(void) {
+  RcAutoCtrlStartConfig_t config = {
+      AUTO_CTRL_TEMPLATE_NONE,
+      AUTO_CTRL_TRAVEL_DIR_HEAD_FORWARD,
+  };
+
+  if (dr16.data.sw_l != DR16_SW_MID || last_sw_l != DR16_SW_MID ||
+      last_sw_r != DR16_SW_MID) {
+    return config;
+  }
+
+  if (dr16.data.sw_r == DR16_SW_UP) {
+    config.template_id = AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD;
+  } else if (dr16.data.sw_r == DR16_SW_DOWN) {
+    config.template_id = AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD;
+  }
+
+  return config;
+}
+
+static RcControlPage_t Rc_GetAutoCtrlPage(auto_ctrl_template_e template_id) {
+  switch (template_id) {
+    case AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD:
+      return RC_CONTROL_PAGE_AUTO_200_UP;
+    case AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD:
+      return RC_CONTROL_PAGE_AUTO_200_DOWN;
+    default:
+      return RC_CONTROL_PAGE_AUTO_200_DOWN;
+  }
+}
+
 static void Rc_SetRodOperator(void) {
-  if (Rc_KeyDown(DR16_KEY_Q)) {
-    rod_pose_latched = ROD_NEW_POSE_STANDBY;
-    rod_grip_latched = ROD_NEW_GRIP_RELEASE;
-  } else if (Rc_KeyDown(DR16_KEY_E)) {
-    rod_pose_latched = ROD_NEW_POSE_READY;
-    rod_grip_latched = ROD_NEW_GRIP_RELEASE;
-  } else if (Rc_KeyDown(DR16_KEY_R)) {
-    rod_pose_latched = ROD_NEW_POSE_GRAB_LOW;
-  } else if (Rc_KeyDown(DR16_KEY_F)) {
-    rod_pose_latched = ROD_NEW_POSE_GRAB_HIGH;
-  } else if (Rc_KeyDown(DR16_KEY_G)) {
-    rod_pose_latched = ROD_NEW_POSE_LIFT;
-  }
+  const float dt_s = 1.0f / (float)RC_MAIN_FREQ;
+  const float target_delta = 12*Rc_ApplyDeadband(dr16.data.ch_r_y,
+                                             RC_ROD_NEW_DEADBAND) *
+                             RC_ROD_NEW_MANUAL_SPEED_RAD_S * dt_s;
 
-  if (dr16.data.mouse.l_click || Rc_KeyDown(DR16_KEY_Z)) {
-    rod_grip_latched = ROD_NEW_GRIP_RELEASE;
-  } else if (dr16.data.mouse.r_click || Rc_KeyDown(DR16_KEY_X)) {
-    rod_grip_latched = ROD_NEW_GRIP_GRAB;
-  }
-
+    rod_target_angle_latched_rad = Rc_ClampRodNewTarget(
+        rod_target_angle_latched_rad + target_delta);
+  if(rod_target_angle_latched_rad>0)rod_target_angle_latched_rad=0;
   rod_cmd.mode = ROD_NEW_MODE_ACTIVE;
-  rod_cmd.pose = rod_pose_latched;
+  rod_cmd.pose = ROD_NEW_POSE_MANUAL;
   rod_cmd.grip = rod_grip_latched;
+  rod_cmd.target_angle_rad = rod_target_angle_latched_rad;
 }
 
 static float Rc_ApplyOreStoreDeadband(float value) {
@@ -612,46 +659,28 @@ static void Rc_TryStartAutoCtrlBySwitch(uint32_t now_ms) {
     return;
   }
 
-  /* 左拨杆必须在UP，且从UP切换才触发 */
-  if (dr16.data.sw_l != DR16_SW_UP || last_sw_l != DR16_SW_UP) {
-    return;
-  }
-
-  /* 右拨杆从MID切换到UP/DOWN才触发 */
-  if (last_sw_r != DR16_SW_MID) {
-    return;
-  }
-
-  auto_ctrl_template_e template_id = AUTO_CTRL_TEMPLATE_NONE;
-  auto_ctrl_travel_dir_e travel_dir = AUTO_CTRL_TRAVEL_DIR_HEAD_FORWARD;
+  const RcAutoCtrlStartConfig_t config = Rc_SelectAutoCtrlStartConfig();
   float target_yaw_rad = 0.0f;
 
-  if (dr16.data.sw_r == DR16_SW_UP) {
-    /* 左UP + 右MID->UP：头向上200台阶 */
-    template_id = AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD;
-  } else if (dr16.data.sw_r == DR16_SW_DOWN) {
-    /* 左UP + 右MID->DOWN：头向下200台阶 */
-    template_id = AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD;
-
-    travel_dir = AUTO_CTRL_TRAVEL_DIR_TAIL_FORWARD;
-  }
-
-  if (template_id != AUTO_CTRL_TEMPLATE_NONE) {
+  if (config.template_id != AUTO_CTRL_TEMPLATE_NONE) {
+    g_rc_control_debug.auto_200_start_event = true;
+    g_rc_control_debug.auto_200_template = config.template_id;
     if (!Rc_PrepareLocalAutoYawFeedback()) {
+      g_rc_control_debug.auto_200_start_ok = false;
       return;
     }
 
     target_yaw_rad =
         Rc_SelectLocalAutoTargetYawRad(auto_ctrl.feedback.yaw_auto_rad,
-                                       travel_dir);
-    (void)AutoCtrl_StartTemplate(
-        &auto_ctrl, template_id, travel_dir,
+                                       config.travel_dir);
+    g_rc_control_debug.auto_200_start_ok = AutoCtrl_StartTemplate(
+        &auto_ctrl, config.template_id, config.travel_dir,
         target_yaw_rad, AUTO_CTRL_RC_YAW_TOLERANCE_RAD,
         AUTO_CTRL_SENSOR_MODE_SICK_FRONT_AND_BOTTOM, now_ms);
   }
-}
+} 
 /* USER STRUCT END */
-
+ 
 /* Exported functions ------------------------------------------------------- */
 void Task_rc_main(void *argument) {
   (void)argument;
@@ -686,6 +715,9 @@ void Task_rc_main(void *argument) {
     g_pc_command_source = PC_COMMAND_SOURCE_RC;
     g_rc_control_debug.page = RC_CONTROL_PAGE_SAFE;
     g_rc_control_debug.reset_event = false;
+    g_rc_control_debug.auto_200_start_event = false;
+    g_rc_control_debug.auto_200_start_ok = false;
+    g_rc_control_debug.auto_200_template = AUTO_CTRL_TEMPLATE_NONE;
     g_rc_control_debug.arm_simple_active = false;
     g_rc_control_debug.rod_active = false;
     g_rc_control_debug.ore_store_active = false;
@@ -715,10 +747,7 @@ void Task_rc_main(void *argument) {
       Rc_SetOreStoreRelax();
     } else if (dr16.data.sw_l == DR16_SW_MID) {
       if (auto_ctrl_inited && AutoCtrl_IsBusy(&auto_ctrl)) {
-        g_rc_control_debug.page = (AutoCtrl_GetTemplate(&auto_ctrl) ==
-                                  AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD)
-                                     ? RC_CONTROL_PAGE_AUTO_200_UP
-                                     : RC_CONTROL_PAGE_AUTO_200_DOWN;
+        g_rc_control_debug.page = Rc_GetAutoCtrlPage(AutoCtrl_GetTemplate(&auto_ctrl));
 #if AUTO_CTRL_OUTPUT_ENABLE
         chassis_cmd = auto_ctrl.chassis_cmd;
         pole_cmd = auto_ctrl.pole_cmd;
@@ -819,8 +848,8 @@ void Task_rc_main(void *argument) {
         Rc_ToggleArmSimpleSuction();
       }
 
-      /* 左DOWN + 右DOWN → MID：切换ROD_SOLENOID */
-      if (Rc_SwitchJustReleasedToMid(dr16.data.sw_r, last_sw_r, DR16_SW_DOWN) && dr16.data.sw_l == DR16_SW_DOWN) {
+      /* 左DOWN + 右MID → DOWN：切换ROD_SOLENOID */
+      if (dr16.data.sw_r == DR16_SW_DOWN && last_sw_r == DR16_SW_MID) {
         Rc_ToggleRodGrip();
       }
 
@@ -834,16 +863,24 @@ void Task_rc_main(void *argument) {
         Rc_SetRodHold();
         Rc_SetOreStoreHold();
         g_rc_control_debug.arm_simple_active = true;
-      } else if (dr16.data.sw_r == DR16_SW_DOWN) {
-        g_rc_control_debug.page = RC_CONTROL_PAGE_ORE_STORE_ROD;
+      } else if (dr16.data.sw_r == DR16_SW_MID) {
+        g_rc_control_debug.page = RC_CONTROL_PAGE_ORE_STORE;
         Rc_SetChassisRelax();
         Rc_SetPoleHold();
         Rc_SetArmDisabled();
         Rc_SetArmSimpleHold();
         Rc_SetOreStoreActiveManual();
+        Rc_SetRodHold();
+        g_rc_control_debug.ore_store_active = true;
+      } else if (dr16.data.sw_r == DR16_SW_DOWN) {
+        g_rc_control_debug.page = RC_CONTROL_PAGE_ROD_NEW;
+        Rc_SetChassisRelax();
+        Rc_SetPoleHold();
+        Rc_SetArmDisabled();
+        Rc_SetArmSimpleHold();
+        Rc_SetOreStoreHold();
         Rc_SetRodOperator();
         g_rc_control_debug.rod_active = true;
-        g_rc_control_debug.ore_store_active = true;
       }
     }
 

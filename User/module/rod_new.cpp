@@ -74,7 +74,8 @@ int8_t RodNew_Init(RodNew_t *r, const RodNew_Params_t *param) {
 }
 
 int8_t RodNew_Control(RodNew_t *r, RodNew_Mode_t mode, RodNew_Pose_t pose,
-                      RodNew_GripState_t grip, uint32_t now) {
+                      RodNew_GripState_t grip, float target_angle_rad,
+                      uint32_t now) {
   if (r == nullptr || r->param == nullptr) {
     return ROD_NEW_ERR_NULL;
   }
@@ -114,6 +115,9 @@ int8_t RodNew_Control(RodNew_t *r, RodNew_Mode_t mode, RodNew_Pose_t pose,
       break;
     case ROD_NEW_POSE_LIFT:
       r->servo.target_angle_rad = r->param->servo.angle_lift_rad;
+      break;
+    case ROD_NEW_POSE_MANUAL:
+      r->servo.target_angle_rad = target_angle_rad;
       break;
     default:
       r->servo.target_angle_rad = r->param->servo.angle_standby_rad;

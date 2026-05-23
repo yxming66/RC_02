@@ -10,7 +10,7 @@
 #include "module/arm_simple.h"
 #include "module/config.h"
 #include "bsp/time.h"
-
+#include "bsp/gpio.h"
 /* Private variables --------------------------------------------------------- */
 static ArmSimple_t arm_simple;
 static bool set_zero_requested = false;
@@ -60,6 +60,8 @@ void Task_arm_simple(void *argument)
     while (1) {
         tick += delay_tick;
 
+        // BSP_GPIO_WritePin(BSP_GPIO_ARM_SOLENOID, true);
+        // BSP_GPIO_WritePin(BSP_GPIO_ROD_SOLENOID, true);
         const uint64_t now_us = BSP_TIME_Get_us();
         arm_simple.timer.now = (float)now_us * 0.000001f;
         arm_simple.timer.last_wakeup_us = now_us;

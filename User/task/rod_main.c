@@ -45,7 +45,8 @@ void Task_rod(void *argument) {
 
     if (!g_rod_new_debug.enable) {
       RodNew_Control(&rod_new, rod_new_cmd.mode, rod_new_cmd.pose,
-                     rod_new_cmd.grip, last_control_tick);
+                     rod_new_cmd.grip, rod_new_cmd.target_angle_rad,
+                     last_control_tick);
       last_control_tick = tick;
     }
     RodNew_Output(&rod_new);
