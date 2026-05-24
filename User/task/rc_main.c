@@ -148,9 +148,9 @@ typedef struct {
 
 #if RC_MAPPING_ACTIVE_PRESET == RC_MAPPING_PRESET_PC_FIRST
 static const RcSwitchBehaviorMap_t rc_behavior_map_active[] = {
-  {DR16_SW_MID, DR16_SW_UP, DR16_SW_MID, DR16_SW_MID,
+  {DR16_SW_MID, DR16_SW_UP, DR16_SW_ERR, DR16_SW_ERR,
    RC_BEHAVIOR_AUTO_200_UP_STANDBY},
-  {DR16_SW_MID, DR16_SW_DOWN, DR16_SW_MID, DR16_SW_MID,
+  {DR16_SW_MID, DR16_SW_DOWN, DR16_SW_ERR, DR16_SW_ERR,
    RC_BEHAVIOR_AUTO_200_DOWN_STANDBY},
   {DR16_SW_MID, DR16_SW_MID, DR16_SW_ERR, DR16_SW_ERR,
    RC_BEHAVIOR_DRIVE},
@@ -163,9 +163,9 @@ static const RcSwitchBehaviorMap_t rc_behavior_map_active[] = {
 };
 #else
 static const RcSwitchBehaviorMap_t rc_behavior_map_active[] = {
-  {DR16_SW_MID, DR16_SW_UP, DR16_SW_MID, DR16_SW_MID,
+  {DR16_SW_MID, DR16_SW_UP, DR16_SW_ERR, DR16_SW_ERR,
    RC_BEHAVIOR_AUTO_200_UP_STANDBY},
-  {DR16_SW_MID, DR16_SW_DOWN, DR16_SW_MID, DR16_SW_MID,
+  {DR16_SW_MID, DR16_SW_DOWN, DR16_SW_ERR, DR16_SW_ERR,
    RC_BEHAVIOR_AUTO_200_DOWN_STANDBY},
   {DR16_SW_MID, DR16_SW_MID, DR16_SW_ERR, DR16_SW_ERR,
    RC_BEHAVIOR_DRIVE},
@@ -262,8 +262,7 @@ static RcAutoCtrlStartConfig_t Rc_SelectAutoCtrlStartConfig(void) {
       AUTO_CTRL_TRAVEL_DIR_HEAD_FORWARD,
   };
 
-  if (dr16.data.sw_l != DR16_SW_MID || last_sw_l != DR16_SW_MID ||
-      last_sw_r != DR16_SW_MID) {
+  if (dr16.data.sw_l != DR16_SW_MID || last_sw_r != DR16_SW_MID) {
     return config;
   }
 
@@ -271,7 +270,7 @@ static RcAutoCtrlStartConfig_t Rc_SelectAutoCtrlStartConfig(void) {
     config.template_id = AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD;
   } else if (dr16.data.sw_r == DR16_SW_DOWN) {
     config.template_id = AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD;
-  }
+  } 
 
   return config;
 }

@@ -158,18 +158,18 @@ Config_RobotParam_t robot_config = {
         },
         .pid = {
             .position_pid = {
-                [ORE_STORE_AXIS_PLATFORM] = {.k = 15.0f, .p = 5.0f, .i = 3.0f, .d = 0.0f, .i_limit = 5.0f, .out_limit = 300.00f, .d_cutoff_freq = 0.0f, .range = 0.0f},
-                [ORE_STORE_AXIS_GATE_LEFT] = {.k = 1.0f,   .p = 20.0f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 45.0f, .d_cutoff_freq = 80.0f, .range = 0.0f},
-                [ORE_STORE_AXIS_GATE_RIGHT] = {.k = 1.0f,  .p = 20.0f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 45.0f, .d_cutoff_freq = 80.0f, .range = 0.0f},
-                [ORE_STORE_AXIS_TRACK_LEFT] = {.k = 1.0f,  .p = 20.0f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 45.0f, .d_cutoff_freq = 80.0f, .range = 0.0f},
-                [ORE_STORE_AXIS_TRACK_RIGHT] = {.k = 1.0f, .p = 20.0f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 45.0f, .d_cutoff_freq = 80.0f, .range = 0.0f},
+                [ORE_STORE_AXIS_PLATFORM] = {.k = 1.0f, .p = 40.0f, .i = 0.0f, .d = 0.0f, .i_limit = 5.0f, .out_limit = 75.00f, .d_cutoff_freq = 80.0f, .range = 0.0f},
+                [ORE_STORE_AXIS_GATE_LEFT] = {.k = 1.0f,   .p = 22.0f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 45.0f, .d_cutoff_freq = 80.0f, .range = 0.0f},
+                [ORE_STORE_AXIS_GATE_RIGHT] = {.k = 1.0f,  .p = 22.0f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 45.0f, .d_cutoff_freq = 80.0f, .range = 0.0f},
+                [ORE_STORE_AXIS_TRACK_LEFT] = {.k = 1.0f,  .p = 25.0f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 85.0f, .d_cutoff_freq = 80.0f, .range = 0.0f},
+                [ORE_STORE_AXIS_TRACK_RIGHT] = {.k = 1.0f, .p = 25.0f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 85.0f, .d_cutoff_freq = 80.0f, .range = 0.0f},
             },
             .velocity_pid = {
-                [ORE_STORE_AXIS_PLATFORM] = {.k = 0.1f, .p = 0.070f, .i = 0.004f, .d = 0.0f, .i_limit = 8.0f, .out_limit = 1.0f, .d_cutoff_freq = 18.0f, .range = 0.0f},
-                [ORE_STORE_AXIS_GATE_LEFT] = {.k = 0.1f,   .p = 0.55f, .i = 0.02f, .d = 0.000f, .i_limit = 0.35f, .out_limit = 1.8f, .d_cutoff_freq = 100.0f, .range = 0.0f},
-                [ORE_STORE_AXIS_GATE_RIGHT] = {.k = 0.1f,  .p = 0.55f, .i = 0.02f, .d = 0.000f, .i_limit = 0.35f, .out_limit = 1.8f, .d_cutoff_freq = 100.0f, .range = 0.0f},
-                [ORE_STORE_AXIS_TRACK_LEFT] = {.k = 0.1f,  .p = 0.55f, .i = 0.02f, .d = 0.000f, .i_limit = 0.35f, .out_limit = 1.8f, .d_cutoff_freq = 100.0f, .range = 0.0f},
-                [ORE_STORE_AXIS_TRACK_RIGHT] = {.k = 0.1f, .p = 0.55f, .i = 0.02f, .d = 0.000f, .i_limit = 0.35f, .out_limit = 1.8f, .d_cutoff_freq = 100.0f, .range = 0.0f},
+                [ORE_STORE_AXIS_PLATFORM] = {.k = 0.1f, .p = 1.550f, .i = 0.02f, .d = 0.0f, .i_limit = 0.35f, .out_limit = 2.5f, .d_cutoff_freq = 18.0f, .range = 0.0f},
+                [ORE_STORE_AXIS_GATE_LEFT] = {.k = 0.1f,   .p = 1.25f, .i = 0.02f, .d = 0.000f, .i_limit = 0.35f, .out_limit = 1.8f, .d_cutoff_freq = 100.0f, .range = 0.0f},
+                [ORE_STORE_AXIS_GATE_RIGHT] = {.k = 0.1f,  .p = 1.25f, .i = 0.02f, .d = 0.000f, .i_limit = 0.35f, .out_limit = 1.8f, .d_cutoff_freq = 100.0f, .range = 0.0f},
+                [ORE_STORE_AXIS_TRACK_LEFT] = {.k = 0.1f,  .p = 1.25f, .i = 0.02f, .d = 0.000f, .i_limit = 0.35f, .out_limit = 1.8f, .d_cutoff_freq = 100.0f, .range = 0.0f},
+                [ORE_STORE_AXIS_TRACK_RIGHT] = {.k = 0.1f, .p = 1.25f, .i = 0.02f, .d = 0.000f, .i_limit = 0.35f, .out_limit = 1.8f, .d_cutoff_freq = 100.0f, .range = 0.0f},
             },
             // MIT风格控制参数 (Kp/Kd)，用于 MIT_STYLE 模式
             // MIT控制律: torque = Kp * (target_pos - current_pos) - Kd * velocity + torque_ff
@@ -182,8 +182,8 @@ Config_RobotParam_t robot_config = {
         },
         .controller = { 
             .sample_freq = 500.0f, 
-            .position_to_velocity_limit = {21.80f, 45.00f, 45.00f, 45.00f, 45.00f},
-            .velocity_to_torque_limit = {0.25f, 1.80f, 1.80f, 1.80f, 1.80f},
+            .position_to_velocity_limit = {75.00f, 45.00f, 45.00f, 85.00f, 85.00f},
+            .velocity_to_torque_limit = {4.50f, 1.80f, 1.80f, 1.80f, 1.80f},
             .feedback_lowpass_cutoff_hz = {-1.0f, 160.0f, 160.0f, 160.0f, 160.0f},
             .output_lowpass_cutoff_hz = {-1.0f, 120.0f, 120.0f, 120.0f, 120.0f},
         },
@@ -197,8 +197,8 @@ Config_RobotParam_t robot_config = {
             },
             .travel_rad = {22.7f, 2.5f, 2.5f, 40.0f, 40.0f},
             .lower_seek_velocity_rad_s = {0.20f, 0.20f, 0.20f, 0.60f, 0.60f},
-            .move_velocity_rad_s = {80.0f, 80.0f, 80.0f, 80.00f, 80.00f},
-            .move_accel_rad_s2 = {80.0f, 80.0f, 80.0f, 80.0f, 80.0f},
+            .move_velocity_rad_s = {380.0f, 80.0f, 80.0f, 100.00f, 100.00f},
+            .move_accel_rad_s2 = {0.0f, 80.0f, 80.0f, 0.0f, 0.0f},
             .arrive_threshold_rad = {0.05f, 0.03f, 0.03f, 0.08f, 0.08f},
         },
         .power_on = {
