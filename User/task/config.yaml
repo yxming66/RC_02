@@ -19,10 +19,3 @@
   function: Task_rc_main
   name: rc_main
   stack: 256
-- delay: 0
-  description: ''
-  freq_control: true
-  frequency: 100.0
-  function: Task_cmd_main
-  name: cmd_main
-  stack: 256

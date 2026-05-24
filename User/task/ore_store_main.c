@@ -38,7 +38,6 @@ typedef struct {
   volatile float platform_feedback_torque_nm;
   volatile float platform_filtered_output_torque_nm;
   volatile float platform_velocity_setpoint_rad_s;
-  volatile float platform_pole_style_output;
   volatile float platform_cmd_torque_nm;
   volatile float platform_cmd_current_a;
   volatile int16_t platform_rm_output_raw;
@@ -48,14 +47,12 @@ typedef struct {
   volatile float track_left_position_rad;
   volatile float track_left_target_rad;
   volatile float track_left_command_rad;
-  volatile float track_left_pole_style_output;
   volatile int16_t track_left_rm_output_raw;
   volatile bool track_right_online;
   volatile bool track_right_homed;
   volatile float track_right_position_rad;
   volatile float track_right_target_rad;
   volatile float track_right_command_rad;
-  volatile float track_right_pole_style_output;
   volatile int16_t track_right_rm_output_raw;
 } OreStoreTask_DebugView_t;
 
@@ -225,8 +222,6 @@ static void OreStoreTask_UpdateDebugView(void) {
       ore_store.debug.filtered_output_torque_nm[ORE_STORE_AXIS_PLATFORM];
   g_ore_store_debug_view.platform_velocity_setpoint_rad_s =
       ore_store.debug.velocity_setpoint_rad_s[ORE_STORE_AXIS_PLATFORM];
-  g_ore_store_debug_view.platform_pole_style_output =
-      ore_store.debug.pole_style_output[ORE_STORE_AXIS_PLATFORM];
   g_ore_store_debug_view.platform_cmd_torque_nm =
       ore_store.debug.rm_last_set_torque_nm[ORE_STORE_AXIS_PLATFORM];
   g_ore_store_debug_view.platform_cmd_current_a =
@@ -245,8 +240,6 @@ static void OreStoreTask_UpdateDebugView(void) {
       ore_store.debug.target_position_rad[ORE_STORE_AXIS_TRACK_LEFT];
     g_ore_store_debug_view.track_left_command_rad =
       ore_store.debug.command_position_rad[ORE_STORE_AXIS_TRACK_LEFT];
-    g_ore_store_debug_view.track_left_pole_style_output =
-      ore_store.debug.pole_style_output[ORE_STORE_AXIS_TRACK_LEFT];
     g_ore_store_debug_view.track_left_rm_output_raw =
       ore_store.debug.rm_output_raw[ORE_STORE_AXIS_TRACK_LEFT];
     g_ore_store_debug_view.track_right_online =
@@ -259,8 +252,6 @@ static void OreStoreTask_UpdateDebugView(void) {
       ore_store.debug.target_position_rad[ORE_STORE_AXIS_TRACK_RIGHT];
     g_ore_store_debug_view.track_right_command_rad =
       ore_store.debug.command_position_rad[ORE_STORE_AXIS_TRACK_RIGHT];
-    g_ore_store_debug_view.track_right_pole_style_output =
-      ore_store.debug.pole_style_output[ORE_STORE_AXIS_TRACK_RIGHT];
     g_ore_store_debug_view.track_right_rm_output_raw =
       ore_store.debug.rm_output_raw[ORE_STORE_AXIS_TRACK_RIGHT];
 }

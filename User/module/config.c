@@ -165,20 +165,6 @@ Config_RobotParam_t robot_config = {
                 [ORE_STORE_AXIS_TRACK_LEFT] = {.k = 0.3f, .p = 1.25f, .i = 0.02f, .d = 0.008f, .i_limit = 0.35f, .out_limit = 1.8f, .d_cutoff_freq = 100.0f, .range = 0.0f},
                 [ORE_STORE_AXIS_TRACK_RIGHT] = {.k = 0.3f, .p = 1.25f, .i = 0.02f, .d = 0.008f, .i_limit = 0.35f, .out_limit = 1.8f, .d_cutoff_freq = 100.0f, .range = 0.0f},
             },
-            .pole_position_pid = {
-                [ORE_STORE_AXIS_PLATFORM] = {.k = 15.0f, .p = 5.0f, .i = 3.0f, .d = 0.0f, .i_limit = 5.0f, .out_limit = 300.00f, .d_cutoff_freq = 0.0f, .range = 0.0f},
-                [ORE_STORE_AXIS_GATE_LEFT] = {.k = 1.0f, .p = 9.0f, .i = 0.0f, .d = 0.04f, .i_limit = 0.0f, .out_limit = 3.5f, .d_cutoff_freq = 18.0f, .range = 0.0f},
-                [ORE_STORE_AXIS_GATE_RIGHT] = {.k = 1.0f, .p = 9.0f, .i = 0.0f, .d = 0.04f, .i_limit = 0.0f, .out_limit = 3.5f, .d_cutoff_freq = 18.0f, .range = 0.0f},
-                [ORE_STORE_AXIS_TRACK_LEFT] = {.k = 10.0f, .p = 9.0f, .i = 0.0f, .d = 0.01f, .i_limit = 0.0f, .out_limit = 300.0f, .d_cutoff_freq = 18.0f, .range = 0.0f},
-                [ORE_STORE_AXIS_TRACK_RIGHT] = {.k = 10.0f, .p = 9.0f, .i = 0.0f, .d = 0.01f, .i_limit = 0.0f, .out_limit = 300.0f, .d_cutoff_freq = 18.0f, .range = 0.0f},
-            }, 
-            .pole_velocity_pid = {
-                [ORE_STORE_AXIS_PLATFORM] = {.k = 0.1f, .p = 0.070f, .i = 0.004f, .d = 0.0f, .i_limit = 8.0f, .out_limit = 1.0f, .d_cutoff_freq = 18.0f, .range = 0.0f},
-                [ORE_STORE_AXIS_GATE_LEFT] = {.k = 1.0f, .p = 0.16f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 1.0f, .d_cutoff_freq = 20.0f, .range = 0.0f},
-                [ORE_STORE_AXIS_GATE_RIGHT] = {.k = 1.0f, .p = 0.16f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 1.0f, .d_cutoff_freq = 20.0f, .range = 0.0f},
-                [ORE_STORE_AXIS_TRACK_LEFT] = {.k = 0.1f, .p = 0.16f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 1.0f, .d_cutoff_freq = 30.0f, .range = 0.0f},
-                [ORE_STORE_AXIS_TRACK_RIGHT] = {.k = 0.1f, .p = 0.16f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 1.0f, .d_cutoff_freq = 30.0f, .range = 0.0f},
-            },
             // MIT风格控制参数 (Kp/Kd)，用于 MIT_STYLE 模式
             // MIT控制律: torque = Kp * (target_pos - current_pos) - Kd * velocity + torque_ff
             // Kp 单位: N·m/rad (每弧度位置误差产生 N·m 力矩)
@@ -194,8 +180,6 @@ Config_RobotParam_t robot_config = {
             .velocity_to_torque_limit = {0.25f, 1.80f, 1.80f, 1.80f, 1.80f},
             .feedback_lowpass_cutoff_hz = {-1.0f, 160.0f, 160.0f, 160.0f, 160.0f},
             .output_lowpass_cutoff_hz = {-1.0f, 120.0f, 120.0f, 120.0f, 120.0f},
-            .normalized_output_limit = {1.0f, 1.0f, 1.0f, 1.0f, 1.0f},
-            .normalized_to_torque_nm = {8.0f, 2.0f, 2.0f, 2.0f, 2.0f},
         },
         .limit = {
             .config = { 
@@ -549,34 +533,6 @@ Config_RobotParam_t robot_config = {
             .front_photo_timeout_ms = 5000u,    /* 等待前光电触发/下降沿超时，单位 ms。 */
             .rear_photo_timeout_ms = 5000u,     /* 等待后光电触发/下降沿超时，单位 ms。 */
             .hold_ms = 1200u,                   /* 四杆全伸支撑通过时间，单位 ms。 */
-        },
-    },
-    .rod_param = {
-        .pit_motor_param = {.can = BSP_CAN_1, .master_id = 0x13, .can_id = 0x03, .module = MOTOR_DM_J4310, .reverse = false},
-        .rol_motor_param = {.can = BSP_CAN_1, .master_id = 0x14, .can_id = 0x04, .module = MOTOR_DM_J4310, .reverse = false},
-        .pose = {
-            .pit_down_angle = 0.267107785f + 0.0f,
-            .pit_up_angle = 0.107107785f + 1.6465615f,
-            .pit_grip_angle = 0.267107785f + 1.7f,
-            .pit_lift_angle = 0.267107785f + 2.0f,
-            .rol_home_angle = 1.67915916f + 0.0f,
-            .rol_flip_angle = 1.67915916f + 3.1415926f,
-        },
-        .limit = {
-            .pit_arrive_threshold = 0.03f,
-            .rol_arrive_threshold = 0.03f,
-            .sequence_timeout = 2.0f,
-            .grip_open_wait_time = 1.0f,
-            .grip_wait_time = 0.25f,
-            .rol_flip_wait_time = 1.0f,
-            .pit_kp = 80.0f,
-            .pit_kd = 2.0f,
-            .rol_kp = 15.0f,
-            .rol_kd = 0.05f,
-            .pit_max_vel = 1.5f,
-            .pit_max_acc = 1.0f,
-            .rol_max_vel = 1.8f,
-            .rol_max_acc = 1.5f,
         },
     },
     .rod_new_param = {

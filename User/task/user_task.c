@@ -30,11 +30,6 @@ const osThreadAttr_t attr_rc_main = {
     .priority = osPriorityNormal,
     .stack_size = 512 * 4,
 };
-const osThreadAttr_t attr_cmd_main = {
-    .name = "cmd_main",
-    .priority = osPriorityNormal,
-    .stack_size = 256 * 4,
-};
 const osThreadAttr_t attr_sick = {
     .name = "sick",
     .priority = osPriorityNormal,
@@ -44,11 +39,6 @@ const osThreadAttr_t attr_auto_ctrl = {
     .name = "auto_ctrl",
     .priority = osPriorityNormal,
     .stack_size = 256 * 4,
-};
-const osThreadAttr_t attr_arm = {
-    .name = "arm",
-    .priority = osPriorityNormal,
-    .stack_size = 2048 * 12,
 };
 const osThreadAttr_t attr_arm_simple = {
     .name = "arm_simple",
@@ -64,11 +54,6 @@ const osThreadAttr_t attr_pc_comm = {
     .name = "pc_comm",
     .priority = osPriorityNormal,
     .stack_size = 512 * 4,
-};
-const osThreadAttr_t attr_pc_uart_rx = {
-    .name = "pc_uart_rx",
-    .priority = osPriorityNormal,
-    .stack_size = 256 * 4,
 };
 const osThreadAttr_t attr_ore_store = {
     .name = "ore_store",

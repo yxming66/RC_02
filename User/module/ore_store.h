@@ -36,7 +36,6 @@ typedef enum {
 typedef enum {
   ORE_STORE_CONTROL_PID_DUAL = 0,  // 双环: 位置PID → 速度PID → 力矩
   ORE_STORE_CONTROL_MIT_STYLE,      // MIT风格: Kp*error - Kd*velocity
-  ORE_STORE_CONTROL_POLE_STYLE,      // 仿Pole: 位置PID → 速度PID → RM归一化输出
 } OreStore_ControlMode_t;
 
 typedef struct {
@@ -62,8 +61,6 @@ typedef struct {
   struct {
     KPID_Params_t position_pid[ORE_STORE_AXIS_NUM];
     KPID_Params_t velocity_pid[ORE_STORE_AXIS_NUM];
-    KPID_Params_t pole_position_pid[ORE_STORE_AXIS_NUM];
-    KPID_Params_t pole_velocity_pid[ORE_STORE_AXIS_NUM];
     // MIT风格控制参数 (Kp/Kd)
     float mit_kp[ORE_STORE_AXIS_NUM];
     float mit_kd[ORE_STORE_AXIS_NUM];
@@ -75,8 +72,6 @@ typedef struct {
     float velocity_to_torque_limit[ORE_STORE_AXIS_NUM];
     float feedback_lowpass_cutoff_hz[ORE_STORE_AXIS_NUM];
     float output_lowpass_cutoff_hz[ORE_STORE_AXIS_NUM];
-    float normalized_output_limit[ORE_STORE_AXIS_NUM];
-    float normalized_to_torque_nm[ORE_STORE_AXIS_NUM];
   } controller;
 
   struct {
@@ -136,9 +131,7 @@ typedef struct {
   float filtered_position_rad[ORE_STORE_AXIS_NUM];
   float filtered_velocity_rad_s[ORE_STORE_AXIS_NUM];
   float filtered_output_torque_nm[ORE_STORE_AXIS_NUM];
-  float pole_style_output[ORE_STORE_AXIS_NUM];
   float motor_torque_nm[ORE_STORE_AXIS_NUM];
-  float normalized_output[ORE_STORE_AXIS_NUM];
   float rm_last_set_torque_nm[ORE_STORE_AXIS_NUM];
   float rm_pending_current_a[ORE_STORE_AXIS_NUM];
   int16_t rm_output_raw[ORE_STORE_AXIS_NUM];
@@ -173,7 +166,6 @@ typedef struct {
   float command_position_rad[ORE_STORE_AXIS_NUM];
   float command_velocity_rad_s[ORE_STORE_AXIS_NUM];
   float velocity_setpoint_rad_s[ORE_STORE_AXIS_NUM];
-  float pole_style_output[ORE_STORE_AXIS_NUM];
   int8_t power_on_assume_ret[ORE_STORE_AXIS_NUM];
   uint32_t power_on_assume_count[ORE_STORE_AXIS_NUM];
 

@@ -10,7 +10,6 @@
 #include "device/dr16.h"
 #include "module/chassis.h"
 #include "module/pole.h"
-#include "module/arm/arm_control_types.h"
 #include "module/arm_simple.h"
 #include "module/config.h"
 #include "module/rod_new.h"
@@ -49,12 +48,16 @@
 #define RC_ROD_NEW_MANUAL_SPEED_RAD_S (1.0f)
 #define RC_ROD_NEW_TARGET_MIN_RAD (-2.356f)
 #define RC_ROD_NEW_TARGET_MAX_RAD (2.356f)
+#define RC_MAPPING_PRESET_DEFAULT (0u)
+#define RC_MAPPING_PRESET_PC_FIRST (1u)
+#ifndef RC_MAPPING_ACTIVE_PRESET
+#define RC_MAPPING_ACTIVE_PRESET RC_MAPPING_PRESET_DEFAULT
+#endif
 
 /* USER STRUCT BEGIN */
 DR16_t dr16;
 static Chassis_CMD_t chassis_cmd;
 static Pole_CMD_t pole_cmd;
-static Arm_CMD_t arm_cmd;
 static ArmSimple_CMD_t arm_simple_cmd;
 static OreStore_CMD_t ore_store_cmd;
 static DR16_SwitchPos_t last_sw_l = DR16_SW_ERR;
@@ -65,20 +68,6 @@ extern auto_ctrl_t auto_ctrl;
 extern bool auto_ctrl_inited;
 extern Chassis_IMU_t chassis_imu;
 
-typedef struct {
-  bool enabled;
-  bool force_enable;
-  bool command_queued;
-  uint32_t request_seq;
-  uint32_t applied_seq;
-  ArmPose_t target_pose;
-} ArmTaskDebugPoseControl_t;
-
-// Temporary task-layer hook for debugger pose injection; remove after bring-up.
-volatile ArmTaskDebugPoseControl_t g_arm_task_debug_pose_control = {0};
-
-/* PC上位机控制相关 */
-#define RC_PC_ENABLE_SWITCH (DR16_SW_UP)  /* sw_l DOWN 且 sw_r UP 时允许PC接管 */
 extern PC_Protocol_t* g_pc_protocol_ptr;
 volatile PC_CommandSource_t g_pc_command_source = PC_COMMAND_SOURCE_RC;
 volatile int8_t g_rc_ore_store_post_ret = ORE_STORE_ERR_NULL;
@@ -95,6 +84,25 @@ typedef enum {
   RC_CONTROL_PAGE_ORE_STORE,
   RC_CONTROL_PAGE_ROD_NEW,
 } RcControlPage_t;
+
+typedef enum {
+  RC_BEHAVIOR_SAFE = 0,
+  RC_BEHAVIOR_DRIVE,
+  RC_BEHAVIOR_AUTO_200_UP_STANDBY,
+  RC_BEHAVIOR_AUTO_200_DOWN_STANDBY,
+  RC_BEHAVIOR_PC,
+  RC_BEHAVIOR_ARM_SIMPLE,
+  RC_BEHAVIOR_ORE_STORE,
+  RC_BEHAVIOR_ROD_NEW,
+} RcBehavior_t;
+
+typedef struct {
+  DR16_SwitchPos_t sw_l;
+  DR16_SwitchPos_t sw_r;
+  DR16_SwitchPos_t last_sw_l;
+  DR16_SwitchPos_t last_sw_r;
+  RcBehavior_t behavior;
+} RcSwitchBehaviorMap_t;
 
 typedef struct {
   volatile RcControlPage_t page;
@@ -138,14 +146,61 @@ typedef struct {
   auto_ctrl_travel_dir_e travel_dir;
 } RcAutoCtrlStartConfig_t;
 
+#if RC_MAPPING_ACTIVE_PRESET == RC_MAPPING_PRESET_PC_FIRST
+static const RcSwitchBehaviorMap_t rc_behavior_map_active[] = {
+  {DR16_SW_MID, DR16_SW_UP, DR16_SW_MID, DR16_SW_MID,
+   RC_BEHAVIOR_AUTO_200_UP_STANDBY},
+  {DR16_SW_MID, DR16_SW_DOWN, DR16_SW_MID, DR16_SW_MID,
+   RC_BEHAVIOR_AUTO_200_DOWN_STANDBY},
+  {DR16_SW_MID, DR16_SW_MID, DR16_SW_ERR, DR16_SW_ERR,
+   RC_BEHAVIOR_DRIVE},
+  {DR16_SW_DOWN, DR16_SW_UP, DR16_SW_ERR, DR16_SW_ERR,
+   RC_BEHAVIOR_PC},
+  {DR16_SW_DOWN, DR16_SW_MID, DR16_SW_ERR, DR16_SW_ERR,
+   RC_BEHAVIOR_ARM_SIMPLE},
+  {DR16_SW_DOWN, DR16_SW_DOWN, DR16_SW_ERR, DR16_SW_ERR,
+   RC_BEHAVIOR_ROD_NEW},
+};
+#else
+static const RcSwitchBehaviorMap_t rc_behavior_map_active[] = {
+  {DR16_SW_MID, DR16_SW_UP, DR16_SW_MID, DR16_SW_MID,
+   RC_BEHAVIOR_AUTO_200_UP_STANDBY},
+  {DR16_SW_MID, DR16_SW_DOWN, DR16_SW_MID, DR16_SW_MID,
+   RC_BEHAVIOR_AUTO_200_DOWN_STANDBY},
+  {DR16_SW_MID, DR16_SW_MID, DR16_SW_ERR, DR16_SW_ERR,
+   RC_BEHAVIOR_DRIVE},
+  {DR16_SW_DOWN, DR16_SW_UP, DR16_SW_ERR, DR16_SW_ERR,
+   RC_BEHAVIOR_ARM_SIMPLE},
+  {DR16_SW_DOWN, DR16_SW_MID, DR16_SW_ERR, DR16_SW_ERR,
+   RC_BEHAVIOR_ORE_STORE},
+  {DR16_SW_DOWN, DR16_SW_DOWN, DR16_SW_ERR, DR16_SW_ERR,
+   RC_BEHAVIOR_ROD_NEW},
+};
+#endif
+
+static const RcSwitchBehaviorMap_t *Rc_GetBehaviorMap(size_t *count) {
+  *count = sizeof(rc_behavior_map_active) / sizeof(rc_behavior_map_active[0]);
+  return rc_behavior_map_active;
+}
+
+static bool Rc_SwitchMapEntryMatches(const RcSwitchBehaviorMap_t *entry) {
+  if (entry == NULL) {
+    return false;
+  }
+  if (entry->sw_l != dr16.data.sw_l || entry->sw_r != dr16.data.sw_r) {
+    return false;
+  }
+  if (entry->last_sw_l != DR16_SW_ERR && entry->last_sw_l != last_sw_l) {
+    return false;
+  }
+  if (entry->last_sw_r != DR16_SW_ERR && entry->last_sw_r != last_sw_r) {
+    return false;
+  }
+  return true;
+}
+
 #define RC_ORE_STORE_DEADBAND (0.05f)
 #define RC_ORE_STORE_FALLBACK_MOVE_SPEED_RAD_S (0.5f)
-
-static bool Rc_ArmPoseIsFinite(const ArmPose_t* pose) {
-  return pose != NULL && isfinite(pose->x) && isfinite(pose->y) &&
-         isfinite(pose->z) && isfinite(pose->roll) &&
-         isfinite(pose->pitch) && isfinite(pose->yaw);
-}
 
 static bool Rc_KeyDown(DR16_Key_t key) {
   return key < DR16_KEY_NUM && dr16.data.keyboard.key[key];
@@ -201,21 +256,14 @@ static bool Rc_SwitchJustReleasedToMid(DR16_SwitchPos_t current, DR16_SwitchPos_
   return (current == DR16_SW_MID && last == from_pos);
 }
 
-static bool Rc_AutoCtrlSwitchGestureActive(void) {
-  return dr16.header.online &&
-         dr16.data.sw_l == DR16_SW_MID &&
-         last_sw_l == DR16_SW_MID &&
-         last_sw_r == DR16_SW_MID &&
-         (dr16.data.sw_r == DR16_SW_UP || dr16.data.sw_r == DR16_SW_DOWN);
-}
-
 static RcAutoCtrlStartConfig_t Rc_SelectAutoCtrlStartConfig(void) {
   RcAutoCtrlStartConfig_t config = {
       AUTO_CTRL_TEMPLATE_NONE,
       AUTO_CTRL_TRAVEL_DIR_HEAD_FORWARD,
   };
 
-  if (!Rc_AutoCtrlSwitchGestureActive()) {
+  if (dr16.data.sw_l != DR16_SW_MID || last_sw_l != DR16_SW_MID ||
+      last_sw_r != DR16_SW_MID) {
     return config;
   }
 
@@ -420,14 +468,6 @@ static void Rc_SetPoleHold(void) {
   Rc_SetPoleManual(0.0f, 0.0f);
 }
 
-static void Rc_SetArmDisabled(void) {
-  memset(&arm_cmd, 0, sizeof(arm_cmd));
-  arm_cmd.enable = dr16.header.online;
-  arm_cmd.set_target_as_current = dr16.header.online;
-  arm_cmd.ctrl_type = ARM_CTRL_REMOTE_CARTESIAN;
-  arm_cmd.frame = ARM_CTRL_FRAME_WORLD;
-}
-
 static void Rc_SetArmSimpleRelax(void) {
   memset(&arm_simple_cmd, 0, sizeof(arm_simple_cmd));
   arm_simple_cmd.mode = ARM_SIMPLE_MODE_RELAX;
@@ -552,45 +592,6 @@ static void Rc_SetArmSimpleOperator(float scale) {
   arm_simple_cmd.suction = arm_simple_suction_latched;
 }
 
-static void Rc_SetArmPoseAbsolute(const ArmPose_t* target_pose,
-                                  bool enable) {
-  memset(&arm_cmd, 0, sizeof(arm_cmd));
-  arm_cmd.enable = enable;
-  arm_cmd.ctrl_type = ARM_CTRL_POSE_ABSOLUTE;
-  arm_cmd.frame = ARM_CTRL_FRAME_WORLD;
-  if (target_pose != NULL) {
-    arm_cmd.target_pose = *target_pose;
-  }
-}
-
-static void Rc_ApplyArmDebugPoseOverride(void) {
-  if (!g_arm_task_debug_pose_control.enabled) {
-    g_arm_task_debug_pose_control.command_queued = false;
-    return;
-  }
-
-  ArmPose_t target_pose;
-  target_pose.x = g_arm_task_debug_pose_control.target_pose.x;
-  target_pose.y = g_arm_task_debug_pose_control.target_pose.y;
-  target_pose.z = g_arm_task_debug_pose_control.target_pose.z;
-  target_pose.roll = g_arm_task_debug_pose_control.target_pose.roll;
-  target_pose.pitch = g_arm_task_debug_pose_control.target_pose.pitch;
-  target_pose.yaw = g_arm_task_debug_pose_control.target_pose.yaw;
-
-  const bool valid_pose = Rc_ArmPoseIsFinite(&target_pose);
-  if (!valid_pose) {
-    g_arm_task_debug_pose_control.command_queued = false;
-    return;
-  }
-
-  const bool enable =
-      dr16.header.online || g_arm_task_debug_pose_control.force_enable;
-  Rc_SetArmPoseAbsolute(&target_pose, enable);
-  g_arm_task_debug_pose_control.applied_seq =
-      g_arm_task_debug_pose_control.request_seq;
-  g_arm_task_debug_pose_control.command_queued = true;
-}
-
 static void Rc_SetChassisRelax(void) {
   chassis_cmd.mode = CHASSIS_MODE_RELAX;
   chassis_cmd.ctrl_vec.vx = 0.0f;
@@ -624,8 +625,274 @@ static bool Rc_ShouldExitAutoCtrlBySwitch(void) {
 static bool Rc_ShouldUsePcCommand(void) {
   return g_pc_protocol_ptr != NULL &&
          PC_Protocol_IsPCControlMode(g_pc_protocol_ptr) &&
-         dr16.data.sw_l == DR16_SW_UP &&
-         dr16.data.sw_r == DR16_SW_UP;
+         dr16.data.sw_l != DR16_SW_UP;
+}
+
+static RcControlPage_t Rc_PageForBehavior(RcBehavior_t behavior) {
+  switch (behavior) {
+    case RC_BEHAVIOR_DRIVE:
+      return RC_CONTROL_PAGE_DRIVE;
+    case RC_BEHAVIOR_AUTO_200_UP_STANDBY:
+      return RC_CONTROL_PAGE_AUTO_200_UP;
+    case RC_BEHAVIOR_AUTO_200_DOWN_STANDBY:
+      return RC_CONTROL_PAGE_AUTO_200_DOWN;
+    case RC_BEHAVIOR_PC:
+      return RC_CONTROL_PAGE_PC;
+    case RC_BEHAVIOR_ARM_SIMPLE:
+      return RC_CONTROL_PAGE_ARM_SIMPLE;
+    case RC_BEHAVIOR_ORE_STORE:
+      return RC_CONTROL_PAGE_ORE_STORE;
+    case RC_BEHAVIOR_ROD_NEW:
+      return RC_CONTROL_PAGE_ROD_NEW;
+    case RC_BEHAVIOR_SAFE:
+    default:
+      return RC_CONTROL_PAGE_SAFE;
+  }
+}
+
+static RcBehavior_t Rc_SelectMappedBehavior(void) {
+  size_t map_count = 0u;
+  const RcSwitchBehaviorMap_t *map = Rc_GetBehaviorMap(&map_count);
+
+  if (!dr16.header.online || dr16.data.sw_l == DR16_SW_UP) {
+    return RC_BEHAVIOR_SAFE;
+  }
+
+  for (size_t index = 0u; index < map_count; ++index) {
+    if (Rc_SwitchMapEntryMatches(&map[index])) {
+      return map[index].behavior;
+    }
+  }
+
+  return RC_BEHAVIOR_SAFE;
+}
+
+static bool Rc_BehaviorAllowsAutoCtrlOutput(RcBehavior_t behavior) {
+  return behavior == RC_BEHAVIOR_DRIVE ||
+         behavior == RC_BEHAVIOR_AUTO_200_UP_STANDBY ||
+         behavior == RC_BEHAVIOR_AUTO_200_DOWN_STANDBY;
+}
+
+static void Rc_ResetFrameDebug(void) {
+  g_pc_command_source = PC_COMMAND_SOURCE_RC;
+  g_rc_control_debug.page = RC_CONTROL_PAGE_SAFE;
+  g_rc_control_debug.reset_event = false;
+  g_rc_control_debug.auto_200_start_event = false;
+  g_rc_control_debug.auto_200_start_ok = false;
+  g_rc_control_debug.auto_200_template = AUTO_CTRL_TEMPLATE_NONE;
+  g_rc_control_debug.arm_simple_active = false;
+  g_rc_control_debug.rod_active = false;
+  g_rc_control_debug.ore_store_active = false;
+  g_rc_ore_store_debug.assume_home_event = false;
+}
+
+static void Rc_HandleResetEvent(void) {
+  if (dr16.header.online && dr16.data.sw_l == DR16_SW_UP &&
+      dr16.data.sw_r == DR16_SW_DOWN && last_sw_r != DR16_SW_DOWN &&
+      last_sw_r != DR16_SW_ERR) {
+    reset = true;
+    g_rc_control_debug.reset_event = true;
+  }
+}
+
+static void Rc_AbortAutoCtrlIfBusy(void) {
+  if (auto_ctrl_inited && AutoCtrl_IsBusy(&auto_ctrl)) {
+    AutoCtrl_Abort(&auto_ctrl);
+  }
+}
+
+static void Rc_ApplySafeBehavior(void) {
+  g_rc_control_debug.page = RC_CONTROL_PAGE_SAFE;
+  Rc_SetChassisRelax();
+  Rc_SetPoleAuto(0.0f, 0.0f);
+  Rc_SetArmSimpleRelax();
+  Rc_SetRodRelax();
+  Rc_SetOreStoreRelax();
+}
+
+static void Rc_ApplyAutoCtrlOutputs(void) {
+  g_rc_control_debug.page = Rc_GetAutoCtrlPage(AutoCtrl_GetTemplate(&auto_ctrl));
+#if AUTO_CTRL_OUTPUT_ENABLE
+  chassis_cmd = auto_ctrl.chassis_cmd;
+  pole_cmd = auto_ctrl.pole_cmd;
+#else
+  Rc_SetAutoDryRunCommands();
+#endif
+  Rc_SetArmSimpleHold();
+  Rc_SetRodHold();
+  Rc_SetOreStoreHold();
+}
+
+static void Rc_ApplyDriveBehavior(void) {
+  g_rc_control_debug.page = RC_CONTROL_PAGE_DRIVE;
+  Rc_SetChassisRemote();
+  Rc_SetPoleManual(dr16.data.ch_l_y, dr16.data.ch_l_y);
+  Rc_SetArmSimpleHold();
+  Rc_SetRodHold();
+  Rc_SetOreStoreHold();
+}
+
+static void Rc_ApplyAutoStandbyBehavior(RcBehavior_t behavior) {
+  g_rc_control_debug.page = Rc_PageForBehavior(behavior);
+  Rc_SetChassisRelax();
+  Rc_SetPoleAuto(0.0f, 0.0f);
+  Rc_SetArmSimpleHold();
+  Rc_SetRodHold();
+  Rc_SetOreStoreHold();
+}
+
+static void Rc_ApplyPcBehavior(void) {
+  g_rc_control_debug.page = RC_CONTROL_PAGE_PC;
+  g_pc_command_source = PC_COMMAND_SOURCE_PC;
+
+  if (auto_ctrl_inited && AutoCtrl_IsBusy(&auto_ctrl)) {
+#if AUTO_CTRL_OUTPUT_ENABLE
+    chassis_cmd = auto_ctrl.chassis_cmd;
+    pole_cmd = auto_ctrl.pole_cmd;
+#else
+    Rc_SetAutoDryRunCommands();
+#endif
+  } else {
+    const PC_ChassisCMD_t* pc_chassis_cmd =
+        PC_Protocol_GetChassisCMD(g_pc_protocol_ptr);
+    const PC_PoleCMD_t* pc_pole_cmd = PC_Protocol_GetPoleCMD(g_pc_protocol_ptr);
+
+    if (pc_chassis_cmd != NULL) {
+      chassis_cmd.mode = CHASSIS_MODE_INDEPENDENT;
+      chassis_cmd.ctrl_vec.vx = pc_chassis_cmd->vx;
+      chassis_cmd.ctrl_vec.vy = pc_chassis_cmd->vy;
+      chassis_cmd.ctrl_vec.wz = pc_chassis_cmd->wz;
+    } else {
+      Rc_SetChassisRelax();
+    }
+
+    if (pc_pole_cmd != NULL) {
+      pole_cmd.mode = (pc_pole_cmd->mode == 0) ? POLE_MODE_RELAX
+                                               : POLE_MODE_ACTIVE;
+      pole_cmd.lift[0] = 0.0f;
+      pole_cmd.lift[1] = 0.0f;
+      pole_cmd.auto_target_enable[0] = (pole_cmd.mode == POLE_MODE_ACTIVE);
+      pole_cmd.auto_target_enable[1] = (pole_cmd.mode == POLE_MODE_ACTIVE);
+      pole_cmd.auto_target_lift[0] = pc_pole_cmd->lift[0];
+      pole_cmd.auto_target_lift[1] = pc_pole_cmd->lift[1];
+      pole_cmd.auto_lift_speed[0] = 0.0f;
+      pole_cmd.auto_lift_speed[1] = 0.0f;
+    }
+  }
+
+  Rc_SetArmSimpleHold();
+  Rc_SetRodHold();
+  Rc_SetOreStoreHold();
+}
+
+static void Rc_ApplyArmSimpleBehavior(void) {
+  g_rc_control_debug.page = RC_CONTROL_PAGE_ARM_SIMPLE;
+  Rc_SetChassisRelax();
+  Rc_SetPoleHold();
+  Rc_SetArmSimpleOperator(RC_ARM_FINE_SCALE);
+  Rc_SetRodHold();
+  Rc_SetOreStoreHold();
+  g_rc_control_debug.arm_simple_active = true;
+}
+
+static void Rc_ApplyOreStoreBehavior(void) {
+  g_rc_control_debug.page = RC_CONTROL_PAGE_ORE_STORE;
+  Rc_SetChassisRelax();
+  Rc_SetPoleHold();
+  Rc_SetArmSimpleHold();
+  Rc_SetOreStoreActiveManual();
+  Rc_SetRodHold();
+  g_rc_control_debug.ore_store_active = true;
+}
+
+static void Rc_ApplyRodNewBehavior(void) {
+  g_rc_control_debug.page = RC_CONTROL_PAGE_ROD_NEW;
+  Rc_SetChassisRelax();
+  Rc_SetPoleHold();
+  Rc_SetArmSimpleHold();
+  Rc_SetOreStoreHold();
+  Rc_SetRodOperator();
+  g_rc_control_debug.rod_active = true;
+}
+
+static void Rc_HandleBehaviorEvents(RcBehavior_t behavior) {
+  if (behavior == RC_BEHAVIOR_ARM_SIMPLE &&
+      Rc_SwitchJustReleasedToMid(dr16.data.sw_r, last_sw_r, DR16_SW_UP) &&
+      dr16.data.sw_l == DR16_SW_DOWN) {
+    Rc_ToggleArmSimpleSuction();
+  }
+
+  if (behavior == RC_BEHAVIOR_ROD_NEW &&
+      dr16.data.sw_r == DR16_SW_DOWN && last_sw_r == DR16_SW_MID) {
+    Rc_ToggleRodGrip();
+  }
+}
+
+static void Rc_ApplyMappedBehavior(RcBehavior_t behavior) {
+  if (!Rc_BehaviorAllowsAutoCtrlOutput(behavior) &&
+      behavior != RC_BEHAVIOR_PC) {
+    Rc_AbortAutoCtrlIfBusy();
+  }
+
+  if (behavior == RC_BEHAVIOR_PC && !Rc_ShouldUsePcCommand()) {
+    Rc_AbortAutoCtrlIfBusy();
+    Rc_ApplySafeBehavior();
+    return;
+  }
+
+  Rc_HandleBehaviorEvents(behavior);
+
+  switch (behavior) {
+    case RC_BEHAVIOR_DRIVE:
+      Rc_ApplyDriveBehavior();
+      break;
+    case RC_BEHAVIOR_AUTO_200_UP_STANDBY:
+    case RC_BEHAVIOR_AUTO_200_DOWN_STANDBY:
+      Rc_ApplyAutoStandbyBehavior(behavior);
+      break;
+    case RC_BEHAVIOR_PC:
+      Rc_ApplyPcBehavior();
+      break;
+    case RC_BEHAVIOR_ARM_SIMPLE:
+      Rc_ApplyArmSimpleBehavior();
+      break;
+    case RC_BEHAVIOR_ORE_STORE:
+      Rc_ApplyOreStoreBehavior();
+      break;
+    case RC_BEHAVIOR_ROD_NEW:
+      Rc_ApplyRodNewBehavior();
+      break;
+    case RC_BEHAVIOR_SAFE:
+    default:
+      Rc_ApplySafeBehavior();
+      break;
+  }
+}
+
+static void Rc_PublishCommandsAndDebug(void) {
+  osMessageQueueReset(task_runtime.msgq.chassis.cmd);
+  osMessageQueuePut(task_runtime.msgq.chassis.cmd, &chassis_cmd, 0, 0);
+  osMessageQueueReset(task_runtime.msgq.pole.cmd);
+  osMessageQueuePut(task_runtime.msgq.pole.cmd, &pole_cmd, 0, 0);
+  osMessageQueueReset(task_runtime.msgq.arm_simple.cmd);
+  osMessageQueuePut(task_runtime.msgq.arm_simple.cmd, &arm_simple_cmd, 0, 0);
+  osMessageQueueReset(task_runtime.msgq.rod.cmd);
+  osMessageQueuePut(task_runtime.msgq.rod.cmd, &rod_cmd, 0, 0);
+  g_rc_ore_store_post_ret = Task_OreStorePostCommand(&ore_store_cmd);
+
+  g_rc_ore_store_debug.online = dr16.header.online;
+  g_rc_ore_store_debug.sw_l = dr16.data.sw_l;
+  g_rc_ore_store_debug.sw_r = dr16.data.sw_r;
+  g_rc_ore_store_debug.last_sw_l = last_sw_l;
+  g_rc_ore_store_debug.last_sw_r = last_sw_r;
+  g_rc_ore_store_debug.cmd_mode = ore_store_cmd.mode;
+  g_rc_ore_store_debug.cmd_force_rehome = ore_store_cmd.force_rehome;
+  g_rc_ore_store_debug.platform_target_rad = ore_store_cmd.platform_target_rad;
+  g_rc_ore_store_debug.gate_target_rad[0] = ore_store_cmd.gate_target_rad[0];
+  g_rc_ore_store_debug.gate_target_rad[1] = ore_store_cmd.gate_target_rad[1];
+  g_rc_ore_store_debug.track_target_rad[0] = ore_store_cmd.track_target_rad[0];
+  g_rc_ore_store_debug.track_target_rad[1] = ore_store_cmd.track_target_rad[1];
+  g_rc_ore_store_debug.post_ret = g_rc_ore_store_post_ret;
 }
 
 static bool Rc_PrepareLocalAutoYawFeedback(void) {
@@ -704,12 +971,12 @@ void Task_rc_main(void *argument) {
     osThreadTerminate(osThreadGetId());
     return;
   }
-  Rc_SetArmDisabled();
   Rc_SetArmSimpleRelax();
   Rc_SetOreStoreRelax();
 
   while (1) {
     uint32_t now_ms;
+    RcBehavior_t behavior;
     tick += delay_tick;
     DR16_StartDmaRecv(&dr16);
     if (DR16_WaitDmaCplt(100)) {
@@ -719,23 +986,8 @@ void Task_rc_main(void *argument) {
     }
 
     now_ms = osKernelGetTickCount();
-    g_pc_command_source = PC_COMMAND_SOURCE_RC;
-    g_rc_control_debug.page = RC_CONTROL_PAGE_SAFE;
-    g_rc_control_debug.reset_event = false;
-    g_rc_control_debug.auto_200_start_event = false;
-    g_rc_control_debug.auto_200_start_ok = false;
-    g_rc_control_debug.auto_200_template = AUTO_CTRL_TEMPLATE_NONE;
-    g_rc_control_debug.arm_simple_active = false;
-    g_rc_control_debug.rod_active = false;
-    g_rc_control_debug.ore_store_active = false;
-    g_rc_ore_store_debug.assume_home_event = false;
-
-    if (dr16.header.online && dr16.data.sw_l == DR16_SW_UP &&
-        dr16.data.sw_r == DR16_SW_DOWN && last_sw_r != DR16_SW_DOWN &&
-        last_sw_r != DR16_SW_ERR) {
-      reset = true;
-      g_rc_control_debug.reset_event = true;
-    }
+    Rc_ResetFrameDebug();
+    Rc_HandleResetEvent();
 
     Rc_TryStartAutoCtrlBySwitch(now_ms);
 
@@ -744,179 +996,17 @@ void Task_rc_main(void *argument) {
       AutoCtrl_Abort(&auto_ctrl);
     }
 
-    if (!dr16.header.online || dr16.data.sw_l == DR16_SW_UP) {
-      g_rc_control_debug.page = RC_CONTROL_PAGE_SAFE;
-      Rc_SetChassisRelax();
-      Rc_SetPoleAuto(0.0f, 0.0f);
-      Rc_SetArmDisabled();
-      Rc_SetArmSimpleRelax();
-      Rc_SetRodRelax();
-      Rc_SetOreStoreRelax();
-    } else if (dr16.data.sw_l == DR16_SW_MID) {
-      if (auto_ctrl_inited && AutoCtrl_IsBusy(&auto_ctrl)) {
-        g_rc_control_debug.page = Rc_GetAutoCtrlPage(AutoCtrl_GetTemplate(&auto_ctrl));
-#if AUTO_CTRL_OUTPUT_ENABLE
-        chassis_cmd = auto_ctrl.chassis_cmd;
-        pole_cmd = auto_ctrl.pole_cmd;
-#else
-        Rc_SetAutoDryRunCommands();
-#endif
-        Rc_SetOreStoreHold();
-      } else if (dr16.data.sw_r == DR16_SW_UP) {
-        g_rc_control_debug.page = RC_CONTROL_PAGE_AUTO_200_UP;
-        Rc_SetChassisRelax();
-        Rc_SetPoleAuto(0.0f, 0.0f);
-        Rc_SetOreStoreHold();
-      } else if (dr16.data.sw_r == DR16_SW_DOWN) {
-        g_rc_control_debug.page = RC_CONTROL_PAGE_AUTO_200_DOWN;
-        Rc_SetChassisRelax();
-        Rc_SetPoleAuto(0.0f, 0.0f);
-        Rc_SetOreStoreHold();
-      } else if (dr16.data.sw_r == DR16_SW_MID) {
-        g_rc_control_debug.page = RC_CONTROL_PAGE_DRIVE;
-        Rc_SetChassisRemote();
-        Rc_SetPoleManual(dr16.data.ch_l_y, dr16.data.ch_l_y);
-        Rc_SetOreStoreHold();
-      } else {
-        Rc_SetChassisRelax();
-        Rc_SetPoleAuto(0.0f, 0.0f);
-        Rc_SetOreStoreHold();
-      }
-
-      Rc_SetArmDisabled();
-      Rc_SetArmSimpleHold();
-      Rc_SetRodHold();
-    } else if (dr16.data.sw_l == DR16_SW_UP) {
-      const bool use_pc_command = Rc_ShouldUsePcCommand();
-
-      if (!use_pc_command && auto_ctrl_inited && AutoCtrl_IsBusy(&auto_ctrl)) {
-        AutoCtrl_Abort(&auto_ctrl);
-      }
-
-      if (use_pc_command) {
-        g_rc_control_debug.page = RC_CONTROL_PAGE_PC;
-        g_pc_command_source = PC_COMMAND_SOURCE_PC;
-        if (auto_ctrl_inited && AutoCtrl_IsBusy(&auto_ctrl)) {
-#if AUTO_CTRL_OUTPUT_ENABLE
-          chassis_cmd = auto_ctrl.chassis_cmd;
-          pole_cmd = auto_ctrl.pole_cmd;
-#else
-          Rc_SetAutoDryRunCommands();
-#endif
-        } else {
-          /* 上位机控制模式 */
-          const PC_ChassisCMD_t* pc_chassis_cmd = PC_Protocol_GetChassisCMD(g_pc_protocol_ptr);
-          const PC_PoleCMD_t* pc_pole_cmd = PC_Protocol_GetPoleCMD(g_pc_protocol_ptr);
-
-          /* 使用上位机Chassis命令 */
-          if (pc_chassis_cmd != NULL) {
-            chassis_cmd.mode = CHASSIS_MODE_INDEPENDENT;
-            chassis_cmd.ctrl_vec.vx = pc_chassis_cmd->vx;
-            chassis_cmd.ctrl_vec.vy = pc_chassis_cmd->vy;
-            chassis_cmd.ctrl_vec.wz = pc_chassis_cmd->wz;
-          } else {
-            Rc_SetChassisRelax();
-          }
-
-          /* 使用上位机Pole命令 */
-          if (pc_pole_cmd != NULL) {
-            pole_cmd.mode = (pc_pole_cmd->mode == 0) ? POLE_MODE_RELAX : POLE_MODE_ACTIVE;
-            pole_cmd.lift[0] = 0.0f;
-            pole_cmd.lift[1] = 0.0f;
-            pole_cmd.auto_target_enable[0] = (pole_cmd.mode == POLE_MODE_ACTIVE);
-            pole_cmd.auto_target_enable[1] = (pole_cmd.mode == POLE_MODE_ACTIVE);
-            pole_cmd.auto_target_lift[0] = pc_pole_cmd->lift[0];
-            pole_cmd.auto_target_lift[1] = pc_pole_cmd->lift[1];
-            pole_cmd.auto_lift_speed[0] = 0.0f;
-            pole_cmd.auto_lift_speed[1] = 0.0f;
-          }
-        }
-        Rc_SetArmDisabled();
-        Rc_SetArmSimpleHold();
-        Rc_SetRodHold();
-        Rc_SetOreStoreHold();
-      } else {
-        g_rc_control_debug.page = RC_CONTROL_PAGE_ARM_SIMPLE;
-        Rc_SetChassisRelax();
-        Rc_SetPoleHold();
-        Rc_SetArmDisabled();
-        Rc_SetArmSimpleOperator(RC_ARM_FINE_SCALE);
-        Rc_SetRodHold();
-        Rc_SetOreStoreHold();
-        g_rc_control_debug.arm_simple_active = true;
-      }
-    } else if (dr16.data.sw_l == DR16_SW_DOWN) {
-      if (auto_ctrl_inited && AutoCtrl_IsBusy(&auto_ctrl)) {
-        AutoCtrl_Abort(&auto_ctrl);
-      }
-
-      /* 左DOWN + 右UP → MID：切换ARM_SOLENOID */
-      if (Rc_SwitchJustReleasedToMid(dr16.data.sw_r, last_sw_r, DR16_SW_UP) && dr16.data.sw_l == DR16_SW_DOWN) {
-        Rc_ToggleArmSimpleSuction();
-      }
-
-      /* 左DOWN + 右MID → DOWN：切换ROD_SOLENOID */
-      if (dr16.data.sw_r == DR16_SW_DOWN && last_sw_r == DR16_SW_MID) {
-        Rc_ToggleRodGrip();
-      }
-
-      /* 左DOWN + 右UP：ARM_SIMPLE 操作模式 */
-      if (dr16.data.sw_r == DR16_SW_UP) {
-        g_rc_control_debug.page = RC_CONTROL_PAGE_ARM_SIMPLE;
-        Rc_SetChassisRelax();
-        Rc_SetPoleHold();
-        Rc_SetArmDisabled();
-        Rc_SetArmSimpleOperator(RC_ARM_FINE_SCALE);
-        Rc_SetRodHold();
-        Rc_SetOreStoreHold();
-        g_rc_control_debug.arm_simple_active = true;
-      } else if (dr16.data.sw_r == DR16_SW_MID) {
-        g_rc_control_debug.page = RC_CONTROL_PAGE_ORE_STORE;
-        Rc_SetChassisRelax();
-        Rc_SetPoleHold();
-        Rc_SetArmDisabled();
-        Rc_SetArmSimpleHold();
-        Rc_SetOreStoreActiveManual();
-        Rc_SetRodHold();
-        g_rc_control_debug.ore_store_active = true;
-      } else if (dr16.data.sw_r == DR16_SW_DOWN) {
-        g_rc_control_debug.page = RC_CONTROL_PAGE_ROD_NEW;
-        Rc_SetChassisRelax();
-        Rc_SetPoleHold();
-        Rc_SetArmDisabled();
-        Rc_SetArmSimpleHold();
-        Rc_SetOreStoreHold();
-        Rc_SetRodOperator();
-        g_rc_control_debug.rod_active = true;
-      }
+    behavior = Rc_SelectMappedBehavior();
+    if (behavior == RC_BEHAVIOR_SAFE) {
+      Rc_ApplySafeBehavior();
+    } else if (auto_ctrl_inited && AutoCtrl_IsBusy(&auto_ctrl) &&
+               Rc_BehaviorAllowsAutoCtrlOutput(behavior)) {
+      Rc_ApplyAutoCtrlOutputs();
+    } else {
+      Rc_ApplyMappedBehavior(behavior);
     }
 
-    Rc_ApplyArmDebugPoseOverride();
-
-    osMessageQueueReset(task_runtime.msgq.chassis.cmd);
-    osMessageQueuePut(task_runtime.msgq.chassis.cmd, &chassis_cmd, 0, 0);
-    osMessageQueueReset(task_runtime.msgq.pole.cmd);
-    osMessageQueuePut(task_runtime.msgq.pole.cmd, &pole_cmd, 0, 0);
-    osMessageQueueReset(task_runtime.msgq.arm.cmd);
-    osMessageQueuePut(task_runtime.msgq.arm.cmd, &arm_cmd, 0, 0);
-    osMessageQueueReset(task_runtime.msgq.arm_simple.cmd);
-    osMessageQueuePut(task_runtime.msgq.arm_simple.cmd, &arm_simple_cmd, 0, 0);
-    osMessageQueueReset(task_runtime.msgq.rod.cmd);
-    osMessageQueuePut(task_runtime.msgq.rod.cmd, &rod_cmd, 0, 0);
-    g_rc_ore_store_post_ret = Task_OreStorePostCommand(&ore_store_cmd);
-    g_rc_ore_store_debug.online = dr16.header.online;
-    g_rc_ore_store_debug.sw_l = dr16.data.sw_l;
-    g_rc_ore_store_debug.sw_r = dr16.data.sw_r;
-    g_rc_ore_store_debug.last_sw_l = last_sw_l;
-    g_rc_ore_store_debug.last_sw_r = last_sw_r;
-    g_rc_ore_store_debug.cmd_mode = ore_store_cmd.mode;
-    g_rc_ore_store_debug.cmd_force_rehome = ore_store_cmd.force_rehome;
-    g_rc_ore_store_debug.platform_target_rad = ore_store_cmd.platform_target_rad;
-    g_rc_ore_store_debug.gate_target_rad[0] = ore_store_cmd.gate_target_rad[0];
-    g_rc_ore_store_debug.gate_target_rad[1] = ore_store_cmd.gate_target_rad[1];
-    g_rc_ore_store_debug.track_target_rad[0] = ore_store_cmd.track_target_rad[0];
-    g_rc_ore_store_debug.track_target_rad[1] = ore_store_cmd.track_target_rad[1];
-    g_rc_ore_store_debug.post_ret = g_rc_ore_store_post_ret;
+    Rc_PublishCommandsAndDebug();
     last_sw_l = dr16.data.sw_l;
     last_sw_r = dr16.data.sw_r;
     task_runtime.stack_water_mark.rc_main = uxTaskGetStackHighWaterMark(NULL);
