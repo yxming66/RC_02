@@ -69,6 +69,21 @@ typedef struct {
     Suction_State_t suction;
 } ArmSimple_DebugControl_t;
 
+typedef struct {
+    ArmSimple_Mode_t mode;
+    ArmSimple_PointMode_t point_mode;
+    Suction_State_t suction;
+    bool joint1_temperature_warning;
+    bool joint1_temperature_over_limit;
+    bool joint1_temperature_limit_latched;
+    float joint1_angle_rad;
+    float joint1_velocity_rad_s;
+    float joint1_temperature_c;
+    float joint2_angle_rad;
+    float target_joint1_rad;
+    float target_joint2_rad;
+} ArmSimple_Feedback_t;
+
 /* 预设姿态点 */
 typedef struct {
     float joint1_pos;
@@ -116,6 +131,8 @@ typedef struct {
         float joint1_max_vel;
         float joint2_max_vel;
     } vel_limit;
+
+    MOTOR_TemperatureProtectionConfig_t joint1_temperature_protection;
 } ArmSimple_Params_t;
 
 /* 臂实例 */
@@ -137,6 +154,10 @@ typedef struct {
     struct {
         float joint1_angle;   /* DM4340当前角度 */
         float joint1_vel;     /* DM4340当前速度 */
+        float joint1_temp;    /* DM4340温度，°C */
+        bool joint1_temperature_warning;
+        bool joint1_temperature_over_limit;
+        bool joint1_temperature_limit_latched;
         float joint2_angle;   /* 舵机当前角度 */
     } feedback;
 

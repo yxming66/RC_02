@@ -90,16 +90,20 @@ typedef struct {
     float max_current;   /* legacy fallback */
     float support_total_travel;   /* rad */
     float support_lift_speed;     /* rad/s */
+    float support_lift_accel;     /* rad/s^2, target lift acceleration limit; <=0 disables soft start */
     float support_limit_soft_zone; /* rad, slow down near lower/upper limit */
     float support_hold_zone;      /* rad, near lower limit hold target */
     float support_hold_speed_threshold; /* rad/s, low-speed condition for hold */
     float support_hold_release_zone; /* rad, release hold only after moving away from lower limit */
     float support_output_slew_rate; /* output unit/s, <=0 disable */
   } limit;
+  MOTOR_TemperatureProtectionConfig_t motor_temperature_protection;
 } Pole_Params_t;
 
 typedef struct {
   MOTOR_Feedback_t motor[POLE_MOTOR_NUM];
+  bool temperature_warning[POLE_MOTOR_NUM];
+  bool temperature_over_limit[POLE_MOTOR_NUM];
   float support_vel_filtered[POLE_SUPPORT_MOTOR_NUM];
   float support_angle_avg;
 } Pole_Feedback_t;
@@ -115,6 +119,9 @@ typedef struct {
   float target_angle_rad[POLE_SUPPORT_MOTOR_NUM];    /* 每根撑杆目标角度 */
   float feedback_angle_rad[POLE_SUPPORT_MOTOR_NUM];  /* 每根撑杆反馈角度 */
   float feedback_speed_rad_s[POLE_SUPPORT_MOTOR_NUM];/* 每根撑杆反馈角速度 */
+  float final_target_lift[2];                    /* 每侧最终目标 lift, rad */
+  float tracked_target_lift[2];                  /* 每侧规划后目标 lift, rad */
+  float tracked_target_velocity[2];              /* 每侧规划后目标速度, rad/s */
 } Pole_Debug_t;
 
 typedef struct {
@@ -136,6 +143,7 @@ typedef struct {
     float upper[POLE_SUPPORT_MOTOR_NUM];
     float final_target_lift[2];
     float tracked_target_lift[2];
+    float tracked_target_velocity[2];
     bool auto_target_was_enabled[2];
     bool lower_hold_latched[POLE_SUPPORT_MOTOR_NUM];
   } support_angle;
@@ -189,6 +197,9 @@ bool Pole_IsGroupAtFinalTarget(const Pole_t *c, uint8_t group,
 bool Pole_IsAllAtFinalTarget(const Pole_t *c, float threshold_rad);
 bool Pole_IsSideOffGround(const Pole_t *c, uint8_t side);
 bool Pole_IsAnyOffGround(const Pole_t *c);
+bool Pole_HasTemperatureWarning(const Pole_t *c);
+bool Pole_HasTemperatureOverLimit(const Pole_t *c);
+float Pole_GetMaxTemperature(const Pole_t *c);
 const Pole_Debug_t *Pole_GetDebug(const Pole_t *c);
 void Pole_Output(Pole_t *c);
 void Pole_ResetOutput(Pole_t *c);

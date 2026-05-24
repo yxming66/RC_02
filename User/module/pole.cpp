@@ -9,7 +9,50 @@
 
 #include "bsp/can.h"
 #include "component/math/scalar.hpp"
+#include "component/trajectory/online_trapezoid.hpp"
 #include "device/motor_rm.h"
+
+namespace {
+
+constexpr float kPoleManualLiftDeadband = 1.0e-4f;
+
+float Pole_PositiveOrZero(float value) {
+  return mr::component::math::is_finite_scalar(value) && value > 0.0f
+             ? value
+             : 0.0f;
+}
+
+void Pole_ResetSideTargetVelocity(Pole_t *c, uint8_t side) {
+  if (c == NULL || side >= 2u) return;
+  c->support_angle.tracked_target_velocity[side] = 0.0f;
+}
+
+float Pole_UpdateTrackedLift(Pole_t *c, uint8_t side, float speed_limit) {
+  if (c == NULL || c->param == NULL || side >= 2u) return 0.0f;
+
+  const float max_velocity = Pole_PositiveOrZero(speed_limit);
+  const float max_acceleration =
+      Pole_PositiveOrZero(c->param->limit.support_lift_accel);
+
+  if (max_velocity <= 0.0f || max_acceleration <= 0.0f) {
+    c->support_angle.tracked_target_velocity[side] = 0.0f;
+    return mr::component::math::move_towards(
+        c->support_angle.tracked_target_lift[side],
+        c->support_angle.final_target_lift[side], max_velocity * c->dt);
+  }
+
+  const mr::comp::traj::OnlineTrapezoidAxisSample sample =
+      mr::comp::traj::update_trapezoid_axis(
+          c->support_angle.tracked_target_lift[side],
+          c->support_angle.final_target_lift[side],
+          &c->support_angle.tracked_target_velocity[side], max_velocity,
+          max_acceleration, c->dt);
+
+  return sample.valid ? sample.position
+                      : c->support_angle.tracked_target_lift[side];
+}
+
+}  // namespace
 
 static MOTOR_RM_t *Pole_GetMotorHandle(const Pole_t *c, uint8_t idx) {
   return (MOTOR_RM_t *)c->motors[idx];
@@ -31,6 +74,54 @@ static void Pole_ResetControllers(Pole_t *c) {
     PID_Reset(&c->pid.support_pos[i]);
     PID_Reset(&c->pid.support_vel[i]);
   }
+}
+
+static bool Pole_TemperatureThresholdEnabled(float threshold_c) {
+  return isfinite(threshold_c) && threshold_c > 0.0f;
+}
+
+static void Pole_UpdateMotorTemperatureFlags(Pole_t *c, uint8_t idx) {
+  if (c == NULL || c->param == NULL || idx >= POLE_MOTOR_NUM) return;
+
+  const float temp_c = c->feedback.motor[idx].temp;
+  const float warning_c = c->param->motor_temperature_protection.warning_c;
+  const float limit_c = c->param->motor_temperature_protection.limit_c;
+  const bool temp_valid = isfinite(temp_c);
+
+  c->feedback.temperature_warning[idx] =
+      temp_valid && Pole_TemperatureThresholdEnabled(warning_c) &&
+      temp_c >= warning_c;
+  c->feedback.temperature_over_limit[idx] =
+      temp_valid && Pole_TemperatureThresholdEnabled(limit_c) &&
+      temp_c >= limit_c;
+}
+
+bool Pole_HasTemperatureWarning(const Pole_t *c) {
+  if (c == NULL) return false;
+  for (uint8_t i = 0; i < POLE_MOTOR_NUM; i++) {
+    if (c->feedback.temperature_warning[i]) return true;
+  }
+  return false;
+}
+
+bool Pole_HasTemperatureOverLimit(const Pole_t *c) {
+  if (c == NULL) return false;
+  for (uint8_t i = 0; i < POLE_MOTOR_NUM; i++) {
+    if (c->feedback.temperature_over_limit[i]) return true;
+  }
+  return false;
+}
+
+float Pole_GetMaxTemperature(const Pole_t *c) {
+  if (c == NULL) return 0.0f;
+  float max_temp = 0.0f;
+  for (uint8_t i = 0; i < POLE_MOTOR_NUM; i++) {
+    const float temp_c = c->feedback.motor[i].temp;
+    if (i == 0u || temp_c > max_temp) {
+      max_temp = temp_c;
+    }
+  }
+  return max_temp;
 }
 
 static float Pole_GetCurrentSideLift(const Pole_t *c, uint8_t side) {
@@ -58,6 +149,7 @@ static void Pole_SyncSideTargetToFeedback(Pole_t *c, uint8_t side) {
   const float current_lift = Pole_GetCurrentSideLift(c, side);
   c->support_angle.final_target_lift[side] = current_lift;
   c->support_angle.tracked_target_lift[side] = current_lift;
+  Pole_ResetSideTargetVelocity(c, side);
 }
 
 static void Pole_SyncTargetsToFeedback(Pole_t *c) {
@@ -111,6 +203,7 @@ int8_t Pole_UpdateFeedback(Pole_t *c) {
     if (motor == NULL) return POLE_ERR;
 
     c->feedback.motor[i] = motor->feedback;
+    Pole_UpdateMotorTemperatureFlags(c, i);
     if (i < POLE_SUPPORT_MOTOR_NUM) {
       sum += Pole_GetSupportAngle(c, i);
     }
@@ -146,6 +239,8 @@ int8_t Pole_Control(Pole_t *c, const Pole_CMD_t *c_cmd, uint32_t now) {
     c->support_angle.final_target_lift[1] = 0.0f;
     c->support_angle.tracked_target_lift[0] = 0.0f;
     c->support_angle.tracked_target_lift[1] = 0.0f;
+    c->support_angle.tracked_target_velocity[0] = 0.0f;
+    c->support_angle.tracked_target_velocity[1] = 0.0f;
     c->support_angle.auto_target_was_enabled[0] = false;
     c->support_angle.auto_target_was_enabled[1] = false;
     c->support_angle.calibrated = true;
@@ -164,17 +259,26 @@ int8_t Pole_Control(Pole_t *c, const Pole_CMD_t *c_cmd, uint32_t now) {
       if (c->support_angle.auto_target_was_enabled[side]) {
         Pole_SyncSideTargetToFeedback(c, side);
       }
-      c->support_angle.final_target_lift[side] += c_cmd->lift[side] * default_speed * c->dt;
+      if (fabsf(c_cmd->lift[side]) <= kPoleManualLiftDeadband) {
+        c->support_angle.final_target_lift[side] =
+            c->support_angle.tracked_target_lift[side];
+      } else {
+        c->support_angle.final_target_lift[side] +=
+            c_cmd->lift[side] * default_speed * c->dt;
+      }
     }
     c->support_angle.auto_target_was_enabled[side] = auto_target_enabled;
 
     c->support_angle.final_target_lift[side] = mr::component::math::clamp_scalar(
         c->support_angle.final_target_lift[side], 0.0f, c->param->limit.support_total_travel);
-    c->support_angle.tracked_target_lift[side] = mr::component::math::move_towards(
-        c->support_angle.tracked_target_lift[side], c->support_angle.final_target_lift[side],
-        speed_limit * c->dt);
+    c->support_angle.tracked_target_lift[side] =
+      Pole_UpdateTrackedLift(c, side, speed_limit);
     c->support_angle.tracked_target_lift[side] = mr::component::math::clamp_scalar(
         c->support_angle.tracked_target_lift[side], 0.0f, c->param->limit.support_total_travel);
+    c->debug.final_target_lift[side] = c->support_angle.final_target_lift[side];
+    c->debug.tracked_target_lift[side] = c->support_angle.tracked_target_lift[side];
+    c->debug.tracked_target_velocity[side] =
+      c->support_angle.tracked_target_velocity[side];
   }
 
   for (uint8_t i = 0; i < POLE_SUPPORT_MOTOR_NUM; i++) {
@@ -194,6 +298,10 @@ int8_t Pole_Control(Pole_t *c, const Pole_CMD_t *c_cmd, uint32_t now) {
                         c->feedback.motor[i].rotor_speed, 0.0f, c->dt);
     c->out.motor[i] = mr::component::math::clamp_scalar(out[i], -c->param->limit.max_current,
                                  c->param->limit.max_current);
+    c->debug.target_angle_rad[i] = c->setpoint.support_target_angle[i];
+    c->debug.feedback_angle_rad[i] = fb_angle;
+    c->debug.feedback_speed_rad_s[i] = c->feedback.motor[i].rotor_speed;
+    c->debug.torque_cmd_nm[i] = c->out.motor[i];
   }
 
   return POLE_OK;

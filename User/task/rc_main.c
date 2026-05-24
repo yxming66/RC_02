@@ -756,6 +756,12 @@ static void Rc_ApplyPcBehavior(void) {
     const PC_ChassisCMD_t* pc_chassis_cmd =
         PC_Protocol_GetChassisCMD(g_pc_protocol_ptr);
     const PC_PoleCMD_t* pc_pole_cmd = PC_Protocol_GetPoleCMD(g_pc_protocol_ptr);
+    const PC_ArmSimpleCMD_t* pc_arm_simple_cmd =
+      PC_Protocol_GetArmSimpleCMD(g_pc_protocol_ptr);
+    const PC_RodNewCMD_t* pc_rod_new_cmd =
+      PC_Protocol_GetRodNewCMD(g_pc_protocol_ptr);
+    const PC_OreStoreCMD_t* pc_ore_store_cmd =
+      PC_Protocol_GetOreStoreCMD(g_pc_protocol_ptr);
 
     if (pc_chassis_cmd != NULL) {
       chassis_cmd.mode = CHASSIS_MODE_INDEPENDENT;
@@ -778,11 +784,56 @@ static void Rc_ApplyPcBehavior(void) {
       pole_cmd.auto_lift_speed[0] = 0.0f;
       pole_cmd.auto_lift_speed[1] = 0.0f;
     }
-  }
 
-  Rc_SetArmSimpleHold();
-  Rc_SetRodHold();
-  Rc_SetOreStoreHold();
+    if (pc_arm_simple_cmd != NULL) {
+      arm_simple_cmd.mode = (ArmSimple_Mode_t)pc_arm_simple_cmd->mode;
+      arm_simple_cmd.point_mode =
+          (ArmSimple_PointMode_t)pc_arm_simple_cmd->point_mode;
+      arm_simple_cmd.suction = (Suction_State_t)pc_arm_simple_cmd->suction;
+      arm_simple_cmd.target_joint.joint1 = pc_arm_simple_cmd->target_joint1_rad;
+      arm_simple_cmd.target_joint.joint2 = pc_arm_simple_cmd->target_joint2_rad;
+      arm_simple_cmd.joint1_vel = 0.0f;
+      arm_simple_suction_latched = arm_simple_cmd.suction;
+      arm_simple_target_initialized = true;
+    } else {
+      Rc_SetArmSimpleHold();
+    }
+
+    if (pc_rod_new_cmd != NULL) {
+      rod_cmd.mode = (RodNew_Mode_t)pc_rod_new_cmd->mode;
+      rod_cmd.pose = (RodNew_Pose_t)pc_rod_new_cmd->pose;
+      rod_cmd.grip = (RodNew_GripState_t)pc_rod_new_cmd->grip;
+      rod_cmd.target_angle_rad =
+          Rc_ClampRodNewTarget(pc_rod_new_cmd->target_angle_rad);
+      rod_grip_latched = rod_cmd.grip;
+      rod_target_angle_latched_rad = rod_cmd.target_angle_rad;
+    } else {
+      Rc_SetRodHold();
+    }
+
+    if (pc_ore_store_cmd != NULL) {
+      ore_store_cmd.mode = (OreStore_Mode_t)pc_ore_store_cmd->mode;
+      ore_store_cmd.force_rehome = pc_ore_store_cmd->force_rehome != 0u;
+      ore_store_cmd.platform_target_rad =
+          Rc_ClampOreStoreTarget(ORE_STORE_AXIS_PLATFORM,
+                                 pc_ore_store_cmd->platform_target_rad);
+      ore_store_cmd.gate_target_rad[0] =
+          Rc_ClampOreStoreTarget(ORE_STORE_AXIS_GATE_LEFT,
+                                 pc_ore_store_cmd->gate_target_rad[0]);
+      ore_store_cmd.gate_target_rad[1] =
+          Rc_ClampOreStoreTarget(ORE_STORE_AXIS_GATE_RIGHT,
+                                 pc_ore_store_cmd->gate_target_rad[1]);
+      ore_store_cmd.track_target_rad[0] =
+          Rc_ClampOreStoreTarget(ORE_STORE_AXIS_TRACK_LEFT,
+                                 pc_ore_store_cmd->track_target_rad[0]);
+      ore_store_cmd.track_target_rad[1] =
+          Rc_ClampOreStoreTarget(ORE_STORE_AXIS_TRACK_RIGHT,
+                                 pc_ore_store_cmd->track_target_rad[1]);
+      ore_store_active_initialized = ore_store_cmd.mode == ORE_STORE_MODE_ACTIVE;
+    } else {
+      Rc_SetOreStoreHold();
+    }
+  }
 }
 
 static void Rc_ApplyArmSimpleBehavior(void) {

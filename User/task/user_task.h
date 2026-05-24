@@ -9,6 +9,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include "module/autoCtrlAPI/api/auto_ctrl_api.h"
+#include "module/arm_simple.h"
+#include "module/rod_new.h"
 #include "module/ore_store.h"
 #include "device/buzzer.h"
 
@@ -106,6 +108,12 @@ typedef struct {
             bool axis_temperature_over_limit[ORE_STORE_AXIS_NUM];
             float max_temperature_c;
         } ore_store_alarm;
+        struct {
+            Buzzer_AlarmLevel_t level;
+            bool motor_temperature_warning[POLE_MOTOR_NUM];
+            bool motor_temperature_over_limit[POLE_MOTOR_NUM];
+            float max_temperature_c;
+        } pole_alarm;
     } status;
 
     /* USER CONFIG BEGIN */
@@ -174,6 +182,8 @@ bool Task_OreStoreIsAxisHomed(uint8_t axis);
 bool Task_OreStoreIsAllHomed(void);
 bool Task_OreStoreIsAxisAtTarget(uint8_t axis, float threshold_rad);
 bool Task_OreStoreIsAllAtTarget(float threshold_rad);
+const ArmSimple_Feedback_t *Task_ArmSimpleGetFeedback(void);
+const RodNew_Feedback_t *Task_RodNewGetFeedback(void);
 const OreStore_Feedback_t *Task_OreStoreGetFeedback(void);
 const OreStore_Debug_t *Task_OreStoreGetDebug(void);
 #ifdef __cplusplus

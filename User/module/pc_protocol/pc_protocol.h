@@ -31,6 +31,9 @@ typedef enum {
     PC_CMD_CHASSIS = 0x10,
     PC_CMD_POLE = 0x11,
     PC_CMD_STEP = 0x12,       /* 自动上台阶命令 */
+    PC_CMD_ARM_SIMPLE = 0x13, /* 简化机械臂命令 */
+    PC_CMD_ROD_NEW = 0x14,    /* 取矛头命令 */
+    PC_CMD_ORE_STORE = 0x15,  /* 矿仓命令 */
     PC_CMD_IMU = 0x20,        /* IMU四元数/欧拉角命令 */
 } PC_CMD_t;
 
@@ -40,6 +43,9 @@ typedef enum {
     PC_FEEDBACK_CHASSIS = 0x90,
     PC_FEEDBACK_POLE = 0x91,
     PC_FEEDBACK_STEP = 0x92,  /* 自动上台阶反馈 */
+    PC_FEEDBACK_ARM_SIMPLE = 0x93,
+    PC_FEEDBACK_ROD_NEW = 0x94,
+    PC_FEEDBACK_ORE_STORE = 0x95,
     PC_FEEDBACK_STATUS = 0xA0,
 } PC_FeedbackCMD_t;
 
@@ -70,6 +76,32 @@ typedef struct {
     float z;
     float pitch;
 } PC_ArmCMD_t;
+
+/* ArmSimple命令: mode + point_mode + suction + joint1 + joint2 */
+typedef struct {
+    uint8_t mode;
+    uint8_t point_mode;
+    uint8_t suction;
+    float target_joint1_rad;
+    float target_joint2_rad;
+} PC_ArmSimpleCMD_t;
+
+/* RodNew命令: mode + pose + grip + target_angle */
+typedef struct {
+    uint8_t mode;
+    uint8_t pose;
+    uint8_t grip;
+    float target_angle_rad;
+} PC_RodNewCMD_t;
+
+/* OreStore命令: mode + force_rehome + platform + gates + tracks */
+typedef struct {
+    uint8_t mode;
+    uint8_t force_rehome;
+    float platform_target_rad;
+    float gate_target_rad[2];
+    float track_target_rad[2];
+} PC_OreStoreCMD_t;
 
 /* 自动上台阶命令 - 对应 auto_ctrl_template_e */
 typedef enum {
@@ -128,6 +160,42 @@ typedef struct {
     float pitch;
 } PC_ArmFeedback_t;
 
+typedef struct {
+    uint8_t mode;
+    uint8_t point_mode;
+    uint8_t suction;
+    uint8_t joint1_temperature_warning;
+    uint8_t joint1_temperature_over_limit;
+    uint8_t joint1_temperature_limit_latched;
+    float joint1_angle_rad;
+    float joint1_velocity_rad_s;
+    float joint1_temperature_c;
+    float joint2_angle_rad;
+    float target_joint1_rad;
+    float target_joint2_rad;
+} PC_ArmSimpleFeedback_t;
+
+typedef struct {
+    uint8_t mode;
+    uint8_t pose;
+    uint8_t grip;
+    uint8_t at_target;
+    float target_angle_rad;
+    float tracked_angle_rad;
+    float tracked_velocity_rad_s;
+    float feedback_angle_rad;
+} PC_RodNewFeedback_t;
+
+typedef struct {
+    uint8_t mode;
+    uint8_t all_homed;
+    uint8_t online_mask;
+    uint8_t homed_mask;
+    float platform_position_rad;
+    float gate_position_rad[2];
+    float track_position_rad[2];
+} PC_OreStoreFeedback_t;
+
 /* 自动上台阶反馈状态 - 对应 auto_ctrl_run_state_e */
 typedef enum {
     PC_STEP_STATE_IDLE = 0,       /* 空闲态 */
@@ -181,6 +249,9 @@ typedef struct {
     PC_ChassisCMD_t chassis;
     PC_PoleCMD_t pole;
     PC_ArmCMD_t arm;
+    PC_ArmSimpleCMD_t arm_simple;
+    PC_RodNewCMD_t rod_new;
+    PC_OreStoreCMD_t ore_store;
     PC_StepCMD_t step;
     PC_ImuCMD_t imu;
 } PC_CMD_Data_t;
@@ -190,6 +261,9 @@ typedef struct {
     PC_ChassisFeedback_t chassis;
     PC_PoleFeedback_t pole;
     PC_ArmFeedback_t arm;
+    PC_ArmSimpleFeedback_t arm_simple;
+    PC_RodNewFeedback_t rod_new;
+    PC_OreStoreFeedback_t ore_store;
     PC_StepFeedback_t step;
     PC_StatusFeedback_t status;
 } PC_FeedbackData_t;
@@ -231,6 +305,9 @@ typedef struct {
     uint32_t rx_heartbeat_count;
     uint32_t rx_chassis_count;
     uint32_t rx_pole_count;
+    uint32_t rx_arm_simple_count;
+    uint32_t rx_rod_new_count;
+    uint32_t rx_ore_store_count;
     uint32_t rx_step_count;
     uint32_t rx_imu_count;
     uint32_t init_fail_count;
@@ -259,6 +336,9 @@ typedef struct {
 
     PC_ChassisCMD_t rx_chassis;
     PC_PoleCMD_t rx_pole;
+    PC_ArmSimpleCMD_t rx_arm_simple;
+    PC_RodNewCMD_t rx_rod_new;
+    PC_OreStoreCMD_t rx_ore_store;
     PC_StepCMD_t rx_step;
     PC_ImuCMD_t rx_imu;
 
@@ -285,11 +365,17 @@ bool PC_Protocol_IsHeartbeatValid(const PC_Protocol_t *proto);
 const PC_ChassisCMD_t* PC_Protocol_GetChassisCMD(const PC_Protocol_t *proto);
 const PC_PoleCMD_t* PC_Protocol_GetPoleCMD(const PC_Protocol_t *proto);
 const PC_ArmCMD_t* PC_Protocol_GetArmCMD(const PC_Protocol_t *proto);
+const PC_ArmSimpleCMD_t* PC_Protocol_GetArmSimpleCMD(const PC_Protocol_t *proto);
+const PC_RodNewCMD_t* PC_Protocol_GetRodNewCMD(const PC_Protocol_t *proto);
+const PC_OreStoreCMD_t* PC_Protocol_GetOreStoreCMD(const PC_Protocol_t *proto);
 const PC_StepCMD_t* PC_Protocol_GetStepCMD(const PC_Protocol_t *proto);
 const PC_ImuCMD_t* PC_Protocol_GetImuCMD(const PC_Protocol_t *proto);
 void PC_Protocol_SetChassisFeedback(PC_Protocol_t *proto, const PC_ChassisFeedback_t *fb);
 void PC_Protocol_SetPoleFeedback(PC_Protocol_t *proto, const PC_PoleFeedback_t *fb);
 void PC_Protocol_SetArmFeedback(PC_Protocol_t *proto, const PC_ArmFeedback_t *fb);
+void PC_Protocol_SetArmSimpleFeedback(PC_Protocol_t *proto, const PC_ArmSimpleFeedback_t *fb);
+void PC_Protocol_SetRodNewFeedback(PC_Protocol_t *proto, const PC_RodNewFeedback_t *fb);
+void PC_Protocol_SetOreStoreFeedback(PC_Protocol_t *proto, const PC_OreStoreFeedback_t *fb);
 void PC_Protocol_SetStepFeedback(PC_Protocol_t *proto, const PC_StepFeedback_t *fb);
 void PC_Protocol_SetStatusFeedback(PC_Protocol_t *proto, const PC_StatusFeedback_t *fb);
 

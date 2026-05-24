@@ -9,6 +9,7 @@
 
 static RodNew_t rod_new;
 static RodNew_CMD_t rod_new_cmd;
+static RodNew_Feedback_t rod_new_feedback;
 
 volatile RodNew_DebugControl_t g_rod_new_debug = {
   false,
@@ -18,6 +19,10 @@ volatile RodNew_DebugControl_t g_rod_new_debug = {
   ROD_NEW_SERVO_PULSE_NEUTRAL_US,
   ROD_NEW_GRIP_RELEASE,
 };
+
+const RodNew_Feedback_t *Task_RodNewGetFeedback(void) {
+  return &rod_new_feedback;
+}
 
 void Task_rod(void *argument) {
   (void)argument;
@@ -49,6 +54,14 @@ void Task_rod(void *argument) {
                      last_control_tick);
       last_control_tick = tick;
     }
+    rod_new_feedback.mode = rod_new.mode;
+    rod_new_feedback.pose = rod_new_cmd.pose;
+    rod_new_feedback.grip = rod_new.gripper.state;
+    rod_new_feedback.target_angle_rad = rod_new.servo.target_angle_rad;
+    rod_new_feedback.tracked_angle_rad = rod_new.servo.tracked_angle_rad;
+    rod_new_feedback.tracked_velocity_rad_s = rod_new.servo.tracked_vel_rad_s;
+    rod_new_feedback.feedback_angle_rad = rod_new.servo.feedback_angle_rad;
+    rod_new_feedback.at_target = rod_new.servo.at_target;
     RodNew_Output(&rod_new);
 
     task_runtime.stack_water_mark.rod = uxTaskGetStackHighWaterMark(NULL);

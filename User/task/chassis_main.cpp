@@ -4,6 +4,9 @@
 #include "module/config.h"
 #include "module/pole.h"
 
+#define POLE_TEMP_WARNING_ALARM_MS (3000u)
+#define POLE_TEMP_OVER_LIMIT_ALARM_MS (5000u)
+
 namespace {
 
 mr::module::chassis::MecanumController chassis;
@@ -24,6 +27,34 @@ bool Task_ChassisMainPoleGroupAtTarget(uint8_t group, float threshold_rad) {
 bool Task_ChassisMainPoleAllAtTarget(float threshold_rad) {
   return Pole_IsAllAtFinalTarget(&pole, threshold_rad);
 }
+}
+
+static void Task_ChassisMainUpdatePoleTemperatureAlarm(uint32_t now_tick) {
+  const bool has_over_limit = Pole_HasTemperatureOverLimit(&pole);
+  const bool has_warning = Pole_HasTemperatureWarning(&pole);
+
+  for (uint8_t i = 0u; i < POLE_MOTOR_NUM; i++) {
+    task_runtime.status.pole_alarm.motor_temperature_warning[i] =
+        pole.feedback.temperature_warning[i];
+    task_runtime.status.pole_alarm.motor_temperature_over_limit[i] =
+        pole.feedback.temperature_over_limit[i];
+  }
+  task_runtime.status.pole_alarm.max_temperature_c =
+      Pole_GetMaxTemperature(&pole);
+
+  if (has_over_limit) {
+    task_runtime.status.pole_alarm.level = BUZZER_ALARM_TEMP_OVER_LIMIT;
+    g_buzzer_alarm_request.level = BUZZER_ALARM_TEMP_OVER_LIMIT;
+    g_buzzer_alarm_request.min_duration_ms = POLE_TEMP_OVER_LIMIT_ALARM_MS;
+    g_buzzer_alarm_request.request_tick = now_tick;
+  } else if (has_warning) {
+    task_runtime.status.pole_alarm.level = BUZZER_ALARM_TEMP_WARNING;
+    g_buzzer_alarm_request.level = BUZZER_ALARM_TEMP_WARNING;
+    g_buzzer_alarm_request.min_duration_ms = POLE_TEMP_WARNING_ALARM_MS;
+    g_buzzer_alarm_request.request_tick = now_tick;
+  } else {
+    task_runtime.status.pole_alarm.level = BUZZER_ALARM_NONE;
+  }
 }
 
 extern "C" void Task_chassis_main(void *argument) {
@@ -62,6 +93,7 @@ extern "C" void Task_chassis_main(void *argument) {
 
     osMessageQueueGet(task_runtime.msgq.pole.cmd, &pole_cmd, nullptr, 0);
     Pole_UpdateFeedback(&pole);
+  Task_ChassisMainUpdatePoleTemperatureAlarm(osKernelGetTickCount());
     Pole_Control(&pole, &pole_cmd, osKernelGetTickCount());
     Pole_Output(&pole);
 

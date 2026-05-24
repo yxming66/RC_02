@@ -102,6 +102,17 @@ typedef struct {
 } RodNew_DebugControl_t;
 
 typedef struct {
+  RodNew_Mode_t mode;
+  RodNew_Pose_t pose;
+  RodNew_GripState_t grip;
+  float target_angle_rad;
+  float tracked_angle_rad;
+  float tracked_velocity_rad_s;
+  float feedback_angle_rad;
+  bool at_target;
+} RodNew_Feedback_t;
+
+typedef struct {
   float target_angle_rad;   /* 目标角度（弧度） */
   float tracked_angle_rad;   /* 跟踪目标（带速度限幅） */
   float tracked_vel_rad_s;   /* 跟踪速度 */

@@ -128,6 +128,12 @@ Config_RobotParam_t robot_config = {
             .max_current = 1.0f,
             .support_total_travel = 26.7f,
             .support_lift_speed = 70.0f,
+            .support_lift_accel = 80.0f,
+        },
+        .motor_temperature_protection = {
+            .warning_c = 40.0f,
+            .limit_c = 60.0f,
+            .auto_relax_on_limit = false,
         },
     },
     .ore_store_param = {
@@ -226,9 +232,9 @@ Config_RobotParam_t robot_config = {
             .reverse = false,
         },
         .joint_temperature_protection = {
-            [0] = {.warning_c = 70.0f, .limit_c = 85.0f, .auto_relax_on_limit = true},
-            [1] = {.warning_c = 70.0f, .limit_c = 85.0f, .auto_relax_on_limit = true},
-            [2] = {.warning_c = 70.0f, .limit_c = 85.0f, .auto_relax_on_limit = true},
+            [0] = {.warning_c = 40.0f, .limit_c = 60.0f, .auto_relax_on_limit = true},
+            [1] = {.warning_c = 40.0f, .limit_c = 60.0f, .auto_relax_on_limit = true},
+            [2] = {.warning_c = 40.0f, .limit_c = 60.0f, .auto_relax_on_limit = true},
         },
         .joint_kp = {8.0f, 6.0f, 6.0f},
         .joint_kd = {3.35f, 2.65f, 2.45f},
@@ -291,6 +297,11 @@ Config_RobotParam_t robot_config = {
         .vel_limit = {
             .joint1_max_vel = 9.5f,
             .joint2_max_vel = 25.0f,
+        },
+        .joint1_temperature_protection = {
+            .warning_c = 40.0f,
+            .limit_c = 60.0f,
+            .auto_relax_on_limit = true,
         },
     },
     .auto_ctrl_param = {

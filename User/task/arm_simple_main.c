@@ -13,6 +13,7 @@
 #include "bsp/gpio.h"
 /* Private variables --------------------------------------------------------- */
 static ArmSimple_t arm_simple;
+static ArmSimple_Feedback_t arm_simple_feedback;
 static bool set_zero_requested = false;
 
 volatile ArmSimple_DebugControl_t g_arm_simple_debug = {
@@ -24,6 +25,10 @@ volatile ArmSimple_DebugControl_t g_arm_simple_debug = {
 };
 
 /* Exported functions ------------------------------------------------------- */
+const ArmSimple_Feedback_t *Task_ArmSimpleGetFeedback(void) {
+    return &arm_simple_feedback;
+}
+
 void Task_arm_simple(void *argument)
 {
     (void)argument;
@@ -69,6 +74,21 @@ void Task_arm_simple(void *argument)
         
         /* 先更新反馈，后续任何保持目标都使用最新电机角度 */
         ArmSimple_UpdateFeedback(&arm_simple);
+        arm_simple_feedback.mode = arm_simple.mode;
+        arm_simple_feedback.point_mode = arm_simple.cmd.point_mode;
+        arm_simple_feedback.suction = arm_simple.suction;
+        arm_simple_feedback.joint1_temperature_warning =
+            arm_simple.feedback.joint1_temperature_warning;
+        arm_simple_feedback.joint1_temperature_over_limit =
+            arm_simple.feedback.joint1_temperature_over_limit;
+        arm_simple_feedback.joint1_temperature_limit_latched =
+            arm_simple.feedback.joint1_temperature_limit_latched;
+        arm_simple_feedback.joint1_angle_rad = arm_simple.feedback.joint1_angle;
+        arm_simple_feedback.joint1_velocity_rad_s = arm_simple.feedback.joint1_vel;
+        arm_simple_feedback.joint1_temperature_c = arm_simple.feedback.joint1_temp;
+        arm_simple_feedback.joint2_angle_rad = arm_simple.feedback.joint2_angle;
+        arm_simple_feedback.target_joint1_rad = arm_simple.target.joint1_target;
+        arm_simple_feedback.target_joint2_rad = arm_simple.target.joint2_target;
 
         ArmSimple_CMD_t cmd;
         if (task_runtime.msgq.arm_simple.cmd != NULL &&

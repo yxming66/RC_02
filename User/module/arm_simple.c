@@ -67,6 +67,21 @@ static float ArmSimple_Joint1GravityTorque(const ArmSimple_t *a)
     return torque_nm;
 }
 
+static mr::motor::MotorTemperatureProtectionConfig ArmSimple_BuildTemperatureProtection(
+    const ArmSimple_Params_t *param)
+{
+    mr::motor::MotorTemperatureProtectionConfig config{};
+    if (param == NULL) {
+        return config;
+    }
+
+    config.warning_c = param->joint1_temperature_protection.warning_c;
+    config.limit_c = param->joint1_temperature_protection.limit_c;
+    config.auto_relax_on_limit =
+        param->joint1_temperature_protection.auto_relax_on_limit;
+    return config;
+}
+
 int8_t ArmSimple_Init(ArmSimple_t *a, ArmSimple_Params_t *param, float target_freq)
 {
     if (a == NULL || param == NULL || target_freq <= 0.0f) {
@@ -86,6 +101,10 @@ int8_t ArmSimple_Init(ArmSimple_t *a, ArmSimple_Params_t *param, float target_fr
     /* 初始化反馈 */
     a->feedback.joint1_angle = 0.0f;
     a->feedback.joint1_vel = 0.0f;
+    a->feedback.joint1_temp = 0.0f;
+    a->feedback.joint1_temperature_warning = false;
+    a->feedback.joint1_temperature_over_limit = false;
+    a->feedback.joint1_temperature_limit_latched = false;
     a->feedback.joint2_angle = 0.0f;
 
     /* 初始化目标 */
@@ -98,7 +117,10 @@ int8_t ArmSimple_Init(ArmSimple_t *a, ArmSimple_Params_t *param, float target_fr
             param->dm4340_param);
     ArmSimpleDmMotor *dm_motor =
         mr::motor::MotorFactory::Create<mr::motor::MotorKind::DM,
-                                        mr::motor::MotorModel::J4340>(dm_config);
+                                        mr::motor::MotorModel::J4340>(
+            dm_config,
+            mr::motor::kDirectDriveInstall,
+            ArmSimple_BuildTemperatureProtection(param));
     if (dm_motor == NULL || dm_motor->Register() != DEVICE_OK) {
         return ARM_SIMPLE_ERR;
     }
@@ -151,6 +173,11 @@ int8_t ArmSimple_UpdateFeedback(ArmSimple_t *a)
     const mr::motor::MotorState state = motor->GetState();
     a->feedback.joint1_angle = state.position_rad;
     a->feedback.joint1_vel = state.velocity_rad_s;
+    a->feedback.joint1_temp = state.temperature_c;
+    a->feedback.joint1_temperature_warning = state.temperature_warning;
+    a->feedback.joint1_temperature_over_limit = state.temperature_over_limit;
+    a->feedback.joint1_temperature_limit_latched =
+        state.temperature_limit_latched;
     a->dm_enabled = state.online &&
                     state.protocol_state == mr::motor::MotorProtocolState::Enabled;
  
