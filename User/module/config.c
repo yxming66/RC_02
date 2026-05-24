@@ -128,7 +128,7 @@ Config_RobotParam_t robot_config = {
             .max_current = 1.0f,
             .support_total_travel = 26.7f,
             .support_lift_speed = 70.0f,
-            .support_lift_accel = 80.0f,
+            .support_lift_accel = 180.0f,
         },
         .motor_temperature_protection = {
             .warning_c = 40.0f,
@@ -158,18 +158,18 @@ Config_RobotParam_t robot_config = {
         },
         .pid = {
             .position_pid = {
-                [ORE_STORE_AXIS_PLATFORM] = {.k = 1.0f, .p = 3.0f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 0.30f, .d_cutoff_freq = 0.0f, .range = 0.0f},
-                [ORE_STORE_AXIS_GATE_LEFT] = {.k = 1.0f, .p = 60.0f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 45.0f, .d_cutoff_freq = 80.0f, .range = 0.0f},
-                [ORE_STORE_AXIS_GATE_RIGHT] = {.k = 1.0f, .p = 60.0f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 45.0f, .d_cutoff_freq = 80.0f, .range = 0.0f},
-                [ORE_STORE_AXIS_TRACK_LEFT] = {.k = 1.0f, .p = 60.0f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 45.0f, .d_cutoff_freq = 80.0f, .range = 0.0f},
-                [ORE_STORE_AXIS_TRACK_RIGHT] = {.k = 1.0f, .p = 60.0f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 45.0f, .d_cutoff_freq = 80.0f, .range = 0.0f},
+                [ORE_STORE_AXIS_PLATFORM] = {.k = 15.0f, .p = 5.0f, .i = 3.0f, .d = 0.0f, .i_limit = 5.0f, .out_limit = 300.00f, .d_cutoff_freq = 0.0f, .range = 0.0f},
+                [ORE_STORE_AXIS_GATE_LEFT] = {.k = 1.0f,   .p = 20.0f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 45.0f, .d_cutoff_freq = 80.0f, .range = 0.0f},
+                [ORE_STORE_AXIS_GATE_RIGHT] = {.k = 1.0f,  .p = 20.0f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 45.0f, .d_cutoff_freq = 80.0f, .range = 0.0f},
+                [ORE_STORE_AXIS_TRACK_LEFT] = {.k = 1.0f,  .p = 20.0f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 45.0f, .d_cutoff_freq = 80.0f, .range = 0.0f},
+                [ORE_STORE_AXIS_TRACK_RIGHT] = {.k = 1.0f, .p = 20.0f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 45.0f, .d_cutoff_freq = 80.0f, .range = 0.0f},
             },
             .velocity_pid = {
-                [ORE_STORE_AXIS_PLATFORM] = {.k = 1.0f, .p = 0.22f, .i = 0.010f, .d = 0.0f, .i_limit = 0.20f, .out_limit = 0.25f, .d_cutoff_freq = 0.0f, .range = 0.0f},
-                [ORE_STORE_AXIS_GATE_LEFT] = {.k = 0.3f, .p = 1.25f, .i = 0.02f, .d = 0.008f, .i_limit = 0.35f, .out_limit = 1.8f, .d_cutoff_freq = 100.0f, .range = 0.0f},
-                [ORE_STORE_AXIS_GATE_RIGHT] = {.k = 0.3f, .p = 1.25f, .i = 0.02f, .d = 0.008f, .i_limit = 0.35f, .out_limit = 1.8f, .d_cutoff_freq = 100.0f, .range = 0.0f},
-                [ORE_STORE_AXIS_TRACK_LEFT] = {.k = 0.3f, .p = 1.25f, .i = 0.02f, .d = 0.008f, .i_limit = 0.35f, .out_limit = 1.8f, .d_cutoff_freq = 100.0f, .range = 0.0f},
-                [ORE_STORE_AXIS_TRACK_RIGHT] = {.k = 0.3f, .p = 1.25f, .i = 0.02f, .d = 0.008f, .i_limit = 0.35f, .out_limit = 1.8f, .d_cutoff_freq = 100.0f, .range = 0.0f},
+                [ORE_STORE_AXIS_PLATFORM] = {.k = 0.1f, .p = 0.070f, .i = 0.004f, .d = 0.0f, .i_limit = 8.0f, .out_limit = 1.0f, .d_cutoff_freq = 18.0f, .range = 0.0f},
+                [ORE_STORE_AXIS_GATE_LEFT] = {.k = 0.1f,   .p = 0.55f, .i = 0.02f, .d = 0.000f, .i_limit = 0.35f, .out_limit = 1.8f, .d_cutoff_freq = 100.0f, .range = 0.0f},
+                [ORE_STORE_AXIS_GATE_RIGHT] = {.k = 0.1f,  .p = 0.55f, .i = 0.02f, .d = 0.000f, .i_limit = 0.35f, .out_limit = 1.8f, .d_cutoff_freq = 100.0f, .range = 0.0f},
+                [ORE_STORE_AXIS_TRACK_LEFT] = {.k = 0.1f,  .p = 0.55f, .i = 0.02f, .d = 0.000f, .i_limit = 0.35f, .out_limit = 1.8f, .d_cutoff_freq = 100.0f, .range = 0.0f},
+                [ORE_STORE_AXIS_TRACK_RIGHT] = {.k = 0.1f, .p = 0.55f, .i = 0.02f, .d = 0.000f, .i_limit = 0.35f, .out_limit = 1.8f, .d_cutoff_freq = 100.0f, .range = 0.0f},
             },
             // MIT风格控制参数 (Kp/Kd)，用于 MIT_STYLE 模式
             // MIT控制律: torque = Kp * (target_pos - current_pos) - Kd * velocity + torque_ff

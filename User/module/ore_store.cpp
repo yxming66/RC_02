@@ -637,10 +637,10 @@ int8_t ActiveAxis(OreStore_t *store, const OreStore_CMD_t *cmd, uint8_t axis) {
         SyncAxisTargetFromPosition(store, axis, store->feedback.position_rad[axis]);
         return assume_ret;
       }
-    } else {
-      (void)ControllerRelax(store, axis);
-      SyncAxisTargetFromPosition(store, axis, store->feedback.position_rad[axis]);
-      return ORE_STORE_ERR;
+    }
+
+    if (!AxisHomed(store, axis)) {
+      return HomeAxis(store, axis);
     }
   }
 
