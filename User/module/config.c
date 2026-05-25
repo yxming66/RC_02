@@ -226,7 +226,7 @@ Config_RobotParam_t robot_config = {
             },
         },
         .fixed_ore_cylinder = {
-            .gpio = BSP_GPIO_ROD_SOLENOID,
+            .gpio = BSP_GPIO_NONE,
         },
     },
     .arm_param = {

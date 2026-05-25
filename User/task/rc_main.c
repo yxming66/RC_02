@@ -251,11 +251,6 @@ static void Rc_SetRodHold(void) {
   Rc_SetRodRelax();
 }
 
-/* 辅助函数：检测拨杆从目标状态切换到MID的边缘 */
-static bool Rc_SwitchJustReleasedToMid(DR16_SwitchPos_t current, DR16_SwitchPos_t last, DR16_SwitchPos_t from_pos) {
-  return (current == DR16_SW_MID && last == from_pos);
-}
-
 static RcAutoCtrlStartConfig_t Rc_SelectAutoCtrlStartConfig(void) {
   RcAutoCtrlStartConfig_t config = {
       AUTO_CTRL_TEMPLATE_NONE,
@@ -923,7 +918,7 @@ static void Rc_ApplyRodNewBehavior(void) {
 
 static void Rc_HandleBehaviorEvents(RcBehavior_t behavior) {
   if (behavior == RC_BEHAVIOR_ARM_SIMPLE &&
-      Rc_SwitchJustReleasedToMid(dr16.data.sw_r, last_sw_r, DR16_SW_UP) &&
+      dr16.data.sw_r == DR16_SW_UP && last_sw_r == DR16_SW_MID &&
       dr16.data.sw_l == DR16_SW_DOWN) {
     Rc_ToggleArmSimpleSuction();
   }
