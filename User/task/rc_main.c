@@ -343,11 +343,21 @@ static float Rc_ClampOreStoreTarget(uint8_t axis, float target_rad) {
 
 static void Rc_SetOreStoreRelax(void) {
   memset(&ore_store_cmd, 0, sizeof(ore_store_cmd));
-  ore_store_cmd.mode = ORE_STORE_MODE_RELAX;
+  if (Task_OreStorePowerOnHomeInProgress()) {
+    ore_store_cmd.mode = ORE_STORE_MODE_HOME;
+    ore_store_active_initialized = false;
+    return;
+  }
+  ore_store_cmd.mode = Task_OreStoreIsAllHomed() ? ORE_STORE_MODE_RELAX
+                                                 : ORE_STORE_MODE_HOME;
   ore_store_active_initialized = false;
 }
 
 static void Rc_SetOreStoreHold(void) {
+  if (Task_OreStorePowerOnHomeInProgress()) {
+    Rc_SetOreStoreRelax();
+    return;
+  }
   if (ore_store_active_initialized) {
     ore_store_cmd.mode = ORE_STORE_MODE_ACTIVE;
     ore_store_cmd.force_rehome = false;
@@ -399,6 +409,11 @@ static void Rc_InitOreStoreActiveTargets(void) {
 }
 
 static void Rc_SetOreStoreActiveManual(void) {
+  if (Task_OreStorePowerOnHomeInProgress()) {
+    Rc_SetOreStoreRelax();
+    return;
+  }
+
   const float dt_s = 1.0f / (float)RC_MAIN_FREQ;
   const float platform_velocity =
     Rc_ApplyOreStoreDeadband(dr16.data.ch_r_y) *
@@ -811,6 +826,10 @@ static void Rc_ApplyPcBehavior(void) {
     }
 
     if (pc_ore_store_cmd != NULL) {
+      if (Task_OreStorePowerOnHomeInProgress()) {
+        Rc_SetOreStoreRelax();
+        return;
+      }
       ore_store_cmd.mode = (OreStore_Mode_t)pc_ore_store_cmd->mode;
       ore_store_cmd.force_rehome = pc_ore_store_cmd->force_rehome != 0u;
       ore_store_cmd.platform_target_rad =

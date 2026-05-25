@@ -180,6 +180,9 @@ int8_t Task_OreStoreAssumeAxisHomedAtCurrent(uint8_t axis,
                                              float position_rad);
 bool Task_OreStoreIsAxisHomed(uint8_t axis);
 bool Task_OreStoreIsAllHomed(void);
+bool Task_OreStorePowerOnHomeInProgress(void);
+bool Task_OreStorePowerOnHomeAttemptDone(void);
+bool Task_OreStorePowerOnHomeFailed(void);
 bool Task_OreStoreIsAxisAtTarget(uint8_t axis, float threshold_rad);
 bool Task_OreStoreIsAllAtTarget(float threshold_rad);
 const ArmSimple_Feedback_t *Task_ArmSimpleGetFeedback(void);

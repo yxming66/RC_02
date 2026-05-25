@@ -202,10 +202,10 @@ Config_RobotParam_t robot_config = {
             .arrive_threshold_rad = {0.05f, 0.03f, 0.03f, 0.08f, 0.08f},
         },
         .power_on = {
-            .fixed_position_enable = {true, false, false, false, false},
+            .fixed_position_enable = {false, false, false, false, false},
             .fixed_position_rad = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f},
-            .auto_assume_on_active = true,
-            .home_mode_uses_fixed_position = true,
+            .auto_assume_on_active = false,
+            .home_mode_uses_fixed_position = false,
         },
     },
     .arm_param = {
@@ -280,7 +280,7 @@ Config_RobotParam_t robot_config = {
             .gpio = BSP_GPIO_ARM_SOLENOID,
         },
         .mit = {
-            .joint1_kp = 30.5f,
+            .joint1_kp = 60.5f,
             .joint1_kd = 5.0f,
             .joint1_torque_ff = 0.0f,
             .joint1_gravity_mass_kg = -1.0f,
@@ -295,8 +295,8 @@ Config_RobotParam_t robot_config = {
             .joint2_max = 4.71f,    /* +270° */
         },
         .vel_limit = {
-            .joint1_max_vel = 9.5f,
-            .joint2_max_vel = 25.0f,
+            .joint1_max_vel = 15.5f,
+            .joint2_max_vel = 50.0f,
         },
         .joint1_temperature_protection = {
             .warning_c = 40.0f,
