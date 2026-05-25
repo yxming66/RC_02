@@ -53,6 +53,12 @@
 #ifndef RC_MAPPING_ACTIVE_PRESET
 #define RC_MAPPING_ACTIVE_PRESET RC_MAPPING_PRESET_DEFAULT
 #endif
+#ifndef RC_LEFT_DOWN_MAPPING_AUTO_ORE
+#define RC_LEFT_DOWN_MAPPING_AUTO_ORE (0u) // 修改映射，0单独控制上层，1一键存取
+#endif
+#ifndef RC_AUTO_ORE_SUCTION_CH_THRESHOLD
+#define RC_AUTO_ORE_SUCTION_CH_THRESHOLD (0.60f)
+#endif
 
 /* USER STRUCT BEGIN */
 DR16_t dr16;
@@ -83,6 +89,7 @@ typedef enum {
   RC_CONTROL_PAGE_ARM_SIMPLE,
   RC_CONTROL_PAGE_ORE_STORE,
   RC_CONTROL_PAGE_ROD_NEW,
+  RC_CONTROL_PAGE_AUTO_ORE,
 } RcControlPage_t;
 
 typedef enum {
@@ -94,6 +101,7 @@ typedef enum {
   RC_BEHAVIOR_ARM_SIMPLE,
   RC_BEHAVIOR_ORE_STORE,
   RC_BEHAVIOR_ROD_NEW,
+  RC_BEHAVIOR_AUTO_ORE,
 } RcBehavior_t;
 
 typedef struct {
@@ -113,6 +121,8 @@ typedef struct {
   volatile bool arm_simple_active;
   volatile bool rod_active;
   volatile bool ore_store_active;
+  volatile bool auto_ore_start_event;
+  volatile bool auto_ore_start_ok;
 } RcControlDebug_t;
 
 volatile RcControlDebug_t g_rc_control_debug = {0};
@@ -154,12 +164,21 @@ static const RcSwitchBehaviorMap_t rc_behavior_map_active[] = {
    RC_BEHAVIOR_AUTO_200_DOWN_STANDBY},
   {DR16_SW_MID, DR16_SW_MID, DR16_SW_ERR, DR16_SW_ERR,
    RC_BEHAVIOR_DRIVE},
+#if RC_LEFT_DOWN_MAPPING_AUTO_ORE
+  {DR16_SW_DOWN, DR16_SW_UP, DR16_SW_ERR, DR16_SW_ERR,
+   RC_BEHAVIOR_AUTO_ORE},
+  {DR16_SW_DOWN, DR16_SW_MID, DR16_SW_ERR, DR16_SW_ERR,
+   RC_BEHAVIOR_ARM_SIMPLE},
+  {DR16_SW_DOWN, DR16_SW_DOWN, DR16_SW_ERR, DR16_SW_ERR,
+   RC_BEHAVIOR_AUTO_ORE},
+#else
   {DR16_SW_DOWN, DR16_SW_UP, DR16_SW_ERR, DR16_SW_ERR,
    RC_BEHAVIOR_PC},
   {DR16_SW_DOWN, DR16_SW_MID, DR16_SW_ERR, DR16_SW_ERR,
    RC_BEHAVIOR_ARM_SIMPLE},
   {DR16_SW_DOWN, DR16_SW_DOWN, DR16_SW_ERR, DR16_SW_ERR,
    RC_BEHAVIOR_ROD_NEW},
+#endif
 };
 #else
 static const RcSwitchBehaviorMap_t rc_behavior_map_active[] = {
@@ -169,12 +188,21 @@ static const RcSwitchBehaviorMap_t rc_behavior_map_active[] = {
    RC_BEHAVIOR_AUTO_200_DOWN_STANDBY},
   {DR16_SW_MID, DR16_SW_MID, DR16_SW_ERR, DR16_SW_ERR,
    RC_BEHAVIOR_DRIVE},
+#if RC_LEFT_DOWN_MAPPING_AUTO_ORE
+  {DR16_SW_DOWN, DR16_SW_UP, DR16_SW_ERR, DR16_SW_ERR,
+   RC_BEHAVIOR_AUTO_ORE},
+  {DR16_SW_DOWN, DR16_SW_MID, DR16_SW_ERR, DR16_SW_ERR,
+   RC_BEHAVIOR_ARM_SIMPLE},
+  {DR16_SW_DOWN, DR16_SW_DOWN, DR16_SW_ERR, DR16_SW_ERR,
+   RC_BEHAVIOR_AUTO_ORE},
+#else
   {DR16_SW_DOWN, DR16_SW_UP, DR16_SW_ERR, DR16_SW_ERR,
    RC_BEHAVIOR_ARM_SIMPLE},
   {DR16_SW_DOWN, DR16_SW_MID, DR16_SW_ERR, DR16_SW_ERR,
    RC_BEHAVIOR_ORE_STORE},
   {DR16_SW_DOWN, DR16_SW_DOWN, DR16_SW_ERR, DR16_SW_ERR,
    RC_BEHAVIOR_ROD_NEW},
+#endif
 };
 #endif
 
@@ -234,6 +262,16 @@ static void Rc_ToggleArmSimpleSuction(void) {
   arm_simple_suction_latched = (arm_simple_suction_latched == SUCTION_ON)
                                    ? SUCTION_OFF
                                    : SUCTION_ON;
+  arm_simple_cmd.suction = arm_simple_suction_latched;
+}
+
+static void Rc_SetArmSimpleSuctionOn(void) {
+  arm_simple_suction_latched = SUCTION_ON;
+  arm_simple_cmd.suction = arm_simple_suction_latched;
+}
+
+static void Rc_SetArmSimpleSuctionOff(void) {
+  arm_simple_suction_latched = SUCTION_OFF;
   arm_simple_cmd.suction = arm_simple_suction_latched;
 }
 
@@ -594,11 +632,19 @@ static void Rc_SetArmSimpleOperator(float scale) {
   }
 
   if (dr16.data.mouse.l_click || Rc_KeyDown(DR16_KEY_Q)) {
-    arm_simple_suction_latched = SUCTION_OFF;
+    Rc_SetArmSimpleSuctionOff();
   } else if (dr16.data.mouse.r_click || Rc_KeyDown(DR16_KEY_E)) {
-    arm_simple_suction_latched = SUCTION_ON;
+    Rc_SetArmSimpleSuctionOn();
   }
   arm_simple_cmd.suction = arm_simple_suction_latched;
+}
+
+static void Rc_HandleArmSimpleRcSuctionOnly(void) {
+  if (dr16.data.ch_l_x <= -RC_AUTO_ORE_SUCTION_CH_THRESHOLD) {
+    Rc_SetArmSimpleSuctionOff();
+  } else if (dr16.data.ch_l_x >= RC_AUTO_ORE_SUCTION_CH_THRESHOLD) {
+    Rc_SetArmSimpleSuctionOn();
+  }
 }
 
 static void Rc_SetChassisRelax(void) {
@@ -653,6 +699,8 @@ static RcControlPage_t Rc_PageForBehavior(RcBehavior_t behavior) {
       return RC_CONTROL_PAGE_ORE_STORE;
     case RC_BEHAVIOR_ROD_NEW:
       return RC_CONTROL_PAGE_ROD_NEW;
+    case RC_BEHAVIOR_AUTO_ORE:
+      return RC_CONTROL_PAGE_AUTO_ORE;
     case RC_BEHAVIOR_SAFE:
     default:
       return RC_CONTROL_PAGE_SAFE;
@@ -692,6 +740,8 @@ static void Rc_ResetFrameDebug(void) {
   g_rc_control_debug.arm_simple_active = false;
   g_rc_control_debug.rod_active = false;
   g_rc_control_debug.ore_store_active = false;
+  g_rc_control_debug.auto_ore_start_event = false;
+  g_rc_control_debug.auto_ore_start_ok = false;
   g_rc_ore_store_debug.assume_home_event = false;
 }
 
@@ -916,6 +966,21 @@ static void Rc_ApplyRodNewBehavior(void) {
   g_rc_control_debug.rod_active = true;
 }
 
+static void Rc_ApplyAutoOreStandbyBehavior(void) {
+  g_rc_control_debug.page = RC_CONTROL_PAGE_AUTO_ORE;
+  Rc_SetChassisRelax();
+  Rc_SetPoleHold();
+  Rc_SetArmSimpleHold();
+  Rc_HandleArmSimpleRcSuctionOnly();
+  Rc_SetOreStoreHold();
+  Rc_SetRodHold();
+}
+
+static bool Rc_AutoOreSwitchEdgeFromMid(void) {
+  return dr16.header.online && dr16.data.sw_l == DR16_SW_DOWN &&
+         last_sw_r == DR16_SW_MID && dr16.data.sw_r != DR16_SW_MID;
+}
+
 static void Rc_HandleBehaviorEvents(RcBehavior_t behavior) {
   if (behavior == RC_BEHAVIOR_ARM_SIMPLE &&
       dr16.data.sw_r == DR16_SW_UP && last_sw_r == DR16_SW_MID &&
@@ -927,6 +992,24 @@ static void Rc_HandleBehaviorEvents(RcBehavior_t behavior) {
       dr16.data.sw_r == DR16_SW_DOWN && last_sw_r == DR16_SW_MID) {
     Rc_ToggleRodGrip();
   }
+
+  if (behavior == RC_BEHAVIOR_AUTO_ORE && Rc_AutoOreSwitchEdgeFromMid()) {
+    g_rc_control_debug.auto_ore_start_event = true;
+    if (auto_ore_inited && !AutoOre_IsBusy(&auto_ore_ctrl)) {
+      if (dr16.data.sw_r == DR16_SW_UP) {
+        g_rc_control_debug.auto_ore_start_ok = Task_AutoOreStartStore();
+      } else if (dr16.data.sw_r == DR16_SW_DOWN) {
+        g_rc_control_debug.auto_ore_start_ok = Task_AutoOreStartRelease();
+      }
+    }
+  }
+
+#if RC_LEFT_DOWN_MAPPING_AUTO_ORE
+  if (behavior == RC_BEHAVIOR_ARM_SIMPLE && dr16.data.sw_l == DR16_SW_DOWN &&
+      dr16.data.sw_r == DR16_SW_MID) {
+    Rc_HandleArmSimpleRcSuctionOnly();
+  }
+#endif
 }
 
 static void Rc_ApplyMappedBehavior(RcBehavior_t behavior) {
@@ -967,6 +1050,9 @@ static void Rc_ApplyMappedBehavior(RcBehavior_t behavior) {
       break;
     case RC_BEHAVIOR_ROD_NEW:
       Rc_ApplyRodNewBehavior();
+      break;
+    case RC_BEHAVIOR_AUTO_ORE:
+      Rc_ApplyAutoOreStandbyBehavior();
       break;
     case RC_BEHAVIOR_SAFE:
     default:
