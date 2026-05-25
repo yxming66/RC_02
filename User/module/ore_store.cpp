@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "bsp/can.h"
+#include "bsp/gpio.h"
 #include "component/math/scalar.hpp"
 #include "device/device.h"
 #include "device/motor/factory/motor_factory.hpp"
@@ -727,6 +728,33 @@ extern "C" {
 
 extern volatile OreStore_DebugCommand_t g_ore_store_debug_command;
 
+bool OreStore_MakePresetCommand(const OreStore_Params_t *param,
+                                OreStore_TrackPoint_t track,
+                                OreStore_TransformPoint_t transform,
+                                OreStore_GatePoint_t gate,
+                                bool fixed_ore_cylinder_closed,
+                                OreStore_CMD_t *cmd) {
+  if (param == nullptr || cmd == nullptr ||
+      track >= ORE_STORE_TRACK_POINT_NUM ||
+      transform >= ORE_STORE_TRANSFORM_POINT_NUM ||
+      gate >= ORE_STORE_GATE_POINT_NUM) {
+    return false;
+  }
+
+  memset(cmd, 0, sizeof(*cmd));
+  cmd->mode = ORE_STORE_MODE_ACTIVE;
+  cmd->force_rehome = false;
+  cmd->fixed_ore_cylinder_closed = fixed_ore_cylinder_closed;
+  cmd->platform_target_rad = param->preset.transform_position_rad[transform];
+  for (uint8_t i = 0; i < ORE_STORE_GATE_NUM; ++i) {
+    cmd->gate_target_rad[i] = param->preset.gate_position_rad[gate][i];
+  }
+  for (uint8_t i = 0; i < ORE_STORE_TRACK_NUM; ++i) {
+    cmd->track_target_rad[i] = param->preset.track_position_rad[track][i];
+  }
+  return true;
+}
+
 int8_t OreStore_Init(OreStore_t *store, const OreStore_Params_t *param,
                      float target_freq) {
   if (store == nullptr || param == nullptr) {
@@ -739,6 +767,9 @@ int8_t OreStore_Init(OreStore_t *store, const OreStore_Params_t *param,
   store->param = param;
   store->mode = ORE_STORE_MODE_RELAX;
   store->control_mode = ORE_STORE_CONTROL_PID_DUAL;
+  store->fixed_ore_cylinder_closed = false;
+  store->feedback.fixed_ore_cylinder_closed = false;
+  BSP_GPIO_WritePin(param->fixed_ore_cylinder.gpio, false);
 
   for (uint8_t axis = 0; axis < ORE_STORE_AXIS_NUM; ++axis) {
     const int8_t ret = ConstructAxis(store, axis, target_freq);
@@ -812,6 +843,9 @@ int8_t OreStore_Control(OreStore_t *store, const OreStore_CMD_t *cmd,
                                   kDefaultDtS, kMinDtS, kMaxDtS);
   store->last_wakeup = now;
   store->debug.dt_s = store->dt;
+  store->fixed_ore_cylinder_closed = cmd->fixed_ore_cylinder_closed;
+  store->feedback.fixed_ore_cylinder_closed = store->fixed_ore_cylinder_closed;
+  store->debug.fixed_ore_cylinder_closed = store->fixed_ore_cylinder_closed;
   const OreStore_Mode_t previous_mode = store->mode;
   store->mode = cmd->mode;
 
@@ -866,6 +900,9 @@ void OreStore_Output(OreStore_t *store) {
   if (store == nullptr || store->param == nullptr) {
     return;
   }
+
+  BSP_GPIO_WritePin(store->param->fixed_ore_cylinder.gpio,
+                    store->fixed_ore_cylinder_closed);
 
   for (uint8_t axis = 0; axis < ORE_STORE_AXIS_NUM; ++axis) {
     if (store->controller[axis] == nullptr) {

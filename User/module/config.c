@@ -44,7 +44,7 @@ Config_RobotParam_t robot_config = {
                 .k = 1.5f,
                 .p = 5.0f,
                 .i = 2.0f,
-                .d = 0.50f,
+                .d = 0.30f,
                 .i_limit = 1.0f,
                 .out_limit = 6.0f,
                 .d_cutoff_freq = 0.0f,
@@ -123,6 +123,8 @@ Config_RobotParam_t robot_config = {
             .step_400_all_extend = {26.7f, 26.7f},
             .step_400_front_retract = {0.0f, 26.7f},
             .step_400_all_retract = {0.0f, 0.0f},
+            .ore_release_target = {0.0f, 0.0f},
+            .ore_release_speed = 70.0f,
         },
         .limit = {
             .max_current = 1.0f,
@@ -206,6 +208,25 @@ Config_RobotParam_t robot_config = {
             .fixed_position_rad = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f},
             .auto_assume_on_active = false,
             .home_mode_uses_fixed_position = false,
+        },
+        .preset = {
+            .transform_position_rad = {
+                [ORE_STORE_TRANSFORM_STANDBY] = 0.0f,
+                [ORE_STORE_TRANSFORM_MID_WAIT] = 0.0f,
+                [ORE_STORE_TRANSFORM_LIFT] = 0.0f,
+                [ORE_STORE_TRANSFORM_BUFFER] = 0.0f,
+            },
+            .gate_position_rad = {
+                [ORE_STORE_GATE_CLOSED] = {0.0f, 0.0f},
+                [ORE_STORE_GATE_OPEN] = {0.0f, 0.0f},
+            },
+            .track_position_rad = {
+                [ORE_STORE_TRACK_STANDBY] = {0.0f, 0.0f},
+                [ORE_STORE_TRACK_RELEASE] = {0.0f, 0.0f},
+            },
+        },
+        .fixed_ore_cylinder = {
+            .gpio = BSP_GPIO_ROD_SOLENOID,
         },
     },
     .arm_param = {
@@ -297,6 +318,14 @@ Config_RobotParam_t robot_config = {
         .vel_limit = {
             .joint1_max_vel = 15.5f,
             .joint2_max_vel = 50.0f,
+        },
+        .preset = {
+            .behavior_point = {
+                [ARM_SIMPLE_BEHAVIOR_STANDBY] = {.joint1_pos = 0.0f, .joint2_pos = 0.0f},
+                [ARM_SIMPLE_BEHAVIOR_PICK_ORE] = {.joint1_pos = 1.0f, .joint2_pos = -1.57f},
+                [ARM_SIMPLE_BEHAVIOR_STORE_ORE] = {.joint1_pos = 1.0f, .joint2_pos = 1.57f},
+            },
+            .arrive_threshold_rad = 0.05f,
         },
         .joint1_temperature_protection = {
             .warning_c = 40.0f,

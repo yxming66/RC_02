@@ -9,6 +9,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include "module/autoCtrlAPI/api/auto_ctrl_api.h"
+#include "module/autoCtrlAPI/ore_store/auto_ore_store.h"
 #include "module/arm_simple.h"
 #include "module/rod_new.h"
 #include "module/ore_store.h"
@@ -141,6 +142,8 @@ extern Task_Runtime_t task_runtime;
 
 extern auto_ctrl_t auto_ctrl;
 extern bool auto_ctrl_inited;
+extern AutoOre_t auto_ore_ctrl;
+extern bool auto_ore_inited;
 extern bool auto_ctrl_local_yaw_zero_initialized;
 extern float auto_ctrl_local_yaw_zero_rad;
 extern BUZZER_t buzzer;
@@ -174,6 +177,9 @@ void Task_ore_store(void *argument);
 
 bool Task_ChassisMainPoleGroupAtTarget(uint8_t group, float threshold_rad);
 bool Task_ChassisMainPoleAllAtTarget(float threshold_rad);
+bool Task_AutoOreStartStore(void);
+bool Task_AutoOreStartRelease(void);
+void Task_AutoOreAbort(void);
 int8_t Task_OreStorePostCommand(const OreStore_CMD_t *cmd);
 void Task_OreStoreRequestRehome(void);
 int8_t Task_OreStoreAssumeAxisHomedAtCurrent(uint8_t axis,

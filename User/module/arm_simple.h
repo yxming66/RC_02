@@ -52,6 +52,19 @@ typedef enum {
     ARM_SIMPLE_POINT_NONE,
 } ArmSimple_PointMode_t;
 
+typedef enum {
+    ARM_SIMPLE_BEHAVIOR_STANDBY = 0,  /* 一键存取矿：待机位置 */
+    ARM_SIMPLE_BEHAVIOR_PICK_ORE,     /* 一键存取矿：取矿位置 */
+    ARM_SIMPLE_BEHAVIOR_STORE_ORE,    /* 一键存取矿：存/放矿位置 */
+    ARM_SIMPLE_BEHAVIOR_NUM,
+} ArmSimple_BehaviorPoint_t;
+
+/* 预设姿态点 */
+typedef struct {
+    float joint1_pos;
+    float joint2_pos;
+} ArmSimple_Point2Point_t;
+
 /* 控制命令 */
 typedef struct {
     ArmSimple_Mode_t mode;
@@ -83,12 +96,6 @@ typedef struct {
     float target_joint1_rad;
     float target_joint2_rad;
 } ArmSimple_Feedback_t;
-
-/* 预设姿态点 */
-typedef struct {
-    float joint1_pos;
-    float joint2_pos;
-} ArmSimple_Point2Point_t;
 
 /* 初始化参数 */
 typedef struct {
@@ -131,6 +138,11 @@ typedef struct {
         float joint1_max_vel;
         float joint2_max_vel;
     } vel_limit;
+
+    struct {
+        ArmSimple_Point2Point_t behavior_point[ARM_SIMPLE_BEHAVIOR_NUM];
+        float arrive_threshold_rad;
+    } preset;
 
     MOTOR_TemperatureProtectionConfig_t joint1_temperature_protection;
 } ArmSimple_Params_t;
@@ -185,6 +197,10 @@ void ArmSimple_SetSuction(ArmSimple_t *a, Suction_State_t state);
 bool ArmSimple_Joint1AtTarget(ArmSimple_t *a, float threshold_rad);
 bool ArmSimple_Joint2AtTarget(ArmSimple_t *a, float threshold_rad);
 uint32_t ArmSimple_AngleToPulseUs(float angle_rad, const ArmSimple_Params_t *param);
+bool ArmSimple_MakeBehaviorCommand(const ArmSimple_Params_t *param,
+                                   ArmSimple_BehaviorPoint_t point,
+                                   Suction_State_t suction,
+                                   ArmSimple_CMD_t *cmd);
 
 extern volatile ArmSimple_DebugControl_t g_arm_simple_debug;
 

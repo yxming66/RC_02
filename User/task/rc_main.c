@@ -717,11 +717,48 @@ static void Rc_AbortAutoCtrlIfBusy(void) {
 
 static void Rc_ApplySafeBehavior(void) {
   g_rc_control_debug.page = RC_CONTROL_PAGE_SAFE;
+  if (auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl)) {
+    Task_AutoOreAbort();
+  }
   Rc_SetChassisRelax();
   Rc_SetPoleAuto(0.0f, 0.0f);
   Rc_SetArmSimpleRelax();
   Rc_SetRodRelax();
   Rc_SetOreStoreRelax();
+}
+
+static void Rc_ApplyAutoOreOutputs(void) {
+  Rc_SetChassisRelax();
+  Rc_SetRodHold();
+
+  const Pole_CMD_t *auto_pole_cmd = AutoOre_GetPoleCommand(&auto_ore_ctrl);
+  if (auto_pole_cmd != NULL) {
+    pole_cmd = *auto_pole_cmd;
+  } else {
+    Rc_SetPoleHold();
+  }
+
+  const ArmSimple_CMD_t *auto_arm_cmd =
+      AutoOre_GetArmCommand(&auto_ore_ctrl);
+  if (auto_arm_cmd != NULL) {
+    arm_simple_cmd = *auto_arm_cmd;
+    arm_simple_suction_latched = arm_simple_cmd.suction;
+    arm_simple_target_initialized = true;
+  } else {
+    Rc_SetArmSimpleHold();
+  }
+
+  const OreStore_CMD_t *auto_ore_cmd =
+      AutoOre_GetOreStoreCommand(&auto_ore_ctrl);
+  if (auto_ore_cmd != NULL) {
+    ore_store_cmd = *auto_ore_cmd;
+    ore_store_active_initialized = ore_store_cmd.mode == ORE_STORE_MODE_ACTIVE;
+  } else {
+    Rc_SetOreStoreHold();
+  }
+
+  g_rc_control_debug.ore_store_active = true;
+  g_rc_control_debug.arm_simple_active = true;
 }
 
 static void Rc_ApplyAutoCtrlOutputs(void) {
@@ -898,6 +935,11 @@ static void Rc_HandleBehaviorEvents(RcBehavior_t behavior) {
 }
 
 static void Rc_ApplyMappedBehavior(RcBehavior_t behavior) {
+  if (auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl)) {
+    Rc_ApplyAutoOreOutputs();
+    return;
+  }
+
   if (!Rc_BehaviorAllowsAutoCtrlOutput(behavior) &&
       behavior != RC_BEHAVIOR_PC) {
     Rc_AbortAutoCtrlIfBusy();

@@ -8,6 +8,7 @@ extern "C" {
 #include <stdint.h>
 
 #include "component/pid.h"
+#include "bsp/gpio.h"
 #include "device/motor.h"
 #include "device/motor_rm.h"
 
@@ -37,6 +38,26 @@ typedef enum {
   ORE_STORE_CONTROL_PID_DUAL = 0,  // 双环: 位置PID → 速度PID → 力矩
   ORE_STORE_CONTROL_MIT_STYLE,      // MIT风格: Kp*error - Kd*velocity
 } OreStore_ControlMode_t;
+
+typedef enum {
+  ORE_STORE_TRACK_STANDBY = 0,
+  ORE_STORE_TRACK_RELEASE,
+  ORE_STORE_TRACK_POINT_NUM,
+} OreStore_TrackPoint_t;
+
+typedef enum {
+  ORE_STORE_TRANSFORM_STANDBY = 0,
+  ORE_STORE_TRANSFORM_MID_WAIT,
+  ORE_STORE_TRANSFORM_LIFT,
+  ORE_STORE_TRANSFORM_BUFFER,
+  ORE_STORE_TRANSFORM_POINT_NUM,
+} OreStore_TransformPoint_t;
+
+typedef enum {
+  ORE_STORE_GATE_CLOSED = 0,
+  ORE_STORE_GATE_OPEN,
+  ORE_STORE_GATE_POINT_NUM,
+} OreStore_GatePoint_t;
 
 typedef struct {
   float stall_velocity_threshold_rad_s;
@@ -89,11 +110,22 @@ typedef struct {
     bool auto_assume_on_active;
     bool home_mode_uses_fixed_position;
   } power_on;
+
+  struct {
+    float transform_position_rad[ORE_STORE_TRANSFORM_POINT_NUM];
+    float gate_position_rad[ORE_STORE_GATE_POINT_NUM][ORE_STORE_GATE_NUM];
+    float track_position_rad[ORE_STORE_TRACK_POINT_NUM][ORE_STORE_TRACK_NUM];
+  } preset;
+
+  struct {
+    BSP_GPIO_t gpio;
+  } fixed_ore_cylinder;
 } OreStore_Params_t;
 
 typedef struct {
   OreStore_Mode_t mode;
   bool force_rehome;
+  bool fixed_ore_cylinder_closed;
   float platform_target_rad;
   float gate_target_rad[ORE_STORE_GATE_NUM];
   float track_target_rad[ORE_STORE_TRACK_NUM];
@@ -109,6 +141,7 @@ typedef struct {
   bool online[ORE_STORE_AXIS_NUM];
   bool homed[ORE_STORE_AXIS_NUM];
   bool all_homed;
+  bool fixed_ore_cylinder_closed;
 } OreStore_Feedback_t;
 
 typedef struct {
@@ -139,6 +172,7 @@ typedef struct {
   float power_on_fixed_position_rad[ORE_STORE_AXIS_NUM];
   int8_t power_on_assume_ret[ORE_STORE_AXIS_NUM];
   uint32_t power_on_assume_count[ORE_STORE_AXIS_NUM];
+  bool fixed_ore_cylinder_closed;
   float dt_s;
 } OreStore_Debug_t;
 
@@ -166,6 +200,7 @@ typedef struct {
   float command_position_rad[ORE_STORE_AXIS_NUM];
   float command_velocity_rad_s[ORE_STORE_AXIS_NUM];
   float velocity_setpoint_rad_s[ORE_STORE_AXIS_NUM];
+  bool fixed_ore_cylinder_closed;
   int8_t power_on_assume_ret[ORE_STORE_AXIS_NUM];
   uint32_t power_on_assume_count[ORE_STORE_AXIS_NUM];
 
@@ -192,6 +227,12 @@ bool OreStore_IsAxisAtTarget(const OreStore_t *store, uint8_t axis,
                              float threshold_rad);
 bool OreStore_IsAllAtTarget(const OreStore_t *store, float threshold_rad);
 const OreStore_Debug_t *OreStore_GetDebug(const OreStore_t *store);
+bool OreStore_MakePresetCommand(const OreStore_Params_t *param,
+                                OreStore_TrackPoint_t track,
+                                OreStore_TransformPoint_t transform,
+                                OreStore_GatePoint_t gate,
+                                bool fixed_ore_cylinder_closed,
+                                OreStore_CMD_t *cmd);
 
 // MIT风格控制API
 void OreStore_SetControlMode(OreStore_t *store, OreStore_ControlMode_t mode);
