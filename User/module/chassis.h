@@ -94,6 +94,7 @@ typedef struct {
     float max_torque_cmd;
   } limit;
   struct {
+    float sample_freq;
     float position_to_velocity_limit;
     float velocity_to_torque_limit;
   } controller;

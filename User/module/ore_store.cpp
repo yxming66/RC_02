@@ -12,6 +12,7 @@
 #include "device/motor/packages/controller/motor_controller.hpp"
 #include "device/motor/packages/soft_limit_learning/soft_limit_learning.hpp"
 #include "device/motor_rm.h"
+#include "module/shared_valve.h"
 
 namespace {
 
@@ -769,7 +770,7 @@ int8_t OreStore_Init(OreStore_t *store, const OreStore_Params_t *param,
   store->control_mode = ORE_STORE_CONTROL_PID_DUAL;
   store->fixed_ore_cylinder_closed = false;
   store->feedback.fixed_ore_cylinder_closed = false;
-  BSP_GPIO_WritePin(param->fixed_ore_cylinder.gpio, false);
+  SharedValve_SetOreStoreRequest(false);
 
   for (uint8_t axis = 0; axis < ORE_STORE_AXIS_NUM; ++axis) {
     const int8_t ret = ConstructAxis(store, axis, target_freq);
@@ -901,8 +902,8 @@ void OreStore_Output(OreStore_t *store) {
     return;
   }
 
-  BSP_GPIO_WritePin(store->param->fixed_ore_cylinder.gpio,
-                    store->fixed_ore_cylinder_closed);
+  SharedValve_SetOreStoreRequest(store->fixed_ore_cylinder_closed);
+  SharedValve_Output();
 
   for (uint8_t axis = 0; axis < ORE_STORE_AXIS_NUM; ++axis) {
     if (store->controller[axis] == nullptr) {

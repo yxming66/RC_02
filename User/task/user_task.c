@@ -45,11 +45,6 @@ const osThreadAttr_t attr_arm_simple = {
     .priority = osPriorityNormal,
     .stack_size = 512 * 4,
 };
-const osThreadAttr_t attr_arm_simple = {
-    .name = "arm_simple",
-    .priority = osPriorityNormal,
-    .stack_size = 512 * 4,
-};
 const osThreadAttr_t attr_rod = {
     .name = "rod",
     .priority = osPriorityNormal,
@@ -57,11 +52,6 @@ const osThreadAttr_t attr_rod = {
 };
 const osThreadAttr_t attr_pc_comm = {
     .name = "pc_comm",
-    .priority = osPriorityNormal,
-    .stack_size = 512 * 4,
-};
-const osThreadAttr_t attr_ore_store = {
-    .name = "ore_store",
     .priority = osPriorityNormal,
     .stack_size = 512 * 4,
 };

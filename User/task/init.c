@@ -13,6 +13,7 @@
 #include "module/pole.h"
 #include "module/arm_simple.h"
 #include "module/rod_new.h"
+#include "module/shared_valve.h"
 #include "bsp/gpio.h"
 /* USER INCLUDE END */
 
@@ -47,6 +48,8 @@ void Task_Init(void *argument) {
       osMessageQueueNew(1u, sizeof(OreStore_CMD_t), NULL);
 
   BUZZER_Init(&buzzer, BSP_PWM_BUZZER);
+
+    SharedValve_Init(BSP_GPIO_ROD_SOLENOID);
 
   BSP_GPIO_WritePin(BSP_GPIO_POWER_24V_1, 1);
   BSP_GPIO_WritePin(BSP_GPIO_POWER_24V_2, 1);

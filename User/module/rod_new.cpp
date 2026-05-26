@@ -9,6 +9,7 @@
 
 #include "bsp/pwm.h"
 #include "component/math/scalar.hpp"
+#include "module/shared_valve.h"
 
 namespace {
 
@@ -68,7 +69,7 @@ int8_t RodNew_Init(RodNew_t *r, const RodNew_Params_t *param) {
   BSP_PWM_SetPulseUs(param->servo.pwm_channel,
                      (uint32_t)RodNew_AngleToPulseUs(r->servo.tracked_angle_rad,
                                                       &param->servo));
-  BSP_GPIO_WritePin(param->gripper.gripper_gpio, false);
+  SharedValve_SetRodRequest(false);
 
   return ROD_NEW_OK;
 }
@@ -174,8 +175,8 @@ void RodNew_Output(RodNew_t *r) {
     r->servo.tracked_vel_rad_s = 0.0f;
     r->servo.at_target = true;
     BSP_PWM_SetPulseUs(pwm_channel, pulse_us);
-    BSP_GPIO_WritePin(r->param->gripper.gripper_gpio,
-                     (g_rod_new_debug.grip == ROD_NEW_GRIP_GRAB));
+    SharedValve_SetRodRequest(g_rod_new_debug.grip == ROD_NEW_GRIP_GRAB);
+    SharedValve_Output();
     return;
   }
 
@@ -219,8 +220,8 @@ void RodNew_Output(RodNew_t *r) {
   BSP_PWM_SetPulseUs(r->param->servo.pwm_channel, pulse_us);
 
   /* 夹爪IO输出 */
-  BSP_GPIO_WritePin(r->param->gripper.gripper_gpio,
-                   (r->gripper.state == ROD_NEW_GRIP_GRAB));
+  SharedValve_SetRodRequest(r->gripper.state == ROD_NEW_GRIP_GRAB);
+  SharedValve_Output();
 }
 
 float RodNew_AngleToPulseUs(float angle_rad,

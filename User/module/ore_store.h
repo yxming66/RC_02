@@ -88,6 +88,7 @@ typedef struct {
   } pid;
 
   struct {
+    float sample_freq;
     float position_to_velocity_limit[ORE_STORE_AXIS_NUM];
     float velocity_to_torque_limit[ORE_STORE_AXIS_NUM];
     float feedback_lowpass_cutoff_hz[ORE_STORE_AXIS_NUM];

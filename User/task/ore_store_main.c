@@ -11,34 +11,8 @@
 #include "module/config.h"
 #include "module/ore_store.h"
 
-#define ORE_STORE_POWER_ON_HOME_EXTRA_TIMEOUT_S (0.5f)
-#define ORE_STORE_POWER_ON_HOME_MIN_HOLD_CYCLES (100u)
-
-typedef enum {
-  ORE_STORE_POWER_ON_HOME_EXIT_NONE = 0,
-  ORE_STORE_POWER_ON_HOME_EXIT_SUCCESS = 1,
-  ORE_STORE_POWER_ON_HOME_EXIT_TIMEOUT = 2,
-  ORE_STORE_POWER_ON_HOME_EXIT_FAILURE_AFTER_START = 3,
-} OreStoreTask_PowerOnHomeExitReason_t;
-
 static OreStore_t ore_store;
 static OreStore_CMD_t ore_store_cmd;
-static volatile bool ore_store_power_on_home_active = true;
-static volatile bool ore_store_power_on_home_attempt_done = false;
-static volatile bool ore_store_power_on_home_failed = false;
-static float ore_store_power_on_home_elapsed_s = 0.0f;
-static float ore_store_power_on_home_timeout_s = 0.0f;
-static uint32_t ore_store_power_on_home_active_cycles = 0u;
-static volatile uint8_t ore_store_power_on_home_exit_reason =
-  ORE_STORE_POWER_ON_HOME_EXIT_NONE;
-static volatile OreStore_Mode_t ore_store_debug_last_received_cmd_mode =
-  ORE_STORE_MODE_RELAX;
-static volatile OreStore_Mode_t ore_store_debug_pre_control_cmd_mode =
-  ORE_STORE_MODE_RELAX;
-static volatile OreStore_Mode_t ore_store_debug_post_control_mode =
-  ORE_STORE_MODE_RELAX;
-static volatile uint32_t ore_store_debug_home_override_fault_count = 0u;
-static volatile uint32_t ore_store_debug_home_finish_count = 0u;
 static volatile bool ore_store_inited = false;
 static volatile bool ore_store_rehome_requested = false;
 volatile int8_t g_ore_store_init_ret = ORE_STORE_ERR_NULL;
@@ -47,18 +21,6 @@ volatile int8_t g_ore_store_control_ret = ORE_STORE_ERR_NULL;
 
 typedef struct {
   volatile bool inited;
-  volatile bool power_on_home_active;
-  volatile bool power_on_home_attempt_done;
-  volatile bool power_on_home_failed;
-  volatile float power_on_home_elapsed_s;
-  volatile float power_on_home_timeout_s;
-  volatile uint32_t power_on_home_active_cycles;
-  volatile uint8_t power_on_home_exit_reason;
-  volatile OreStore_Mode_t last_received_cmd_mode;
-  volatile OreStore_Mode_t pre_control_cmd_mode;
-  volatile OreStore_Mode_t post_control_mode;
-  volatile uint32_t home_override_fault_count;
-  volatile uint32_t home_finish_count;
   volatile OreStore_Mode_t mode;
   volatile bool platform_online;
   volatile bool platform_homed;
@@ -113,7 +75,7 @@ static void OreStoreTask_SetDefaultCommand(OreStore_CMD_t *cmd) {
   }
 
   memset(cmd, 0, sizeof(*cmd));
-  cmd->mode = ORE_STORE_MODE_HOME;
+  cmd->mode = ORE_STORE_MODE_RELAX;
 }
 
 static bool OreStoreTask_ModeIsValid(OreStore_Mode_t mode) {
@@ -228,27 +190,6 @@ static void OreStoreTask_ApplyAssumeHomedDebug(void) {
 
 static void OreStoreTask_UpdateDebugView(void) {
   g_ore_store_debug_view.inited = ore_store_inited;
-  g_ore_store_debug_view.power_on_home_active = ore_store_power_on_home_active;
-  g_ore_store_debug_view.power_on_home_attempt_done =
-    ore_store_power_on_home_attempt_done;
-  g_ore_store_debug_view.power_on_home_failed = ore_store_power_on_home_failed;
-  g_ore_store_debug_view.power_on_home_elapsed_s =
-    ore_store_power_on_home_elapsed_s;
-  g_ore_store_debug_view.power_on_home_timeout_s =
-    ore_store_power_on_home_timeout_s;
-  g_ore_store_debug_view.power_on_home_active_cycles =
-      ore_store_power_on_home_active_cycles;
-    g_ore_store_debug_view.power_on_home_exit_reason =
-      ore_store_power_on_home_exit_reason;
-    g_ore_store_debug_view.last_received_cmd_mode =
-      ore_store_debug_last_received_cmd_mode;
-    g_ore_store_debug_view.pre_control_cmd_mode =
-      ore_store_debug_pre_control_cmd_mode;
-    g_ore_store_debug_view.post_control_mode =
-      ore_store_debug_post_control_mode;
-    g_ore_store_debug_view.home_override_fault_count =
-      ore_store_debug_home_override_fault_count;
-    g_ore_store_debug_view.home_finish_count = ore_store_debug_home_finish_count;
   g_ore_store_debug_view.mode = ore_store.mode;
   g_ore_store_debug_view.platform_online =
       ore_store.feedback.online[ORE_STORE_AXIS_PLATFORM];
@@ -331,7 +272,8 @@ static void OreStoreTask_UpdateTemperatureAlarm(uint32_t now_tick) {
     task_runtime.status.ore_store_alarm.axis_temperature_over_limit[axis] =
         axis_over_limit;
 
-    has_warning = has_warning || axis_warning;
+    has_warning = has_warning || axis_warning; 
+
     has_over_limit = has_over_limit || axis_over_limit;
     if (axis == 0u || temperature_c > max_temperature_c) {
       max_temperature_c = temperature_c;
@@ -353,95 +295,6 @@ static void OreStoreTask_UpdateTemperatureAlarm(uint32_t now_tick) {
   } else {
     task_runtime.status.ore_store_alarm.level = BUZZER_ALARM_NONE;
   }
-}
-
-static float OreStoreTask_CalcPowerOnHomeTimeoutS(
-    const OreStore_Params_t *param) {
-  if (param == NULL) {
-    return ORE_STORE_POWER_ON_HOME_EXTRA_TIMEOUT_S;
-  }
-
-  float timeout_s = 0.0f;
-  for (uint8_t axis = 0; axis < ORE_STORE_AXIS_NUM; ++axis) {
-    const OreStore_SoftLimitConfig_t *limit = &param->limit.config[axis];
-    float axis_timeout_s = 0.0f;
-    if (isfinite(limit->online_wait_timeout_s) &&
-        limit->online_wait_timeout_s > 0.0f) {
-      axis_timeout_s += limit->online_wait_timeout_s;
-    }
-    if (isfinite(limit->seek_timeout_s) && limit->seek_timeout_s > 0.0f) {
-      axis_timeout_s += limit->seek_timeout_s;
-    }
-    if (axis_timeout_s > timeout_s) {
-      timeout_s = axis_timeout_s;
-    }
-  }
-
-  return timeout_s + ORE_STORE_POWER_ON_HOME_EXTRA_TIMEOUT_S;
-}
-
-static bool OreStoreTask_HasHomeFailureAfterStart(void) {
-  const OreStore_Debug_t *debug = OreStore_GetDebug(&ore_store);
-  if (debug == NULL) {
-    return true;
-  }
-
-  for (uint8_t axis = 0; axis < ORE_STORE_AXIS_NUM; ++axis) {
-    if (debug->homing_started[axis] && debug->axis_failed[axis]) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
-static bool OreStoreTask_PowerOnHomeCanExit(void) {
-  return ore_store_power_on_home_active_cycles >=
-         ORE_STORE_POWER_ON_HOME_MIN_HOLD_CYCLES;
-}
-
-static void OreStoreTask_FinishPowerOnHomeAttempt(
-    bool failed, OreStoreTask_PowerOnHomeExitReason_t reason) {
-  ore_store_power_on_home_active = false;
-  ore_store_power_on_home_attempt_done = true;
-  ore_store_power_on_home_failed = failed;
-  ore_store_power_on_home_exit_reason = (uint8_t)reason;
-  ++ore_store_debug_home_finish_count;
-  memset(&ore_store_cmd, 0, sizeof(ore_store_cmd));
-  ore_store_cmd.mode = ORE_STORE_MODE_RELAX;
-}
-
-static void OreStoreTask_ForcePowerOnHomeCommand(OreStore_CMD_t *cmd) {
-  if (cmd == NULL || !ore_store_power_on_home_active ||
-      ore_store_power_on_home_attempt_done) {
-    return;
-  }
-
-  cmd->mode = ORE_STORE_MODE_HOME;
-  cmd->force_rehome = false;
-}
-
-static void OreStoreTask_ApplyPowerOnHomeLock(OreStore_CMD_t *cmd) {
-  if (cmd == NULL || !ore_store_power_on_home_active ||
-      ore_store_power_on_home_attempt_done) {
-    return;
-  }
-
-  if (OreStoreTask_PowerOnHomeCanExit() && OreStore_IsAllHomed(&ore_store)) {
-    OreStoreTask_FinishPowerOnHomeAttempt(
-        false, ORE_STORE_POWER_ON_HOME_EXIT_SUCCESS);
-    return;
-  }
-
-  if (OreStoreTask_PowerOnHomeCanExit() &&
-      ore_store_power_on_home_timeout_s > 0.0f &&
-      ore_store_power_on_home_elapsed_s >= ore_store_power_on_home_timeout_s) {
-    OreStoreTask_FinishPowerOnHomeAttempt(
-        true, ORE_STORE_POWER_ON_HOME_EXIT_TIMEOUT);
-    return;
-  }
-
-  OreStoreTask_ForcePowerOnHomeCommand(cmd);
 }
 
 void Task_ore_store(void *argument) {
@@ -466,19 +319,6 @@ void Task_ore_store(void *argument) {
     return;
   }
   ore_store_inited = true;
-  ore_store_power_on_home_active = true;
-  ore_store_power_on_home_attempt_done = false;
-  ore_store_power_on_home_failed = false;
-  ore_store_power_on_home_elapsed_s = 0.0f;
-  ore_store_power_on_home_active_cycles = 0u;
-  ore_store_power_on_home_exit_reason = ORE_STORE_POWER_ON_HOME_EXIT_NONE;
-  ore_store_debug_last_received_cmd_mode = ORE_STORE_MODE_HOME;
-  ore_store_debug_pre_control_cmd_mode = ORE_STORE_MODE_HOME;
-  ore_store_debug_post_control_mode = ORE_STORE_MODE_RELAX;
-  ore_store_debug_home_override_fault_count = 0u;
-  ore_store_debug_home_finish_count = 0u;
-  ore_store_power_on_home_timeout_s =
-      OreStoreTask_CalcPowerOnHomeTimeoutS(&cfg->ore_store_param);
 
   while (1) {
     tick += delay_tick;
@@ -487,13 +327,7 @@ void Task_ore_store(void *argument) {
     if (osMessageQueueGet(task_runtime.msgq.ore_store.cmd, &next_cmd, NULL,
                           0) == osOK) {
       OreStoreTask_SanitizeCommand(&next_cmd);
-      ore_store_debug_last_received_cmd_mode = next_cmd.mode;
-      if (OreStore_IsAllHomed(&ore_store) || next_cmd.mode != ORE_STORE_MODE_RELAX) {
-        ore_store_cmd = next_cmd;
-      } else {
-        ore_store_cmd.mode = ORE_STORE_MODE_HOME;
-        ore_store_cmd.force_rehome = false;
-      }
+      ore_store_cmd = next_cmd;
     }
 
     (void)OreStoreTask_TryApplyDebugCommand(&ore_store_cmd);
@@ -507,39 +341,8 @@ void Task_ore_store(void *argument) {
     OreStoreTask_ApplyAssumeHomedDebug();
     const uint32_t now_tick = osKernelGetTickCount();
     OreStoreTask_UpdateTemperatureAlarm(now_tick);
-    OreStoreTask_ApplyPowerOnHomeLock(&ore_store_cmd);
-    OreStoreTask_ForcePowerOnHomeCommand(&ore_store_cmd);
-    ore_store_debug_pre_control_cmd_mode = ore_store_cmd.mode;
     g_ore_store_control_ret =
         OreStore_Control(&ore_store, &ore_store_cmd, now_tick);
-    ore_store_debug_post_control_mode = ore_store.mode;
-    if (ore_store_power_on_home_active &&
-        !ore_store_power_on_home_attempt_done &&
-        ore_store.mode != ORE_STORE_MODE_HOME) {
-      ++ore_store_debug_home_override_fault_count;
-      ore_store.mode = ORE_STORE_MODE_HOME;
-      ore_store_debug_post_control_mode = ore_store.mode;
-    }
-    if (ore_store_power_on_home_active &&
-        !ore_store_power_on_home_attempt_done) {
-      ore_store_power_on_home_elapsed_s += ore_store.debug.dt_s;
-      ++ore_store_power_on_home_active_cycles;
-      if (OreStoreTask_PowerOnHomeCanExit() &&
-          OreStore_IsAllHomed(&ore_store)) {
-        OreStoreTask_FinishPowerOnHomeAttempt(
-            false, ORE_STORE_POWER_ON_HOME_EXIT_SUCCESS);
-      } else if (OreStoreTask_PowerOnHomeCanExit() &&
-                 OreStoreTask_HasHomeFailureAfterStart()) {
-        OreStoreTask_FinishPowerOnHomeAttempt(
-            true, ORE_STORE_POWER_ON_HOME_EXIT_FAILURE_AFTER_START);
-      } else if (OreStoreTask_PowerOnHomeCanExit() &&
-                 (ore_store_power_on_home_timeout_s > 0.0f &&
-                  ore_store_power_on_home_elapsed_s >=
-                      ore_store_power_on_home_timeout_s)) {
-        OreStoreTask_FinishPowerOnHomeAttempt(
-            true, ORE_STORE_POWER_ON_HOME_EXIT_TIMEOUT);
-      }
-    }
     OreStore_Output(&ore_store);
     OreStoreTask_ApplyDirectDebugOutput();
     OreStoreTask_UpdateDebugView();
@@ -586,16 +389,15 @@ bool Task_OreStoreIsAllHomed(void) {
 }
 
 bool Task_OreStorePowerOnHomeInProgress(void) {
-  return ore_store_inited && ore_store_power_on_home_active &&
-         !ore_store_power_on_home_attempt_done;
+  return false;
 }
 
 bool Task_OreStorePowerOnHomeAttemptDone(void) {
-  return ore_store_inited && ore_store_power_on_home_attempt_done;
+  return ore_store_inited;
 }
 
 bool Task_OreStorePowerOnHomeFailed(void) {
-  return ore_store_inited && ore_store_power_on_home_failed;
+  return false;
 }
 
 bool Task_OreStoreIsAxisAtTarget(uint8_t axis, float threshold_rad) {

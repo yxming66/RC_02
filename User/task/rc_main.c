@@ -1054,18 +1054,21 @@ static bool Rc_AutoOreSwitchEdgeFromMid(void) {
          last_sw_r == DR16_SW_MID && dr16.data.sw_r != DR16_SW_MID;
 }
 
-static void Rc_HandleBehaviorEvents(RcBehavior_t behavior) {
-  if (behavior == RC_BEHAVIOR_ARM_SIMPLE &&
-      dr16.data.sw_r == DR16_SW_UP && last_sw_r == DR16_SW_MID &&
-      dr16.data.sw_l == DR16_SW_DOWN) {
+static void Rc_HandleLeftUpIoEvents(void) {
+  if (!dr16.header.online || dr16.data.sw_l != DR16_SW_UP) {
+    return;
+  }
+
+  if (last_sw_r == DR16_SW_MID && dr16.data.sw_r == DR16_SW_UP) {
     Rc_ToggleArmSimpleSuction();
   }
 
-  if (behavior == RC_BEHAVIOR_ROD_NEW &&
-      dr16.data.sw_r == DR16_SW_DOWN && last_sw_r == DR16_SW_MID) {
+  if (last_sw_r == DR16_SW_UP && dr16.data.sw_r == DR16_SW_MID) {
     Rc_ToggleRodGrip();
   }
+}
 
+static void Rc_HandleBehaviorEvents(RcBehavior_t behavior) {
   if (behavior == RC_BEHAVIOR_AUTO_ORE && Rc_AutoOreSwitchEdgeFromMid()) {
     g_rc_control_debug.auto_ore_start_event = true;
     if (auto_ore_inited && !AutoOre_IsBusy(&auto_ore_ctrl)) {
@@ -1257,6 +1260,7 @@ void Task_rc_main(void *argument) {
     now_ms = osKernelGetTickCount();
     Rc_ResetFrameDebug();
     Rc_HandleResetEvent();
+    Rc_HandleLeftUpIoEvents();
 
     Rc_LatchFinishedAutoTargets();
 

@@ -71,6 +71,8 @@ Config_RobotParam_t robot_config = {
             .sample_freq = 500.0f,
             .position_to_velocity_limit = 1.2f,
             .velocity_to_torque_limit = 6.0f,
+        },
+        .front_omni_rear_mecanum = {
             .lateral_vy_to_wz_feedforward = 0.10f,//1.1f不会偏航会有-vx
             .lateral_heading_hold_enable = true,
             .lateral_heading_hold_kp = 8.0f,
@@ -226,7 +228,7 @@ Config_RobotParam_t robot_config = {
             },
         },
         .fixed_ore_cylinder = {
-            .gpio = BSP_GPIO_NONE,
+            .gpio = BSP_GPIO_ROD_SOLENOID,
         },
     },
     .arm_param = {
