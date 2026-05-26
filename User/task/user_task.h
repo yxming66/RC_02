@@ -177,6 +177,7 @@ void Task_ore_store(void *argument);
 
 bool Task_ChassisMainPoleGroupAtTarget(uint8_t group, float threshold_rad);
 bool Task_ChassisMainPoleAllAtTarget(float threshold_rad);
+bool Task_ChassisMainGetPoleHoldCommand(Pole_CMD_t *cmd);
 bool Task_AutoOreStartStore(void);
 bool Task_AutoOreStartRelease(void);
 void Task_AutoOreAbort(void);

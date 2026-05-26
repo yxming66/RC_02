@@ -34,8 +34,9 @@ static const BSP_GPIO_MAP_t GPIO_Map[BSP_GPIO_NUM] = {
   {USER_KEY_Pin, USER_KEY_GPIO_Port},
     {ACCL_INT_Pin, ACCL_INT_GPIO_Port},
     {GYRO_INT_Pin, GYRO_INT_GPIO_Port},
-    {GPIO_PIN_10, GPIOC},    
-    {GPIO_PIN_11, GPIOC},    
+    {valve_arm_Pin, valve_arm_GPIO_Port},
+    {valve_rod_Pin, valve_rod_GPIO_Port},
+    {0, NULL},
 };
 
 static void (*GPIO_Callback[16])(void);
@@ -118,18 +119,20 @@ int8_t BSP_GPIO_DisableIRQ(BSP_GPIO_t gpio) {
   return BSP_OK;
 }
 int8_t BSP_GPIO_WritePin(BSP_GPIO_t gpio, bool value){
-  if (gpio >= BSP_GPIO_NUM) return BSP_ERR;
+  if (gpio == BSP_GPIO_NONE) return BSP_OK;
+  if (gpio >= BSP_GPIO_NUM || GPIO_Map[gpio].gpio == NULL) return BSP_ERR;
   HAL_GPIO_WritePin(GPIO_Map[gpio].gpio, GPIO_Map[gpio].pin, value);
   return BSP_OK;
 }
 
 int8_t BSP_GPIO_TogglePin(BSP_GPIO_t gpio){
-  if (gpio >= BSP_GPIO_NUM) return BSP_ERR;
+  if (gpio == BSP_GPIO_NONE) return BSP_OK;
+  if (gpio >= BSP_GPIO_NUM || GPIO_Map[gpio].gpio == NULL) return BSP_ERR;
   HAL_GPIO_TogglePin(GPIO_Map[gpio].gpio, GPIO_Map[gpio].pin);
   return BSP_OK;
 }
 
 bool BSP_GPIO_ReadPin(BSP_GPIO_t gpio){
-  if (gpio >= BSP_GPIO_NUM) return false;
+  if (gpio >= BSP_GPIO_NUM || GPIO_Map[gpio].gpio == NULL) return false;
   return HAL_GPIO_ReadPin(GPIO_Map[gpio].gpio, GPIO_Map[gpio].pin) == GPIO_PIN_SET;
 }
