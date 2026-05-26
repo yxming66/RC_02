@@ -354,7 +354,7 @@ Config_RobotParam_t robot_config = {
              * - rear_retract_move_speed: 中段后低速等待后光电的前进速度。
              * - second_photo_retract_move_speed: 后光电触发后，全收腿时的前进速度。
              */
-            .prealign_move_speed = 0.0f,        /* PREALIGN 对正阶段叠加 vx，单位 m/s。 */
+            .prealign_move_speed = 0.20f,       /* PREALIGN 对正阶段叠加 vx，单位 m/s。 */
             .pole_extend_move_speed = 0.50f,    /* 撑杆伸出阶段 vx，单位 m/s。 */
             .front_retract_move_speed = 0.50f,  /* 前杆动作阶段 vx，单位 m/s。 */
             .front_retract_timeout_ms = 5000u,  /* 前光电触发后，等待前杆收回到位超时，单位 ms。 */
@@ -384,7 +384,7 @@ Config_RobotParam_t robot_config = {
              * - rear_retract_move_speed: 中段后低速等待后光电的前进速度。
              * - second_photo_retract_move_speed: 后光电触发后，全收腿时的前进速度。
              */
-            .prealign_move_speed = 0.0f,       /* PREALIGN 对正阶段叠加 vx，单位 m/s。 */
+            .prealign_move_speed = 0.0f,      /* PREALIGN 对正阶段叠加 vx，单位 m/s。 */
             .pole_extend_move_speed = 0.50f,    /* 撑杆伸出阶段 vx，单位 m/s。 */
             .front_retract_move_speed = 0.50f,  /* 前杆动作阶段 vx，单位 m/s。 */
             .front_retract_timeout_ms = 5000u,  /* 前光电触发后，等待前杆收回到位超时，单位 ms。 */

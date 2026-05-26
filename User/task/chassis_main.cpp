@@ -27,6 +27,22 @@ bool Task_ChassisMainPoleGroupAtTarget(uint8_t group, float threshold_rad) {
 bool Task_ChassisMainPoleAllAtTarget(float threshold_rad) {
   return Pole_IsAllAtFinalTarget(&pole, threshold_rad);
 }
+
+bool Task_ChassisMainGetPoleHoldCommand(Pole_CMD_t *cmd) {
+  if (cmd == nullptr || pole.param == nullptr) {
+    return false;
+  }
+
+  *cmd = {};
+  cmd->mode = POLE_MODE_ACTIVE;
+  cmd->auto_target_enable[0] = true;
+  cmd->auto_target_enable[1] = true;
+  cmd->auto_target_lift[0] = pole.debug.tracked_target_lift[0];
+  cmd->auto_target_lift[1] = pole.debug.tracked_target_lift[1];
+  cmd->auto_lift_speed[0] = 0.0f;
+  cmd->auto_lift_speed[1] = 0.0f;
+  return true;
+}
 }
 
 static void Task_ChassisMainUpdatePoleTemperatureAlarm(uint32_t now_tick) {
