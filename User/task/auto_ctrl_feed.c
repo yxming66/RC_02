@@ -162,6 +162,12 @@ void Task_AutoOreAbort(void) {
   }
 }
 
+void Task_AutoOreSetHeldOreCount(uint8_t held_ore_count) {
+  if (auto_ore_inited) {
+    AutoOre_SetHeldOreCount(&auto_ore_ctrl, held_ore_count);
+  }
+}
+
 /* Exported functions ------------------------------------------------------- */
 void Task_auto_ctrl(void *argument) {
   (void)argument; /* 未使用argument，消除警告 */

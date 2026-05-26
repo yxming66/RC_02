@@ -54,7 +54,7 @@
 #define RC_MAPPING_ACTIVE_PRESET RC_MAPPING_PRESET_DEFAULT
 #endif
 #ifndef RC_LEFT_DOWN_MAPPING_AUTO_ORE
-#define RC_LEFT_DOWN_MAPPING_AUTO_ORE (0u) // 修改映射，0单独控制上层，1一键存取
+#define RC_LEFT_DOWN_MAPPING_AUTO_ORE (1u) // 0单独控制上层，1一键存取
 #endif
 #ifndef RC_AUTO_ORE_SUCTION_CH_THRESHOLD
 #define RC_AUTO_ORE_SUCTION_CH_THRESHOLD (0.60f)
@@ -123,6 +123,12 @@ typedef struct {
   volatile bool ore_store_active;
   volatile bool auto_ore_start_event;
   volatile bool auto_ore_start_ok;
+  volatile AutoOre_State_t auto_ore_state;
+  volatile AutoOre_Result_t auto_ore_result;
+  volatile AutoOre_Fault_t auto_ore_fault;
+  volatile AutoOre_Action_t auto_ore_action;
+  volatile uint8_t auto_ore_held_count;
+  volatile uint8_t auto_ore_step_index;
 } RcControlDebug_t;
 
 volatile RcControlDebug_t g_rc_control_debug = {0};
@@ -815,6 +821,12 @@ static void Rc_ResetFrameDebug(void) {
   g_rc_control_debug.ore_store_active = false;
   g_rc_control_debug.auto_ore_start_event = false;
   g_rc_control_debug.auto_ore_start_ok = false;
+  g_rc_control_debug.auto_ore_state = AutoOre_GetState(&auto_ore_ctrl);
+  g_rc_control_debug.auto_ore_result = AutoOre_GetResult(&auto_ore_ctrl);
+  g_rc_control_debug.auto_ore_fault = AutoOre_GetFault(&auto_ore_ctrl);
+  g_rc_control_debug.auto_ore_action = auto_ore_ctrl.action;
+  g_rc_control_debug.auto_ore_held_count = AutoOre_GetHeldOreCount(&auto_ore_ctrl);
+  g_rc_control_debug.auto_ore_step_index = AutoOre_GetStepIndex(&auto_ore_ctrl);
   g_rc_ore_store_debug.assume_home_event = false;
 }
 
@@ -1054,6 +1066,24 @@ static bool Rc_AutoOreSwitchEdgeFromMid(void) {
          last_sw_r == DR16_SW_MID && dr16.data.sw_r != DR16_SW_MID;
 }
 
+static void Rc_HandleAutoOreHeldCountCalibration(void) {
+  if (!dr16.header.online || dr16.data.sw_l != DR16_SW_DOWN ||
+      dr16.data.sw_r != DR16_SW_MID || !auto_ore_inited ||
+      AutoOre_IsBusy(&auto_ore_ctrl)) {
+    return;
+  }
+
+  if (Rc_KeyDown(DR16_KEY_Z)) {
+    Task_AutoOreSetHeldOreCount(0u);
+  } else if (Rc_KeyDown(DR16_KEY_X)) {
+    Task_AutoOreSetHeldOreCount(1u);
+  } else if (Rc_KeyDown(DR16_KEY_C)) {
+    Task_AutoOreSetHeldOreCount(2u);
+  } else if (Rc_KeyDown(DR16_KEY_V)) {
+    Task_AutoOreSetHeldOreCount(3u);
+  }
+}
+
 static void Rc_HandleLeftUpIoEvents(void) {
   if (!dr16.header.online || dr16.data.sw_l != DR16_SW_UP) {
     return;
@@ -1069,6 +1099,8 @@ static void Rc_HandleLeftUpIoEvents(void) {
 }
 
 static void Rc_HandleBehaviorEvents(RcBehavior_t behavior) {
+  Rc_HandleAutoOreHeldCountCalibration();
+
   if (behavior == RC_BEHAVIOR_AUTO_ORE && Rc_AutoOreSwitchEdgeFromMid()) {
     g_rc_control_debug.auto_ore_start_event = true;
     if (auto_ore_inited && !AutoOre_IsBusy(&auto_ore_ctrl)) {

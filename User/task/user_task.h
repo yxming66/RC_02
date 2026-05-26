@@ -181,6 +181,7 @@ bool Task_ChassisMainGetPoleHoldCommand(Pole_CMD_t *cmd);
 bool Task_AutoOreStartStore(void);
 bool Task_AutoOreStartRelease(void);
 void Task_AutoOreAbort(void);
+void Task_AutoOreSetHeldOreCount(uint8_t held_ore_count);
 int8_t Task_OreStorePostCommand(const OreStore_CMD_t *cmd);
 void Task_OreStoreRequestRehome(void);
 int8_t Task_OreStoreAssumeAxisHomedAtCurrent(uint8_t axis,
