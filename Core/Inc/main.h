@@ -81,11 +81,13 @@ void Error_Handler(void);
 #define GYRO_INT_Pin GPIO_PIN_12
 #define GYRO_INT_GPIO_Port GPIOE
 #define GYRO_INT_EXTI_IRQn EXTI15_10_IRQn
-#define photo1_Pin GPIO_PIN_13
-#define photo1_GPIO_Port GPIOE
 #define USER_KEY_Pin GPIO_PIN_15
 #define USER_KEY_GPIO_Port GPIOA
 #define USER_KEY_EXTI_IRQn EXTI15_10_IRQn
+#define valve_arm_Pin GPIO_PIN_10
+#define valve_arm_GPIO_Port GPIOC
+#define valve_rod_Pin GPIO_PIN_11
+#define valve_rod_GPIO_Port GPIOC
 
 /* USER CODE BEGIN Private defines */
 

@@ -15,9 +15,19 @@ extern "C" {
 /* Exported macro ----------------------------------------------------------- */
 /* Exported types ----------------------------------------------------------- */
 typedef enum {
+    MOTOR_DM_J10010,
+    MOTOR_DM_J10010L,
+    MOTOR_DM_J10422P,
+    MOTOR_DM_J3507,
     MOTOR_DM_J4310,
     MOTOR_DM_J4310P,
     MOTOR_DM_J4340,
+    MOTOR_DM_J4340P,
+    MOTOR_DM_J6006,
+    MOTOR_DM_J6248P,
+    MOTOR_DM_J8006,
+    MOTOR_DM_J8009,
+    MOTOR_DM_J8009P,
     MOTOR_DM_H3510,
 } MOTOR_DM_Module_t;
 

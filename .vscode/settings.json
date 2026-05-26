@@ -1,4 +1,9 @@
 {
+  "files.associations": {
+    "*.hpp": "cpp",
+    "*.cpp": "cpp",
+    "*.h": "c"
+  },
   "cmake.cmakePath": "cube-cmake",
   "cmake.configureArgs": [
     "-DCMAKE_COMMAND=cube-cmake"
@@ -9,10 +14,7 @@
   "stm32cube-ide-clangd.path": "cube",
   "stm32cube-ide-clangd.arguments": [
     "starm-clangd",
-    "--query-driver=C:/Program Files/Arm/GNU Toolchain*/bin/arm-none-eabi-*",
-    "--query-driver=C:/Users/Lenovo/AppData/Local/stm32cube/bundles/gnu-tools-for-stm32/14.3.1+st.2/bin/arm-none-eabi-gcc*",
-    "--query-driver=C:/Users/Lenovo/AppData/Local/stm32cube/bundles/gnu-tools-for-stm32/14.3.1+st.2/bin/arm-none-eabi-g++*"
+    "--query-driver=${env:CUBE_BUNDLE_PATH}/gnu-tools-for-stm32/14.3.1+st.2/bin/arm-none-eabi-gcc*",
+    "--query-driver=${env:CUBE_BUNDLE_PATH}/gnu-tools-for-stm32/14.3.1+st.2/bin/arm-none-eabi-g++*"
   ],
-  "C_Cpp.intelliSenseEngine": "default",
-  "C_Cpp.default.compileCommands": "${workspaceFolder}/build/Debug/compile_commands.json",
 }

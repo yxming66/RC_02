@@ -34,6 +34,9 @@ static osThreadId_t s_thread_id = NULL;
 #define PC_CMD_HEARTBEAT_PAYLOAD_LEN (0u)
 #define PC_CMD_CHASSIS_PAYLOAD_LEN (12u)
 #define PC_CMD_POLE_PAYLOAD_LEN (9u)
+#define PC_CMD_ARM_SIMPLE_PAYLOAD_LEN (11u)
+#define PC_CMD_ROD_NEW_PAYLOAD_LEN (7u)
+#define PC_CMD_ORE_STORE_PAYLOAD_LEN (22u)
 #define PC_CMD_STEP_PAYLOAD_LEN_BASIC (2u)
 #define PC_CMD_STEP_PAYLOAD_LEN_WITH_YAW (6u)
 #define PC_CMD_STEP_PAYLOAD_LEN_WITH_TOLERANCE (10u)
@@ -68,11 +71,17 @@ static const uint8_t frame_header_[2] = {
 static uint16_t PC_Protocol_BuildHeartbeat(uint8_t *tx_buf);
 static uint16_t PC_Protocol_BuildChassisFeedback(const PC_ChassisFeedback_t *fb, uint8_t *tx_buf);
 static uint16_t PC_Protocol_BuildPoleFeedback(const PC_PoleFeedback_t *fb, uint8_t *tx_buf);
+static uint16_t PC_Protocol_BuildArmSimpleFeedback(const PC_ArmSimpleFeedback_t *fb, uint8_t *tx_buf);
+static uint16_t PC_Protocol_BuildRodNewFeedback(const PC_RodNewFeedback_t *fb, uint8_t *tx_buf);
+static uint16_t PC_Protocol_BuildOreStoreFeedback(const PC_OreStoreFeedback_t *fb, uint8_t *tx_buf);
 static uint16_t PC_Protocol_BuildStepFeedback(const PC_StepFeedback_t *fb, uint8_t *tx_buf);
 static uint16_t PC_Protocol_BuildStatusFeedback(const PC_StatusFeedback_t *fb, uint8_t *tx_buf);
 
 static bool PC_Protocol_ParseChassisCMD(const uint8_t *payload, uint8_t len, PC_ChassisCMD_t *cmd);
 static bool PC_Protocol_ParsePoleCMD(const uint8_t *payload, uint8_t len, PC_PoleCMD_t *cmd);
+static bool PC_Protocol_ParseArmSimpleCMD(const uint8_t *payload, uint8_t len, PC_ArmSimpleCMD_t *cmd);
+static bool PC_Protocol_ParseRodNewCMD(const uint8_t *payload, uint8_t len, PC_RodNewCMD_t *cmd);
+static bool PC_Protocol_ParseOreStoreCMD(const uint8_t *payload, uint8_t len, PC_OreStoreCMD_t *cmd);
 static bool PC_Protocol_ParseHeartbeat(const uint8_t *payload, uint8_t len);
 static bool PC_Protocol_ParseStepCMD(const uint8_t *payload, uint8_t len, PC_StepCMD_t *cmd);
 
@@ -115,6 +124,80 @@ static uint16_t PC_Protocol_BuildPoleFeedback(const PC_PoleFeedback_t *fb, uint8
     header->cmd = PC_FEEDBACK_POLE;
 
     memcpy(&tx_buf[4], fb, sizeof(PC_PoleFeedback_t));
+
+    uint16_t crc = CRC16_Calc(tx_buf, PC_PROTOCOL_HEADER_SIZE + PC_PROTOCOL_LENGTH_SIZE + PC_PROTOCOL_CMD_SIZE + header->length, CRC16_INIT);
+    tx_buf[4 + header->length] = (uint8_t)(crc & 0xFFu);
+    tx_buf[5 + header->length] = (uint8_t)((crc >> 8) & 0xFFu);
+
+    return PC_PROTOCOL_HEADER_SIZE + PC_PROTOCOL_LENGTH_SIZE + PC_PROTOCOL_CMD_SIZE + header->length + PC_PROTOCOL_CRC_SIZE;
+}
+
+static uint16_t PC_Protocol_BuildArmSimpleFeedback(const PC_ArmSimpleFeedback_t *fb, uint8_t *tx_buf) {
+    PC_FrameHeader_t *header = (PC_FrameHeader_t *)tx_buf;
+    header->header[0] = frame_header_[0];
+    header->header[1] = frame_header_[1];
+    header->length = 34u;
+    header->cmd = PC_FEEDBACK_ARM_SIMPLE;
+
+    tx_buf[4] = fb->mode;
+    tx_buf[5] = fb->point_mode;
+    tx_buf[6] = fb->suction;
+    tx_buf[7] = fb->joint1_temperature_warning;
+    tx_buf[8] = fb->joint1_temperature_over_limit;
+    tx_buf[9] = fb->joint1_temperature_limit_latched;
+    memcpy(&tx_buf[10], &fb->joint1_angle_rad, sizeof(float));
+    memcpy(&tx_buf[14], &fb->joint1_velocity_rad_s, sizeof(float));
+    memcpy(&tx_buf[18], &fb->joint1_temperature_c, sizeof(float));
+    memcpy(&tx_buf[22], &fb->joint2_angle_rad, sizeof(float));
+    memcpy(&tx_buf[26], &fb->target_joint1_rad, sizeof(float));
+    memcpy(&tx_buf[30], &fb->target_joint2_rad, sizeof(float));
+
+    uint16_t crc = CRC16_Calc(tx_buf, PC_PROTOCOL_HEADER_SIZE + PC_PROTOCOL_LENGTH_SIZE + PC_PROTOCOL_CMD_SIZE + header->length, CRC16_INIT);
+    tx_buf[4 + header->length] = (uint8_t)(crc & 0xFFu);
+    tx_buf[5 + header->length] = (uint8_t)((crc >> 8) & 0xFFu);
+
+    return PC_PROTOCOL_HEADER_SIZE + PC_PROTOCOL_LENGTH_SIZE + PC_PROTOCOL_CMD_SIZE + header->length + PC_PROTOCOL_CRC_SIZE;
+}
+
+static uint16_t PC_Protocol_BuildRodNewFeedback(const PC_RodNewFeedback_t *fb, uint8_t *tx_buf) {
+    PC_FrameHeader_t *header = (PC_FrameHeader_t *)tx_buf;
+    header->header[0] = frame_header_[0];
+    header->header[1] = frame_header_[1];
+    header->length = 20u;
+    header->cmd = PC_FEEDBACK_ROD_NEW;
+
+    tx_buf[4] = fb->mode;
+    tx_buf[5] = fb->pose;
+    tx_buf[6] = fb->grip;
+    tx_buf[7] = fb->at_target;
+    memcpy(&tx_buf[8], &fb->target_angle_rad, sizeof(float));
+    memcpy(&tx_buf[12], &fb->tracked_angle_rad, sizeof(float));
+    memcpy(&tx_buf[16], &fb->tracked_velocity_rad_s, sizeof(float));
+    memcpy(&tx_buf[20], &fb->feedback_angle_rad, sizeof(float));
+
+    uint16_t crc = CRC16_Calc(tx_buf, PC_PROTOCOL_HEADER_SIZE + PC_PROTOCOL_LENGTH_SIZE + PC_PROTOCOL_CMD_SIZE + header->length, CRC16_INIT);
+    tx_buf[4 + header->length] = (uint8_t)(crc & 0xFFu);
+    tx_buf[5 + header->length] = (uint8_t)((crc >> 8) & 0xFFu);
+
+    return PC_PROTOCOL_HEADER_SIZE + PC_PROTOCOL_LENGTH_SIZE + PC_PROTOCOL_CMD_SIZE + header->length + PC_PROTOCOL_CRC_SIZE;
+}
+
+static uint16_t PC_Protocol_BuildOreStoreFeedback(const PC_OreStoreFeedback_t *fb, uint8_t *tx_buf) {
+    PC_FrameHeader_t *header = (PC_FrameHeader_t *)tx_buf;
+    header->header[0] = frame_header_[0];
+    header->header[1] = frame_header_[1];
+    header->length = 24u;
+    header->cmd = PC_FEEDBACK_ORE_STORE;
+
+    tx_buf[4] = fb->mode;
+    tx_buf[5] = fb->all_homed;
+    tx_buf[6] = fb->online_mask;
+    tx_buf[7] = fb->homed_mask;
+    memcpy(&tx_buf[8], &fb->platform_position_rad, sizeof(float));
+    memcpy(&tx_buf[12], &fb->gate_position_rad[0], sizeof(float));
+    memcpy(&tx_buf[16], &fb->gate_position_rad[1], sizeof(float));
+    memcpy(&tx_buf[20], &fb->track_position_rad[0], sizeof(float));
+    memcpy(&tx_buf[24], &fb->track_position_rad[1], sizeof(float));
 
     uint16_t crc = CRC16_Calc(tx_buf, PC_PROTOCOL_HEADER_SIZE + PC_PROTOCOL_LENGTH_SIZE + PC_PROTOCOL_CMD_SIZE + header->length, CRC16_INIT);
     tx_buf[4 + header->length] = (uint8_t)(crc & 0xFFu);
@@ -179,6 +262,43 @@ static bool PC_Protocol_ParsePoleCMD(const uint8_t *payload, uint8_t len, PC_Pol
     cmd->mode = payload[0];
     memcpy(&cmd->lift[0], &payload[1], sizeof(float));
     memcpy(&cmd->lift[1], &payload[5], sizeof(float));
+    return true;
+}
+
+static bool PC_Protocol_ParseArmSimpleCMD(const uint8_t *payload, uint8_t len, PC_ArmSimpleCMD_t *cmd) {
+    if (len != PC_CMD_ARM_SIMPLE_PAYLOAD_LEN) {
+        return false;
+    }
+    cmd->mode = payload[0];
+    cmd->point_mode = payload[1];
+    cmd->suction = payload[2];
+    memcpy(&cmd->target_joint1_rad, &payload[3], sizeof(float));
+    memcpy(&cmd->target_joint2_rad, &payload[7], sizeof(float));
+    return true;
+}
+
+static bool PC_Protocol_ParseRodNewCMD(const uint8_t *payload, uint8_t len, PC_RodNewCMD_t *cmd) {
+    if (len != PC_CMD_ROD_NEW_PAYLOAD_LEN) {
+        return false;
+    }
+    cmd->mode = payload[0];
+    cmd->pose = payload[1];
+    cmd->grip = payload[2];
+    memcpy(&cmd->target_angle_rad, &payload[3], sizeof(float));
+    return true;
+}
+
+static bool PC_Protocol_ParseOreStoreCMD(const uint8_t *payload, uint8_t len, PC_OreStoreCMD_t *cmd) {
+    if (len != PC_CMD_ORE_STORE_PAYLOAD_LEN) {
+        return false;
+    }
+    cmd->mode = payload[0];
+    cmd->force_rehome = payload[1];
+    memcpy(&cmd->platform_target_rad, &payload[2], sizeof(float));
+    memcpy(&cmd->gate_target_rad[0], &payload[6], sizeof(float));
+    memcpy(&cmd->gate_target_rad[1], &payload[10], sizeof(float));
+    memcpy(&cmd->track_target_rad[0], &payload[14], sizeof(float));
+    memcpy(&cmd->track_target_rad[1], &payload[18], sizeof(float));
     return true;
 }
 
@@ -300,6 +420,18 @@ int8_t PC_Protocol_ParseFrame(PC_Protocol_t *proto, const uint8_t *data, uint16_
             parsed = PC_Protocol_ParsePoleCMD(payload, length, &proto->cmd.pole);
             break;
 
+        case PC_CMD_ARM_SIMPLE:
+            parsed = PC_Protocol_ParseArmSimpleCMD(payload, length, &proto->cmd.arm_simple);
+            break;
+
+        case PC_CMD_ROD_NEW:
+            parsed = PC_Protocol_ParseRodNewCMD(payload, length, &proto->cmd.rod_new);
+            break;
+
+        case PC_CMD_ORE_STORE:
+            parsed = PC_Protocol_ParseOreStoreCMD(payload, length, &proto->cmd.ore_store);
+            break;
+
         case PC_CMD_STEP:
             parsed = PC_Protocol_ParseStepCMD(payload, length, &proto->cmd.step);
             break;
@@ -340,6 +472,15 @@ uint16_t PC_Protocol_BuildFrame(PC_Protocol_t *proto, uint8_t cmd, uint8_t *tx_b
         case PC_FEEDBACK_POLE:
             return PC_Protocol_BuildPoleFeedback(&proto->feedback.pole, tx_buf);
 
+        case PC_FEEDBACK_ARM_SIMPLE:
+            return PC_Protocol_BuildArmSimpleFeedback(&proto->feedback.arm_simple, tx_buf);
+
+        case PC_FEEDBACK_ROD_NEW:
+            return PC_Protocol_BuildRodNewFeedback(&proto->feedback.rod_new, tx_buf);
+
+        case PC_FEEDBACK_ORE_STORE:
+            return PC_Protocol_BuildOreStoreFeedback(&proto->feedback.ore_store, tx_buf);
+
         case PC_FEEDBACK_STEP:
             return PC_Protocol_BuildStepFeedback(&proto->feedback.step, tx_buf);
 
@@ -376,6 +517,21 @@ const PC_ArmCMD_t* PC_Protocol_GetArmCMD(const PC_Protocol_t *proto) {
     return &proto->cmd.arm;
 }
 
+const PC_ArmSimpleCMD_t* PC_Protocol_GetArmSimpleCMD(const PC_Protocol_t *proto) {
+    if (proto == NULL) return NULL;
+    return &proto->cmd.arm_simple;
+}
+
+const PC_RodNewCMD_t* PC_Protocol_GetRodNewCMD(const PC_Protocol_t *proto) {
+    if (proto == NULL) return NULL;
+    return &proto->cmd.rod_new;
+}
+
+const PC_OreStoreCMD_t* PC_Protocol_GetOreStoreCMD(const PC_Protocol_t *proto) {
+    if (proto == NULL) return NULL;
+    return &proto->cmd.ore_store;
+}
+
 const PC_StepCMD_t* PC_Protocol_GetStepCMD(const PC_Protocol_t *proto) {
     if (proto == NULL) return NULL;
     return &proto->cmd.step;
@@ -399,6 +555,21 @@ void PC_Protocol_SetPoleFeedback(PC_Protocol_t *proto, const PC_PoleFeedback_t *
 void PC_Protocol_SetArmFeedback(PC_Protocol_t *proto, const PC_ArmFeedback_t *fb) {
     if (proto == NULL || fb == NULL) return;
     memcpy(&proto->feedback.arm, fb, sizeof(PC_ArmFeedback_t));
+}
+
+void PC_Protocol_SetArmSimpleFeedback(PC_Protocol_t *proto, const PC_ArmSimpleFeedback_t *fb) {
+    if (proto == NULL || fb == NULL) return;
+    memcpy(&proto->feedback.arm_simple, fb, sizeof(PC_ArmSimpleFeedback_t));
+}
+
+void PC_Protocol_SetRodNewFeedback(PC_Protocol_t *proto, const PC_RodNewFeedback_t *fb) {
+    if (proto == NULL || fb == NULL) return;
+    memcpy(&proto->feedback.rod_new, fb, sizeof(PC_RodNewFeedback_t));
+}
+
+void PC_Protocol_SetOreStoreFeedback(PC_Protocol_t *proto, const PC_OreStoreFeedback_t *fb) {
+    if (proto == NULL || fb == NULL) return;
+    memcpy(&proto->feedback.ore_store, fb, sizeof(PC_OreStoreFeedback_t));
 }
 
 void PC_Protocol_SetStepFeedback(PC_Protocol_t *proto, const PC_StepFeedback_t *fb) {
@@ -665,6 +836,15 @@ void PC_Comm_Process(PC_Comm_t *comm, uint32_t now_ms) {
                     break;
                 case PC_CMD_POLE:
                     g_pc_comm_debug.rx_pole_count++;
+                    break;
+                case PC_CMD_ARM_SIMPLE:
+                    g_pc_comm_debug.rx_arm_simple_count++;
+                    break;
+                case PC_CMD_ROD_NEW:
+                    g_pc_comm_debug.rx_rod_new_count++;
+                    break;
+                case PC_CMD_ORE_STORE:
+                    g_pc_comm_debug.rx_ore_store_count++;
                     break;
                 case PC_CMD_STEP:
                     g_pc_comm_debug.rx_step_count++;

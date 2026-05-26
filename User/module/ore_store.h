@@ -8,6 +8,7 @@ extern "C" {
 #include <stdint.h>
 
 #include "component/pid.h"
+#include "bsp/gpio.h"
 #include "device/motor.h"
 #include "device/motor_rm.h"
 
@@ -21,10 +22,10 @@ extern "C" {
 
 typedef enum {
   ORE_STORE_AXIS_PLATFORM = 0,
-  ORE_STORE_AXIS_GATE_LEFT,
-  ORE_STORE_AXIS_GATE_RIGHT,
-  ORE_STORE_AXIS_TRACK_LEFT,
-  ORE_STORE_AXIS_TRACK_RIGHT,
+  ORE_STORE_AXIS_GATE_LEFT,   // 兜底矿机构左 2006，行程约 2 rad
+  ORE_STORE_AXIS_GATE_RIGHT,  // 兜底矿机构右 2006，行程约 2 rad
+  ORE_STORE_AXIS_TRACK_LEFT,  // 滑轨机构左 2006，行程约 37 rad
+  ORE_STORE_AXIS_TRACK_RIGHT, // 滑轨机构右 2006，行程约 37 rad
 } OreStore_Axis_t;
 
 typedef enum {
@@ -33,17 +34,45 @@ typedef enum {
   ORE_STORE_MODE_ACTIVE,
 } OreStore_Mode_t;
 
+typedef enum {
+  ORE_STORE_CONTROL_PID_DUAL = 0,  // 双环: 位置PID → 速度PID → 力矩
+  ORE_STORE_CONTROL_MIT_STYLE,      // MIT风格: Kp*error - Kd*velocity
+} OreStore_ControlMode_t;
+
+typedef enum {
+  ORE_STORE_TRACK_STANDBY = 0,
+  ORE_STORE_TRACK_RELEASE,
+  ORE_STORE_TRACK_POINT_NUM,
+} OreStore_TrackPoint_t;
+
+typedef enum {
+  ORE_STORE_TRANSFORM_STANDBY = 0,
+  ORE_STORE_TRANSFORM_MID_WAIT,
+  ORE_STORE_TRANSFORM_LIFT,
+  ORE_STORE_TRANSFORM_BUFFER,
+  ORE_STORE_TRANSFORM_POINT_NUM,
+} OreStore_TransformPoint_t;
+
+typedef enum {
+  ORE_STORE_GATE_CLOSED = 0,
+  ORE_STORE_GATE_OPEN,
+  ORE_STORE_GATE_POINT_NUM,
+} OreStore_GatePoint_t;
+
 typedef struct {
   float stall_velocity_threshold_rad_s;
   float stall_position_window_rad;
   uint16_t stall_cycles_required;
   float seek_timeout_s;
+  float online_wait_timeout_s;
   float limit_margin_rad;
+  float learned_limit_margin_rad;
   float min_range_rad;
 } OreStore_SoftLimitConfig_t;
 
 typedef struct {
   MOTOR_RM_Param_t motor_param[ORE_STORE_AXIS_NUM];
+  MOTOR_TemperatureProtectionConfig_t motor_temperature_protection;
 
   struct {
     float external_ratio;
@@ -53,11 +82,16 @@ typedef struct {
   struct {
     KPID_Params_t position_pid[ORE_STORE_AXIS_NUM];
     KPID_Params_t velocity_pid[ORE_STORE_AXIS_NUM];
+    // MIT风格控制参数 (Kp/Kd)
+    float mit_kp[ORE_STORE_AXIS_NUM];
+    float mit_kd[ORE_STORE_AXIS_NUM];
   } pid;
 
   struct {
     float position_to_velocity_limit[ORE_STORE_AXIS_NUM];
     float velocity_to_torque_limit[ORE_STORE_AXIS_NUM];
+    float feedback_lowpass_cutoff_hz[ORE_STORE_AXIS_NUM];
+    float output_lowpass_cutoff_hz[ORE_STORE_AXIS_NUM];
   } controller;
 
   struct {
@@ -65,13 +99,32 @@ typedef struct {
     float travel_rad[ORE_STORE_AXIS_NUM];
     float lower_seek_velocity_rad_s[ORE_STORE_AXIS_NUM];
     float move_velocity_rad_s[ORE_STORE_AXIS_NUM];
+    float move_accel_rad_s2[ORE_STORE_AXIS_NUM];
     float arrive_threshold_rad[ORE_STORE_AXIS_NUM];
   } limit;
+
+  struct {
+    bool fixed_position_enable[ORE_STORE_AXIS_NUM];
+    float fixed_position_rad[ORE_STORE_AXIS_NUM];
+    bool auto_assume_on_active;
+    bool home_mode_uses_fixed_position;
+  } power_on;
+
+  struct {
+    float transform_position_rad[ORE_STORE_TRANSFORM_POINT_NUM];
+    float gate_position_rad[ORE_STORE_GATE_POINT_NUM][ORE_STORE_GATE_NUM];
+    float track_position_rad[ORE_STORE_TRACK_POINT_NUM][ORE_STORE_TRACK_NUM];
+  } preset;
+
+  struct {
+    BSP_GPIO_t gpio;
+  } fixed_ore_cylinder;
 } OreStore_Params_t;
 
 typedef struct {
   OreStore_Mode_t mode;
   bool force_rehome;
+  bool fixed_ore_cylinder_closed;
   float platform_target_rad;
   float gate_target_rad[ORE_STORE_GATE_NUM];
   float track_target_rad[ORE_STORE_TRACK_NUM];
@@ -82,17 +135,23 @@ typedef struct {
   float raw_position_rad[ORE_STORE_AXIS_NUM];
   float position_rad[ORE_STORE_AXIS_NUM];
   float velocity_rad_s[ORE_STORE_AXIS_NUM];
+  bool temperature_warning[ORE_STORE_AXIS_NUM];
+  bool temperature_over_limit[ORE_STORE_AXIS_NUM];
   bool online[ORE_STORE_AXIS_NUM];
   bool homed[ORE_STORE_AXIS_NUM];
   bool all_homed;
+  bool fixed_ore_cylinder_closed;
 } OreStore_Feedback_t;
 
 typedef struct {
   float target_position_rad[ORE_STORE_AXIS_NUM];
   float command_position_rad[ORE_STORE_AXIS_NUM];
   float zero_offset_rad[ORE_STORE_AXIS_NUM];
+  float learned_lower_raw_rad[ORE_STORE_AXIS_NUM];
   float travel_rad[ORE_STORE_AXIS_NUM];
+  float velocity_setpoint_rad_s[ORE_STORE_AXIS_NUM];
   float seek_velocity_rad_s[ORE_STORE_AXIS_NUM];
+  float online_wait_s[ORE_STORE_AXIS_NUM];
   uint8_t soft_limit_state[ORE_STORE_AXIS_NUM];
   uint16_t stall_cycles[ORE_STORE_AXIS_NUM];
   bool homing_started[ORE_STORE_AXIS_NUM];
@@ -102,6 +161,18 @@ typedef struct {
   int8_t set_command_ret[ORE_STORE_AXIS_NUM];
   int8_t commit_ret[ORE_STORE_AXIS_NUM];
   bool command_pending[ORE_STORE_AXIS_NUM];
+  float filtered_position_rad[ORE_STORE_AXIS_NUM];
+  float filtered_velocity_rad_s[ORE_STORE_AXIS_NUM];
+  float filtered_output_torque_nm[ORE_STORE_AXIS_NUM];
+  float motor_torque_nm[ORE_STORE_AXIS_NUM];
+  float rm_last_set_torque_nm[ORE_STORE_AXIS_NUM];
+  float rm_pending_current_a[ORE_STORE_AXIS_NUM];
+  int16_t rm_output_raw[ORE_STORE_AXIS_NUM];
+  uint16_t rm_tx_frame_id[ORE_STORE_AXIS_NUM];
+  float power_on_fixed_position_rad[ORE_STORE_AXIS_NUM];
+  int8_t power_on_assume_ret[ORE_STORE_AXIS_NUM];
+  uint32_t power_on_assume_count[ORE_STORE_AXIS_NUM];
+  bool fixed_ore_cylinder_closed;
   float dt_s;
 } OreStore_Debug_t;
 
@@ -111,6 +182,7 @@ typedef struct {
 
   const OreStore_Params_t *param;
   OreStore_Mode_t mode;
+  OreStore_ControlMode_t control_mode;
   bool rehome_latched;
 
   void *motor[ORE_STORE_AXIS_NUM];
@@ -121,8 +193,19 @@ typedef struct {
   bool homing_started[ORE_STORE_AXIS_NUM];
   bool axis_failed[ORE_STORE_AXIS_NUM];
   float zero_offset_rad[ORE_STORE_AXIS_NUM];
+  float learned_lower_raw_rad[ORE_STORE_AXIS_NUM];
+  float homing_online_wait_s[ORE_STORE_AXIS_NUM];
   float target_position_rad[ORE_STORE_AXIS_NUM];
+  float tracked_position_rad[ORE_STORE_AXIS_NUM];
   float command_position_rad[ORE_STORE_AXIS_NUM];
+  float command_velocity_rad_s[ORE_STORE_AXIS_NUM];
+  float velocity_setpoint_rad_s[ORE_STORE_AXIS_NUM];
+  bool fixed_ore_cylinder_closed;
+  int8_t power_on_assume_ret[ORE_STORE_AXIS_NUM];
+  uint32_t power_on_assume_count[ORE_STORE_AXIS_NUM];
+
+  // MIT控制模式状态
+  float mit_target_rad[ORE_STORE_AXIS_NUM];
 
   OreStore_Feedback_t feedback;
   OreStore_Debug_t debug;
@@ -136,12 +219,49 @@ int8_t OreStore_Control(OreStore_t *store, const OreStore_CMD_t *cmd,
 void OreStore_Output(OreStore_t *store);
 void OreStore_ResetOutput(OreStore_t *store);
 void OreStore_RequestRehome(OreStore_t *store);
+int8_t OreStore_AssumeAxisHomedAtCurrent(OreStore_t *store, uint8_t axis,
+                                         float position_rad);
 bool OreStore_IsAxisHomed(const OreStore_t *store, uint8_t axis);
 bool OreStore_IsAllHomed(const OreStore_t *store);
 bool OreStore_IsAxisAtTarget(const OreStore_t *store, uint8_t axis,
                              float threshold_rad);
 bool OreStore_IsAllAtTarget(const OreStore_t *store, float threshold_rad);
 const OreStore_Debug_t *OreStore_GetDebug(const OreStore_t *store);
+bool OreStore_MakePresetCommand(const OreStore_Params_t *param,
+                                OreStore_TrackPoint_t track,
+                                OreStore_TransformPoint_t transform,
+                                OreStore_GatePoint_t gate,
+                                bool fixed_ore_cylinder_closed,
+                                OreStore_CMD_t *cmd);
+
+// MIT风格控制API
+void OreStore_SetControlMode(OreStore_t *store, OreStore_ControlMode_t mode);
+OreStore_ControlMode_t OreStore_GetControlMode(const OreStore_t *store);
+
+typedef struct OreStore_DebugCommand_t {
+  volatile bool enable;
+  volatile OreStore_Mode_t mode;
+  volatile bool force_rehome;
+  volatile float platform_target_rad;
+  volatile float gate_target_rad[ORE_STORE_GATE_NUM];
+  volatile float track_target_rad[ORE_STORE_TRACK_NUM];
+  volatile bool direct_output_enable;
+  volatile uint8_t direct_output_axis;
+  volatile float direct_output;
+  volatile int8_t direct_set_ret;
+  volatile int8_t direct_ctrl_ret;
+  volatile bool assume_homed_trigger;
+  volatile uint8_t assume_homed_axis;
+  volatile float assume_homed_position_rad;
+  volatile int8_t assume_homed_ret;
+  volatile uint32_t applied_count;
+} OreStore_DebugCommand_t;
+
+// 调试命令API（用于阶跃测试）
+void OreStore_SetDebugCommand(bool enable, OreStore_Mode_t mode,
+                              float platform_target, const float gate_target[2],
+                              const float track_target[2]);
+void OreStore_DisableDebugCommand(void);
 
 #ifdef __cplusplus
 }

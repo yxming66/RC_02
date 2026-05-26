@@ -63,7 +63,7 @@ typedef struct {
     float target_velocity;  /* 目标角速度 (-20~20 rad/s) */
     float kp;               /* 位置增益 (0.0~5000.0) */
     float kd;               /* 微分增益 (0.0~100.0) */
-    float torque;           /* 力矩 (-60~60 Nm) */
+    float torque;           /* 力矩，范围由电机型号决定 */
 } MOTOR_LZ_MotionParam_t;
 
 /*每个电机需要的参数*/
@@ -149,7 +149,7 @@ int8_t MOTOR_LZ_MotionControl(MOTOR_LZ_Param_t *param, MOTOR_LZ_MotionParam_t *m
 /**
  * @brief 电流(力矩)模式控制电机
  * @param param 电机参数
- * @param torque 目标力矩 (-60~60 Nm)
+ * @param torque 目标力矩，范围由电机型号决定
  * @return 设备状态码
  */
 int8_t MOTOR_LZ_TorqueControl(MOTOR_LZ_Param_t *param, float torque);

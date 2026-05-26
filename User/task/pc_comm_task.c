@@ -6,6 +6,8 @@
 #include "task/user_task.h"
 #include "module/pc_protocol/pc_protocol.h"
 #include "module/autoCtrlAPI/api/auto_ctrl_api.h"
+#include "module/arm_simple.h"
+#include "module/rod_new.h"
 #include "bsp/uart.h"
 #include "component/crc16.h"
 #include "main.h"
@@ -24,6 +26,9 @@ static const uint8_t s_feedback_cmds[] = {
     PC_FEEDBACK_HEARTBEAT,
     PC_FEEDBACK_CHASSIS,
     PC_FEEDBACK_POLE,
+    PC_FEEDBACK_ARM_SIMPLE,
+    PC_FEEDBACK_ROD_NEW,
+    PC_FEEDBACK_ORE_STORE,
     PC_FEEDBACK_STEP,
     PC_FEEDBACK_STATUS,
 };
@@ -82,8 +87,73 @@ void PC_Comm_DebugUpdate(const PC_Comm_t *comm) {
 
     g_pc_comm_debug.rx_chassis = comm->protocol.cmd.chassis;
     g_pc_comm_debug.rx_pole = comm->protocol.cmd.pole;
+    g_pc_comm_debug.rx_arm_simple = comm->protocol.cmd.arm_simple;
+    g_pc_comm_debug.rx_rod_new = comm->protocol.cmd.rod_new;
+    g_pc_comm_debug.rx_ore_store = comm->protocol.cmd.ore_store;
     g_pc_comm_debug.rx_step = comm->protocol.cmd.step;
     g_pc_comm_debug.rx_imu = comm->protocol.cmd.imu;
+}
+
+static void PcComm_UpdateModuleFeedback(PC_Comm_t *comm) {
+    if (comm == NULL) {
+        return;
+    }
+
+    const ArmSimple_Feedback_t *arm_fb = Task_ArmSimpleGetFeedback();
+    if (arm_fb != NULL) {
+        PC_ArmSimpleFeedback_t pc_arm = {0};
+        pc_arm.mode = (uint8_t)arm_fb->mode;
+        pc_arm.point_mode = (uint8_t)arm_fb->point_mode;
+        pc_arm.suction = (uint8_t)arm_fb->suction;
+        pc_arm.joint1_temperature_warning =
+            arm_fb->joint1_temperature_warning ? 1u : 0u;
+        pc_arm.joint1_temperature_over_limit =
+            arm_fb->joint1_temperature_over_limit ? 1u : 0u;
+        pc_arm.joint1_temperature_limit_latched =
+            arm_fb->joint1_temperature_limit_latched ? 1u : 0u;
+        pc_arm.joint1_angle_rad = arm_fb->joint1_angle_rad;
+        pc_arm.joint1_velocity_rad_s = arm_fb->joint1_velocity_rad_s;
+        pc_arm.joint1_temperature_c = arm_fb->joint1_temperature_c;
+        pc_arm.joint2_angle_rad = arm_fb->joint2_angle_rad;
+        pc_arm.target_joint1_rad = arm_fb->target_joint1_rad;
+        pc_arm.target_joint2_rad = arm_fb->target_joint2_rad;
+        PC_Protocol_SetArmSimpleFeedback(&comm->protocol, &pc_arm);
+    }
+
+    const RodNew_Feedback_t *rod_fb = Task_RodNewGetFeedback();
+    if (rod_fb != NULL) {
+        PC_RodNewFeedback_t pc_rod = {0};
+        pc_rod.mode = (uint8_t)rod_fb->mode;
+        pc_rod.pose = (uint8_t)rod_fb->pose;
+        pc_rod.grip = (uint8_t)rod_fb->grip;
+        pc_rod.at_target = rod_fb->at_target ? 1u : 0u;
+        pc_rod.target_angle_rad = rod_fb->target_angle_rad;
+        pc_rod.tracked_angle_rad = rod_fb->tracked_angle_rad;
+        pc_rod.tracked_velocity_rad_s = rod_fb->tracked_velocity_rad_s;
+        pc_rod.feedback_angle_rad = rod_fb->feedback_angle_rad;
+        PC_Protocol_SetRodNewFeedback(&comm->protocol, &pc_rod);
+    }
+
+    const OreStore_Feedback_t *ore_fb = Task_OreStoreGetFeedback();
+    if (ore_fb != NULL) {
+        PC_OreStoreFeedback_t pc_ore = {0};
+        pc_ore.mode = comm->protocol.cmd.ore_store.mode;
+        pc_ore.all_homed = ore_fb->all_homed ? 1u : 0u;
+        for (uint8_t axis = 0u; axis < ORE_STORE_AXIS_NUM; ++axis) {
+            if (ore_fb->online[axis]) {
+                pc_ore.online_mask |= (uint8_t)(1u << axis);
+            }
+            if (ore_fb->homed[axis]) {
+                pc_ore.homed_mask |= (uint8_t)(1u << axis);
+            }
+        }
+        pc_ore.platform_position_rad = ore_fb->position_rad[ORE_STORE_AXIS_PLATFORM];
+        pc_ore.gate_position_rad[0] = ore_fb->position_rad[ORE_STORE_AXIS_GATE_LEFT];
+        pc_ore.gate_position_rad[1] = ore_fb->position_rad[ORE_STORE_AXIS_GATE_RIGHT];
+        pc_ore.track_position_rad[0] = ore_fb->position_rad[ORE_STORE_AXIS_TRACK_LEFT];
+        pc_ore.track_position_rad[1] = ore_fb->position_rad[ORE_STORE_AXIS_TRACK_RIGHT];
+        PC_Protocol_SetOreStoreFeedback(&comm->protocol, &pc_ore);
+    }
 }
 
 static void PcComm_DebugRecordInitFail(int8_t reason) {
@@ -213,6 +283,7 @@ static bool PcComm_TransmitFeedback(PC_Comm_t *comm) {
     }
 
     PcComm_UpdateStatusFeedback(comm);
+    PcComm_UpdateModuleFeedback(comm);
 
     for (uint8_t i = 0; i < (uint8_t)(sizeof(s_feedback_cmds) / sizeof(s_feedback_cmds[0])); ++i) {
         if (PcComm_AppendFeedbackFrame(comm, s_feedback_cmds[i], &tx_len)) {

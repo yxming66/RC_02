@@ -1,21 +1,23 @@
 /*
- * Arm Simple: DM4310关节1 + JS6660舵机关节2 + 电磁阀吸盘
+ * Arm Simple: DM4340关节1 + JS6660舵机关节2 + 电磁阀吸盘
  */
 
 #include "module/arm_simple.h"
 #include "bsp/pwm.h"
 #include "bsp/gpio.h"
+#include "device/device.h"
+#include "device/motor/core/motor_aliases.hpp"
+#include "device/motor/core/motor_instance_config.hpp"
+#include "device/motor/core/motor_state.hpp"
+#include "device/motor/factory/motor_factory.hpp"
+#include <string.h>
 #include <math.h>
 
-static float ServoAngleToPulse(float angle_rad)
+using ArmSimpleDmMotor = mr::motor::DmJ4340Motor;
+
+static ArmSimpleDmMotor *ArmSimple_GetDmMotor(ArmSimple_t *a)
 {
-    /* 将角度映射到PWM脉宽: -270° ~ +270° 对应 0.5ms ~ 2.5ms */
-    float normalized = (angle_rad - SERVO_JS6660_MIN_ANGLE_RAD) /
-                       (SERVO_JS6660_MAX_ANGLE_RAD - SERVO_JS6660_MIN_ANGLE_RAD);
-    normalized = (normalized < 0.0f) ? 0.0f : (normalized > 1.0f) ? 1.0f : normalized;
-    float pulse_us = SERVO_JS6660_PULSE_MIN_US +
-                     normalized * (SERVO_JS6660_PULSE_MAX_US - SERVO_JS6660_PULSE_MIN_US);
-    return pulse_us;
+    return (a == NULL) ? NULL : reinterpret_cast<ArmSimpleDmMotor *>(a->dm_motor);
 }
 
 static float ClampAngle(float angle, float min_angle, float max_angle)
@@ -25,12 +27,68 @@ static float ClampAngle(float angle, float min_angle, float max_angle)
     return angle;
 }
 
+static uint32_t ClampPulseUs(uint32_t pulse_us)
+{
+    if (pulse_us < SERVO_JS6660_PULSE_MIN_US) return SERVO_JS6660_PULSE_MIN_US;
+    if (pulse_us > SERVO_JS6660_PULSE_MAX_US) return SERVO_JS6660_PULSE_MAX_US;
+    return pulse_us;
+}
+
+static float ClampFloat(float value, float min_value, float max_value)
+{
+    if (value < min_value) return min_value;
+    if (value > max_value) return max_value;
+    return value;
+}
+
+static float ArmSimple_Joint1GravityTorque(const ArmSimple_t *a)
+{
+    if (a == NULL || a->param == NULL) {
+        return 0.0f;
+    }
+
+    if (a->mode == ARM_SIMPLE_MODE_RELAX) {
+        return 0.0f;
+    }
+
+    const float mass_kg = a->param->mit.joint1_gravity_mass_kg;
+    const float com_m = a->param->mit.joint1_gravity_com_m;
+    if (fabsf(mass_kg) <= 1e-6f || com_m <= 0.0f) {
+        return 0.0f;
+    }
+
+    const float angle_rad = a->target.joint1_target -
+                            a->param->mit.joint1_gravity_zero_rad;
+    float torque_nm = mass_kg * 9.80665f * com_m * cosf(angle_rad);
+    const float limit_nm = a->param->mit.joint1_gravity_ff_limit_nm;
+    if (limit_nm > 0.0f) {
+        torque_nm = ClampFloat(torque_nm, -limit_nm, limit_nm);
+    }
+    return torque_nm;
+}
+
+static mr::motor::MotorTemperatureProtectionConfig ArmSimple_BuildTemperatureProtection(
+    const ArmSimple_Params_t *param)
+{
+    mr::motor::MotorTemperatureProtectionConfig config{};
+    if (param == NULL) {
+        return config;
+    }
+
+    config.warning_c = param->joint1_temperature_protection.warning_c;
+    config.limit_c = param->joint1_temperature_protection.limit_c;
+    config.auto_relax_on_limit =
+        param->joint1_temperature_protection.auto_relax_on_limit;
+    return config;
+}
+
 int8_t ArmSimple_Init(ArmSimple_t *a, ArmSimple_Params_t *param, float target_freq)
 {
-    if (a == NULL || param == NULL) {
+    if (a == NULL || param == NULL || target_freq <= 0.0f) {
         return ARM_SIMPLE_ERR;
     }
 
+    memset(a, 0, sizeof(*a));
     a->param = param;
     a->mode = ARM_SIMPLE_MODE_RELAX;
     a->suction = SUCTION_OFF;
@@ -43,6 +101,10 @@ int8_t ArmSimple_Init(ArmSimple_t *a, ArmSimple_Params_t *param, float target_fr
     /* 初始化反馈 */
     a->feedback.joint1_angle = 0.0f;
     a->feedback.joint1_vel = 0.0f;
+    a->feedback.joint1_temp = 0.0f;
+    a->feedback.joint1_temperature_warning = false;
+    a->feedback.joint1_temperature_over_limit = false;
+    a->feedback.joint1_temperature_limit_latched = false;
     a->feedback.joint2_angle = 0.0f;
 
     /* 初始化目标 */
@@ -50,11 +112,23 @@ int8_t ArmSimple_Init(ArmSimple_t *a, ArmSimple_Params_t *param, float target_fr
     a->target.joint2_target = 0.0f;
     a->target.joint1_vel_target = 0.0f;
 
-    /* 初始化PID */
-    KPID_Init(&a->pid.joint1_pos, &param->pid.joint1_pos, target_freq);
-    KPID_Init(&a->pid.joint1_vel, &param->pid.joint1_vel, target_freq);
+    const auto dm_config =
+        mr::motor::MotorInstanceConfig<mr::motor::MotorKind::DM>::FromVendorParam(
+            param->dm4340_param);
+    ArmSimpleDmMotor *dm_motor =
+        mr::motor::MotorFactory::Create<mr::motor::MotorKind::DM,
+                                        mr::motor::MotorModel::J4340>(
+            dm_config,
+            mr::motor::kDirectDriveInstall,
+            ArmSimple_BuildTemperatureProtection(param));
+    if (dm_motor == NULL || dm_motor->Register() != DEVICE_OK) {
+        return ARM_SIMPLE_ERR;
+    }
+    a->dm_motor = dm_motor;
 
     /* 初始化舵机PWM */
+    BSP_PWM_SetFreq(param->servo_param.pwm_channel,
+                    (param->servo_param.freq_hz > 0.0f) ? param->servo_param.freq_hz : SERVO_JS6660_DEFAULT_FREQ_HZ);
     BSP_PWM_Start(param->servo_param.pwm_channel);
 
     /* 初始化吸盘GPIO（默认关闭） */
@@ -75,7 +149,7 @@ int8_t ArmSimple_Init(ArmSimple_t *a, ArmSimple_Params_t *param, float target_fr
 
     /* 初始化命令 */
     a->cmd.mode = ARM_SIMPLE_MODE_RELAX;
-    a->cmd.point_mode = ARM_SIMPLE_POINT_SLEEP;
+    a->cmd.point_mode = ARM_SIMPLE_POINT_NONE;
     a->cmd.suction = SUCTION_OFF;
 
     return ARM_SIMPLE_OK;
@@ -83,78 +157,63 @@ int8_t ArmSimple_Init(ArmSimple_t *a, ArmSimple_Params_t *param, float target_fr
 
 int8_t ArmSimple_UpdateFeedback(ArmSimple_t *a)
 {
-    if (a == NULL) {
+    if (a == NULL || a->param == NULL) {
         return ARM_SIMPLE_ERR;
     }
 
-    MOTOR_DM_t *motor = MOTOR_DM_GetMotor(&a->param->dm4310_param);
-    if (motor != NULL) {
-        a->feedback.joint1_angle = motor->motor.feedback.rotor_abs_angle;
-        if (a->param->dm4310_param.reverse) {
-            a->feedback.joint1_angle = -a->feedback.joint1_angle;
-        }
-        a->feedback.joint1_vel = motor->motor.feedback.rotor_speed;
-        if (a->param->dm4310_param.reverse) {
-            a->feedback.joint1_vel = -a->feedback.joint1_vel;
-        }
+    ArmSimpleDmMotor *motor = ArmSimple_GetDmMotor(a);
+    if (motor == NULL) {
+        return ARM_SIMPLE_ERR;
     }
 
-    return ARM_SIMPLE_OK;
+    const int8_t ret = motor->Update();
+    if (a->mode != ARM_SIMPLE_MODE_RELAX) {
+        (void)motor->Enable();
+    }
+    const mr::motor::MotorState state = motor->GetState();
+    a->feedback.joint1_angle = state.position_rad;
+    a->feedback.joint1_vel = state.velocity_rad_s;
+    a->feedback.joint1_temp = state.temperature_c;
+    a->feedback.joint1_temperature_warning = state.temperature_warning;
+    a->feedback.joint1_temperature_over_limit = state.temperature_over_limit;
+    a->feedback.joint1_temperature_limit_latched =
+        state.temperature_limit_latched;
+    a->dm_enabled = state.online &&
+                    state.protocol_state == mr::motor::MotorProtocolState::Enabled;
+ 
+    return (ret == DEVICE_OK) ? ARM_SIMPLE_OK : ARM_SIMPLE_ERR;
 }
 
 int8_t ArmSimple_Control(ArmSimple_t *a, const ArmSimple_CMD_t *cmd)
 {
-    if (a == NULL || cmd == NULL) {
+    if (a == NULL || a->param == NULL || cmd == NULL) {
         return ARM_SIMPLE_ERR;
     }
 
     a->cmd = *cmd;
     a->mode = cmd->mode;
 
-    switch (cmd->mode) {
-        case ARM_SIMPLE_MODE_RELAX:
-            ArmSimple_Relax(a);
-            break;
-
-        case ARM_SIMPLE_MODE_JOINT:
-            /* 关节角度控制 */
-            a->target.joint1_target = ClampAngle(cmd->target_joint.joint1,
-                                                  a->param->soft_limit.joint1_min,
-                                                  a->param->soft_limit.joint1_max);
-            a->target.joint2_target = ClampAngle(cmd->target_joint.joint2,
-                                                  a->param->soft_limit.joint2_min,
-                                                  a->param->soft_limit.joint2_max);
-            {
-                float joint1_err = a->target.joint1_target - a->feedback.joint1_angle;
-                float vel_output = KPID_Calculate(&a->pid.joint1_pos, joint1_err);
-                vel_output = (vel_output > a->param->vel_limit.joint1_max_vel) ?
-                              a->param->vel_limit.joint1_max_vel : vel_output;
-                vel_output = (vel_output < -a->param->vel_limit.joint1_max_vel) ?
-                              -a->param->vel_limit.joint1_max_vel : vel_output;
-                a->target.joint1_vel_target = vel_output;
-            }
-            break;
-
-        case ARM_SIMPLE_MODE_POS_VEL:
-            /* 位置+速度控制 */
-            a->target.joint1_target = ClampAngle(cmd->target_joint.joint1,
-                                                  a->param->soft_limit.joint1_min,
-                                                  a->param->soft_limit.joint1_max);
-            a->target.joint2_target = ClampAngle(cmd->target_joint.joint2,
-                                                  a->param->soft_limit.joint2_min,
-                                                  a->param->soft_limit.joint2_max);
-            a->target.joint1_vel_target = cmd->joint1_vel;
-            break;
-
-        default:
-            break;
+    if (cmd->mode == ARM_SIMPLE_MODE_RELAX) {
+        a->target.joint1_vel_target = 0.0f;
+        ArmSimple_SetSuction(a, cmd->suction);
+        return ARM_SIMPLE_OK;
     }
 
-    /* 点对点姿态 */
     if (cmd->point_mode < ARM_SIMPLE_POINT_NONE) {
         a->target.joint1_target = a->point2point[cmd->point_mode].joint1_pos;
         a->target.joint2_target = a->point2point[cmd->point_mode].joint2_pos;
+    } else {
+        a->target.joint1_target = cmd->target_joint.joint1;
+        a->target.joint2_target = cmd->target_joint.joint2;
     }
+    a->target.joint1_target = ClampAngle(a->target.joint1_target,
+                                          a->param->soft_limit.joint1_min,
+                                          a->param->soft_limit.joint1_max);
+    a->target.joint2_target = ClampAngle(a->target.joint2_target,
+                                          a->param->soft_limit.joint2_min,
+                                          a->param->soft_limit.joint2_max);
+    a->target.joint1_vel_target = 0.0f;
+    a->feedback.joint2_angle = a->target.joint2_target;
 
     /* 吸盘控制 */
     ArmSimple_SetSuction(a, cmd->suction);
@@ -164,57 +223,59 @@ int8_t ArmSimple_Control(ArmSimple_t *a, const ArmSimple_CMD_t *cmd)
 
 int8_t ArmSimple_Output(ArmSimple_t *a)
 {
-    if (a == NULL) {
+    if (a == NULL || a->param == NULL) {
         return ARM_SIMPLE_ERR;
     }
 
-    MOTOR_MIT_Output_t mit_output = {0};
-
-    switch (a->mode) {
-        case ARM_SIMPLE_MODE_RELAX:
-            mit_output.torque = 0.0f;
-            mit_output.velocity = 0.0f;
-            mit_output.angle = a->feedback.joint1_angle;
-            mit_output.kp = 0.0f;
-            mit_output.kd = 0.0f;
-            break;
-
-        case ARM_SIMPLE_MODE_JOINT:
-        case ARM_SIMPLE_MODE_POS_VEL:
-            mit_output.torque = 0.0f;
-            mit_output.velocity = a->target.joint1_vel_target;
-            mit_output.angle = a->target.joint1_target;
-            mit_output.kp = 5.0f;
-            mit_output.kd = 2.0f;
-            break;
-
-        default:
-            break;
+    ArmSimpleDmMotor *motor = ArmSimple_GetDmMotor(a);
+    if (motor == NULL) {
+        return ARM_SIMPLE_ERR;
     }
 
-    MOTOR_DM_MITCtrl(&a->param->dm4310_param, &mit_output);
-
-    /* 舵机输出 */
-    float servo_pulse = ServoAngleToPulse(a->target.joint2_target);
-    BSP_PWM_SetPulseUs(a->param->servo_param.pwm_channel, (uint32_t)servo_pulse);
+    if (a->mode == ARM_SIMPLE_MODE_RELAX) {
+        (void)motor->Relax();
+        a->dm_enabled = false;
+    } else {
+        (void)motor->SetMIT(a->target.joint1_target,
+                            a->target.joint1_vel_target,
+                            a->param->mit.joint1_kp,
+                            a->param->mit.joint1_kd,
+                            a->param->mit.joint1_torque_ff +
+                                ArmSimple_Joint1GravityTorque(a));
+        (void)motor->CommitCommand();
+    }
+    BSP_PWM_SetPulseUs(a->param->servo_param.pwm_channel,
+                       ArmSimple_AngleToPulseUs(a->target.joint2_target, a->param));
 
     return ARM_SIMPLE_OK;
 }
 
+int8_t ArmSimple_SetJoint1Zero(ArmSimple_t *a)
+{
+    ArmSimpleDmMotor *motor = ArmSimple_GetDmMotor(a);
+    if (motor == NULL) {
+        return ARM_SIMPLE_ERR;
+    }
+
+    return (motor->SetZero() == DEVICE_OK) ? ARM_SIMPLE_OK : ARM_SIMPLE_ERR;
+}
+
 void ArmSimple_Relax(ArmSimple_t *a)
 {
-    if (a == NULL) return;
+    if (a == NULL || a->param == NULL) return;
 
-    MOTOR_DM_Relax(&a->param->dm4310_param);
+    ArmSimpleDmMotor *motor = ArmSimple_GetDmMotor(a);
+    if (motor != NULL) {
+        (void)motor->Relax();
+        a->dm_enabled = false;
+    }
 
-    /* 舵机保持当前位置 */
-    float servo_pulse = ServoAngleToPulse(a->feedback.joint2_angle);
-    BSP_PWM_SetPulseUs(a->param->servo_param.pwm_channel, (uint32_t)servo_pulse);
+    a->target.joint2_target = a->feedback.joint2_angle;
 }
 
 void ArmSimple_SetSuction(ArmSimple_t *a, Suction_State_t state)
 {
-    if (a == NULL) return;
+    if (a == NULL || a->param == NULL) return;
 
     a->suction = state;
     BSP_GPIO_WritePin(a->param->suction_param.gpio, (state == SUCTION_ON) ? true : false);
@@ -232,4 +293,65 @@ bool ArmSimple_Joint2AtTarget(ArmSimple_t *a, float threshold_rad)
     if (a == NULL) return false;
     float err = fabsf(a->target.joint2_target - a->feedback.joint2_angle);
     return (err < threshold_rad);
+}
+
+bool ArmSimple_MakeBehaviorCommand(const ArmSimple_Params_t *param,
+                                   ArmSimple_BehaviorPoint_t point,
+                                   Suction_State_t suction,
+                                   ArmSimple_CMD_t *cmd)
+{
+    if (param == NULL || cmd == NULL || point >= ARM_SIMPLE_BEHAVIOR_NUM) {
+        return false;
+    }
+
+    memset(cmd, 0, sizeof(*cmd));
+    cmd->mode = ARM_SIMPLE_MODE_JOINT;
+    cmd->point_mode = ARM_SIMPLE_POINT_NONE;
+    cmd->suction = suction;
+    cmd->target_joint.joint1 = ClampAngle(
+        param->preset.behavior_point[point].joint1_pos,
+        param->soft_limit.joint1_min,
+        param->soft_limit.joint1_max);
+    cmd->target_joint.joint2 = ClampAngle(
+        param->preset.behavior_point[point].joint2_pos,
+        param->soft_limit.joint2_min,
+        param->soft_limit.joint2_max);
+    cmd->joint1_vel = 0.0f;
+    return true;
+}
+
+uint32_t ArmSimple_AngleToPulseUs(float angle_rad, const ArmSimple_Params_t *param)
+{
+    if (param != NULL && param->servo_param.reverse) {
+        angle_rad = -angle_rad;
+    }
+
+    float min_angle = SERVO_JS6660_MIN_ANGLE_RAD;
+    float max_angle = SERVO_JS6660_MAX_ANGLE_RAD;
+    if (param != NULL) {
+        min_angle = param->soft_limit.joint2_min;
+        max_angle = param->soft_limit.joint2_max;
+    }
+
+    if (min_angle >= 0.0f || max_angle <= 0.0f || min_angle >= max_angle) {
+        min_angle = SERVO_JS6660_MIN_ANGLE_RAD;
+        max_angle = SERVO_JS6660_MAX_ANGLE_RAD;
+    }
+
+    const float clamped = ClampAngle(angle_rad, min_angle, max_angle);
+    float pulse_us = (float)SERVO_JS6660_PULSE_NEUTRAL_US;
+
+    if (clamped >= 0.0f) {
+        if (fabsf(max_angle) > 1e-6f) {
+            pulse_us += (clamped / max_angle) *
+                        ((float)SERVO_JS6660_PULSE_MAX_US - (float)SERVO_JS6660_PULSE_NEUTRAL_US);
+        }
+    } else {
+        if (fabsf(min_angle) > 1e-6f) {
+            pulse_us -= ((-clamped) / (-min_angle)) *
+                        ((float)SERVO_JS6660_PULSE_NEUTRAL_US - (float)SERVO_JS6660_PULSE_MIN_US);
+        }
+    }
+
+    return ClampPulseUs((uint32_t)(pulse_us + 0.5f));
 }

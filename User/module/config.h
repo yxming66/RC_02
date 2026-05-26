@@ -13,7 +13,6 @@
 #include "module/chassis.h"
 #include "module/ore_store.h"
 #include "module/pole.h"
-#include "module/rod.h"
 #include "module/rod_new.h"
 #include "module/arm_simple.h"
 
@@ -86,7 +85,6 @@ typedef struct {
   Arm_Params_t arm_param;
   ArmSimple_Params_t arm_simple_param;
   AutoCtrl_Params_t auto_ctrl_param;
-  Rod_Params_t rod_param;
   RodNew_Params_t rod_new_param;
 } Config_RobotParam_t;
 

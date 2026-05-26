@@ -22,10 +22,10 @@ extern "C" {
 #define ROD_NEW_ERR_NULL (-2)
 
 /* 舵机PWM参数 ----------------------------------------------------------- */
-#define ROD_NEW_SERVO_PULSE_MIN_US 500U    /* 最小脉宽 */
-#define ROD_NEW_SERVO_PULSE_MAX_US 2500U   /* 最大脉宽 */
-#define ROD_NEW_SERVO_PULSE_NEUTRAL_US 1500U /* 中位脉宽 */
-#define ROD_NEW_SERVO_DEADBAND_US 3U        /* 死区 */
+#define ROD_NEW_SERVO_PULSE_MIN_US 850U    /* 最小脉宽 */
+#define ROD_NEW_SERVO_PULSE_MAX_US 1550U   /* 最大脉宽 */
+#define ROD_NEW_SERVO_PULSE_NEUTRAL_US 850U /* 中位脉宽 */
+#define ROD_NEW_SERVO_DEADBAND_US 1U        /* 死区 */
 #define ROD_NEW_SERVO_DEFAULT_FREQ_HZ 50U   /* 默认频率 50Hz */
 
 typedef enum {
@@ -44,9 +44,15 @@ typedef enum {
   ROD_NEW_POSE_GRAB_LOW,      /* 低位夹取 */
   ROD_NEW_POSE_GRAB_HIGH,     /* 高位夹取 */
   ROD_NEW_POSE_LIFT,          /* 抬升 */
+  ROD_NEW_POSE_MANUAL,        /* 手动角度 */
 } RodNew_Pose_t;
 
 typedef struct {
+  /* PWM输出 */
+  BSP_PWM_Channel_t pwm_channel;
+  float freq_hz;
+  uint32_t zero_pulse_us; /* 结构0位对应脉宽 */
+
   /* 角度参数（弧度） */
   float angle_standby_rad;
   float angle_ready_rad;
@@ -80,8 +86,36 @@ typedef struct {
 } RodNew_Params_t;
 
 typedef struct {
+  RodNew_Mode_t mode;
+  RodNew_Pose_t pose;
+  RodNew_GripState_t grip;
+  float target_angle_rad;
+} RodNew_CMD_t;
+
+typedef struct {
+  volatile bool enable;
+  volatile bool direct_pulse_enable;
+  volatile BSP_PWM_Channel_t pwm_channel;
+  volatile float target_angle_rad;
+  volatile uint32_t pulse_us;
+  volatile RodNew_GripState_t grip;
+} RodNew_DebugControl_t;
+
+typedef struct {
+  RodNew_Mode_t mode;
+  RodNew_Pose_t pose;
+  RodNew_GripState_t grip;
+  float target_angle_rad;
+  float tracked_angle_rad;
+  float tracked_velocity_rad_s;
+  float feedback_angle_rad;
+  bool at_target;
+} RodNew_Feedback_t;
+
+typedef struct {
   float target_angle_rad;   /* 目标角度（弧度） */
   float tracked_angle_rad;   /* 跟踪目标（带速度限幅） */
+  float tracked_vel_rad_s;   /* 跟踪速度 */
   float feedback_angle_rad; /* 反馈角度 */
   bool at_target;
 } RodNew_ServoState_t;
@@ -109,7 +143,8 @@ typedef struct {
 /* Exported functions prototypes -------------------------------------------- */
 int8_t RodNew_Init(RodNew_t *r, const RodNew_Params_t *param);
 int8_t RodNew_Control(RodNew_t *r, RodNew_Mode_t mode, RodNew_Pose_t pose,
-                      RodNew_GripState_t grip, uint32_t now);
+                      RodNew_GripState_t grip, float target_angle_rad,
+                      uint32_t now);
 void RodNew_Output(RodNew_t *r);
 void RodNew_Reset(RodNew_t *r);
 
@@ -117,6 +152,8 @@ void RodNew_Reset(RodNew_t *r);
 float RodNew_AngleToPulseUs(float angle_rad, const RodNew_ServoParams_t *param);
 bool RodNew_IsAtTarget(const RodNew_t *r);
 bool RodNew_IsGripDone(const RodNew_t *r);
+
+extern volatile RodNew_DebugControl_t g_rod_new_debug;
 
 #ifdef __cplusplus
 }

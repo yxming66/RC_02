@@ -34,11 +34,9 @@ The library is no longer a scaffold. It is integrated into:
 
 Both paths currently build successfully in this repository.
 
-The active project entry points are:
-
-- `User/task/arm_main.cpp`
-- `User/module/arm_runtime/robotic_arm.hpp`
-- `simulation/src/arm_sim_c_api.cpp`
+The firmware task entry point for the simplified arm hardware is
+`User/task/arm_simple_main.c`. The full serial-arm library is retained as an
+algorithm module and can be reused by future integrations.
 
 Those paths all use the current C++ `User/robotics/arm` implementation.
 

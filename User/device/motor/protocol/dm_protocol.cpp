@@ -81,7 +81,7 @@ MotorProtocol<MotorKind::DM, Model>::MotorProtocol(const MotorInstanceConfig<Mot
 
 template <MotorModel Model>
 float MotorProtocol<MotorKind::DM, Model>::TotalRatio() const {
-    return ResolvePositiveRatio(MotorTraits<MotorKind::DM, Model>::kGearRatio) * ResolvePositiveRatio(install_.external_ratio);
+    return ResolvePositiveRatio(install_.external_ratio);
 }
 
 template <MotorModel Model>
@@ -236,7 +236,11 @@ void MotorProtocol<MotorKind::DM, Model>::RefreshStateCache() {
 
 template <MotorModel Model>
 int8_t MotorProtocol<MotorKind::DM, Model>::Register() {
-    const int8_t ret = MOTOR_DM_AttachExternal(&param_, &vendor_instance_);
+  if (instance_ != nullptr) {
+        state_.protocol_state = MotorProtocolState::Registered;
+        return DEVICE_OK;
+  }  
+  const int8_t ret = MOTOR_DM_AttachExternal(&param_, &vendor_instance_);
     if (ret == DEVICE_OK) {
         instance_ = &vendor_instance_;
         state_.protocol_state = MotorProtocolState::Registered;
@@ -247,42 +251,28 @@ int8_t MotorProtocol<MotorKind::DM, Model>::Register() {
 template <MotorModel Model>
 int8_t MotorProtocol<MotorKind::DM, Model>::Enable() {
     if (instance_ != nullptr && instance_->motor.header.online && instance_->status == MOTOR_DM_STATUS_ENABLED) {
-        state_.protocol_state = MotorProtocolState::Enabled;
         state_.protocol_status_code = instance_->status_raw;
         state_.protocol_fault = EncodeDmFault(instance_->status);
         return DEVICE_OK;
     }
-    const int8_t ret = MOTOR_DM_Enable(&param_);
-    if (ret == DEVICE_OK) {
-        state_.protocol_state = MotorProtocolState::Enabled;
-    }
-    return ret;
+    return MOTOR_DM_Enable(&param_);
 }
 
 template <MotorModel Model>
 int8_t MotorProtocol<MotorKind::DM, Model>::Disable() {
     ClearPendingCommand();
     if (instance_ != nullptr && instance_->motor.header.online && instance_->status == MOTOR_DM_STATUS_DISABLED) {
-        state_.protocol_state = MotorProtocolState::Disabled;
         state_.protocol_status_code = instance_->status_raw;
         state_.protocol_fault = EncodeDmFault(instance_->status);
         return DEVICE_OK;
     }
-    const int8_t ret = MOTOR_DM_Disable(&param_);
-    if (ret == DEVICE_OK) {
-        state_.protocol_state = MotorProtocolState::Disabled;
-    }
-    return ret;
+    return MOTOR_DM_Disable(&param_);
 }
 
 template <MotorModel Model>
 int8_t MotorProtocol<MotorKind::DM, Model>::Relax() {
     ClearPendingCommand();
-    const int8_t ret = MOTOR_DM_Relax(&param_);
-    if (ret == DEVICE_OK) {
-        state_.protocol_state = MotorProtocolState::Enabled;
-    }
-    return ret;
+    return MOTOR_DM_Relax(&param_);
 }
 
 template <MotorModel Model>
@@ -397,8 +387,19 @@ int8_t MotorProtocol<MotorKind::DM, Model>::SetMIT(float position, float velocit
     return DEVICE_OK;
 }
 
+template class MotorProtocol<MotorKind::DM, MotorModel::J10010>;
+template class MotorProtocol<MotorKind::DM, MotorModel::J10010L>;
+template class MotorProtocol<MotorKind::DM, MotorModel::J10422P>;
+template class MotorProtocol<MotorKind::DM, MotorModel::J3507>;
 template class MotorProtocol<MotorKind::DM, MotorModel::J4310>;
 template class MotorProtocol<MotorKind::DM, MotorModel::J4310P>;
 template class MotorProtocol<MotorKind::DM, MotorModel::J4340>;
+template class MotorProtocol<MotorKind::DM, MotorModel::J4340P>;
+template class MotorProtocol<MotorKind::DM, MotorModel::J6006>;
+template class MotorProtocol<MotorKind::DM, MotorModel::J6248P>;
+template class MotorProtocol<MotorKind::DM, MotorModel::J8006>;
+template class MotorProtocol<MotorKind::DM, MotorModel::J8009>;
+template class MotorProtocol<MotorKind::DM, MotorModel::J8009P>;
+template class MotorProtocol<MotorKind::DM, MotorModel::H3510>;
 
 } // namespace mr::motor
