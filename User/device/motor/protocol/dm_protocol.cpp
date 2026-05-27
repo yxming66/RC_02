@@ -86,14 +86,17 @@ float MotorProtocol<MotorKind::DM, Model>::TotalRatio() const {
 
 template <MotorModel Model>
 float MotorProtocol<MotorKind::DM, Model>::ToRotorPosition(float output_position_rad) const {
-    const float signed_position = install_.reverse_output ? -output_position_rad : output_position_rad;
-    return signed_position * TotalRatio();
+    return output_position_rad * TotalRatio();
 }
 
 template <MotorModel Model>
 float MotorProtocol<MotorKind::DM, Model>::ToRotorVelocity(float output_velocity_rad_s) const {
-    const float signed_velocity = install_.reverse_output ? -output_velocity_rad_s : output_velocity_rad_s;
-    return signed_velocity * TotalRatio();
+    return output_velocity_rad_s * TotalRatio();
+}
+
+template <MotorModel Model>
+float MotorProtocol<MotorKind::DM, Model>::ToRotorLimit(float output_limit) const {
+    return fabsf(output_limit) * TotalRatio();
 }
 
 template <MotorModel Model>
@@ -108,8 +111,7 @@ float MotorProtocol<MotorKind::DM, Model>::ToOutputVelocity(float rotor_velocity
 
 template <MotorModel Model>
 float MotorProtocol<MotorKind::DM, Model>::ToOutputTorque(float torque_current) const {
-    float torque = torque_current * MotorTraits<MotorKind::DM, Model>::kTorqueConstant * TotalRatio();
-    return install_.reverse_output ? -torque : torque;
+    return torque_current * MotorTraits<MotorKind::DM, Model>::kTorqueConstant * TotalRatio();
 }
 
 template <MotorModel Model>
@@ -223,13 +225,6 @@ void MotorProtocol<MotorKind::DM, Model>::RefreshStateCache() {
     next.protocol_fault = EncodeDmFault(instance_->status);
     next.protocol_state = DecodeDmProtocolState(instance_->status);
 
-    if (install_.reverse_output) {
-        next.position_rad = -next.position_rad;
-        next.position_single_turn_rad = WrapToPi(-next.position_single_turn_rad);
-        next.velocity_rad_s = -next.velocity_rad_s;
-        next.torque_nm = -next.torque_nm;
-    }
-
     last_online_ = true;
     state_ = next;
 }
@@ -318,6 +313,7 @@ int8_t MotorProtocol<MotorKind::DM, Model>::CommitCommand() {
             return DEVICE_OK;
     }
 
+    debug_.last_commit_ret = ret;
     state_.last_commit_ok = (ret == DEVICE_OK);
     if (ret == DEVICE_OK) {
         ClearPendingCommand();
@@ -332,6 +328,11 @@ void MotorProtocol<MotorKind::DM, Model>::ClearPendingCommand() {
     pending_position_ = 0.0f;
     pending_position_velocity_limit_ = 0.0f;
     pending_mit_output_ = {};
+    debug_.pending_type = pending_type_;
+    debug_.pending_velocity = pending_velocity_;
+    debug_.pending_position = pending_position_;
+    debug_.pending_position_velocity_limit = pending_position_velocity_limit_;
+    debug_.pending_mit_torque = pending_mit_output_.torque;
     state_.command_pending = false;
 }
 
@@ -348,8 +349,10 @@ int8_t MotorProtocol<MotorKind::DM, Model>::SetTorque(float torque_nm) {
 
 template <MotorModel Model>
 int8_t MotorProtocol<MotorKind::DM, Model>::SetVelocity(float velocity) {
-    pending_velocity_ = AbsClip(ToRotorVelocity(velocity), ToRotorVelocity(MotorTraits<MotorKind::DM, Model>::kMaxVelocity));
+    pending_velocity_ = AbsClip(ToRotorVelocity(velocity), ToRotorLimit(MotorTraits<MotorKind::DM, Model>::kMaxVelocity));
     pending_type_ = PendingCommandType::Velocity;
+    debug_.pending_type = pending_type_;
+    debug_.pending_velocity = pending_velocity_;
     state_.command_pending = true;
     return DEVICE_OK;
 }
@@ -360,10 +363,13 @@ int8_t MotorProtocol<MotorKind::DM, Model>::SetPosition(float position, float ma
     constexpr float max_position_limit = MotorTraits<MotorKind::DM, Model>::kMaxPosition;
     const float output_velocity_limit = (max_velocity > 0.0f) ? AbsClip(max_velocity, max_velocity_limit) : max_velocity_limit;
     const float rotor_position = ToRotorPosition(position);
-    const float rotor_position_limit = (max_position_limit > 0.0f) ? ToRotorPosition(max_position_limit) : 0.0f;
+    const float rotor_position_limit = (max_position_limit > 0.0f) ? ToRotorLimit(max_position_limit) : 0.0f;
     pending_position_ = (rotor_position_limit > 0.0f) ? AbsClip(rotor_position, rotor_position_limit) : rotor_position;
     pending_position_velocity_limit_ = ToRotorVelocity(output_velocity_limit);
     pending_type_ = PendingCommandType::Position;
+    debug_.pending_type = pending_type_;
+    debug_.pending_position = pending_position_;
+    debug_.pending_position_velocity_limit = pending_position_velocity_limit_;
     state_.command_pending = true;
     return DEVICE_OK;
 }
@@ -375,16 +381,25 @@ int8_t MotorProtocol<MotorKind::DM, Model>::SetMIT(float position, float velocit
     constexpr float peak_torque = MotorTraits<MotorKind::DM, Model>::kPeakTorque;
     const float rotor_position = ToRotorPosition(position);
     const float rotor_velocity = ToRotorVelocity(velocity);
-    const float rotor_position_limit = (max_position_limit > 0.0f) ? ToRotorPosition(max_position_limit) : 0.0f;
-    const float rotor_velocity_limit = ToRotorVelocity(max_velocity_limit);
+    const float rotor_position_limit = (max_position_limit > 0.0f) ? ToRotorLimit(max_position_limit) : 0.0f;
+    const float rotor_velocity_limit = ToRotorLimit(max_velocity_limit);
     pending_mit_output_.angle = (rotor_position_limit > 0.0f) ? AbsClip(rotor_position, rotor_position_limit) : rotor_position;
     pending_mit_output_.velocity = AbsClip(rotor_velocity, rotor_velocity_limit);
     pending_mit_output_.kp = kp;
     pending_mit_output_.kd = kd;
     pending_mit_output_.torque = (peak_torque > 0.0f) ? AbsClip(torque_ff, peak_torque) : torque_ff;
     pending_type_ = PendingCommandType::Mit;
+    debug_.pending_type = pending_type_;
+    debug_.pending_position = pending_mit_output_.angle;
+    debug_.pending_velocity = pending_mit_output_.velocity;
+    debug_.pending_mit_torque = pending_mit_output_.torque;
     state_.command_pending = true;
     return DEVICE_OK;
+}
+
+template <MotorModel Model>
+const DmProtocolDebugSnapshot& MotorProtocol<MotorKind::DM, Model>::GetDebugSnapshot() const {
+    return debug_;
 }
 
 template class MotorProtocol<MotorKind::DM, MotorModel::J10010>;

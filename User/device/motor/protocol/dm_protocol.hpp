@@ -13,6 +13,15 @@
 
 namespace mr::motor {
 
+struct DmProtocolDebugSnapshot {
+    PendingCommandType pending_type = PendingCommandType::None;
+    float pending_velocity = 0.0f;
+    float pending_position = 0.0f;
+    float pending_position_velocity_limit = 0.0f;
+    float pending_mit_torque = 0.0f;
+    int8_t last_commit_ret = DEVICE_OK;
+};
+
 template <MotorModel Model>
 class MotorProtocol<MotorKind::DM, Model> {
 public:
@@ -35,11 +44,13 @@ public:
     int8_t SetVelocity(float velocity);
     int8_t SetPosition(float position, float max_velocity);
     int8_t SetMIT(float position, float velocity, float kp, float kd, float torque_ff);
+    const DmProtocolDebugSnapshot& GetDebugSnapshot() const;
 
 private:
     float TotalRatio() const;
     float ToRotorPosition(float output_position_rad) const;
     float ToRotorVelocity(float output_velocity_rad_s) const;
+    float ToRotorLimit(float output_limit) const;
     float ToOutputPosition(float rotor_position_rad) const;
     float ToOutputVelocity(float rotor_velocity_rad_s) const;
     float ToOutputTorque(float torque_current) const;
@@ -63,6 +74,7 @@ private:
     MOTOR_DM_Param_t param_{};
     MOTOR_DM_t* instance_ = nullptr;
     MOTOR_DM_t vendor_instance_{};
+    DmProtocolDebugSnapshot debug_{};
     bool rotor_position_initialized_ = false;
     float last_rotor_position_rad_ = 0.0f;
     float accumulated_rotor_position_rad_ = 0.0f;

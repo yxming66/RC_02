@@ -40,22 +40,22 @@ typedef enum {
 } OreStore_ControlMode_t;
 
 typedef enum {
-  ORE_STORE_TRACK_STANDBY = 0,
-  ORE_STORE_TRACK_RELEASE,
+  ORE_STORE_TRACK_STANDBY = 0,  // 轨道收回待机位置
+  ORE_STORE_TRACK_RELEASE,      // 轨道推出释放位置
   ORE_STORE_TRACK_POINT_NUM,
 } OreStore_TrackPoint_t;
 
 typedef enum {
-  ORE_STORE_TRANSFORM_STANDBY = 0,
-  ORE_STORE_TRANSFORM_MID_WAIT,
-  ORE_STORE_TRANSFORM_LIFT,
-  ORE_STORE_TRANSFORM_BUFFER,
+  ORE_STORE_TRANSFORM_STANDBY = 0,  // 平台待机/复位低位
+  ORE_STORE_TRANSFORM_MID_WAIT,     // 平台中间等待位
+  ORE_STORE_TRANSFORM_LIFT,         // 平台抬升/满行程位
+  ORE_STORE_TRANSFORM_BUFFER,       // 平台缓冲/备用预设位
   ORE_STORE_TRANSFORM_POINT_NUM,
 } OreStore_TransformPoint_t;
 
 typedef enum {
-  ORE_STORE_GATE_CLOSED = 0,
-  ORE_STORE_GATE_OPEN,
+  ORE_STORE_GATE_CLOSED = 0,  // 左右门关闭位置
+  ORE_STORE_GATE_OPEN,        // 左右门打开位置
   ORE_STORE_GATE_POINT_NUM,
 } OreStore_GatePoint_t;
 

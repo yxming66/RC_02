@@ -60,13 +60,12 @@ float MotorProtocol<MotorKind::RM, Model>::TotalRatio() const {
 
 template <MotorModel Model>
 float MotorProtocol<MotorKind::RM, Model>::ToTorqueCurrent(float output_torque_nm) const {
-    const float signed_torque = install_.reverse_output ? -output_torque_nm : output_torque_nm;
     const float torque_constant = (MotorTraits<MotorKind::RM, Model>::kTorqueConstant > 0.0f) ? MotorTraits<MotorKind::RM, Model>::kTorqueConstant : 0.0f;
     const float total_ratio = TotalRatio();
     if (torque_constant <= 0.0f || total_ratio <= 0.0f) {
         return 0.0f;
     }
-    return signed_torque / (torque_constant * total_ratio);
+    return output_torque_nm / (torque_constant * total_ratio);
 }
 
 template <MotorModel Model>
@@ -245,12 +244,6 @@ void MotorProtocol<MotorKind::RM, Model>::RefreshStateCache() {
     }
     debug_.last_error_code = error_code;
 
-    if (install_.reverse_output) {
-        next.position_rad = -next.position_rad;
-        next.position_single_turn_rad = WrapToPi(-next.position_single_turn_rad);
-        next.velocity_rad_s = -next.velocity_rad_s;
-        next.torque_nm = -next.torque_nm;
-    }
     last_online_ = next.online;
     state_ = next;
 }
@@ -287,7 +280,7 @@ int8_t MotorProtocol<MotorKind::RM, Model>::Disable() {
     }
     last_non_fault_protocol_state_ = MotorProtocolState::Disabled;
     state_.protocol_state = last_non_fault_protocol_state_;
-    return MOTOR_RM_Ctrl(&param_);
+    return DEVICE_OK;
 }
 
 template <MotorModel Model>
@@ -299,7 +292,7 @@ int8_t MotorProtocol<MotorKind::RM, Model>::Relax() {
     }
     last_non_fault_protocol_state_ = MotorProtocolState::Enabled;
     state_.protocol_state = last_non_fault_protocol_state_;
-    return MOTOR_RM_Ctrl(&param_);
+    return DEVICE_OK;
 }
 
 template <MotorModel Model>
@@ -331,16 +324,13 @@ int8_t MotorProtocol<MotorKind::RM, Model>::CommitCommand() {
         state_.last_commit_ok = false;
         return ret;
     }
-    ret = MOTOR_RM_Ctrl(&param_);
     debug_.pending_valid = pending_valid_;
     debug_.pending_torque_current = pending_torque_current_;
-    debug_.last_commit_ret = ret;
+    debug_.last_commit_ret = DEVICE_OK;
     debug_.last_commit_skipped = false;
-    state_.last_commit_ok = (ret == DEVICE_OK);
-    if (ret == DEVICE_OK) {
-        ClearPendingCommand();
-    }
-    return ret;
+    state_.last_commit_ok = true;
+    ClearPendingCommand();
+    return DEVICE_OK;
 }
 
 template <MotorModel Model>

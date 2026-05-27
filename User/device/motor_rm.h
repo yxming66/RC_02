@@ -75,6 +75,7 @@ typedef struct {
 typedef struct {
     BSP_CAN_t can;
     MOTOR_RM_MsgOutput_t output_msg;
+    uint8_t pending_tx_groups;
     MOTOR_RM_t *motors[MOTOR_RM_MAX_MOTORS];
     uint8_t motor_count;
   MOTOR_RM_t *external_motors[MOTOR_RM_MAX_MOTORS];
@@ -90,6 +91,8 @@ typedef struct {
     int16_t requested_current;
     int16_t grouped_output[MOTOR_RM_MAX_MOTORS];
     uint8_t tx_data[8];
+    uint8_t pending_tx_groups;
+    uint32_t flush_count;
 } MOTOR_RM_TxDebug_t;
 
   typedef struct {
@@ -151,9 +154,32 @@ int8_t MOTOR_RM_SetTorqueCurrent(MOTOR_RM_Param_t *param, float current_a);
 /**
  * @brief 发送控制命令到电机，注意一个CAN可以控制多个电机，所以只需要发送一次即可
  * @param param 电机参数
+ * @note 兼容旧代码的立即发送接口。多个 RM 电机同周期控制时，推荐先调用
+ *       MOTOR_RM_SetOutput()/MOTOR_RM_SetTorqueCurrent() 写完同组缓存，再调用
+ *       MOTOR_RM_FlushGroup()/MOTOR_RM_FlushCAN() 统一发送。
  * @return 
  */
 int8_t MOTOR_RM_Ctrl(MOTOR_RM_Param_t *param);
+
+/**
+ * @brief 发送指定电机所属 RM 控制帧组的缓存命令。
+ * @param param 电机参数，用于定位 CAN 与控制帧组
+ * @return 设备状态码
+ */
+int8_t MOTOR_RM_FlushGroup(MOTOR_RM_Param_t *param);
+
+/**
+ * @brief 发送指定 CAN 上所有待发送的 RM 控制帧组。
+ * @param can CAN 总线
+ * @return 设备状态码
+ */
+int8_t MOTOR_RM_FlushCAN(BSP_CAN_t can);
+
+/**
+ * @brief 发送所有 CAN 上所有待发送的 RM 控制帧组。
+ * @return 设备状态码
+ */
+int8_t MOTOR_RM_FlushAll(void);
 
 /**
  * @brief 获取指定电机的实例指针

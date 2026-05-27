@@ -17,8 +17,8 @@ extern "C" {
 #define ARM_SIMPLE_ERR (-1)
 
 /* 舵机角度范围 */
-#define SERVO_JS6660_MIN_ANGLE_RAD (-4.712389f)   /* -270° */
-#define SERVO_JS6660_MAX_ANGLE_RAD (4.712389f)    /* +270° */
+#define SERVO_JS6660_MIN_ANGLE_RAD (-2.356194f)   /* -135° from center */
+#define SERVO_JS6660_MAX_ANGLE_RAD (2.356194f)    /* +135° from center */
 #define SERVO_JS6660_DEFAULT_FREQ_HZ (50.0f)       /* 50Hz PWM */
 #define SERVO_JS6660_PULSE_MIN_US (500)            /* 0.5ms */
 #define SERVO_JS6660_PULSE_MAX_US (2500)           /* 2.5ms */
@@ -32,7 +32,7 @@ typedef enum {
 
 /* 控制模式 */
 typedef enum {
-    ARM_SIMPLE_MODE_RELAX = 0,    /* 松弛，所有输出归零 */
+    ARM_SIMPLE_MODE_RELAX = 0,    /* 松弛，关节1失能 */
     ARM_SIMPLE_MODE_JOINT,        /* 关节角度控制 */
     ARM_SIMPLE_MODE_POS_VEL,      /* 兼容旧命令：按角度控制处理 */
 } ArmSimple_Mode_t;
@@ -40,7 +40,7 @@ typedef enum {
 /* 关节角度（弧度） */
 typedef struct {
     float joint1;  /* DM4340关节1角度（绝对值） */
-    float joint2;  /* 舵机关节2角度（-270° ~ +270°） */
+    float joint2;  /* 舵机关节2角度，默认相对中心0点-135° ~ +135° */
 } ArmSimple_JointAngle_t;
 
 /* 预设姿态 */
@@ -153,6 +153,7 @@ typedef struct {
     void *dm_motor;
     ArmSimple_Mode_t mode;
     ArmSimple_Mode_t last_output_mode;
+    uint64_t last_joint1_disable_us;
     bool dm_enabled;
     Suction_State_t suction;
 

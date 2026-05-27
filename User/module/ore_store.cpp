@@ -650,7 +650,7 @@ int8_t ActiveAxis(OreStore_t *store, const OreStore_CMD_t *cmd, uint8_t axis) {
   store->target_position_rad[axis] = requested_target;
   const float limited_target = limit->ClampPosition(requested_target);
   (void)UpdateAxisMotionProfile(store, axis, limited_target);
-  store->command_position_rad[axis] = limit->ClampPosition(store->tracked_position_rad[axis]);
+  store->command_position_rad[axis] = store->tracked_position_rad[axis];
   const float raw_target = store->zero_offset_rad[axis] + store->command_position_rad[axis];
 
   if (store->control_mode == ORE_STORE_CONTROL_MIT_STYLE) {
@@ -905,13 +905,24 @@ void OreStore_Output(OreStore_t *store) {
   SharedValve_SetOreStoreRequest(store->fixed_ore_cylinder_closed);
   SharedValve_Output();
 
+  bool can_flush_requested[BSP_CAN_NUM] = {};
   for (uint8_t axis = 0; axis < ORE_STORE_AXIS_NUM; ++axis) {
     if (store->controller[axis] == nullptr) {
       store->debug.commit_ret[axis] = DEVICE_ERR_NULL;
     } else {
       store->debug.commit_ret[axis] = ControllerCommit(store, axis);
+      if (store->debug.commit_ret[axis] == DEVICE_OK &&
+          store->param->motor_param[axis].can < BSP_CAN_NUM) {
+        can_flush_requested[store->param->motor_param[axis].can] = true;
+      }
     }
     RefreshDebugAxis(store, axis);
+  }
+
+  for (uint8_t can = 0; can < BSP_CAN_NUM; ++can) {
+    if (can_flush_requested[can]) {
+      (void)MOTOR_RM_FlushCAN(static_cast<BSP_CAN_t>(can));
+    }
   }
 }
 
