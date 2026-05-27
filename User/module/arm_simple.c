@@ -267,10 +267,9 @@ void ArmSimple_Relax(ArmSimple_t *a)
     ArmSimpleDmMotor *motor = ArmSimple_GetDmMotor(a);
     if (motor != NULL) {
         (void)motor->Relax();
-        a->dm_enabled = false;
     }
-
-    a->target.joint2_target = a->feedback.joint2_angle;
+    a->mode = ARM_SIMPLE_MODE_RELAX;
+    a->dm_enabled = false;
 }
 
 void ArmSimple_SetSuction(ArmSimple_t *a, Suction_State_t state)
@@ -278,7 +277,7 @@ void ArmSimple_SetSuction(ArmSimple_t *a, Suction_State_t state)
     if (a == NULL || a->param == NULL) return;
 
     a->suction = state;
-    BSP_GPIO_WritePin(a->param->suction_param.gpio, (state == SUCTION_ON) ? true : false);
+    BSP_GPIO_WritePin(a->param->suction_param.gpio, state == SUCTION_ON);
 }
 
 bool ArmSimple_Joint1AtTarget(ArmSimple_t *a, float threshold_rad)
@@ -293,31 +292,6 @@ bool ArmSimple_Joint2AtTarget(ArmSimple_t *a, float threshold_rad)
     if (a == NULL) return false;
     float err = fabsf(a->target.joint2_target - a->feedback.joint2_angle);
     return (err < threshold_rad);
-}
-
-bool ArmSimple_MakeBehaviorCommand(const ArmSimple_Params_t *param,
-                                   ArmSimple_BehaviorPoint_t point,
-                                   Suction_State_t suction,
-                                   ArmSimple_CMD_t *cmd)
-{
-    if (param == NULL || cmd == NULL || point >= ARM_SIMPLE_BEHAVIOR_NUM) {
-        return false;
-    }
-
-    memset(cmd, 0, sizeof(*cmd));
-    cmd->mode = ARM_SIMPLE_MODE_JOINT;
-    cmd->point_mode = ARM_SIMPLE_POINT_NONE;
-    cmd->suction = suction;
-    cmd->target_joint.joint1 = ClampAngle(
-        param->preset.behavior_point[point].joint1_pos,
-        param->soft_limit.joint1_min,
-        param->soft_limit.joint1_max);
-    cmd->target_joint.joint2 = ClampAngle(
-        param->preset.behavior_point[point].joint2_pos,
-        param->soft_limit.joint2_min,
-        param->soft_limit.joint2_max);
-    cmd->joint1_vel = 0.0f;
-    return true;
 }
 
 uint32_t ArmSimple_AngleToPulseUs(float angle_rad, const ArmSimple_Params_t *param)
@@ -354,4 +328,23 @@ uint32_t ArmSimple_AngleToPulseUs(float angle_rad, const ArmSimple_Params_t *par
     }
 
     return ClampPulseUs((uint32_t)(pulse_us + 0.5f));
+}
+
+bool ArmSimple_MakeBehaviorCommand(const ArmSimple_Params_t *param,
+                                   ArmSimple_BehaviorPoint_t point,
+                                   Suction_State_t suction,
+                                   ArmSimple_CMD_t *cmd)
+{
+    if (param == NULL || cmd == NULL || point >= ARM_SIMPLE_BEHAVIOR_NUM) {
+        return false;
+    }
+
+    memset(cmd, 0, sizeof(*cmd));
+    cmd->mode = ARM_SIMPLE_MODE_JOINT;
+    cmd->point_mode = ARM_SIMPLE_POINT_NONE;
+    cmd->suction = suction;
+    cmd->target_joint.joint1 = param->preset.behavior_point[point].joint1_pos;
+    cmd->target_joint.joint2 = param->preset.behavior_point[point].joint2_pos;
+    cmd->joint1_vel = 0.0f;
+    return true;
 }

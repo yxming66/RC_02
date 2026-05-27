@@ -71,11 +71,16 @@ typedef struct {
     BSP_CAN_t can;
     MOTOR_DM_t *motors[MOTOR_DM_MAX_MOTORS];
     uint8_t motor_count;
+    /* C++ motor 适配层：由 C++ 对象持有生命周期的外部实例。 */
     MOTOR_DM_t *external_motors[MOTOR_DM_MAX_MOTORS];
     uint8_t external_motor_count;
 } MOTOR_DM_CANManager_t;
 
 /* Exported functions prototypes -------------------------------------------- */
+
+/* -------------------------------------------------------------------------- */
+/* 原生 C 驱动接口：注册、反馈更新、协议控制帧与状态控制。 */
+/* -------------------------------------------------------------------------- */
 
 /**
  * @brief 注册一个LK电机
@@ -83,14 +88,6 @@ typedef struct {
  * @return 
  */
 int8_t MOTOR_DM_Register(MOTOR_DM_Param_t *param);
-
-/**
- * @brief 将外部分配的 DM 电机实例附着到底层驱动
- * @param param 电机参数
- * @param external_motor 外部实例存储，生命周期需覆盖整个使用期
- * @return 设备状态码
- */
-int8_t MOTOR_DM_AttachExternal(MOTOR_DM_Param_t *param, MOTOR_DM_t *external_motor);
 
 /**
  * @brief 更新指定电机数据
@@ -151,6 +148,19 @@ int8_t MOTOR_DM_SetZero(MOTOR_DM_Param_t *param);
  * @return DEVICE_OK 成功，DEVICE_ERR 失败
  */
 int8_t MOTOR_DM_ClearFault(MOTOR_DM_Param_t *param);
+
+/* -------------------------------------------------------------------------- */
+/* C++ motor 适配接口：protocol/motor_t 使用的外部实例与原始反馈读取。 */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * @brief 将外部分配的 DM 电机实例附着到底层驱动
+ * @param param 电机参数
+ * @param external_motor 外部实例存储，生命周期需覆盖整个使用期
+ * @return 设备状态码
+ * @note C++ motor 框架专用；外部实例由 C++ 对象持有，不由 C 驱动分配/释放。
+ */
+int8_t MOTOR_DM_AttachExternal(MOTOR_DM_Param_t *param, MOTOR_DM_t *external_motor);
 
 const MOTOR_DM_RawFeedback_t* MOTOR_DM_GetRawFeedback(MOTOR_DM_Param_t *param);
 

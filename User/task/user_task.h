@@ -24,14 +24,14 @@ extern "C" {
 /* 任务运行频率 */
 #define BLINK_FREQ (50.0)
 #define ATTI_ESTI_FREQ (400.0)
-#define CHASSIS_MAIN_FREQ (1000.0)
-#define RC_MAIN_FREQ (1000.0)
+#define CHASSIS_MAIN_FREQ (500.0)
+#define RC_MAIN_FREQ (500.0)
 #define SICK_FREQ (100.0)
 #define AUTO_CTRL_FREQ (100.0)
 #define ARM_SIMPLE_FREQ (500.0)
 #define ROD_FREQ (400.0)
 #define PC_COMM_FREQ (100.0)
-#define ORE_STORE_FREQ (1000.0)
+#define ORE_STORE_FREQ (500.0)
 /* 任务初始化延时ms */
 #define TASK_INIT_DELAY (100u)
 #define BLINK_INIT_DELAY (0)

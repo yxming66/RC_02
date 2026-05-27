@@ -371,6 +371,8 @@ void Pole_ResetOutput(Pole_t *c) {
     MOTOR_RM_Relax((MOTOR_RM_Param_t *)&c->param->motor_param[i]);
     c->out.motor[i] = 0.0f;
   }
+
+  MOTOR_RM_Ctrl((MOTOR_RM_Param_t *)&c->param->motor_param[0]);
 }
 
 void Pole_Power_Control(Pole_t *c, float max_power) {

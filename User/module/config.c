@@ -44,7 +44,7 @@ Config_RobotParam_t robot_config = {
                 .k = 1.5f,
                 .p = 5.0f,
                 .i = 2.0f,
-                .d = 0.30f,
+                .d = 0.50f,
                 .i_limit = 1.0f,
                 .out_limit = 6.0f,
                 .d_cutoff_freq = 0.0f,
@@ -69,8 +69,6 @@ Config_RobotParam_t robot_config = {
         },
         .controller = {
             .sample_freq = 500.0f,
-            .position_to_velocity_limit = 1.2f,
-            .velocity_to_torque_limit = 6.0f,
         },
         .front_omni_rear_mecanum = {
             .lateral_vy_to_wz_feedforward = 0.10f,//1.1f不会偏航会有-vx
@@ -125,8 +123,6 @@ Config_RobotParam_t robot_config = {
             .step_400_all_extend = {26.7f, 26.7f},
             .step_400_front_retract = {0.0f, 26.7f},
             .step_400_all_retract = {0.0f, 0.0f},
-            .ore_release_target = {0.0f, 0.0f},
-            .ore_release_speed = 70.0f,
         },
         .limit = {
             .max_current = 1.0f,
@@ -162,11 +158,11 @@ Config_RobotParam_t robot_config = {
         },
         .pid = {
             .position_pid = {
-                [ORE_STORE_AXIS_PLATFORM] = {.k = 1.0f, .p = 40.0f, .i = 0.0f, .d = 0.0f, .i_limit = 5.0f, .out_limit = 75.00f, .d_cutoff_freq = 80.0f, .range = 0.0f},
+                [ORE_STORE_AXIS_PLATFORM] = {.k = 1.0f, .p = 12.0f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 45.0f, .d_cutoff_freq = 80.0f, .range = 0.0f},
                 [ORE_STORE_AXIS_GATE_LEFT] = {.k = 1.0f,   .p = 22.0f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 45.0f, .d_cutoff_freq = 80.0f, .range = 0.0f},
                 [ORE_STORE_AXIS_GATE_RIGHT] = {.k = 1.0f,  .p = 22.0f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 45.0f, .d_cutoff_freq = 80.0f, .range = 0.0f},
-                [ORE_STORE_AXIS_TRACK_LEFT] = {.k = 1.0f,  .p = 25.0f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 85.0f, .d_cutoff_freq = 80.0f, .range = 0.0f},
-                [ORE_STORE_AXIS_TRACK_RIGHT] = {.k = 1.0f, .p = 25.0f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 85.0f, .d_cutoff_freq = 80.0f, .range = 0.0f},
+                [ORE_STORE_AXIS_TRACK_LEFT] = {.k = 1.0f,  .p = 8.0f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 40.0f, .d_cutoff_freq = 80.0f, .range = 0.0f},
+                [ORE_STORE_AXIS_TRACK_RIGHT] = {.k = 1.0f, .p = 8.0f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 40.0f, .d_cutoff_freq = 80.0f, .range = 0.0f},
             },
             .velocity_pid = {
                 [ORE_STORE_AXIS_PLATFORM] = {.k = 0.1f, .p = 1.550f, .i = 0.02f, .d = 0.0f, .i_limit = 0.35f, .out_limit = 2.5f, .d_cutoff_freq = 18.0f, .range = 0.0f},
@@ -186,8 +182,6 @@ Config_RobotParam_t robot_config = {
         },
         .controller = { 
             .sample_freq = 500.0f, 
-            .position_to_velocity_limit = {75.00f, 45.00f, 45.00f, 85.00f, 85.00f},
-            .velocity_to_torque_limit = {4.50f, 1.80f, 1.80f, 1.80f, 1.80f},
             .feedback_lowpass_cutoff_hz = {-1.0f, 160.0f, 160.0f, 160.0f, 160.0f},
             .output_lowpass_cutoff_hz = {-1.0f, 120.0f, 120.0f, 120.0f, 120.0f},
         },
@@ -201,8 +195,7 @@ Config_RobotParam_t robot_config = {
             },
             .travel_rad = {22.7f, 2.5f, 2.5f, 40.0f, 40.0f},
             .lower_seek_velocity_rad_s = {0.20f, 0.20f, 0.20f, 0.60f, 0.60f},
-            .move_velocity_rad_s = {380.0f, 80.0f, 80.0f, 100.00f, 100.00f},
-            .move_accel_rad_s2 = {0.0f, 80.0f, 80.0f, 0.0f, 0.0f},
+            .move_velocity_rad_s = {60.0f, 80.0f, 80.0f, 60.00f, 60.00f},
             .arrive_threshold_rad = {0.05f, 0.03f, 0.03f, 0.08f, 0.08f},
         },
         .power_on = {
@@ -212,19 +205,22 @@ Config_RobotParam_t robot_config = {
             .home_mode_uses_fixed_position = false,
         },
         .preset = {
+            /* 平台升降轴预设位置：低位待机 -> 中间等待 -> 抬升交接，BUFFER 预留待标定。 */
             .transform_position_rad = {
-                [ORE_STORE_TRANSFORM_STANDBY] = 0.0f,
-                [ORE_STORE_TRANSFORM_MID_WAIT] = 0.0f,
-                [ORE_STORE_TRANSFORM_LIFT] = 0.0f,
-                [ORE_STORE_TRANSFORM_BUFFER] = 0.0f,
+                [ORE_STORE_TRANSFORM_STANDBY] = 0.0f,    /* 平台待机/复位低位。 */
+                [ORE_STORE_TRANSFORM_MID_WAIT] = 11.0f,  /* 平台中间等待位，存矿时先到此位等待交接。 */
+                [ORE_STORE_TRANSFORM_LIFT] = 22.7f,      /* 平台抬升位/满行程位，用于顶升后开门或释放。 */
+                [ORE_STORE_TRANSFORM_BUFFER] = 0.0f,     /* 平台缓冲/备用预设位，待实机标定。 */
             },
+            /* 左右仓门预设位置：数组顺序为左门、右门。 */
             .gate_position_rad = {
-                [ORE_STORE_GATE_CLOSED] = {0.0f, 0.0f},
-                [ORE_STORE_GATE_OPEN] = {0.0f, 0.0f},
+                [ORE_STORE_GATE_CLOSED] = {2.5f, 2.5f},  /* 左右门关闭位置。 */
+                [ORE_STORE_GATE_OPEN] = {0.0f, 0.0f},    /* 左右门打开位置。 */
             },
+            /* 左右释放轨道预设位置：数组顺序为左轨、右轨。 */
             .track_position_rad = {
-                [ORE_STORE_TRACK_STANDBY] = {0.0f, 0.0f},
-                [ORE_STORE_TRACK_RELEASE] = {0.0f, 0.0f},
+                [ORE_STORE_TRACK_STANDBY] = {0.0f, 0.0f},    /* 轨道收回待机位置。 */
+                [ORE_STORE_TRACK_RELEASE] = {24.0f, 24.0f},  /* 轨道推出释放位置。 */
             },
         },
         .fixed_ore_cylinder = {
@@ -303,7 +299,7 @@ Config_RobotParam_t robot_config = {
             .gpio = BSP_GPIO_ARM_SOLENOID,
         },
         .mit = {
-            .joint1_kp = 60.5f,
+            .joint1_kp = 100.0f,
             .joint1_kd = 5.0f,
             .joint1_torque_ff = 0.0f,
             .joint1_gravity_mass_kg = -1.0f,
@@ -314,8 +310,8 @@ Config_RobotParam_t robot_config = {
         .soft_limit = {
             .joint1_min = -0.08f,
             .joint1_max = 1.57f,
-            .joint2_min = -4.71f,   /* -270° */
-            .joint2_max = 4.71f,    /* +270° */
+            .joint2_min = -2.356194f,   /* 舵机中心0点向负方向最大约-135° */
+            .joint2_max = 2.356194f,    /* 舵机中心0点向正方向最大约+135° */
         },
         .vel_limit = {
             .joint1_max_vel = 15.5f,
@@ -323,9 +319,9 @@ Config_RobotParam_t robot_config = {
         },
         .preset = {
             .behavior_point = {
-                [ARM_SIMPLE_BEHAVIOR_STANDBY] = {.joint1_pos = 0.0f, .joint2_pos = 0.0f},
-                [ARM_SIMPLE_BEHAVIOR_PICK_ORE] = {.joint1_pos = 1.0f, .joint2_pos = -1.57f},
-                [ARM_SIMPLE_BEHAVIOR_STORE_ORE] = {.joint1_pos = 1.0f, .joint2_pos = 1.57f},
+                [ARM_SIMPLE_BEHAVIOR_STANDBY] = {.joint1_pos = 0.149153411f, .joint2_pos = 0.0f},
+                [ARM_SIMPLE_BEHAVIOR_PICK_ORE] = {.joint1_pos = 1.4756968f, .joint2_pos = 0.0f},
+                [ARM_SIMPLE_BEHAVIOR_STORE_ORE] = {.joint1_pos = 0.149153411f, .joint2_pos = -1.570796f},
             },
             .arrive_threshold_rad = 0.05f,
         },
@@ -356,7 +352,7 @@ Config_RobotParam_t robot_config = {
              * - rear_retract_move_speed: 中段后低速等待后光电的前进速度。
              * - second_photo_retract_move_speed: 后光电触发后，全收腿时的前进速度。
              */
-            .prealign_move_speed = 0.20f,       /* PREALIGN 对正阶段叠加 vx，单位 m/s。 */
+            .prealign_move_speed = 0.0f,        /* PREALIGN 对正阶段叠加 vx，单位 m/s。 */
             .pole_extend_move_speed = 0.50f,    /* 撑杆伸出阶段 vx，单位 m/s。 */
             .front_retract_move_speed = 0.50f,  /* 前杆动作阶段 vx，单位 m/s。 */
             .front_retract_timeout_ms = 5000u,  /* 前光电触发后，等待前杆收回到位超时，单位 ms。 */
@@ -386,7 +382,7 @@ Config_RobotParam_t robot_config = {
              * - rear_retract_move_speed: 中段后低速等待后光电的前进速度。
              * - second_photo_retract_move_speed: 后光电触发后，全收腿时的前进速度。
              */
-            .prealign_move_speed = 0.0f,      /* PREALIGN 对正阶段叠加 vx，单位 m/s。 */
+            .prealign_move_speed = 0.0f,       /* PREALIGN 对正阶段叠加 vx，单位 m/s。 */
             .pole_extend_move_speed = 0.50f,    /* 撑杆伸出阶段 vx，单位 m/s。 */
             .front_retract_move_speed = 0.50f,  /* 前杆动作阶段 vx，单位 m/s。 */
             .front_retract_timeout_ms = 5000u,  /* 前光电触发后，等待前杆收回到位超时，单位 ms。 */

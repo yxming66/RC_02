@@ -10,6 +10,7 @@ namespace mr::motor {
 struct MotorInstallSpec {
     // 机构额外传动比，定义为：电机输出轴角 / 机构最终输出角。无额外传动时填 1.0f。
     float external_ratio;
+    // 保留配置字段兼容旧参数；方向反转统一使用 MotorInstanceConfig::reverse。
     bool reverse_output;
 };
 

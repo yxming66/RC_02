@@ -17,7 +17,7 @@
 //
 //   EmulatedVelocity:
 //     u_torque = velocity_pid(target_velocity - feedback_velocity)
-//     再按 velocity_to_torque_limit 或电机 Traits 回退限幅裁剪，最后 SetTorque。
+//     经过输出低通后调用 motor_.SetTorque()。
 //
 //   NativePosition:
 //     电机协议原生支持位置闭环时，直接 motor_.SetPosition(target_position, velocity_limit)。
@@ -43,8 +43,6 @@
 // 滤波与限幅:
 //   feedback_lowpass_cutoff_hz 对闭环使用的 position/velocity 做一阶低通；<=0 时直通。
 //   output_lowpass_cutoff_hz 只作用于最终力矩命令；原生速度/位置/MIT 不经过输出滤波。
-//   速度限幅回退: 显式限幅 -> 推荐速度 -> 额定速度 -> 最大速度。
-//   力矩限幅回退: 显式限幅 -> 推荐/额定/峰值电流结合力矩常数估算；仍无有效值时输出压为 0。
 
 namespace mr::motor {
 
@@ -58,10 +56,6 @@ constexpr float kTwoPi = 6.28318530717958647692f;
 
 float ClampLimit(float value) {
     return (scalar::is_finite_scalar(value) && value > 0.0f) ? value : 0.0f;
-}
-
-float ResolvePositiveRatio(float ratio) {
-    return (ratio > 0.0f) ? ratio : 1.0f;
 }
 
 float Maxf(float lhs, float rhs) {
@@ -131,14 +125,6 @@ cntlr::pid::Config BuildPidConfig(const KPID_Params_t* params,
     return pid_config;
 }
 
-float ApplyRequiredAbsLimit(float value, float limit) {
-    const float positive_limit = ClampLimit(limit);
-    if (positive_limit <= 0.0f) {
-        return 0.0f;
-    }
-    return cntlr::SymmetricLimit::Abs(positive_limit).Apply(value);
-}
-
 float ResolveCutoffHz(float cutoff_hz) {
     return (scalar::is_finite_scalar(cutoff_hz) && cutoff_hz > 0.0f)
                ? cutoff_hz
@@ -174,8 +160,6 @@ MotorControllerT<MotorType>::MotorControllerT(MotorType& motor,
       target_torque_(0.0f),
       target_velocity_(0.0f),
       target_position_(0.0f),
-      position_velocity_limit_(config.position_to_velocity_limit),
-      velocity_torque_limit_(config.velocity_to_torque_limit),
       target_mit_kp_(0.0f),
       target_mit_kd_(0.0f),
             target_mit_torque_ff_(0.0f),
@@ -213,8 +197,6 @@ int8_t MotorControllerT<MotorType>::Enable() {
     target_torque_ = 0.0f;
     target_velocity_ = motor_.GetState().velocity_rad_s;
     target_position_ = motor_.GetState().position_rad;
-    position_velocity_limit_ = config_.position_to_velocity_limit;
-    velocity_torque_limit_ = config_.velocity_to_torque_limit;
     target_mit_kp_ = 0.0f;
     target_mit_kd_ = 0.0f;
     target_mit_torque_ff_ = 0.0f;
@@ -264,13 +246,11 @@ int8_t MotorControllerT<MotorType>::Update() {
         }
         float torque_cmd =
             velocity_pid_.Update(target_velocity_, state.velocity_rad_s, dt);
-        torque_cmd = ApplyRequiredAbsLimit(
-            torque_cmd, ResolveTorqueLimit(velocity_torque_limit_));
         return motor_.SetTorque(FilterOutputTorque(torque_cmd, dt));
     }
 
     case ControlMode::NativePosition:
-        return motor_.SetPosition(target_position_, position_velocity_limit_);
+        return motor_.SetPosition(target_position_, target_velocity_);
 
     case ControlMode::EmulatedPosition: {
         if (!position_pid_ready_ || !velocity_pid_ready_) {
@@ -278,12 +258,8 @@ int8_t MotorControllerT<MotorType>::Update() {
         }
         float velocity_cmd =
             position_pid_.Update(target_position_, state.position_rad, dt);
-        velocity_cmd = ApplyRequiredAbsLimit(
-            velocity_cmd, ResolveVelocityLimit(position_velocity_limit_));
         float torque_cmd =
             velocity_pid_.Update(velocity_cmd, state.velocity_rad_s, dt);
-        torque_cmd = ApplyRequiredAbsLimit(
-            torque_cmd, ResolveTorqueLimit(velocity_torque_limit_));
         return motor_.SetTorque(FilterOutputTorque(torque_cmd, dt));
     }
 
@@ -293,8 +269,6 @@ int8_t MotorControllerT<MotorType>::Update() {
         }
         float torque_cmd =
             position_pid_.Update(target_position_, state.position_rad, dt);
-        torque_cmd = ApplyRequiredAbsLimit(
-            torque_cmd, ResolveTorqueLimit(velocity_torque_limit_));
         return motor_.SetTorque(FilterOutputTorque(torque_cmd, dt));
     }
 
@@ -307,8 +281,6 @@ int8_t MotorControllerT<MotorType>::Update() {
         float torque_cmd = target_mit_kp_ * pos_error
                          - target_mit_kd_ * state.velocity_rad_s
                          + target_mit_torque_ff_;
-        torque_cmd = ApplyRequiredAbsLimit(
-            torque_cmd, ResolveTorqueLimit(velocity_torque_limit_));
         return motor_.SetTorque(FilterOutputTorque(torque_cmd, dt));
     }
     }
@@ -338,8 +310,6 @@ int8_t MotorControllerT<MotorType>::SetTorque(float torque_nm) {
     }
     mode_ = ControlMode::Torque;
     target_torque_ = torque_nm;
-    position_velocity_limit_ = config_.position_to_velocity_limit;
-    velocity_torque_limit_ = config_.velocity_to_torque_limit;
     return DEVICE_OK;
 }
 
@@ -347,7 +317,6 @@ template <typename MotorType>
 int8_t MotorControllerT<MotorType>::SetVelocity(float velocity) {
     target_velocity_ = velocity;
     target_position_ = motor_.GetState().position_rad;
-    velocity_torque_limit_ = config_.velocity_to_torque_limit;
     
     if constexpr (MotorType::Traits::kSupportsVelocity) {
         if (mode_ != ControlMode::NativeVelocity) {
@@ -372,9 +341,7 @@ template <typename MotorType>
 int8_t MotorControllerT<MotorType>::SetPosition(float position,
                                                 float max_velocity) {
     target_position_ = position;
-    position_velocity_limit_ =
-        (max_velocity > 0.0f) ? max_velocity : config_.position_to_velocity_limit;
-    velocity_torque_limit_ = config_.velocity_to_torque_limit;
+    target_velocity_ = max_velocity;
 
     if constexpr (MotorType::Traits::kSupportsPosition) {
         if (mode_ != ControlMode::NativePosition) {
@@ -398,11 +365,9 @@ int8_t MotorControllerT<MotorType>::SetPosition(float position,
 template <typename MotorType>
 int8_t MotorControllerT<MotorType>::SetPositionTorque(float position,
                                                       float torque_limit) {
+    (void)torque_limit;
     target_position_ = position;
     target_velocity_ = 0.0f;
-    position_velocity_limit_ = config_.position_to_velocity_limit;
-    velocity_torque_limit_ =
-        (torque_limit > 0.0f) ? torque_limit : config_.velocity_to_torque_limit;
 
     if (!position_pid_ready_) {
         return DEVICE_ERR_UNSUPPORTED;
@@ -566,67 +531,10 @@ float MotorControllerT<MotorType>::UpdateControlDt() {
     return cntlr::SanitizeDt(control_timer_.Update(), control_dt_fallback_s_);
 }
 
-template <typename MotorType>
-float MotorControllerT<MotorType>::ResolveVelocityLimit(
-    float request_limit) const {
-    const float limit = ClampLimit(request_limit);
-    if (limit > 0.0f) {
-        return limit;
-    }
-
-    const float recommended_limit = ClampLimit(MotorType::recommended_velocity());
-    if (recommended_limit > 0.0f) {
-        return recommended_limit;
-    }
-
-    const float rated_limit = ClampLimit(MotorType::rated_velocity());
-    if (rated_limit > 0.0f) {
-        return rated_limit;
-    }
-
-    return ClampLimit(MotorType::max_velocity());
-}
-
-template <typename MotorType>
-float MotorControllerT<MotorType>::ResolveTorqueLimit(float request_limit) const {
-    float limit = ClampLimit(request_limit);
-    if (limit > 0.0f) {
-        return limit;
-    }
-
-    if (mode_ == ControlMode::EmulatedVelocity ||
-        mode_ == ControlMode::EmulatedPosition ||
-        mode_ == ControlMode::EmulatedMit) {
-        const float ratio = ResolvePositiveRatio(MotorType::gear_ratio());
-        const float output_ratio =
-            ratio * ResolvePositiveRatio(motor_.GetInstallConfig().external_ratio);
-        const float recommended_limit =
-            ClampLimit(MotorType::recommended_current());
-        if (recommended_limit > 0.0f) {
-            return MotorType::torque_constant() > 0.0f
-                       ? recommended_limit * MotorType::torque_constant() *
-                             output_ratio
-                       : recommended_limit;
-        }
-        const float rated_limit = ClampLimit(MotorType::rated_current());
-        if (rated_limit > 0.0f) {
-            return MotorType::torque_constant() > 0.0f
-                       ? rated_limit * MotorType::torque_constant() * output_ratio
-                       : rated_limit;
-        }
-        const float legacy_limit = ClampLimit(MotorType::peak_current());
-        if (legacy_limit > 0.0f) {
-            return MotorType::torque_constant() > 0.0f
-                       ? legacy_limit * MotorType::torque_constant() *
-                             output_ratio
-                       : legacy_limit;
-        }
-    }
-
-    return 0.0f;
-}
-
 template class MotorControllerT<mr::motor::DmJ4310Motor>;
+template class MotorControllerT<mr::motor::DmJ4310PMotor>;
+template class MotorControllerT<mr::motor::DmJ4340Motor>;
+template class MotorControllerT<mr::motor::LzRso3Motor>;
 template class MotorControllerT<mr::motor::RmM2006Motor>;
 template class MotorControllerT<mr::motor::RmM3508Motor>;
 

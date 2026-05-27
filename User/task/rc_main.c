@@ -54,10 +54,15 @@
 #define RC_MAPPING_ACTIVE_PRESET RC_MAPPING_PRESET_DEFAULT
 #endif
 #ifndef RC_LEFT_DOWN_MAPPING_AUTO_ORE
-#define RC_LEFT_DOWN_MAPPING_AUTO_ORE (1u) // 0单独控制上层，1一键存取
+#define RC_LEFT_DOWN_MAPPING_AUTO_ORE (0u) // 0单独控制上层，1一键存取
 #endif
-#ifndef RC_AUTO_ORE_SUCTION_CH_THRESHOLD
-#define RC_AUTO_ORE_SUCTION_CH_THRESHOLD (0.60f)
+#ifndef RC_MANUAL_IO_CH_THRESHOLD
+#define RC_MANUAL_IO_CH_THRESHOLD (0.90f)
+
+#define RC_CHASSIS_VX_SCALE (2.0f)
+#define RC_CHASSIS_VY_SCALE (2.0f)
+#define RC_CHASSIS_WZ_SCALE (3.0f)
+
 #endif
 
 /* USER STRUCT BEGIN */
@@ -266,23 +271,6 @@ static void Rc_SetRodRelax(void) {
   rod_cmd.target_angle_rad = rod_target_angle_latched_rad;
 }
 
-static void Rc_ToggleArmSimpleSuction(void) {
-  arm_simple_suction_latched = (arm_simple_suction_latched == SUCTION_ON)
-                                   ? SUCTION_OFF
-                                   : SUCTION_ON;
-  arm_simple_cmd.suction = arm_simple_suction_latched;
-}
-
-static void Rc_SetArmSimpleSuctionOn(void) {
-  arm_simple_suction_latched = SUCTION_ON;
-  arm_simple_cmd.suction = arm_simple_suction_latched;
-}
-
-static void Rc_SetArmSimpleSuctionOff(void) {
-  arm_simple_suction_latched = SUCTION_OFF;
-  arm_simple_cmd.suction = arm_simple_suction_latched;
-}
-
 static void Rc_SetChassisRelax(void) {
   chassis_cmd.mode = CHASSIS_MODE_RELAX;
   chassis_cmd.ctrl_vec.vx = 0.0f;
@@ -290,10 +278,23 @@ static void Rc_SetChassisRelax(void) {
   chassis_cmd.ctrl_vec.wz = 0.0f;
 }
 
-static void Rc_ToggleRodGrip(void) {
-  rod_grip_latched = (rod_grip_latched == ROD_NEW_GRIP_GRAB)
-                         ? ROD_NEW_GRIP_RELEASE
-                         : ROD_NEW_GRIP_GRAB;
+static void Rc_UpdateArmSimpleIoFromLeftX(void) {
+  if (dr16.data.ch_l_x <= -RC_MANUAL_IO_CH_THRESHOLD) {
+    arm_simple_suction_latched = SUCTION_OFF;
+  } else if (dr16.data.ch_l_x >= RC_MANUAL_IO_CH_THRESHOLD) {
+    arm_simple_suction_latched = SUCTION_ON;
+  }
+
+  arm_simple_cmd.suction = arm_simple_suction_latched;
+}
+
+static void Rc_UpdateRodIoFromLeftX(void) {
+  if (dr16.data.ch_l_x <= -RC_MANUAL_IO_CH_THRESHOLD) {
+    rod_grip_latched = ROD_NEW_GRIP_RELEASE;
+  } else if (dr16.data.ch_l_x >= RC_MANUAL_IO_CH_THRESHOLD) {
+    rod_grip_latched = ROD_NEW_GRIP_GRAB;
+  }
+
   rod_cmd.grip = rod_grip_latched;
 }
 
@@ -342,7 +343,7 @@ static void Rc_SetRodOperator(void) {
 
     rod_target_angle_latched_rad = Rc_ClampRodNewTarget(
         rod_target_angle_latched_rad + target_delta);
-  if(rod_target_angle_latched_rad>0)rod_target_angle_latched_rad=0;
+  Rc_UpdateRodIoFromLeftX();
   rod_cmd.mode = ROD_NEW_MODE_ACTIVE;
   rod_cmd.pose = ROD_NEW_POSE_MANUAL;
   rod_cmd.grip = rod_grip_latched;
@@ -467,7 +468,7 @@ static void Rc_SetOreStoreActiveManual(void) {
     Rc_ApplyOreStoreDeadband(dr16.data.ch_r_y) *
     Rc_OreStoreAxisMoveSpeed(ORE_STORE_AXIS_PLATFORM);
   const float gate_velocity =
-    Rc_ApplyOreStoreDeadband(dr16.data.ch_l_x) *
+    Rc_ApplyOreStoreDeadband(dr16.data.ch_r_x) *
     Rc_OreStoreAxisMoveSpeed(ORE_STORE_AXIS_GATE_LEFT);
   const float track_velocity =
     Rc_ApplyOreStoreDeadband(dr16.data.ch_l_y) *
@@ -718,27 +719,14 @@ static void Rc_SetArmSimpleOperator(float scale) {
         arm_simple_cmd.target_joint.joint2 + joint2_delta);
   }
 
-  if (dr16.data.mouse.l_click || Rc_KeyDown(DR16_KEY_Q)) {
-    Rc_SetArmSimpleSuctionOff();
-  } else if (dr16.data.mouse.r_click || Rc_KeyDown(DR16_KEY_E)) {
-    Rc_SetArmSimpleSuctionOn();
-  }
-  arm_simple_cmd.suction = arm_simple_suction_latched;
-}
-
-static void Rc_HandleArmSimpleRcSuctionOnly(void) {
-  if (dr16.data.ch_l_x <= -RC_AUTO_ORE_SUCTION_CH_THRESHOLD) {
-    Rc_SetArmSimpleSuctionOff();
-  } else if (dr16.data.ch_l_x >= RC_AUTO_ORE_SUCTION_CH_THRESHOLD) {
-    Rc_SetArmSimpleSuctionOn();
-  }
+  Rc_UpdateArmSimpleIoFromLeftX();
 }
 
 static void Rc_SetChassisRemote(void) {
   chassis_cmd.mode = CHASSIS_MODE_INDEPENDENT;
-  chassis_cmd.ctrl_vec.vx = dr16.data.ch_r_y;
-  chassis_cmd.ctrl_vec.vy = -dr16.data.ch_r_x;
-  chassis_cmd.ctrl_vec.wz = -dr16.data.ch_l_x;
+  chassis_cmd.ctrl_vec.vx = dr16.data.ch_r_y * RC_CHASSIS_VX_SCALE;
+  chassis_cmd.ctrl_vec.vy = -dr16.data.ch_r_x * RC_CHASSIS_VY_SCALE;
+  chassis_cmd.ctrl_vec.wz = -dr16.data.ch_l_x * RC_CHASSIS_WZ_SCALE;
 }
 
 #if defined(RC_AUTO_CTRL_DRY_RUN_ENABLED)
@@ -1056,7 +1044,6 @@ static void Rc_ApplyAutoOreStandbyBehavior(void) {
   Rc_SetChassisRelax();
   Rc_SetPoleHold();
   Rc_SetArmSimpleHold();
-  Rc_HandleArmSimpleRcSuctionOnly();
   Rc_SetOreStoreHold();
   Rc_SetRodHold();
 }
@@ -1084,20 +1071,6 @@ static void Rc_HandleAutoOreHeldCountCalibration(void) {
   }
 }
 
-static void Rc_HandleLeftUpIoEvents(void) {
-  if (!dr16.header.online || dr16.data.sw_l != DR16_SW_UP) {
-    return;
-  }
-
-  if (last_sw_r == DR16_SW_MID && dr16.data.sw_r == DR16_SW_UP) {
-    Rc_ToggleArmSimpleSuction();
-  }
-
-  if (last_sw_r == DR16_SW_UP && dr16.data.sw_r == DR16_SW_MID) {
-    Rc_ToggleRodGrip();
-  }
-}
-
 static void Rc_HandleBehaviorEvents(RcBehavior_t behavior) {
   Rc_HandleAutoOreHeldCountCalibration();
 
@@ -1111,13 +1084,6 @@ static void Rc_HandleBehaviorEvents(RcBehavior_t behavior) {
       }
     }
   }
-
-#if RC_LEFT_DOWN_MAPPING_AUTO_ORE
-  if (behavior == RC_BEHAVIOR_ARM_SIMPLE && dr16.data.sw_l == DR16_SW_DOWN &&
-      dr16.data.sw_r == DR16_SW_MID) {
-    Rc_HandleArmSimpleRcSuctionOnly();
-  }
-#endif
 }
 
 static void Rc_ApplyMappedBehavior(RcBehavior_t behavior) {
@@ -1292,7 +1258,6 @@ void Task_rc_main(void *argument) {
     now_ms = osKernelGetTickCount();
     Rc_ResetFrameDebug();
     Rc_HandleResetEvent();
-    Rc_HandleLeftUpIoEvents();
 
     Rc_LatchFinishedAutoTargets();
 

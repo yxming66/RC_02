@@ -296,6 +296,10 @@ void Chassis_ResetOutput(Chassis_t *c) {
             MOTOR_RM_Relax(&(m->param));
         }
     }
+  MOTOR_RM_t *rm = c->motors[0];
+  if (rm) {
+    MOTOR_RM_Ctrl(&rm->param);
+  }
 }
 
 /**

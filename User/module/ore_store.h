@@ -40,22 +40,22 @@ typedef enum {
 } OreStore_ControlMode_t;
 
 typedef enum {
-  ORE_STORE_TRACK_STANDBY = 0,
-  ORE_STORE_TRACK_RELEASE,
+  ORE_STORE_TRACK_STANDBY = 0,  // 轨道收回待机位置
+  ORE_STORE_TRACK_RELEASE,      // 轨道推出释放位置
   ORE_STORE_TRACK_POINT_NUM,
 } OreStore_TrackPoint_t;
 
 typedef enum {
-  ORE_STORE_TRANSFORM_STANDBY = 0,
-  ORE_STORE_TRANSFORM_MID_WAIT,
-  ORE_STORE_TRANSFORM_LIFT,
-  ORE_STORE_TRANSFORM_BUFFER,
+  ORE_STORE_TRANSFORM_STANDBY = 0,  // 平台待机/复位低位
+  ORE_STORE_TRANSFORM_MID_WAIT,     // 平台中间等待位
+  ORE_STORE_TRANSFORM_LIFT,         // 平台抬升/满行程位
+  ORE_STORE_TRANSFORM_BUFFER,       // 平台缓冲/备用预设位
   ORE_STORE_TRANSFORM_POINT_NUM,
 } OreStore_TransformPoint_t;
 
 typedef enum {
-  ORE_STORE_GATE_CLOSED = 0,
-  ORE_STORE_GATE_OPEN,
+  ORE_STORE_GATE_CLOSED = 0,  // 左右门关闭位置
+  ORE_STORE_GATE_OPEN,        // 左右门打开位置
   ORE_STORE_GATE_POINT_NUM,
 } OreStore_GatePoint_t;
 
@@ -89,8 +89,6 @@ typedef struct {
 
   struct {
     float sample_freq;
-    float position_to_velocity_limit[ORE_STORE_AXIS_NUM];
-    float velocity_to_torque_limit[ORE_STORE_AXIS_NUM];
     float feedback_lowpass_cutoff_hz[ORE_STORE_AXIS_NUM];
     float output_lowpass_cutoff_hz[ORE_STORE_AXIS_NUM];
   } controller;
@@ -100,7 +98,6 @@ typedef struct {
     float travel_rad[ORE_STORE_AXIS_NUM];
     float lower_seek_velocity_rad_s[ORE_STORE_AXIS_NUM];
     float move_velocity_rad_s[ORE_STORE_AXIS_NUM];
-    float move_accel_rad_s2[ORE_STORE_AXIS_NUM];
     float arrive_threshold_rad[ORE_STORE_AXIS_NUM];
   } limit;
 
@@ -199,7 +196,6 @@ typedef struct {
   float target_position_rad[ORE_STORE_AXIS_NUM];
   float tracked_position_rad[ORE_STORE_AXIS_NUM];
   float command_position_rad[ORE_STORE_AXIS_NUM];
-  float command_velocity_rad_s[ORE_STORE_AXIS_NUM];
   float velocity_setpoint_rad_s[ORE_STORE_AXIS_NUM];
   bool fixed_ore_cylinder_closed;
   int8_t power_on_assume_ret[ORE_STORE_AXIS_NUM];

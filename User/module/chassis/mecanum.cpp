@@ -7,6 +7,7 @@
 #include "bsp/can.h"
 #include "component/math/scalar.hpp"
 #include "device/device.h"
+#include "device/motor_rm.h"
 
 namespace mr::module::chassis {
 
@@ -309,6 +310,10 @@ void MecanumController::Output() {
     out_.last_commit_ok[i] = (out_.commit_ret[i] == DEVICE_OK);
     StoreWheelDebug(i);
   }
+
+  if (param_ != nullptr) {
+    (void)MOTOR_RM_Ctrl(const_cast<MOTOR_RM_Param_t *>(&param_->motor_param[0]));
+  }
 }
 
 void MecanumController::ResetOutput() {
@@ -316,10 +321,13 @@ void MecanumController::ResetOutput() {
     Wheel *wheel = wheels_[i];
     if (wheel != nullptr) {
       wheel->Relax();
-      wheel->CommitCommand();
       out_.motor[i] = 0.0f;
       out_.command_pending[i] = false;
     }
+  }
+
+  if (param_ != nullptr) {
+    (void)MOTOR_RM_Ctrl(const_cast<MOTOR_RM_Param_t *>(&param_->motor_param[0]));
   }
 }
 
@@ -536,10 +544,6 @@ int8_t MecanumController::RegisterWheels(float target_freq) {
     controller_config.sample_freq =
         (param_->controller.sample_freq > 0.0f) ? param_->controller.sample_freq
                                                 : target_freq;
-    controller_config.position_to_velocity_limit =
-        param_->controller.position_to_velocity_limit;
-    controller_config.velocity_to_torque_limit =
-        param_->controller.velocity_to_torque_limit;
 
     mr::wheel::RmM3508WheelConfig wheel_config{};
     wheel_config.motor_param = param_->motor_param[i];

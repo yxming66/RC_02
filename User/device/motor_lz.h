@@ -98,11 +98,16 @@ typedef struct {
     BSP_CAN_t can;
     MOTOR_LZ_t *motors[MOTOR_LZ_MAX_MOTORS];
     uint8_t motor_count;
+    /* C++ motor 适配层：由 C++ 对象持有生命周期的外部实例。 */
     MOTOR_LZ_t *external_motors[MOTOR_LZ_MAX_MOTORS];
     uint8_t external_motor_count;
 } MOTOR_LZ_CANManager_t;
 
 /* Exported functions prototypes -------------------------------------------- */
+
+/* -------------------------------------------------------------------------- */
+/* 原生 C 驱动接口：初始化、注册、反馈更新、协议控制帧与状态控制。 */
+/* -------------------------------------------------------------------------- */
 
 /**
  * @brief 初始化灵足电机驱动系统
@@ -116,14 +121,6 @@ int8_t MOTOR_LZ_Init(void);
  * @return 设备状态码
  */
 int8_t MOTOR_LZ_Register(MOTOR_LZ_Param_t *param);
-
-/**
- * @brief 将外部分配的灵足电机实例附着到底层驱动
- * @param param 电机参数
- * @param external_motor 外部实例存储，生命周期需覆盖整个使用期
- * @return 设备状态码
- */
-int8_t MOTOR_LZ_AttachExternal(MOTOR_LZ_Param_t *param, MOTOR_LZ_t *external_motor);
 
 /**
  * @brief 更新指定电机数据
@@ -213,6 +210,19 @@ int8_t MOTOR_LZ_Relax(MOTOR_LZ_Param_t *param);
  * @return 设备状态码
  */
 int8_t MOTOR_LZ_Offline(MOTOR_LZ_Param_t *param);
+
+/* -------------------------------------------------------------------------- */
+/* C++ motor 适配接口：protocol/motor_t 使用的外部实例与原始反馈读取。 */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * @brief 将外部分配的灵足电机实例附着到底层驱动
+ * @param param 电机参数
+ * @param external_motor 外部实例存储，生命周期需覆盖整个使用期
+ * @return 设备状态码
+ * @note C++ motor 框架专用；外部实例由 C++ 对象持有，不由 C 驱动分配/释放。
+ */
+int8_t MOTOR_LZ_AttachExternal(MOTOR_LZ_Param_t *param, MOTOR_LZ_t *external_motor);
 
 const MOTOR_LZ_RawFeedback_t* MOTOR_LZ_GetRawFeedback(MOTOR_LZ_Param_t *param);
 

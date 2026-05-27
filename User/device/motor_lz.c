@@ -57,7 +57,9 @@ static float MOTOR_LZ_GetTorqueRangeNm(MOTOR_LZ_Module_t module);
 static int8_t MOTOR_LZ_SendExtFrame(BSP_CAN_t can, uint32_t ext_id, uint8_t *data, uint8_t dlc);
 static uint32_t MOTOR_LZ_IdParser(uint32_t original_id, BSP_CAN_FrameType_t frame_type);
 
-/* Private functions -------------------------------------------------------- */
+/* -------------------------------------------------------------------------- */
+/* 协议层/管理层：LZ 扩展帧编解码、ID 解析器、CAN 管理器与电机查找绑定。 */
+/* -------------------------------------------------------------------------- */
 
 /**
  * @brief 获取CAN管理器
@@ -274,7 +276,9 @@ static void MOTOR_LZ_Decode(MOTOR_LZ_t *motor, BSP_CAN_Message_t *msg) {
     motor->motor.header.last_online_time = BSP_TIME_Get();
 }
 
-/* Exported functions ------------------------------------------------------- */
+/* -------------------------------------------------------------------------- */
+/* 原生 C 驱动接口：初始化、注册、反馈更新、协议控制帧与状态控制。 */
+/* -------------------------------------------------------------------------- */
 
 /**
  * @brief 初始化灵足电机驱动系统
@@ -486,7 +490,7 @@ int8_t MOTOR_LZ_Offline(MOTOR_LZ_Param_t *param) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* 为 C++ motor 封装层提供服务的 C 接口函数（当前主路径为 protocol/motor_t） */
+/* C++ motor 适配接口：protocol/motor_t 使用的外部实例与原始反馈读取。 */
 /* -------------------------------------------------------------------------- */
 
 /* C++ 驱动层将外部持有的 vendor instance 绑定到 C 管理器。 */

@@ -110,7 +110,7 @@ float MotorProtocol<MotorKind::RM, Model>::AccumulateRotorPosition(float single_
         : kDefaultResyncDeltaRad;
 
     if (fabsf(delta) > delta_limit) {
-        SyncRotorPosition(single_turn_rotor_position_rad);
+        last_single_turn_rotor_position_rad_ = single_turn_rotor_position_rad;
         return accumulated_rotor_position_rad_;
     }
 
@@ -287,7 +287,7 @@ int8_t MotorProtocol<MotorKind::RM, Model>::Disable() {
     }
     last_non_fault_protocol_state_ = MotorProtocolState::Disabled;
     state_.protocol_state = last_non_fault_protocol_state_;
-    return MOTOR_RM_Ctrl(&param_);
+    return DEVICE_OK;
 }
 
 template <MotorModel Model>
@@ -299,7 +299,7 @@ int8_t MotorProtocol<MotorKind::RM, Model>::Relax() {
     }
     last_non_fault_protocol_state_ = MotorProtocolState::Enabled;
     state_.protocol_state = last_non_fault_protocol_state_;
-    return MOTOR_RM_Ctrl(&param_);
+    return DEVICE_OK;
 }
 
 template <MotorModel Model>
@@ -331,16 +331,13 @@ int8_t MotorProtocol<MotorKind::RM, Model>::CommitCommand() {
         state_.last_commit_ok = false;
         return ret;
     }
-    ret = MOTOR_RM_Ctrl(&param_);
     debug_.pending_valid = pending_valid_;
     debug_.pending_torque_current = pending_torque_current_;
-    debug_.last_commit_ret = ret;
+    debug_.last_commit_ret = DEVICE_OK;
     debug_.last_commit_skipped = false;
-    state_.last_commit_ok = (ret == DEVICE_OK);
-    if (ret == DEVICE_OK) {
-        ClearPendingCommand();
-    }
-    return ret;
+    state_.last_commit_ok = true;
+    ClearPendingCommand();
+    return DEVICE_OK;
 }
 
 template <MotorModel Model>
