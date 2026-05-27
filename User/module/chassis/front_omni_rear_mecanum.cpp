@@ -652,10 +652,6 @@ int8_t FrontOmniRearMecanumController::RegisterWheels(float target_freq) {
     controller_config.sample_freq =
         (param_->controller.sample_freq > 0.0f) ? param_->controller.sample_freq
                                                 : target_freq;
-    controller_config.position_to_velocity_limit =
-        param_->controller.position_to_velocity_limit;
-    controller_config.velocity_to_torque_limit =
-        param_->controller.velocity_to_torque_limit;
 
     mr::wheel::RmM3508WheelConfig wheel_config{};
     wheel_config.motor_param = param_->motor_param[i];

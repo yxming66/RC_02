@@ -28,7 +28,6 @@ constexpr float kMinDtS = 0.0005f;
 constexpr float kMaxDtS = 0.050f;
 constexpr float kDefaultSampleFreqHz = 500.0f;
 constexpr float kDefaultMoveVelocityRadS = 1.0f;
-constexpr float kDefaultMoveAccelRadS2 = 30.0f;
 constexpr float kDefaultArriveThresholdRad = 0.03f;
 constexpr float kDefaultOnlineWaitTimeoutS = 1.5f;
 
@@ -72,10 +71,6 @@ mr::motor::MotorControllerConfig BuildControllerConfig(
   config.sample_freq =
       PositiveOr(param->controller.sample_freq,
                  PositiveOr(target_freq, kDefaultSampleFreqHz));
-  config.position_to_velocity_limit =
-      scalar::positive_or_zero(param->controller.position_to_velocity_limit[axis]);
-  config.velocity_to_torque_limit =
-      scalar::positive_or_zero(param->controller.velocity_to_torque_limit[axis]);
   config.feedback_lowpass_cutoff_hz =
       scalar::positive_or_zero(param->controller.feedback_lowpass_cutoff_hz[axis]);
   config.output_lowpass_cutoff_hz =
@@ -256,50 +251,6 @@ float AxisTravel(const OreStore_Params_t *param, uint8_t axis) {
 float AxisMoveVelocity(const OreStore_Params_t *param, uint8_t axis) {
   return PositiveOr(param->limit.move_velocity_rad_s[axis],
                     kDefaultMoveVelocityRadS);
-}
-
-float AxisMoveAccel(const OreStore_Params_t *param, uint8_t axis) {
-  return PositiveOr(param->limit.move_accel_rad_s2[axis],
-                    kDefaultMoveAccelRadS2);
-}
-
-float UpdateAxisMotionProfile(OreStore_t *store, uint8_t axis,
-                              float target_position_rad) {
-  const float dt_s = scalar::positive_or_zero(store->dt);
-  const float max_velocity = AxisMoveVelocity(store->param, axis);
-  const float max_accel = AxisMoveAccel(store->param, axis);
-  if (dt_s <= 0.0f || max_velocity <= 0.0f || max_accel <= 0.0f) {
-    store->command_velocity_rad_s[axis] = 0.0f;
-    store->tracked_position_rad[axis] = target_position_rad;
-    return target_position_rad;
-  }
-
-  const float position_error = target_position_rad - store->tracked_position_rad[axis];
-  const float stop_distance =
-      (store->command_velocity_rad_s[axis] * store->command_velocity_rad_s[axis]) /
-      (2.0f * max_accel);
-  float desired_velocity = 0.0f;
-  if (fabsf(position_error) > 0.0001f) {
-    desired_velocity = (position_error > 0.0f) ? max_velocity : -max_velocity;
-    if (fabsf(position_error) <= stop_distance) {
-      desired_velocity = 0.0f;
-    }
-  }
-
-  const float max_delta_velocity = max_accel * dt_s;
-  store->command_velocity_rad_s[axis] = scalar::move_towards(
-      store->command_velocity_rad_s[axis], desired_velocity, max_delta_velocity);
-
-  float next_position =
-      store->tracked_position_rad[axis] + store->command_velocity_rad_s[axis] * dt_s;
-  if ((position_error > 0.0f && next_position > target_position_rad) ||
-      (position_error < 0.0f && next_position < target_position_rad)) {
-    next_position = target_position_rad;
-    store->command_velocity_rad_s[axis] = 0.0f;
-  }
-
-  store->tracked_position_rad[axis] = next_position;
-  return next_position;
 }
 
 float AxisSeekVelocity(const OreStore_Params_t *param, uint8_t axis) {
@@ -649,8 +600,8 @@ int8_t ActiveAxis(OreStore_t *store, const OreStore_CMD_t *cmd, uint8_t axis) {
   const float requested_target = CommandTarget(cmd, axis);
   store->target_position_rad[axis] = requested_target;
   const float limited_target = limit->ClampPosition(requested_target);
-  (void)UpdateAxisMotionProfile(store, axis, limited_target);
-  store->command_position_rad[axis] = store->tracked_position_rad[axis];
+  store->tracked_position_rad[axis] = limited_target;
+  store->command_position_rad[axis] = limited_target;
   const float raw_target = store->zero_offset_rad[axis] + store->command_position_rad[axis];
 
   if (store->control_mode == ORE_STORE_CONTROL_MIT_STYLE) {

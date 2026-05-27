@@ -95,8 +95,6 @@ typedef struct {
   } limit;
   struct {
     float sample_freq;
-    float position_to_velocity_limit;
-    float velocity_to_torque_limit;
   } controller;
   struct {
     float lateral_vy_to_wz_feedforward; /* wz_ff = gain * vy, rad/m. */

@@ -58,6 +58,11 @@
 #endif
 #ifndef RC_MANUAL_IO_CH_THRESHOLD
 #define RC_MANUAL_IO_CH_THRESHOLD (0.90f)
+
+#define RC_CHASSIS_VX_SCALE (2.0f)
+#define RC_CHASSIS_VY_SCALE (2.0f)
+#define RC_CHASSIS_WZ_SCALE (3.0f)
+
 #endif
 
 /* USER STRUCT BEGIN */
@@ -719,9 +724,9 @@ static void Rc_SetArmSimpleOperator(float scale) {
 
 static void Rc_SetChassisRemote(void) {
   chassis_cmd.mode = CHASSIS_MODE_INDEPENDENT;
-  chassis_cmd.ctrl_vec.vx = dr16.data.ch_r_y;
-  chassis_cmd.ctrl_vec.vy = -dr16.data.ch_r_x;
-  chassis_cmd.ctrl_vec.wz = -dr16.data.ch_l_x;
+  chassis_cmd.ctrl_vec.vx = dr16.data.ch_r_y * RC_CHASSIS_VX_SCALE;
+  chassis_cmd.ctrl_vec.vy = -dr16.data.ch_r_x * RC_CHASSIS_VY_SCALE;
+  chassis_cmd.ctrl_vec.wz = -dr16.data.ch_l_x * RC_CHASSIS_WZ_SCALE;
 }
 
 #if defined(RC_AUTO_CTRL_DRY_RUN_ENABLED)

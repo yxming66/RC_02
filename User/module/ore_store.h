@@ -89,8 +89,6 @@ typedef struct {
 
   struct {
     float sample_freq;
-    float position_to_velocity_limit[ORE_STORE_AXIS_NUM];
-    float velocity_to_torque_limit[ORE_STORE_AXIS_NUM];
     float feedback_lowpass_cutoff_hz[ORE_STORE_AXIS_NUM];
     float output_lowpass_cutoff_hz[ORE_STORE_AXIS_NUM];
   } controller;
@@ -100,7 +98,6 @@ typedef struct {
     float travel_rad[ORE_STORE_AXIS_NUM];
     float lower_seek_velocity_rad_s[ORE_STORE_AXIS_NUM];
     float move_velocity_rad_s[ORE_STORE_AXIS_NUM];
-    float move_accel_rad_s2[ORE_STORE_AXIS_NUM];
     float arrive_threshold_rad[ORE_STORE_AXIS_NUM];
   } limit;
 
@@ -199,7 +196,6 @@ typedef struct {
   float target_position_rad[ORE_STORE_AXIS_NUM];
   float tracked_position_rad[ORE_STORE_AXIS_NUM];
   float command_position_rad[ORE_STORE_AXIS_NUM];
-  float command_velocity_rad_s[ORE_STORE_AXIS_NUM];
   float velocity_setpoint_rad_s[ORE_STORE_AXIS_NUM];
   bool fixed_ore_cylinder_closed;
   int8_t power_on_assume_ret[ORE_STORE_AXIS_NUM];

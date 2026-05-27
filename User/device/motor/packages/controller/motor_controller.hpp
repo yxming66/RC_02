@@ -40,14 +40,38 @@ struct MotorControllerConfig {
     // 控制器采样频率 Hz。<=0 时回退到 PID 库默认频率。
     float sample_freq;
 
-    // 位置环输出速度目标的限幅 rad/s。<=0 时按电机 Traits 推荐/额定/最大速度回退。
-    float position_to_velocity_limit;
-    // 速度环输出力矩目标的限幅 N*m。<=0 时按电机 Traits 电流/力矩参数回退。
-    float velocity_to_torque_limit;
     // 反馈位置和速度的一阶低通截止频率 Hz。<=0 时禁用反馈滤波。
     float feedback_lowpass_cutoff_hz;
     // 输出力矩的一阶低通截止频率 Hz。<=0 时禁用输出滤波。
     float output_lowpass_cutoff_hz;
+
+        constexpr MotorControllerConfig()
+                : velocity_pid(nullptr),
+                    position_pid(nullptr),
+                    sample_freq(0.0f),
+                    feedback_lowpass_cutoff_hz(0.0f),
+                    output_lowpass_cutoff_hz(0.0f) {}
+
+        constexpr MotorControllerConfig(const KPID_Params_t* velocity,
+                                                                        const KPID_Params_t* position,
+                                                                        float sample,
+                                                                        float feedback_cutoff,
+                                                                        float output_cutoff)
+                : velocity_pid(velocity),
+                    position_pid(position),
+                    sample_freq(sample),
+                    feedback_lowpass_cutoff_hz(feedback_cutoff),
+                    output_lowpass_cutoff_hz(output_cutoff) {}
+
+        constexpr MotorControllerConfig(const KPID_Params_t* velocity,
+                                                                        const KPID_Params_t* position,
+                                                                        float sample,
+                                                                        float,
+                                                                        float,
+                                                                        float feedback_cutoff,
+                                                                        float output_cutoff)
+                : MotorControllerConfig(velocity, position, sample, feedback_cutoff,
+                                                                output_cutoff) {}
 };
 
 template <typename MotorType>
@@ -125,8 +149,6 @@ private:
     };
 
     float UpdateControlDt();
-    float ResolveVelocityLimit(float request_limit) const;
-    float ResolveTorqueLimit(float request_limit) const;
     float LowpassAlpha(float cutoff_hz, float dt_s) const;
     void ResetFiltersToState();
     MotorState FilterFeedback(const MotorState& state, float dt_s);
@@ -153,8 +175,6 @@ private:
     float target_torque_;
     float target_velocity_;
     float target_position_;
-    float position_velocity_limit_;
-    float velocity_torque_limit_;
     float target_mit_kp_;
     float target_mit_kd_;
     float target_mit_torque_ff_;
