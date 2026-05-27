@@ -75,9 +75,11 @@ typedef struct {
 typedef struct {
     BSP_CAN_t can;
     MOTOR_RM_MsgOutput_t output_msg;
+    /* 缓存后统一发送：记录哪些 RM 控制帧组已写入缓存。 */
     uint8_t pending_tx_groups;
     MOTOR_RM_t *motors[MOTOR_RM_MAX_MOTORS];
     uint8_t motor_count;
+  /* C++ motor 适配层：由 C++ 对象持有生命周期的外部实例。 */
   MOTOR_RM_t *external_motors[MOTOR_RM_MAX_MOTORS];
   uint8_t external_motor_count;
 } MOTOR_RM_CANManager_t;
@@ -108,20 +110,16 @@ typedef struct {
 
 /* Exported functions prototypes -------------------------------------------- */
 
+/* -------------------------------------------------------------------------- */
+/* 原生 C 驱动接口：注册、反馈更新、兼容输出、直接组帧发送与状态控制。 */
+/* -------------------------------------------------------------------------- */
+
 /**
  * @brief 注册一个RM电机
  * @param param 电机参数
  * @return 
  */
 int8_t MOTOR_RM_Register(MOTOR_RM_Param_t *param);
-
-/**
- * @brief 将外部分配的 RM 电机实例附着到底层驱动
- * @param param 电机参数
- * @param external_motor 外部实例存储，生命周期需覆盖整个使用期
- * @return 设备状态码
- */
-int8_t MOTOR_RM_AttachExternal(MOTOR_RM_Param_t *param, MOTOR_RM_t *external_motor);
 
 /**
  * @brief 更新指定电机数据
@@ -134,22 +132,11 @@ int8_t MOTOR_RM_Update(MOTOR_RM_Param_t *param);
  * @brief 设置一个电机的归一化输出（底层兼容接口）
  * @param param 电机参数
  * @param value 输出值，范围[-1.0, 1.0]
- * @note 这是底层发送接口，保留给旧代码或直接比例输出场景使用。
- *       C++ 电机驱动的力矩控制链路不应直接调用它，而应优先使用
- *       MOTOR_RM_SetTorqueCurrent()，先完成“输出轴力矩 -> 转子侧电流”的物理量换算。
+ * @note 该接口只写入 CAN 管理器的输出缓存；随后调用 MOTOR_RM_Ctrl()
+ *       或 MOTOR_RM_FlushGroup()/MOTOR_RM_FlushCAN() 发送对应控制帧组。
  * @return 
  */
 int8_t MOTOR_RM_SetOutput(MOTOR_RM_Param_t *param, float value);
-
-/**
- * @brief 设置一个电机的转子侧电流命令（C++ 力矩控制主入口）
- * @param param 电机参数
- * @param current_a 转子侧目标电流，单位 A
- * @note C++ RM 驱动会先将目标输出轴力矩按转矩常数、减速比、外部传动比
- *       换算为转子侧电流（A），本接口再统一完成 A -> RM raw 指令值 的换算。
- * @return
- */
-int8_t MOTOR_RM_SetTorqueCurrent(MOTOR_RM_Param_t *param, float current_a);
 
 /**
  * @brief 发送控制命令到电机，注意一个CAN可以控制多个电机，所以只需要发送一次即可
@@ -162,21 +149,21 @@ int8_t MOTOR_RM_SetTorqueCurrent(MOTOR_RM_Param_t *param, float current_a);
 int8_t MOTOR_RM_Ctrl(MOTOR_RM_Param_t *param);
 
 /**
- * @brief 发送指定电机所属 RM 控制帧组的缓存命令。
+ * @brief 按 C 驱动缓存发送方式，发送指定电机所属 RM 控制帧组的缓存命令。
  * @param param 电机参数，用于定位 CAN 与控制帧组
  * @return 设备状态码
  */
 int8_t MOTOR_RM_FlushGroup(MOTOR_RM_Param_t *param);
 
 /**
- * @brief 发送指定 CAN 上所有待发送的 RM 控制帧组。
+ * @brief 按 C 驱动缓存发送方式，发送指定 CAN 上所有待发送的 RM 控制帧组。
  * @param can CAN 总线
  * @return 设备状态码
  */
 int8_t MOTOR_RM_FlushCAN(BSP_CAN_t can);
 
 /**
- * @brief 发送所有 CAN 上所有待发送的 RM 控制帧组。
+ * @brief 按 C 驱动缓存发送方式，发送所有 CAN 上所有待发送的 RM 控制帧组。
  * @return 设备状态码
  */
 int8_t MOTOR_RM_FlushAll(void);
@@ -208,6 +195,29 @@ int8_t MOTOR_RM_Offine(MOTOR_RM_Param_t *param);
  * @return 
  */
 int8_t MOTOR_RM_UpdateAll(void);
+
+/* -------------------------------------------------------------------------- */
+/* C++ motor 适配接口：protocol/motor_t 使用的外部实例、物理量命令、Flush 与调试。 */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * @brief 将外部分配的 RM 电机实例附着到底层驱动
+ * @param param 电机参数
+ * @param external_motor 外部实例存储，生命周期需覆盖整个使用期
+ * @return 设备状态码
+ * @note C++ motor 框架专用；外部实例由 C++ 对象持有，不由 C 驱动分配/释放。
+ */
+int8_t MOTOR_RM_AttachExternal(MOTOR_RM_Param_t *param, MOTOR_RM_t *external_motor);
+
+/**
+ * @brief 设置一个电机的转子侧电流命令（C++ 力矩控制主入口）
+ * @param param 电机参数
+ * @param current_a 转子侧目标电流，单位 A
+ * @note C++ RM 驱动会先将目标输出轴力矩按转矩常数、减速比、外部传动比
+ *       换算为转子侧电流（A），本接口再统一完成 A -> RM raw 指令值 的换算。
+ * @return
+ */
+int8_t MOTOR_RM_SetTorqueCurrent(MOTOR_RM_Param_t *param, float current_a);
 
 const MOTOR_RM_RawFeedback_t* MOTOR_RM_GetRawFeedback(MOTOR_RM_Param_t *param);
 

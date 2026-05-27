@@ -905,25 +905,17 @@ void OreStore_Output(OreStore_t *store) {
   SharedValve_SetOreStoreRequest(store->fixed_ore_cylinder_closed);
   SharedValve_Output();
 
-  bool can_flush_requested[BSP_CAN_NUM] = {};
   for (uint8_t axis = 0; axis < ORE_STORE_AXIS_NUM; ++axis) {
     if (store->controller[axis] == nullptr) {
       store->debug.commit_ret[axis] = DEVICE_ERR_NULL;
     } else {
       store->debug.commit_ret[axis] = ControllerCommit(store, axis);
-      if (store->debug.commit_ret[axis] == DEVICE_OK &&
-          store->param->motor_param[axis].can < BSP_CAN_NUM) {
-        can_flush_requested[store->param->motor_param[axis].can] = true;
-      }
     }
     RefreshDebugAxis(store, axis);
   }
 
-  for (uint8_t can = 0; can < BSP_CAN_NUM; ++can) {
-    if (can_flush_requested[can]) {
-      (void)MOTOR_RM_FlushCAN(static_cast<BSP_CAN_t>(can));
-    }
-  }
+  (void)MOTOR_RM_Ctrl((MOTOR_RM_Param_t *)&store->param->motor_param[ORE_STORE_AXIS_PLATFORM]);
+  (void)MOTOR_RM_Ctrl((MOTOR_RM_Param_t *)&store->param->motor_param[ORE_STORE_AXIS_GATE_LEFT]);
 }
 
 void OreStore_ResetOutput(OreStore_t *store) {

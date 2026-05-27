@@ -60,12 +60,13 @@ float MotorProtocol<MotorKind::RM, Model>::TotalRatio() const {
 
 template <MotorModel Model>
 float MotorProtocol<MotorKind::RM, Model>::ToTorqueCurrent(float output_torque_nm) const {
+    const float signed_torque = install_.reverse_output ? -output_torque_nm : output_torque_nm;
     const float torque_constant = (MotorTraits<MotorKind::RM, Model>::kTorqueConstant > 0.0f) ? MotorTraits<MotorKind::RM, Model>::kTorqueConstant : 0.0f;
     const float total_ratio = TotalRatio();
     if (torque_constant <= 0.0f || total_ratio <= 0.0f) {
         return 0.0f;
     }
-    return output_torque_nm / (torque_constant * total_ratio);
+    return signed_torque / (torque_constant * total_ratio);
 }
 
 template <MotorModel Model>
@@ -109,7 +110,7 @@ float MotorProtocol<MotorKind::RM, Model>::AccumulateRotorPosition(float single_
         : kDefaultResyncDeltaRad;
 
     if (fabsf(delta) > delta_limit) {
-        SyncRotorPosition(single_turn_rotor_position_rad);
+        last_single_turn_rotor_position_rad_ = single_turn_rotor_position_rad;
         return accumulated_rotor_position_rad_;
     }
 
@@ -244,6 +245,12 @@ void MotorProtocol<MotorKind::RM, Model>::RefreshStateCache() {
     }
     debug_.last_error_code = error_code;
 
+    if (install_.reverse_output) {
+        next.position_rad = -next.position_rad;
+        next.position_single_turn_rad = WrapToPi(-next.position_single_turn_rad);
+        next.velocity_rad_s = -next.velocity_rad_s;
+        next.torque_nm = -next.torque_nm;
+    }
     last_online_ = next.online;
     state_ = next;
 }

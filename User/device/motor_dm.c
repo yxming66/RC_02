@@ -40,6 +40,10 @@
 /* Private variables -------------------------------------------------------- */
 static MOTOR_DM_CANManager_t *can_managers[BSP_CAN_NUM] = {NULL};
 
+/* -------------------------------------------------------------------------- */
+/* 协议层/管理层：DM CAN 编解码、CAN 管理器与电机查找绑定。 */
+/* -------------------------------------------------------------------------- */
+
 static int float_to_uint(float x_float, float x_min, float x_max, int bits)
 {
 	/* Converts a float to an unsigned int, given range and number of bits */
@@ -363,7 +367,9 @@ static int8_t MOTOR_DM_BindExternalMotor(MOTOR_DM_CANManager_t *manager, MOTOR_D
     return DEVICE_OK;
 }
 
-/* Exported functions ------------------------------------------------------- */
+/* -------------------------------------------------------------------------- */
+/* 原生 C 驱动接口：注册、反馈更新、协议控制帧与状态控制。 */
+/* -------------------------------------------------------------------------- */
 
 /**
  * @brief 注册一个DM电机
@@ -711,7 +717,7 @@ int8_t MOTOR_DM_Offine(MOTOR_DM_Param_t *param) {
 
 
 /* -------------------------------------------------------------------------- */
-/* 为 C++ motor 封装层提供服务的 C 接口函数（当前主路径为 protocol/motor_t） */
+/* C++ motor 适配接口：protocol/motor_t 使用的外部实例与原始反馈读取。 */
 /* -------------------------------------------------------------------------- */
 
 /* C++ 驱动层将外部持有的 vendor instance 绑定到 C 管理器。 */

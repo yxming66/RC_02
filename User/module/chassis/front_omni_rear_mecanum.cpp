@@ -329,7 +329,6 @@ int8_t FrontOmniRearMecanumController::Control(const Chassis_CMD_t &cmd,
 }
 
 void FrontOmniRearMecanumController::Output() {
-  bool can_flush_requested[BSP_CAN_NUM] = {};
   for (uint8_t i = 0; i < kWheelCount; ++i) {
     Wheel *wheel = wheels_[i];
     if (wheel == nullptr) {
@@ -342,38 +341,26 @@ void FrontOmniRearMecanumController::Output() {
     out_.commit_ret[i] = wheel->CommitCommand();
     out_.command_pending[i] = wheel->HasPendingCommand();
     out_.last_commit_ok[i] = (out_.commit_ret[i] == DEVICE_OK);
-    if (param_ != nullptr && out_.commit_ret[i] == DEVICE_OK &&
-        param_->motor_param[i].can < BSP_CAN_NUM) {
-      can_flush_requested[param_->motor_param[i].can] = true;
-    }
     StoreWheelDebug(i);
   }
 
-  for (uint8_t can = 0; can < BSP_CAN_NUM; ++can) {
-    if (can_flush_requested[can]) {
-      (void)MOTOR_RM_FlushCAN(static_cast<BSP_CAN_t>(can));
-    }
+  if (param_ != nullptr) {
+    (void)MOTOR_RM_Ctrl(const_cast<MOTOR_RM_Param_t *>(&param_->motor_param[0]));
   }
 }
 
 void FrontOmniRearMecanumController::ResetOutput() {
-  bool can_flush_requested[BSP_CAN_NUM] = {};
   for (uint8_t i = 0; i < kWheelCount; ++i) {
     Wheel *wheel = wheels_[i];
     if (wheel != nullptr) {
       wheel->Relax();
-      if (param_ != nullptr && param_->motor_param[i].can < BSP_CAN_NUM) {
-        can_flush_requested[param_->motor_param[i].can] = true;
-      }
       out_.motor[i] = 0.0f;
       out_.command_pending[i] = false;
     }
   }
 
-  for (uint8_t can = 0; can < BSP_CAN_NUM; ++can) {
-    if (can_flush_requested[can]) {
-      (void)MOTOR_RM_FlushCAN(static_cast<BSP_CAN_t>(can));
-    }
+  if (param_ != nullptr) {
+    (void)MOTOR_RM_Ctrl(const_cast<MOTOR_RM_Param_t *>(&param_->motor_param[0]));
   }
 }
 

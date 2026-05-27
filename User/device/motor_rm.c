@@ -52,6 +52,7 @@
 
 /* Private variables -------------------------------------------------------- */
 static MOTOR_RM_CANManager_t *can_managers[BSP_CAN_NUM] = {NULL};
+/* C++ motor 适配层调试快照：记录最近一次 RM 组帧发送。 */
 static MOTOR_RM_TxDebug_t motor_rm_tx_debug = {0};
 MOTOR_RM_SlotTxDebug_t g_motor_rm_slot_tx_debug[MOTOR_RM_MAX_MOTORS] = {0};
 
@@ -190,7 +191,6 @@ static int8_t MOTOR_RM_SendGroup(MOTOR_RM_CANManager_t *manager,
     MOTOR_RM_UpdateTxDebug(manager, &tx_frame, source_motor_id, logical_index);
     const int8_t ret = BSP_CAN_TransmitStdDataFrame(manager->can, &tx_frame) == BSP_OK ? DEVICE_OK : DEVICE_ERR;
     if (ret == DEVICE_OK) {
-        manager->pending_tx_groups &= (uint8_t)~MOTOR_RM_TX_GROUP_MASK(group);
         motor_rm_tx_debug.pending_tx_groups = manager->pending_tx_groups;
         motor_rm_tx_debug.flush_count++;
     }
@@ -345,6 +345,23 @@ static int8_t MOTOR_RM_BindExternalMotor(MOTOR_RM_CANManager_t *manager, MOTOR_R
     return DEVICE_OK;
 }
 
+static MOTOR_RM_Param_t* MOTOR_RM_FindParamByTxGroup(MOTOR_RM_CANManager_t *manager, uint8_t group) {
+    if (manager == NULL) return NULL;
+    for (int i = 0; i < manager->motor_count; i++) {
+        MOTOR_RM_t *motor = manager->motors[i];
+        if (motor != NULL && MOTOR_RM_GetTxGroup(&motor->param) == (int8_t)group) {
+            return &motor->param;
+        }
+    }
+    for (int i = 0; i < manager->external_motor_count; i++) {
+        MOTOR_RM_t *motor = manager->external_motors[i];
+        if (motor != NULL && MOTOR_RM_GetTxGroup(&motor->param) == (int8_t)group) {
+            return &motor->param;
+        }
+    }
+    return NULL;
+}
+
 /* Exported functions ------------------------------------------------------- */
 
 int8_t MOTOR_RM_Register(MOTOR_RM_Param_t *param) {
@@ -409,10 +426,13 @@ int8_t MOTOR_RM_UpdateAll(void) {
     return ret;
 }
 
+/* -------------------------------------------------------------------------- */
+/* 原生 C 驱动接口：兼容旧模块的归一化输出、立即组帧发送与状态控制。 */
+/* -------------------------------------------------------------------------- */
+
 /*
  * 底层兼容接口：输入为归一化输出值 [-1, 1]。
  * 主要保留给旧代码或直接比例输出场景使用。
- * 若上层按“目标力矩”控制 RM 电机，应优先走 MOTOR_RM_SetTorqueCurrent()。
  */
 int8_t MOTOR_RM_SetOutput(MOTOR_RM_Param_t *param, float value) {
     if (param == NULL) return DEVICE_ERR_NULL;
@@ -434,21 +454,6 @@ int8_t MOTOR_RM_SetOutput(MOTOR_RM_Param_t *param, float value) {
     return DEVICE_OK;
 }
 
-/*
- * C++ RM 驱动的主下发接口：输入为转子侧目标电流，单位 A。
- * 上层先完成“输出轴力矩 -> 转子侧电流(A)”换算，这里再统一完成
- * “电流(A) -> RM raw 指令值”的映射并写入发送缓存。
- */
-int8_t MOTOR_RM_SetTorqueCurrent(MOTOR_RM_Param_t *param, float current_a) {
-    if (param == NULL) return DEVICE_ERR_NULL;
-    const float lsb = (float)MOTOR_RM_GetLSB(param->module);
-    const float current_range_a = MOTOR_RM_GetCurrentRangeAmp(param->module);
-    if (lsb <= 0.0f || current_range_a <= 0.0f) return DEVICE_ERR;
-    const float raw_current = current_a * lsb / current_range_a;
-    const float normalized = raw_current / lsb;
-    return MOTOR_RM_SetOutput(param, normalized);
-}
-
 int8_t MOTOR_RM_Ctrl(MOTOR_RM_Param_t *param) {
     if (param == NULL) return DEVICE_ERR_NULL;
     MOTOR_RM_CANManager_t *manager = MOTOR_RM_GetCANManager(param->can);
@@ -468,8 +473,7 @@ int8_t MOTOR_RM_FlushGroup(MOTOR_RM_Param_t *param) {
     if ((manager->pending_tx_groups & MOTOR_RM_TX_GROUP_MASK((uint8_t)group)) == 0u) {
         return DEVICE_OK;
     }
-    const int8_t logical_index = MOTOR_RM_GetLogicalIndex(param->id, param->module);
-    return MOTOR_RM_SendGroup(manager, (uint8_t)group, param->id, logical_index);
+    return MOTOR_RM_Ctrl(param);
 }
 
 int8_t MOTOR_RM_FlushCAN(BSP_CAN_t can) {
@@ -481,7 +485,8 @@ int8_t MOTOR_RM_FlushCAN(BSP_CAN_t can) {
          group <= MOTOR_RM_TX_GROUP_GM6020_HIGH;
          group++) {
         if ((pending & MOTOR_RM_TX_GROUP_MASK(group)) == 0u) continue;
-        if (MOTOR_RM_SendGroup(manager, group, 0u, DEVICE_ERR) != DEVICE_OK) {
+        MOTOR_RM_Param_t *param = MOTOR_RM_FindParamByTxGroup(manager, group);
+        if (param == NULL || MOTOR_RM_Ctrl(param) != DEVICE_OK) {
             ret = DEVICE_ERR;
         }
     }
@@ -521,7 +526,7 @@ int8_t MOTOR_RM_Offine(MOTOR_RM_Param_t *param) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* 为 C++ motor 封装层提供服务的 C 接口函数（当前主路径为 protocol/motor_t） */
+/* C++ motor 适配接口：protocol/motor_t 使用的外部实例、物理量命令、Flush 与调试。 */
 /* -------------------------------------------------------------------------- */
 
 /* C++ 驱动层将外部持有的 vendor instance 绑定到 C 管理器。 */
@@ -531,6 +536,17 @@ int8_t MOTOR_RM_AttachExternal(MOTOR_RM_Param_t *param, MOTOR_RM_t *external_mot
     MOTOR_RM_CANManager_t *manager = MOTOR_RM_GetCANManager(param->can);
     if (manager == NULL) return DEVICE_ERR;
     return MOTOR_RM_BindExternalMotor(manager, param, external_motor);
+}
+
+/* C++ RM 驱动的主下发接口：输入为转子侧目标电流，单位 A。 */
+int8_t MOTOR_RM_SetTorqueCurrent(MOTOR_RM_Param_t *param, float current_a) {
+    if (param == NULL) return DEVICE_ERR_NULL;
+    const float lsb = (float)MOTOR_RM_GetLSB(param->module);
+    const float current_range_a = MOTOR_RM_GetCurrentRangeAmp(param->module);
+    if (lsb <= 0.0f || current_range_a <= 0.0f) return DEVICE_ERR;
+    const float raw_current = current_a * lsb / current_range_a;
+    const float normalized = raw_current / lsb;
+    return MOTOR_RM_SetOutput(param, normalized);
 }
 
 /* C++ 驱动层读取底层原始反馈缓存。 */

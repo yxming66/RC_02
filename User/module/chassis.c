@@ -280,7 +280,7 @@ void Chassis_Output(Chassis_t *c) {
 
     MOTOR_RM_t *rm = c->motors[0];
     if (rm) {
-      MOTOR_RM_FlushGroup(&rm->param);
+        MOTOR_RM_Ctrl(&rm->param);
     }
 }
 
@@ -298,7 +298,7 @@ void Chassis_ResetOutput(Chassis_t *c) {
     }
   MOTOR_RM_t *rm = c->motors[0];
   if (rm) {
-    MOTOR_RM_FlushGroup(&rm->param);
+    MOTOR_RM_Ctrl(&rm->param);
   }
 }
 
