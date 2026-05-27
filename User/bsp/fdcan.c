@@ -61,6 +61,9 @@ typedef struct BSP_FDCAN_QueueNode {
     uint32_t can_id;
     osMessageQueueId_t queue;
     uint8_t queue_size;
+  bool latest_only;
+  volatile bool latest_valid;
+  BSP_FDCAN_Message_t latest_msg;
     struct BSP_FDCAN_QueueNode *next;
 } BSP_FDCAN_QueueNode_t;
 
@@ -75,8 +78,8 @@ static const uint8_t fdcan_dlc2len[16] = {0,1,2,3,4,5,6,7,8,12,16,20,24,32,48,64
 
 /* Private function prototypes ---------------------------------------------- */
 static BSP_FDCAN_t FDCAN_Get(FDCAN_HandleTypeDef *hfdcan);
-static osMessageQueueId_t BSP_FDCAN_FindQueue(BSP_FDCAN_t fdcan, uint32_t can_id);
-static int8_t BSP_FDCAN_CreateIdQueue(BSP_FDCAN_t fdcan, uint32_t can_id, uint8_t queue_size);
+static BSP_FDCAN_QueueNode_t *BSP_FDCAN_FindNode(BSP_FDCAN_t fdcan, uint32_t can_id);
+static int8_t BSP_FDCAN_CreateIdNode(BSP_FDCAN_t fdcan, uint32_t can_id, uint8_t queue_size, bool latest_only);
 static void BSP_FDCAN_RxFifo0Callback(void);
 static void BSP_FDCAN_RxFifo1Callback(void);
 static void BSP_FDCAN_TxCompleteCallback(void);
@@ -96,16 +99,23 @@ static BSP_FDCAN_t FDCAN_Get(FDCAN_HandleTypeDef *hfdcan) {
   else return BSP_FDCAN_ERR;
 }
 
-static osMessageQueueId_t BSP_FDCAN_FindQueue(BSP_FDCAN_t fdcan, uint32_t can_id) {
+static BSP_FDCAN_QueueNode_t *BSP_FDCAN_FindNode(BSP_FDCAN_t fdcan, uint32_t can_id) {
   BSP_FDCAN_QueueNode_t *node = queue_list;
   while (node != NULL) {
-    if (node->fdcan == fdcan && node->can_id == can_id) return node->queue;
+    if (node->fdcan == fdcan && node->can_id == can_id) return node;
     node = node->next;
   }
   return NULL;
 }
 
-static int8_t BSP_FDCAN_CreateIdQueue(BSP_FDCAN_t fdcan, uint32_t can_id, uint8_t queue_size) {
+static BSP_FDCAN_QueueNode_t *BSP_FDCAN_FindNodeNoWait(BSP_FDCAN_t fdcan, uint32_t can_id) {
+  if (osMutexAcquire(queue_mutex, 0u) != osOK) return NULL;
+  BSP_FDCAN_QueueNode_t *node = BSP_FDCAN_FindNode(fdcan, can_id);
+  osMutexRelease(queue_mutex);
+  return node;
+}
+
+static int8_t BSP_FDCAN_CreateIdNode(BSP_FDCAN_t fdcan, uint32_t can_id, uint8_t queue_size, bool latest_only) {
   if (queue_size == 0) queue_size = BSP_FDCAN_DEFAULT_QUEUE_SIZE;
   if (osMutexAcquire(queue_mutex, FDCAN_QUEUE_MUTEX_TIMEOUT) != osOK) return BSP_ERR_TIMEOUT;
   BSP_FDCAN_QueueNode_t *node = queue_list;
@@ -119,11 +129,15 @@ static int8_t BSP_FDCAN_CreateIdQueue(BSP_FDCAN_t fdcan, uint32_t can_id, uint8_
   
   BSP_FDCAN_QueueNode_t *new_node = (BSP_FDCAN_QueueNode_t *)BSP_Malloc(sizeof(BSP_FDCAN_QueueNode_t));
   if (new_node == NULL) { osMutexRelease(queue_mutex); return BSP_ERR_NULL; }
-  new_node->queue = osMessageQueueNew(queue_size, sizeof(BSP_FDCAN_Message_t), NULL);
-  if (new_node->queue == NULL) { BSP_Free(new_node); osMutexRelease(queue_mutex); return BSP_ERR; }
+  memset(new_node, 0, sizeof(BSP_FDCAN_QueueNode_t));
+  if (!latest_only) {
+    new_node->queue = osMessageQueueNew(queue_size, sizeof(BSP_FDCAN_Message_t), NULL);
+    if (new_node->queue == NULL) { BSP_Free(new_node); osMutexRelease(queue_mutex); return BSP_ERR; }
+  }
   new_node->fdcan = fdcan;
   new_node->can_id = can_id;
   new_node->queue_size = queue_size;
+  new_node->latest_only = latest_only;
   new_node->next = queue_list;
   queue_list = new_node;
   osMutexRelease(queue_mutex);
@@ -218,8 +232,8 @@ static void BSP_FDCAN_RxFifo0Callback(void) {
         uint32_t original_id = (rx_header.IdType == FDCAN_STANDARD_ID) ? rx_header.Identifier&0x7ff : rx_header.Identifier&0x1fffffff;
         BSP_FDCAN_FrameType_t frame_type = BSP_FDCAN_GetFrameType(&rx_header);
         uint32_t parsed_id = BSP_FDCAN_ParseId(original_id, frame_type);
-        osMessageQueueId_t queue = BSP_FDCAN_FindQueue((BSP_FDCAN_t)fdcan_idx, parsed_id);
-        if (queue != NULL) {
+        BSP_FDCAN_QueueNode_t *node = BSP_FDCAN_FindNode((BSP_FDCAN_t)fdcan_idx, parsed_id);
+        if (node != NULL) {
           BSP_FDCAN_Message_t msg;
           msg.frame_type = frame_type;
           msg.original_id = original_id;
@@ -229,7 +243,12 @@ static void BSP_FDCAN_RxFifo0Callback(void) {
           if (msg.dlc > BSP_FDCAN_MAX_DLC) msg.dlc = BSP_FDCAN_MAX_DLC;
           memset(msg.data, 0, BSP_FDCAN_MAX_DLC);//现在是最大缓冲区写法所以全清零
           memcpy(msg.data, rx_data, msg.dlc);
-          osMessageQueuePut(queue, &msg, 0, 0);
+          if (node->latest_only) {
+            node->latest_msg = msg;
+            node->latest_valid = true;
+          } else if (node->queue != NULL) {
+            osMessageQueuePut(node->queue, &msg, 0, 0);
+          }
         }
       } else {
           break;
@@ -249,8 +268,8 @@ static void BSP_FDCAN_RxFifo1Callback(void) {
         uint32_t original_id = (rx_header.IdType == FDCAN_STANDARD_ID) ? rx_header.Identifier&0x7ff : rx_header.Identifier&0x1fffffff;
         BSP_FDCAN_FrameType_t frame_type = BSP_FDCAN_GetFrameType(&rx_header);
         uint32_t parsed_id = BSP_FDCAN_ParseId(original_id, frame_type);
-        osMessageQueueId_t queue = BSP_FDCAN_FindQueue((BSP_FDCAN_t)fdcan_idx, parsed_id);
-        if (queue != NULL) {
+        BSP_FDCAN_QueueNode_t *node = BSP_FDCAN_FindNode((BSP_FDCAN_t)fdcan_idx, parsed_id);
+        if (node != NULL) {
           BSP_FDCAN_Message_t msg;
           msg.frame_type = frame_type;
           msg.original_id = original_id;
@@ -260,7 +279,12 @@ static void BSP_FDCAN_RxFifo1Callback(void) {
           if (msg.dlc > BSP_FDCAN_MAX_DLC) msg.dlc = BSP_FDCAN_MAX_DLC;
           memset(msg.data, 0, BSP_FDCAN_MAX_DLC);//现在是最大缓冲区写法所以全清零
           memcpy(msg.data, rx_data, msg.dlc);
-          osMessageQueuePut(queue, &msg, 0, 0);
+          if (node->latest_only) {
+            node->latest_msg = msg;
+            node->latest_valid = true;
+          } else if (node->queue != NULL) {
+            osMessageQueuePut(node->queue, &msg, 0, 0);
+          }
         }
       } else {
           break;
@@ -527,34 +551,63 @@ int8_t BSP_FDCAN_TransmitRemoteFrame(BSP_FDCAN_t fdcan, BSP_FDCAN_RemoteFrame_t 
 
 int8_t BSP_FDCAN_RegisterId(BSP_FDCAN_t fdcan, uint32_t can_id, uint8_t queue_size) {
     if (!inited) return BSP_ERR_INITED;
-    return BSP_FDCAN_CreateIdQueue(fdcan, can_id, queue_size);
+    return BSP_FDCAN_CreateIdNode(fdcan, can_id, queue_size, false);
+}
+
+int8_t BSP_FDCAN_RegisterLatestId(BSP_FDCAN_t fdcan, uint32_t can_id) {
+    if (!inited) return BSP_ERR_INITED;
+    return BSP_FDCAN_CreateIdNode(fdcan, can_id, 1u, true);
 }
 
 int8_t BSP_FDCAN_GetMessage(BSP_FDCAN_t fdcan, uint32_t can_id, BSP_FDCAN_Message_t *msg, uint32_t timeout) {
     if (!inited) return BSP_ERR_INITED;
     if (msg == NULL) return BSP_ERR_NULL;
-    if (osMutexAcquire(queue_mutex, FDCAN_QUEUE_MUTEX_TIMEOUT) != osOK) return BSP_ERR_TIMEOUT;
-    osMessageQueueId_t queue = BSP_FDCAN_FindQueue(fdcan, can_id);
-    osMutexRelease(queue_mutex);
+    BSP_FDCAN_QueueNode_t *node = BSP_FDCAN_FindNodeNoWait(fdcan, can_id);
+    osMessageQueueId_t queue = (node != NULL) ? node->queue : NULL;
     if (queue == NULL) return BSP_ERR_NO_DEV;
     osStatus_t res = osMessageQueueGet(queue, msg, NULL, timeout);
     return (res == osOK) ? BSP_OK : BSP_ERR;
 }
 
+int8_t BSP_FDCAN_GetLatestMessage(BSP_FDCAN_t fdcan, uint32_t can_id, BSP_FDCAN_Message_t *msg) {
+    if (!inited) return BSP_ERR_INITED;
+    if (msg == NULL) return BSP_ERR_NULL;
+    BSP_FDCAN_QueueNode_t *node = BSP_FDCAN_FindNodeNoWait(fdcan, can_id);
+    if (node == NULL) return BSP_ERR_NO_DEV;
+    if (node->latest_only) {
+        if (!node->latest_valid) return BSP_ERR;
+        *msg = node->latest_msg;
+        return BSP_OK;
+    }
+    osMessageQueueId_t queue = node->queue;
+    if (queue == NULL) return BSP_ERR_NO_DEV;
+
+    BSP_FDCAN_Message_t latest;
+    bool has_latest = false;
+    while (osMessageQueueGet(queue, &latest, NULL, BSP_FDCAN_TIMEOUT_IMMEDIATE) == osOK) {
+        has_latest = true;
+    }
+    if (!has_latest) return BSP_ERR;
+    *msg = latest;
+    return BSP_OK;
+}
+
 int32_t BSP_FDCAN_GetQueueCount(BSP_FDCAN_t fdcan, uint32_t can_id) {
     if (!inited) return -1;
-    if (osMutexAcquire(queue_mutex, FDCAN_QUEUE_MUTEX_TIMEOUT) != osOK) return -1;
-    osMessageQueueId_t queue = BSP_FDCAN_FindQueue(fdcan, can_id);
-    osMutexRelease(queue_mutex);
+    BSP_FDCAN_QueueNode_t *node = BSP_FDCAN_FindNodeNoWait(fdcan, can_id);
+    osMessageQueueId_t queue = (node != NULL) ? node->queue : NULL;
     if (queue == NULL) return -1;
     return (int32_t)osMessageQueueGetCount(queue);
 }
 
 int8_t BSP_FDCAN_FlushQueue(BSP_FDCAN_t fdcan, uint32_t can_id) {
     if (!inited) return BSP_ERR_INITED;
-    if (osMutexAcquire(queue_mutex, FDCAN_QUEUE_MUTEX_TIMEOUT) != osOK) return BSP_ERR_TIMEOUT;
-    osMessageQueueId_t queue = BSP_FDCAN_FindQueue(fdcan, can_id);
-    osMutexRelease(queue_mutex);
+    BSP_FDCAN_QueueNode_t *node = BSP_FDCAN_FindNodeNoWait(fdcan, can_id);
+    if (node != NULL && node->latest_only) {
+        node->latest_valid = false;
+        return BSP_OK;
+    }
+    osMessageQueueId_t queue = (node != NULL) ? node->queue : NULL;
     if (queue == NULL) return BSP_ERR_NO_DEV;
     BSP_FDCAN_Message_t tmp;
     while (osMessageQueueGet(queue, &tmp, NULL, BSP_FDCAN_TIMEOUT_IMMEDIATE) == osOK) { }

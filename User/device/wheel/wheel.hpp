@@ -46,6 +46,7 @@ class RmM3508Wheel final {
   int8_t Enable();
   int8_t Relax();
   int8_t Update();
+  int8_t UpdateFeedback();
   int8_t SetTorque(float torque_nm);
   int8_t SetPosition(float position_rad, float max_velocity_rad_s = 0.0f);
   int8_t CommitCommand();

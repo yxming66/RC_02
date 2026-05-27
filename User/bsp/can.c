@@ -640,7 +640,7 @@ int8_t BSP_CAN_GetMessage(BSP_CAN_t can, uint32_t can_id, BSP_CAN_Message_t *msg
     if (msg == NULL) {
         return BSP_ERR_NULL;
     }
-    if (osMutexAcquire(queue_mutex, CAN_QUEUE_MUTEX_TIMEOUT) != osOK) {
+    if (osMutexAcquire(queue_mutex, 0U) != osOK) {
         return BSP_ERR_TIMEOUT;
     }
     osMessageQueueId_t queue = BSP_CAN_FindQueue(can, can_id);
@@ -656,7 +656,7 @@ int32_t BSP_CAN_GetQueueCount(BSP_CAN_t can, uint32_t can_id) {
     if (!inited) {
         return -1;
     }
-    if (osMutexAcquire(queue_mutex, CAN_QUEUE_MUTEX_TIMEOUT) != osOK) {
+    if (osMutexAcquire(queue_mutex, 0U) != osOK) {
         return -1;
     }
     osMessageQueueId_t queue = BSP_CAN_FindQueue(can, can_id);
@@ -671,7 +671,7 @@ int8_t BSP_CAN_FlushQueue(BSP_CAN_t can, uint32_t can_id) {
     if (!inited) {
         return BSP_ERR_INITED;
     }
-    if (osMutexAcquire(queue_mutex, CAN_QUEUE_MUTEX_TIMEOUT) != osOK) {
+    if (osMutexAcquire(queue_mutex, 0U) != osOK) {
         return BSP_ERR_TIMEOUT;
     }
     osMessageQueueId_t queue = BSP_CAN_FindQueue(can, can_id);

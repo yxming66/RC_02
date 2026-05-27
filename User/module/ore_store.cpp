@@ -865,8 +865,10 @@ void OreStore_Output(OreStore_t *store) {
     RefreshDebugAxis(store, axis);
   }
 
-  (void)MOTOR_RM_Ctrl((MOTOR_RM_Param_t *)&store->param->motor_param[ORE_STORE_AXIS_PLATFORM]);
-  (void)MOTOR_RM_Ctrl((MOTOR_RM_Param_t *)&store->param->motor_param[ORE_STORE_AXIS_GATE_LEFT]);
+  (void)MOTOR_RM_FlushGroup(
+      (MOTOR_RM_Param_t *)&store->param->motor_param[ORE_STORE_AXIS_PLATFORM]);
+  (void)MOTOR_RM_FlushGroup(
+      (MOTOR_RM_Param_t *)&store->param->motor_param[ORE_STORE_AXIS_GATE_LEFT]);
 }
 
 void OreStore_ResetOutput(OreStore_t *store) {

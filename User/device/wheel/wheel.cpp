@@ -74,6 +74,18 @@ int8_t RmM3508Wheel::Update() {
   return ret;
 }
 
+int8_t RmM3508Wheel::UpdateFeedback() {
+  if (motor_ == nullptr) {
+    return DEVICE_ERR_NULL;
+  }
+  const int8_t ret = motor_->Update();
+  if (ret == DEVICE_OK) {
+    RefreshState();
+  }
+  RefreshDebug();
+  return ret;
+}
+
 int8_t RmM3508Wheel::SetTorque(float torque_nm) {
   if (controller_ == nullptr) {
     return DEVICE_ERR_NULL;

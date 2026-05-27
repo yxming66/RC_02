@@ -191,6 +191,7 @@ static int8_t MOTOR_RM_SendGroup(MOTOR_RM_CANManager_t *manager,
     MOTOR_RM_UpdateTxDebug(manager, &tx_frame, source_motor_id, logical_index);
     const int8_t ret = BSP_CAN_TransmitStdDataFrame(manager->can, &tx_frame) == BSP_OK ? DEVICE_OK : DEVICE_ERR;
     if (ret == DEVICE_OK) {
+        manager->pending_tx_groups &= (uint8_t)~MOTOR_RM_TX_GROUP_MASK(group);
         motor_rm_tx_debug.pending_tx_groups = manager->pending_tx_groups;
         motor_rm_tx_debug.flush_count++;
     }
@@ -305,7 +306,7 @@ static int8_t MOTOR_RM_BindMotor(MOTOR_RM_CANManager_t *manager, MOTOR_RM_Param_
     memset(motor, 0, sizeof(MOTOR_RM_t));
     memcpy(&motor->param, param, sizeof(MOTOR_RM_Param_t));
     motor->motor.reverse = param->reverse;
-    if (BSP_CAN_RegisterId(param->can, param->id, 3) != BSP_OK) {
+    if (BSP_CAN_RegisterLatestId(param->can, param->id) != BSP_OK) {
         return DEVICE_ERR;
     }
     manager->motors[manager->motor_count] = motor;
@@ -337,7 +338,7 @@ static int8_t MOTOR_RM_BindExternalMotor(MOTOR_RM_CANManager_t *manager, MOTOR_R
     memset(motor, 0, sizeof(MOTOR_RM_t));
     memcpy(&motor->param, param, sizeof(MOTOR_RM_Param_t));
     motor->motor.reverse = param->reverse;
-    if (BSP_CAN_RegisterId(param->can, param->id, 3) != BSP_OK) {
+    if (BSP_CAN_RegisterLatestId(param->can, param->id) != BSP_OK) {
         return DEVICE_ERR;
     }
     manager->external_motors[manager->external_motor_count] = motor;
@@ -386,7 +387,7 @@ int8_t MOTOR_RM_Update(MOTOR_RM_Param_t *param) {
     MOTOR_RM_t *motor = MOTOR_RM_FindMotorById(manager, param->id);
     if (motor == NULL) return DEVICE_ERR_NO_DEV;
     BSP_CAN_Message_t rx_msg;
-    if (BSP_CAN_GetMessage(param->can, param->id, &rx_msg, BSP_CAN_TIMEOUT_IMMEDIATE) != BSP_OK) {
+    if (BSP_CAN_GetLatestMessage(param->can, param->id, &rx_msg) != BSP_OK) {
         uint64_t now_time = BSP_TIME_Get();
         if (now_time - motor->motor.header.last_online_time > MOTOR_RM_FEEDBACK_TIMEOUT_US) {
             motor->motor.header.online = false;

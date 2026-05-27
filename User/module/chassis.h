@@ -130,6 +130,9 @@ typedef struct {
 
 typedef struct {
   float dt_s;
+  uint32_t update_feedback_us;
+  uint32_t control_us;
+  uint32_t output_us;
   float gimbal_beta_rad;
   MoveVector_t cmd_vec_raw;
   MoveVector_t cmd_vec_body;

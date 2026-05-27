@@ -112,7 +112,8 @@ extern "C" void Task_chassis_main(void *argument) {
     /* Update motor speed for gyro calibration in atti_esti task */
     const auto &fb = chassis.feedback();
     for (int i = 0; i < 4; i++) {
-        chassis_motor_speed_rpm[i] = fb.motor[i].velocity_rad_s * 60.0f / (2.0f * 3.14159265358979f);
+      chassis_motor_speed_rpm[i] =
+          fb.motor[i].velocity_rad_s * 60.0f / (2.0f * 3.14159265358979f);
     }
 
     (void)chassis.Control(chassis_cmd, osKernelGetTickCount());
@@ -120,7 +121,7 @@ extern "C" void Task_chassis_main(void *argument) {
 
     osMessageQueueGet(task_runtime.msgq.pole.cmd, &pole_cmd, nullptr, 0);
     Pole_UpdateFeedback(&pole);
-  Task_ChassisMainUpdatePoleTemperatureAlarm(osKernelGetTickCount());
+    Task_ChassisMainUpdatePoleTemperatureAlarm(osKernelGetTickCount());
     Pole_Control(&pole, &pole_cmd, osKernelGetTickCount());
     Pole_Output(&pole);
 
