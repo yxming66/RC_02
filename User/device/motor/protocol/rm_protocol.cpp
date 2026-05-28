@@ -21,8 +21,15 @@ float ResolvePositiveRatio(float ratio) {
     return mr::component::math::positive_or(ratio, 1.0f);
 }
 
-float WrapAngleDiff(float diff_rad) {
-    return mr::component::math::wrap_error(diff_rad, kTwoPi);
+float ResolveRmAngleDelta(float current_rad, float last_rad, float velocity_rad_s) {
+    const float raw_delta = current_rad - last_rad;
+    if (raw_delta > kPi) {
+        return (velocity_rad_s > 0.0f) ? raw_delta : raw_delta - kTwoPi;
+    }
+    if (raw_delta < -kPi) {
+        return (velocity_rad_s < 0.0f) ? raw_delta : raw_delta + kTwoPi;
+    }
+    return raw_delta;
 }
 
 float WrapToPi(float angle_rad) {
@@ -104,7 +111,9 @@ float MotorProtocol<MotorKind::RM, Model>::AccumulateRotorPosition(float single_
         return accumulated_rotor_position_rad_;
     }
 
-    const float delta = WrapAngleDiff(single_turn_rotor_position_rad - last_single_turn_rotor_position_rad_);
+    const float delta = ResolveRmAngleDelta(single_turn_rotor_position_rad,
+                                            last_single_turn_rotor_position_rad_,
+                                            rotor_velocity_rad_s);
     const float delta_limit = (fabsf(rotor_velocity_rad_s) > 0.0f)
         ? fabsf(rotor_velocity_rad_s) + kPi
         : kDefaultResyncDeltaRad;

@@ -158,11 +158,11 @@ Config_RobotParam_t robot_config = {
         },
         .pid = {
             .position_pid = {
-                [ORE_STORE_AXIS_PLATFORM] = {.k = 1.0f, .p = 12.0f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 45.0f, .d_cutoff_freq = 80.0f, .range = 0.0f},
+                [ORE_STORE_AXIS_PLATFORM] = {.k = 1.0f, .p = 24.0f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 60.0f, .d_cutoff_freq = 80.0f, .range = 0.0f},
                 [ORE_STORE_AXIS_GATE_LEFT] = {.k = 1.0f,   .p = 22.0f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 45.0f, .d_cutoff_freq = 80.0f, .range = 0.0f},
                 [ORE_STORE_AXIS_GATE_RIGHT] = {.k = 1.0f,  .p = 22.0f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 45.0f, .d_cutoff_freq = 80.0f, .range = 0.0f},
-                [ORE_STORE_AXIS_TRACK_LEFT] = {.k = 1.0f,  .p = 8.0f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 40.0f, .d_cutoff_freq = 80.0f, .range = 0.0f},
-                [ORE_STORE_AXIS_TRACK_RIGHT] = {.k = 1.0f, .p = 8.0f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 40.0f, .d_cutoff_freq = 80.0f, .range = 0.0f},
+                [ORE_STORE_AXIS_TRACK_LEFT] = {.k = 1.0f,  .p = 40.0f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 60.0f, .d_cutoff_freq = 80.0f, .range = 0.0f},
+                [ORE_STORE_AXIS_TRACK_RIGHT] = {.k = 1.0f, .p = 40.0f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 60.0f, .d_cutoff_freq = 80.0f, .range = 0.0f},
             },
             .velocity_pid = {
                 [ORE_STORE_AXIS_PLATFORM] = {.k = 0.1f, .p = 1.550f, .i = 0.02f, .d = 0.0f, .i_limit = 0.35f, .out_limit = 2.5f, .d_cutoff_freq = 18.0f, .range = 0.0f},
@@ -195,9 +195,9 @@ Config_RobotParam_t robot_config = {
             },
             .travel_rad = {22.7f, 2.5f, 2.5f, 40.0f, 40.0f},
             .lower_seek_velocity_rad_s = {0.20f, 0.20f, 0.20f, 0.60f, 0.60f},
-            .move_velocity_rad_s = {60.0f, 80.0f, 80.0f, 60.00f, 60.00f},
+            .move_velocity_rad_s = {400.0f, 80.0f, 80.0f, 200.00f, 200.00f},
             .arrive_threshold_rad = {0.05f, 0.03f, 0.03f, 0.08f, 0.08f},
-        },
+        }, 
         .power_on = {
             .fixed_position_enable = {false, false, false, false, false},
             .fixed_position_rad = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f},

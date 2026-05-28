@@ -37,12 +37,12 @@ const osThreadAttr_t attr_sick = {
 };
 const osThreadAttr_t attr_auto_ctrl = {
     .name = "auto_ctrl",
-    .priority = osPriorityNormal,
+    .priority = osPriorityAboveNormal,
     .stack_size = 256 * 4,
 };
 const osThreadAttr_t attr_arm_simple = {
     .name = "arm_simple",
-    .priority = osPriorityNormal,
+    .priority = osPriorityAboveNormal,
     .stack_size = 512 * 4,
 };
 const osThreadAttr_t attr_rod = {
