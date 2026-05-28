@@ -6,8 +6,11 @@
 #include <cmsis_os2.h>
 #include <string.h>
 
+#include "bsp/time.h"
+
 /* Private define ----------------------------------------------------------- */
 #define FDCAN_QUEUE_MUTEX_TIMEOUT         100
+#define FDCAN_RX_MAX_FRAMES_PER_CALLBACK 4u
 
 /* Private macro ------------------------------------------------------------ */
 
@@ -75,6 +78,8 @@ static bool inited = false;
 static BSP_FDCAN_IdParser_t id_parser = NULL;
 static BSP_FDCAN_TxQueue_t tx_queues[BSP_FDCAN_NUM];
 static const uint8_t fdcan_dlc2len[16] = {0,1,2,3,4,5,6,7,8,12,16,20,24,32,48,64};
+volatile BSP_FDCAN_RxDebug_t g_bsp_fdcan_rx_debug = {0};
+static volatile bool fdcan_recover_pending[BSP_FDCAN_NUM] = {false};
 
 /* Private function prototypes ---------------------------------------------- */
 static BSP_FDCAN_t FDCAN_Get(FDCAN_HandleTypeDef *hfdcan);
@@ -89,6 +94,8 @@ static void BSP_FDCAN_TxQueueInit(BSP_FDCAN_t fdcan);
 static bool BSP_FDCAN_TxQueuePush(BSP_FDCAN_t fdcan, BSP_FDCAN_TxMessage_t *msg);
 static bool BSP_FDCAN_TxQueuePop(BSP_FDCAN_t fdcan, BSP_FDCAN_TxMessage_t *msg);
 static bool BSP_FDCAN_TxQueueIsEmpty(BSP_FDCAN_t fdcan);
+static uint32_t BSP_FDCAN_NotifyFlags(BSP_FDCAN_t fdcan);
+static int8_t BSP_FDCAN_RecoverIfNeeded(BSP_FDCAN_t fdcan, bool force);
 
 /* Private functions -------------------------------------------------------- */
 static BSP_FDCAN_t FDCAN_Get(FDCAN_HandleTypeDef *hfdcan) {
@@ -198,6 +205,75 @@ static bool BSP_FDCAN_TxQueueIsEmpty(BSP_FDCAN_t fdcan) {
   return tx_queues[fdcan].head == tx_queues[fdcan].tail;
 }
 
+static uint32_t BSP_FDCAN_NotifyFlags(BSP_FDCAN_t fdcan) {
+  switch (fdcan) {
+#ifdef FDCAN1_EN
+    case BSP_FDCAN_1:
+      return FDCANx_NOTIFY_FLAGS(FDCAN1_RX_FIFO) | FDCAN_IT_ERROR_WARNING |
+             FDCAN_IT_ERROR_PASSIVE | FDCAN_IT_BUS_OFF |
+             FDCAN_IT_ARB_PROTOCOL_ERROR | FDCAN_IT_DATA_PROTOCOL_ERROR |
+             FDCAN_IT_ERROR_LOGGING_OVERFLOW;
+#endif
+#ifdef FDCAN2_EN
+    case BSP_FDCAN_2:
+      return FDCANx_NOTIFY_FLAGS(FDCAN2_RX_FIFO) | FDCAN_IT_ERROR_WARNING |
+             FDCAN_IT_ERROR_PASSIVE | FDCAN_IT_BUS_OFF |
+             FDCAN_IT_ARB_PROTOCOL_ERROR | FDCAN_IT_DATA_PROTOCOL_ERROR |
+             FDCAN_IT_ERROR_LOGGING_OVERFLOW;
+#endif
+#ifdef FDCAN3_EN
+    case BSP_FDCAN_3:
+      return FDCANx_NOTIFY_FLAGS(FDCAN3_RX_FIFO) | FDCAN_IT_ERROR_WARNING |
+             FDCAN_IT_ERROR_PASSIVE | FDCAN_IT_BUS_OFF |
+             FDCAN_IT_ARB_PROTOCOL_ERROR | FDCAN_IT_DATA_PROTOCOL_ERROR |
+             FDCAN_IT_ERROR_LOGGING_OVERFLOW;
+#endif
+    default:
+      return 0u;
+  }
+}
+
+static int8_t BSP_FDCAN_RecoverIfNeeded(BSP_FDCAN_t fdcan, bool force) {
+  if (!inited) return BSP_ERR_INITED;
+  if (fdcan >= BSP_FDCAN_NUM) return BSP_ERR;
+  FDCAN_HandleTypeDef *hfdcan = BSP_FDCAN_GetHandle(fdcan);
+  if (hfdcan == NULL) return BSP_ERR_NULL;
+
+  FDCAN_ProtocolStatusTypeDef status = {0};
+  FDCAN_ErrorCountersTypeDef counters = {0};
+  if (HAL_FDCAN_GetProtocolStatus(hfdcan, &status) == HAL_OK) {
+    g_bsp_fdcan_rx_debug.protocol_status[fdcan] = hfdcan->Instance->PSR;
+  }
+  if (HAL_FDCAN_GetErrorCounters(hfdcan, &counters) == HAL_OK) {
+    g_bsp_fdcan_rx_debug.tx_error_count[fdcan] = counters.TxErrorCnt;
+    g_bsp_fdcan_rx_debug.rx_error_count[fdcan] = counters.RxErrorCnt;
+  }
+
+  const bool need_recover = force || fdcan_recover_pending[fdcan] ||
+                            (status.BusOff != 0u) ||
+                            (hfdcan->State == HAL_FDCAN_STATE_ERROR);
+  if (!need_recover) return BSP_OK;
+
+  ++g_bsp_fdcan_rx_debug.recover_request_count[fdcan];
+  fdcan_recover_pending[fdcan] = false;
+  BSP_FDCAN_TxQueueInit(fdcan);
+  hfdcan->ErrorCode = HAL_FDCAN_ERROR_NONE;
+  if (hfdcan->State == HAL_FDCAN_STATE_BUSY) {
+    (void)HAL_FDCAN_Stop(hfdcan);
+  } else if (hfdcan->State == HAL_FDCAN_STATE_ERROR) {
+    hfdcan->State = HAL_FDCAN_STATE_READY;
+    SET_BIT(hfdcan->Instance->CCCR, FDCAN_CCCR_INIT);
+    SET_BIT(hfdcan->Instance->CCCR, FDCAN_CCCR_CCE);
+  }
+  (void)HAL_FDCAN_ActivateNotification(hfdcan, BSP_FDCAN_NotifyFlags(fdcan), 0);
+  if (HAL_FDCAN_Start(hfdcan) == HAL_OK) {
+    ++g_bsp_fdcan_rx_debug.recover_success_count[fdcan];
+    return BSP_OK;
+  }
+  ++g_bsp_fdcan_rx_debug.recover_fail_count[fdcan];
+  return BSP_ERR;
+}
+
 static void BSP_FDCAN_TxCompleteCallback(void) {
   for (int i = 0; i < BSP_FDCAN_NUM; i++) {
     BSP_FDCAN_t fdcan = (BSP_FDCAN_t)i;
@@ -222,13 +298,17 @@ static void BSP_FDCAN_TxCompleteCallback(void) {
 }
 
 static void BSP_FDCAN_RxFifo0Callback(void) {
+  const uint64_t start_us = BSP_TIME_Get_us();
+  uint32_t handled = 0u;
   FDCAN_RxHeaderTypeDef rx_header;
   uint8_t rx_data[BSP_FDCAN_MAX_DLC];
   for (int fdcan_idx = 0; fdcan_idx < BSP_FDCAN_NUM; fdcan_idx++) {
     FDCAN_HandleTypeDef *hfdcan = BSP_FDCAN_GetHandle((BSP_FDCAN_t)fdcan_idx);
     if (hfdcan == NULL) continue;
-    while (HAL_FDCAN_GetRxFifoFillLevel(hfdcan, FDCAN_RX_FIFO0) > 0) {
+    while (handled < FDCAN_RX_MAX_FRAMES_PER_CALLBACK &&
+           HAL_FDCAN_GetRxFifoFillLevel(hfdcan, FDCAN_RX_FIFO0) > 0) {
       if (HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO0, &rx_header, rx_data) == HAL_OK) {
+        ++handled;
         uint32_t original_id = (rx_header.IdType == FDCAN_STANDARD_ID) ? rx_header.Identifier&0x7ff : rx_header.Identifier&0x1fffffff;
         BSP_FDCAN_FrameType_t frame_type = BSP_FDCAN_GetFrameType(&rx_header);
         uint32_t parsed_id = BSP_FDCAN_ParseId(original_id, frame_type);
@@ -254,17 +334,36 @@ static void BSP_FDCAN_RxFifo0Callback(void) {
           break;
       }
     }
+    if (handled >= FDCAN_RX_MAX_FRAMES_PER_CALLBACK &&
+        HAL_FDCAN_GetRxFifoFillLevel(hfdcan, FDCAN_RX_FIFO0) > 0) {
+      ++g_bsp_fdcan_rx_debug.fifo0_limited_count;
+    }
+  }
+  ++g_bsp_fdcan_rx_debug.fifo0_callback_count;
+  g_bsp_fdcan_rx_debug.fifo0_frame_count += handled;
+  g_bsp_fdcan_rx_debug.fifo0_last_frames = handled;
+  if (handled > g_bsp_fdcan_rx_debug.fifo0_max_frames_per_callback) {
+    g_bsp_fdcan_rx_debug.fifo0_max_frames_per_callback = handled;
+  }
+  const uint32_t elapsed_us = (uint32_t)(BSP_TIME_Get_us() - start_us);
+  g_bsp_fdcan_rx_debug.fifo0_last_us = elapsed_us;
+  if (elapsed_us > g_bsp_fdcan_rx_debug.fifo0_max_us) {
+    g_bsp_fdcan_rx_debug.fifo0_max_us = elapsed_us;
   }
 }
 
 static void BSP_FDCAN_RxFifo1Callback(void) {
+  const uint64_t start_us = BSP_TIME_Get_us();
+  uint32_t handled = 0u;
   FDCAN_RxHeaderTypeDef rx_header;
   uint8_t rx_data[BSP_FDCAN_MAX_DLC];
   for (int fdcan_idx = 0; fdcan_idx < BSP_FDCAN_NUM; fdcan_idx++) {
     FDCAN_HandleTypeDef *hfdcan = BSP_FDCAN_GetHandle((BSP_FDCAN_t)fdcan_idx);
     if (hfdcan == NULL) continue;
-    while (HAL_FDCAN_GetRxFifoFillLevel(hfdcan, FDCAN_RX_FIFO1) > 0) {
+    while (handled < FDCAN_RX_MAX_FRAMES_PER_CALLBACK &&
+           HAL_FDCAN_GetRxFifoFillLevel(hfdcan, FDCAN_RX_FIFO1) > 0) {
       if (HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO1, &rx_header, rx_data) == HAL_OK) {
+        ++handled;
         uint32_t original_id = (rx_header.IdType == FDCAN_STANDARD_ID) ? rx_header.Identifier&0x7ff : rx_header.Identifier&0x1fffffff;
         BSP_FDCAN_FrameType_t frame_type = BSP_FDCAN_GetFrameType(&rx_header);
         uint32_t parsed_id = BSP_FDCAN_ParseId(original_id, frame_type);
@@ -290,6 +389,21 @@ static void BSP_FDCAN_RxFifo1Callback(void) {
           break;
       }
     }
+    if (handled >= FDCAN_RX_MAX_FRAMES_PER_CALLBACK &&
+        HAL_FDCAN_GetRxFifoFillLevel(hfdcan, FDCAN_RX_FIFO1) > 0) {
+      ++g_bsp_fdcan_rx_debug.fifo1_limited_count;
+    }
+  }
+  ++g_bsp_fdcan_rx_debug.fifo1_callback_count;
+  g_bsp_fdcan_rx_debug.fifo1_frame_count += handled;
+  g_bsp_fdcan_rx_debug.fifo1_last_frames = handled;
+  if (handled > g_bsp_fdcan_rx_debug.fifo1_max_frames_per_callback) {
+    g_bsp_fdcan_rx_debug.fifo1_max_frames_per_callback = handled;
+  }
+  const uint32_t elapsed_us = (uint32_t)(BSP_TIME_Get_us() - start_us);
+  g_bsp_fdcan_rx_debug.fifo1_last_us = elapsed_us;
+  if (elapsed_us > g_bsp_fdcan_rx_debug.fifo1_max_us) {
+    g_bsp_fdcan_rx_debug.fifo1_max_us = elapsed_us;
   }
 }
 
@@ -339,6 +453,17 @@ void HAL_FDCAN_ErrorCallback(FDCAN_HandleTypeDef *hfdcan) {
   if (bsp_fdcan != BSP_FDCAN_ERR) {
     if (FDCAN_Callback[bsp_fdcan][HAL_FDCAN_ERROR_CB])
       FDCAN_Callback[bsp_fdcan][HAL_FDCAN_ERROR_CB]();
+  }
+}
+
+void HAL_FDCAN_ErrorStatusCallback(FDCAN_HandleTypeDef *hfdcan, uint32_t ErrorStatusITs) {
+  BSP_FDCAN_t bsp_fdcan = FDCAN_Get(hfdcan);
+  if (bsp_fdcan == BSP_FDCAN_ERR) return;
+  ++g_bsp_fdcan_rx_debug.error_status_count[bsp_fdcan];
+  g_bsp_fdcan_rx_debug.protocol_status[bsp_fdcan] = hfdcan->Instance->PSR;
+  if ((ErrorStatusITs & FDCAN_IT_BUS_OFF) != 0u) {
+    ++g_bsp_fdcan_rx_debug.bus_off_count[bsp_fdcan];
+    fdcan_recover_pending[bsp_fdcan] = true;
   }
 }
 
@@ -405,7 +530,7 @@ int8_t BSP_FDCAN_Init(void) {
   #undef hfdcan
   #undef FDCANX_RX_FIFO
   HAL_FDCAN_ConfigGlobalFilter(&hfdcan1, FDCAN1_GLOBAL_FILTER);
-  HAL_FDCAN_ActivateNotification(&hfdcan1, FDCANx_NOTIFY_FLAGS(FDCAN1_RX_FIFO), 0);
+  HAL_FDCAN_ActivateNotification(&hfdcan1, BSP_FDCAN_NotifyFlags(BSP_FDCAN_1), 0);
   BSP_FDCAN_RegisterCallback(BSP_FDCAN_1, FDCANX_MSG_PENDING_CB(FDCAN1_RX_FIFO), BSP_FDCAN_RxFifo0Callback);
   BSP_FDCAN_RegisterCallback(BSP_FDCAN_1, HAL_FDCAN_TX_EVENT_FIFO_CB, BSP_FDCAN_TxCompleteCallback);
   HAL_FDCAN_Start(&hfdcan1);
@@ -418,7 +543,7 @@ int8_t BSP_FDCAN_Init(void) {
   #undef hfdcan
   #undef FDCANX_RX_FIFO
   HAL_FDCAN_ConfigGlobalFilter(&hfdcan2, FDCAN2_GLOBAL_FILTER);
-  HAL_FDCAN_ActivateNotification(&hfdcan2, FDCANx_NOTIFY_FLAGS(FDCAN2_RX_FIFO), 0);
+  HAL_FDCAN_ActivateNotification(&hfdcan2, BSP_FDCAN_NotifyFlags(BSP_FDCAN_2), 0);
   BSP_FDCAN_RegisterCallback(BSP_FDCAN_2, FDCANX_MSG_PENDING_CB(FDCAN2_RX_FIFO), BSP_FDCAN_RxFifo1Callback);
   BSP_FDCAN_RegisterCallback(BSP_FDCAN_2, HAL_FDCAN_TX_EVENT_FIFO_CB, BSP_FDCAN_TxCompleteCallback);
   HAL_FDCAN_Start(&hfdcan2);
@@ -431,7 +556,7 @@ int8_t BSP_FDCAN_Init(void) {
   #undef hfdcan
   #undef FDCANX_RX_FIFO
   HAL_FDCAN_ConfigGlobalFilter(&hfdcan3, FDCAN3_GLOBAL_FILTER);
-  HAL_FDCAN_ActivateNotification(&hfdcan3, FDCANx_NOTIFY_FLAGS(FDCAN3_RX_FIFO), 0);
+  HAL_FDCAN_ActivateNotification(&hfdcan3, BSP_FDCAN_NotifyFlags(BSP_FDCAN_3), 0);
   BSP_FDCAN_RegisterCallback(BSP_FDCAN_3, FDCANX_MSG_PENDING_CB(FDCAN3_RX_FIFO), BSP_FDCAN_RxFifo1Callback);
   BSP_FDCAN_RegisterCallback(BSP_FDCAN_3, HAL_FDCAN_TX_EVENT_FIFO_CB, BSP_FDCAN_TxCompleteCallback);
   HAL_FDCAN_Start(&hfdcan3);
@@ -477,6 +602,7 @@ int8_t BSP_FDCAN_Transmit(BSP_FDCAN_t fdcan, BSP_FDCAN_Format_t format, uint32_t
     if (dlc > BSP_FDCAN_MAX_DLC) return BSP_ERR;
     FDCAN_HandleTypeDef *hfdcan = BSP_FDCAN_GetHandle(fdcan);
     if (hfdcan == NULL) return BSP_ERR_NULL;
+  (void)BSP_FDCAN_RecoverIfNeeded(fdcan, false);
 
   BSP_FDCAN_TxMessage_t tx_msg = {0};
   switch (format) {
@@ -562,6 +688,7 @@ int8_t BSP_FDCAN_RegisterLatestId(BSP_FDCAN_t fdcan, uint32_t can_id) {
 int8_t BSP_FDCAN_GetMessage(BSP_FDCAN_t fdcan, uint32_t can_id, BSP_FDCAN_Message_t *msg, uint32_t timeout) {
     if (!inited) return BSP_ERR_INITED;
     if (msg == NULL) return BSP_ERR_NULL;
+    (void)BSP_FDCAN_RecoverIfNeeded(fdcan, false);
     BSP_FDCAN_QueueNode_t *node = BSP_FDCAN_FindNodeNoWait(fdcan, can_id);
     osMessageQueueId_t queue = (node != NULL) ? node->queue : NULL;
     if (queue == NULL) return BSP_ERR_NO_DEV;
@@ -572,6 +699,7 @@ int8_t BSP_FDCAN_GetMessage(BSP_FDCAN_t fdcan, uint32_t can_id, BSP_FDCAN_Messag
 int8_t BSP_FDCAN_GetLatestMessage(BSP_FDCAN_t fdcan, uint32_t can_id, BSP_FDCAN_Message_t *msg) {
     if (!inited) return BSP_ERR_INITED;
     if (msg == NULL) return BSP_ERR_NULL;
+  (void)BSP_FDCAN_RecoverIfNeeded(fdcan, false);
     BSP_FDCAN_QueueNode_t *node = BSP_FDCAN_FindNodeNoWait(fdcan, can_id);
     if (node == NULL) return BSP_ERR_NO_DEV;
     if (node->latest_only) {
@@ -591,6 +719,10 @@ int8_t BSP_FDCAN_GetLatestMessage(BSP_FDCAN_t fdcan, uint32_t can_id, BSP_FDCAN_
     *msg = latest;
     return BSP_OK;
 }
+
+  int8_t BSP_FDCAN_Recover(BSP_FDCAN_t fdcan) {
+    return BSP_FDCAN_RecoverIfNeeded(fdcan, true);
+  }
 
 int32_t BSP_FDCAN_GetQueueCount(BSP_FDCAN_t fdcan, uint32_t can_id) {
     if (!inited) return -1;

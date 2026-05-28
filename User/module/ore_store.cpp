@@ -6,6 +6,7 @@
 
 #include "bsp/can.h"
 #include "bsp/gpio.h"
+#include "bsp/time.h"
 #include "component/math/scalar.hpp"
 #include "device/device.h"
 #include "device/motor/factory/motor_factory.hpp"
@@ -131,9 +132,14 @@ int8_t ControllerRelax(OreStore_t *store, uint8_t axis) {
                               : SmallControllerPtr(store, axis)->Relax();
 }
 
-int8_t ControllerUpdate(OreStore_t *store, uint8_t axis) {
-  return IsPlatformAxis(axis) ? PlatformControllerPtr(store)->Update()
-                              : SmallControllerPtr(store, axis)->Update();
+int8_t ControllerUpdateFeedback(OreStore_t *store, uint8_t axis) {
+  return IsPlatformAxis(axis) ? PlatformControllerPtr(store)->UpdateFeedback()
+                              : SmallControllerPtr(store, axis)->UpdateFeedback();
+}
+
+int8_t ControllerUpdateCommand(OreStore_t *store, uint8_t axis) {
+  return IsPlatformAxis(axis) ? PlatformControllerPtr(store)->UpdateCommand()
+                              : SmallControllerPtr(store, axis)->UpdateCommand();
 }
 
 int8_t ControllerCommit(OreStore_t *store, uint8_t axis) {
@@ -748,7 +754,7 @@ int8_t OreStore_UpdateFeedback(OreStore_t *store) {
       continue;
     }
 
-    const int8_t update_ret = ControllerUpdate(store, axis);
+    const int8_t update_ret = ControllerUpdateFeedback(store, axis);
     store->debug.controller_update_ret[axis] = update_ret;
     if (update_ret != DEVICE_OK) {
       result = ORE_STORE_ERR;
@@ -791,8 +797,13 @@ int8_t OreStore_Control(OreStore_t *store, const OreStore_CMD_t *cmd,
     return ORE_STORE_ERR_NULL;
   }
 
-  store->dt = scalar::sanitize_dt((now - store->last_wakeup) * 0.001f,
-                                  kDefaultDtS, kMinDtS, kMaxDtS);
+  const uint64_t now_us = BSP_TIME_Get_us();
+  const float raw_dt_s =
+      (store->last_wakeup_us == 0u)
+          ? kDefaultDtS
+          : static_cast<float>(now_us - store->last_wakeup_us) * 0.000001f;
+  store->dt = scalar::sanitize_dt(raw_dt_s, kDefaultDtS, kMinDtS, kMaxDtS);
+  store->last_wakeup_us = now_us;
   store->last_wakeup = now;
   store->debug.dt_s = store->dt;
   store->fixed_ore_cylinder_closed = cmd->fixed_ore_cylinder_closed;
@@ -839,6 +850,17 @@ int8_t OreStore_Control(OreStore_t *store, const OreStore_CMD_t *cmd,
     }
 
     store->debug.set_command_ret[axis] = ret;
+    if (ret == DEVICE_OK || ret == ORE_STORE_OK) {
+      if (store->mode != ORE_STORE_MODE_RELAX &&
+          store->controller[axis] != nullptr) {
+        ret = ControllerUpdateCommand(store, axis);
+        store->debug.controller_control_ret[axis] = ret;
+      } else {
+        store->debug.controller_control_ret[axis] = DEVICE_OK;
+      }
+    } else {
+      store->debug.controller_control_ret[axis] = ret;
+    }
     if (ret != DEVICE_OK && ret != ORE_STORE_OK) {
       result = ORE_STORE_ERR;
     }

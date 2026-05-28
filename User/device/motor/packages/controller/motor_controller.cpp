@@ -163,6 +163,7 @@ MotorControllerT<MotorType>::MotorControllerT(MotorType& motor,
       target_mit_kp_(0.0f),
       target_mit_kd_(0.0f),
             target_mit_torque_ff_(0.0f),
+            last_control_dt_s_(control_dt_fallback_s_),
             last_feedback_position_(0.0f),
             last_feedback_velocity_(0.0f),
             last_output_torque_(0.0f) {
@@ -226,12 +227,37 @@ int8_t MotorControllerT<MotorType>::Relax() {
 template <typename MotorType>
 int8_t MotorControllerT<MotorType>::Update() {
     const float dt = UpdateControlDt();
+    last_control_dt_s_ = dt;
     int8_t ret = motor_.Update();
     if (ret != DEVICE_OK) {
         return ret;
     }
 
     const MotorState state = FilterFeedback(motor_.GetState(), dt);
+    return UpdateCommandFromState(state, dt);
+}
+
+template <typename MotorType>
+int8_t MotorControllerT<MotorType>::UpdateFeedback() {
+    const float dt = UpdateControlDt();
+    last_control_dt_s_ = dt;
+    int8_t ret = motor_.Update();
+    if (ret != DEVICE_OK) {
+        return ret;
+    }
+
+    (void)FilterFeedback(motor_.GetState(), dt);
+    return DEVICE_OK;
+}
+
+template <typename MotorType>
+int8_t MotorControllerT<MotorType>::UpdateCommand() {
+    return UpdateCommandFromState(motor_.GetState(), last_control_dt_s_);
+}
+
+template <typename MotorType>
+int8_t MotorControllerT<MotorType>::UpdateCommandFromState(
+    const MotorState& state, float dt) {
 
     switch (mode_) {
     case ControlMode::Torque:

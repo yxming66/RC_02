@@ -118,6 +118,33 @@ typedef struct {
   volatile uint32_t tail;
 } BSP_FDCAN_TxQueue_t;
 
+typedef struct {
+  volatile uint32_t fifo0_callback_count;
+  volatile uint32_t fifo1_callback_count;
+  volatile uint32_t fifo0_frame_count;
+  volatile uint32_t fifo1_frame_count;
+  volatile uint32_t fifo0_limited_count;
+  volatile uint32_t fifo1_limited_count;
+  volatile uint32_t fifo0_max_frames_per_callback;
+  volatile uint32_t fifo1_max_frames_per_callback;
+  volatile uint32_t fifo0_last_frames;
+  volatile uint32_t fifo1_last_frames;
+  volatile uint32_t fifo0_last_us;
+  volatile uint32_t fifo1_last_us;
+  volatile uint32_t fifo0_max_us;
+  volatile uint32_t fifo1_max_us;
+  volatile uint32_t error_status_count[BSP_FDCAN_NUM];
+  volatile uint32_t bus_off_count[BSP_FDCAN_NUM];
+  volatile uint32_t recover_request_count[BSP_FDCAN_NUM];
+  volatile uint32_t recover_success_count[BSP_FDCAN_NUM];
+  volatile uint32_t recover_fail_count[BSP_FDCAN_NUM];
+  volatile uint32_t tx_error_count[BSP_FDCAN_NUM];
+  volatile uint32_t rx_error_count[BSP_FDCAN_NUM];
+  volatile uint32_t protocol_status[BSP_FDCAN_NUM];
+} BSP_FDCAN_RxDebug_t;
+
+extern volatile BSP_FDCAN_RxDebug_t g_bsp_fdcan_rx_debug;
+
 /* Exported functions prototypes -------------------------------------------- */
 int8_t BSP_FDCAN_Init(void);
 FDCAN_HandleTypeDef *BSP_FDCAN_GetHandle(BSP_FDCAN_t can);
@@ -130,6 +157,7 @@ int8_t BSP_FDCAN_RegisterId(BSP_FDCAN_t can, uint32_t can_id, uint8_t queue_size
 int8_t BSP_FDCAN_RegisterLatestId(BSP_FDCAN_t can, uint32_t can_id);
 int8_t BSP_FDCAN_GetMessage(BSP_FDCAN_t can, uint32_t can_id, BSP_FDCAN_Message_t *msg, uint32_t timeout);
 int8_t BSP_FDCAN_GetLatestMessage(BSP_FDCAN_t can, uint32_t can_id, BSP_FDCAN_Message_t *msg);
+int8_t BSP_FDCAN_Recover(BSP_FDCAN_t can);
 int32_t BSP_FDCAN_GetQueueCount(BSP_FDCAN_t can, uint32_t can_id);
 int8_t BSP_FDCAN_FlushQueue(BSP_FDCAN_t can, uint32_t can_id);
 int8_t BSP_FDCAN_RegisterIdParser(BSP_FDCAN_IdParser_t parser);

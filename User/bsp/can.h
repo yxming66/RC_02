@@ -69,6 +69,7 @@ typedef BSP_FDCAN_IdParser_t BSP_CAN_IdParser_t;
                                         BSP_FDCAN_GetMessage(can, can_id, msg, timeout)
 #define BSP_CAN_GetLatestMessage(can, can_id, msg) \
                                         BSP_FDCAN_GetLatestMessage(can, can_id, msg)
+#define BSP_CAN_Recover(can)            BSP_FDCAN_Recover(can)
 #define BSP_CAN_GetQueueCount(can, can_id) \
                                         BSP_FDCAN_GetQueueCount(can, can_id)
 #define BSP_CAN_FlushQueue(can, can_id) \

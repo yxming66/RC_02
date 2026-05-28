@@ -43,7 +43,7 @@ void Task_rod(void *argument) {
   rod_new_cmd.pose = ROD_NEW_POSE_STANDBY;
   rod_new_cmd.grip = ROD_NEW_GRIP_RELEASE;
 
-  while (1) { 
+  while (1) {  
     tick += delay_tick;
 
     osMessageQueueGet(task_runtime.msgq.rod.cmd, &rod_new_cmd, NULL, 0);

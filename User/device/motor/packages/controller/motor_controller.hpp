@@ -116,6 +116,8 @@ public:
     int8_t Disable();
     int8_t Relax();
     int8_t Update();
+    int8_t UpdateFeedback();
+    int8_t UpdateCommand();
     int8_t CommitCommand();
     bool HasPendingCommand() const;
     void ClearPendingCommand();
@@ -149,6 +151,7 @@ private:
     };
 
     float UpdateControlDt();
+    int8_t UpdateCommandFromState(const MotorState& state, float dt_s);
     float LowpassAlpha(float cutoff_hz, float dt_s) const;
     void ResetFiltersToState();
     MotorState FilterFeedback(const MotorState& state, float dt_s);
@@ -178,6 +181,7 @@ private:
     float target_mit_kp_;
     float target_mit_kd_;
     float target_mit_torque_ff_;
+    float last_control_dt_s_;
     float last_feedback_position_;
     float last_feedback_velocity_;
     float last_output_torque_;

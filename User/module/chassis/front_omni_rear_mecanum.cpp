@@ -332,12 +332,17 @@ int8_t FrontOmniRearMecanumController::Control(const Chassis_CMD_t &cmd,
     }
 
     out_.set_torque_ret[i] = wheel->SetTorque(out_.motor[i]);
+    if (out_.set_torque_ret[i] == DEVICE_OK) {
+      out_.controller_update_ret[i] = wheel->UpdateCommand();
+    } else {
+      out_.controller_update_ret[i] = out_.set_torque_ret[i];
+    }
     StoreWheelDebug(i);
-    if (out_.set_torque_ret[i] != DEVICE_OK) {
+    if (out_.set_torque_ret[i] != DEVICE_OK ||
+        out_.controller_update_ret[i] != DEVICE_OK) {
       debug_.control_us = static_cast<uint32_t>(BSP_TIME_Get_us() - start_us);
       return CHASSIS_ERR;
     }
-    out_.controller_update_ret[i] = DEVICE_OK;
     out_.command_pending[i] = wheel->HasPendingCommand();
   }
 
@@ -363,7 +368,7 @@ void FrontOmniRearMecanumController::Output() {
   }
 
   if (param_ != nullptr) {
-    (void)MOTOR_RM_FlushGroup(
+    (void)MOTOR_RM_Ctrl(
         const_cast<MOTOR_RM_Param_t *>(&param_->motor_param[0]));
   }
   debug_.output_us = static_cast<uint32_t>(BSP_TIME_Get_us() - start_us);
@@ -380,7 +385,7 @@ void FrontOmniRearMecanumController::ResetOutput() {
   }
 
   if (param_ != nullptr) {
-    (void)MOTOR_RM_FlushGroup(
+    (void)MOTOR_RM_Ctrl(
         const_cast<MOTOR_RM_Param_t *>(&param_->motor_param[0]));
   }
 }
@@ -654,11 +659,16 @@ int8_t FrontOmniRearMecanumController::ControlWheelHold() {
     debug_.wheel_torque_cmd_nm[i] = out_.motor[i];
 
     out_.set_torque_ret[i] = wheel->SetTorque(out_.motor[i]);
+    if (out_.set_torque_ret[i] == DEVICE_OK) {
+      out_.controller_update_ret[i] = wheel->UpdateCommand();
+    } else {
+      out_.controller_update_ret[i] = out_.set_torque_ret[i];
+    }
     StoreWheelDebug(i);
-    if (out_.set_torque_ret[i] != DEVICE_OK) {
+    if (out_.set_torque_ret[i] != DEVICE_OK ||
+        out_.controller_update_ret[i] != DEVICE_OK) {
       return CHASSIS_ERR;
     }
-    out_.controller_update_ret[i] = DEVICE_OK;
     out_.command_pending[i] = wheel->HasPendingCommand();
   }
 

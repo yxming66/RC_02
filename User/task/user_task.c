@@ -22,12 +22,12 @@ const osThreadAttr_t attr_atti_esti = {
 };
 const osThreadAttr_t attr_chassis_main = {
     .name = "chassis_main",
-    .priority = osPriorityNormal,
+    .priority = osPriorityAboveNormal,
     .stack_size = 256 * 4,
 };
 const osThreadAttr_t attr_rc_main = {
     .name = "rc_main",
-    .priority = osPriorityNormal,
+    .priority = osPriorityAboveNormal,
     .stack_size = 512 * 4,
 };
 const osThreadAttr_t attr_sick = {
@@ -57,6 +57,6 @@ const osThreadAttr_t attr_pc_comm = {
 };
 const osThreadAttr_t attr_ore_store = {
     .name = "ore_store",
-    .priority = osPriorityNormal,
+    .priority = osPriorityAboveNormal,
     .stack_size = 512 * 4,
 };
