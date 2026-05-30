@@ -25,7 +25,6 @@
 /* Private variables -------------------------------------------------------- */
 /* USER STRUCT BEGIN */
 extern Chassis_IMU_t chassis_imu;
-extern float distance_cm[4];
 extern DR16_t dr16;
 extern PC_Protocol_t *g_pc_protocol_ptr;
 
@@ -39,6 +38,7 @@ bool auto_rod_spearhead_inited = false;
 bool auto_ctrl_local_yaw_zero_initialized = false;
 float auto_ctrl_local_yaw_zero_rad = 0.0f;
 auto_ctrl_feedback_t feedback = {0};
+static Sick_Output_t auto_ctrl_sick_output = {0};
 static const GPIO_PinState photo1_active_state = GPIO_PIN_RESET;
 static const GPIO_PinState photo2_active_state = GPIO_PIN_RESET;
 static const GPIO_PinState photo3_active_state = GPIO_PIN_RESET;
@@ -284,8 +284,13 @@ void Task_auto_ctrl(void *argument) {
 
       feedback.yaw_auto_rad = AutoCtrlFeed_SelectYawRad();
       /* 当前 AutoCtrl API 只消费前向两路 SICK。 */
-      feedback.sick_front_left_cm = distance_cm[2];
-      feedback.sick_front_right_cm = distance_cm[3];
+      (void)Task_SickGetLatestOutput(&auto_ctrl_sick_output);
+      feedback.sick_front_left_cm = auto_ctrl_sick_output.valid[2]
+                    ? auto_ctrl_sick_output.distance_m[2] * 100.0f
+                    : -1.0f;
+      feedback.sick_front_right_cm = auto_ctrl_sick_output.valid[3]
+                     ? auto_ctrl_sick_output.distance_m[3] * 100.0f
+                     : -1.0f;
 
       GPIO_PinState photo1_state = HAL_GPIO_ReadPin(GPIOE, GPIO_PIN_13);
       GPIO_PinState photo2_state = HAL_GPIO_ReadPin(GPIOE, GPIO_PIN_9);

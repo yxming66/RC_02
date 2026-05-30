@@ -15,6 +15,7 @@
 #include "module/rod_new.h"
 #include "module/ore_store.h"
 #include "device/buzzer.h"
+#include "device/sick.h"
 
 /* USER INCLUDE END */
 
@@ -217,6 +218,7 @@ bool Task_OreStorePowerOnHomeAttemptDone(void);
 bool Task_OreStorePowerOnHomeFailed(void);
 bool Task_OreStoreIsAxisAtTarget(uint8_t axis, float threshold_rad);
 bool Task_OreStoreIsAllAtTarget(float threshold_rad);
+bool Task_SickGetLatestOutput(Sick_Output_t *output);
 const ArmSimple_Feedback_t *Task_ArmSimpleGetFeedback(void);
 const RodNew_Feedback_t *Task_RodNewGetFeedback(void);
 const OreStore_Feedback_t *Task_OreStoreGetFeedback(void);

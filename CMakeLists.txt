@@ -75,6 +75,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     User/device/bmi088.c
     User/device/buzzer.c
     User/device/dr16.c
+    User/device/sick.c
     User/device/motor.c
     User/device/motor_rm.c
     User/device/motor_dm.c
@@ -132,6 +133,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
 
     # User/module sources
     User/module/arm/arm.cpp
+    User/module/cloudmusic/cloudmusic.c
     User/module/config.c
     User/module/rod_new.cpp
     User/module/pc_protocol/pc_protocol.cpp
