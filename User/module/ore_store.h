@@ -41,7 +41,6 @@ typedef enum {
 
 typedef enum {
   ORE_STORE_TRACK_STANDBY = 0,  // 轨道收回待机位置
-  ORE_STORE_TRACK_RELEASE,      // 轨道推出释放位置
   ORE_STORE_TRACK_POINT_NUM,
 } OreStore_TrackPoint_t;
 

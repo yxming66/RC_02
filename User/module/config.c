@@ -217,10 +217,9 @@ Config_RobotParam_t robot_config = {
                 [ORE_STORE_GATE_CLOSED] = {2.5f, 2.5f},  /* 左右门关闭位置。 */
                 [ORE_STORE_GATE_OPEN] = {0.0f, 0.0f},    /* 左右门打开位置。 */
             },
-            /* 左右释放轨道预设位置：数组顺序为左轨、右轨。 */
+            /* 左右轨道预设位置：数组顺序为左轨、右轨；自动流程中始终保持待机。 */
             .track_position_rad = {
                 [ORE_STORE_TRACK_STANDBY] = {0.0f, 0.0f},    /* 轨道收回待机位置。 */
-                [ORE_STORE_TRACK_RELEASE] = {24.0f, 24.0f},  /* 轨道推出释放位置。 */
             },
         },
         .fixed_ore_cylinder = {
@@ -320,8 +319,10 @@ Config_RobotParam_t robot_config = {
         .preset = {
             .behavior_point = {
                 [ARM_SIMPLE_BEHAVIOR_STANDBY] = {.joint1_pos = 0.149153411f, .joint2_pos = 0.0f},
-                [ARM_SIMPLE_BEHAVIOR_PICK_ORE] = {.joint1_pos = 1.4756968f, .joint2_pos = 0.0f},
-                [ARM_SIMPLE_BEHAVIOR_STORE_ORE] = {.joint1_pos = 0.149153411f, .joint2_pos = -1.570796f},
+                [ARM_SIMPLE_BEHAVIOR_STORE_ORE] = {.joint1_pos = 1.4756968f, .joint2_pos = 0.0f},
+                [ARM_SIMPLE_BEHAVIOR_WAIT_STORE_ORE] = {.joint1_pos = 0.149153411f, .joint2_pos = 0.0f},
+                [ARM_SIMPLE_BEHAVIOR_WAIT_RELEASE_ORE] = {.joint1_pos = 0.149153411f, .joint2_pos = 0.0f},
+                [ARM_SIMPLE_BEHAVIOR_RELEASE_ORE] = {.joint1_pos = 0.149153411f, .joint2_pos = -1.570796f},
             },
             .arrive_threshold_rad = 0.05f,
         },
@@ -386,14 +387,14 @@ Config_RobotParam_t robot_config = {
             .pole_extend_move_speed = 0.50f,    /* 撑杆伸出阶段 vx，单位 m/s。 */
             .front_retract_move_speed = 0.50f,  /* 前杆动作阶段 vx，单位 m/s。 */
             .front_retract_timeout_ms = 5000u,  /* 前光电触发后，等待前杆收回到位超时，单位 ms。 */
-            .mid_move_speed = 1.5f,             /* 前杆收回到位后的中段平移 vx，单位 m/s。 */
-            .mid_move_ms = 250u,               /* 中段平移持续时间，单位 ms。 */
-            .rear_retract_move_speed = 0.20f,   /* 等待后光电触发的低速 vx，单位 m/s。 */
+            .mid_move_speed = 3.0f,             /* 前杆收回到位后的中段平移 vx，单位 m/s。 */
+            .mid_move_ms = 350u,               /* 中段平移持续时间，单位 ms。 */
+            .rear_retract_move_speed = 0.40f,   /* 等待后光电触发的低速 vx，单位 m/s。 */
             .rear_retract_timeout_ms = 5000u,   /* 后光电触发后，全收腿动作超时，单位 ms。 */
             .rear_retract_move_ms = 300u,       /* 后光电触发后，全收腿移动持续时间，单位 ms。 */
             .second_photo_retract_move_speed = 0.50f, /* 后一个光电触发收腿时向头向移动 vx，单位 m/s。 */
-            .final_move_speed = 1.5f,           /* 收尾离开台阶 vx，单位 m/s。 */
-            .final_move_ms = 800u,              /* 收尾离开台阶持续时间，单位 ms。 */
+            .final_move_speed = 2.5f,           /* 收尾离开台阶 vx，单位 m/s。 */
+            .final_move_ms = 400u,              /* 收尾离开台阶持续时间，单位 ms。 */
             .pole_all_extend_speed = 50.0f,     /* 四杆全伸目标跟随速度，单位 rad/s。 */
             .pole_front_extend_speed = 20.0f,   /* 前杆伸出目标跟随速度，单位 rad/s。 */
             .pole_front_retract_speed = 65.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
@@ -447,11 +448,11 @@ Config_RobotParam_t robot_config = {
              */
             /* Active fields used by AutoCtrlTemplate_RunHeadDescend400Optimized. */
             .prealign_move_speed = 0.20f,       /* PREALIGN 对正阶段叠加 vx，单位 m/s。 */
-            .front_retract_move_speed = 0.15f,  /* 前杆动作阶段 vx，单位 m/s。 */
+            .front_retract_move_speed = 0.3f,  /* 前杆动作阶段 vx，单位 m/s。 */
             .mid_move_speed = 1.50f,            /* 中段平移 vx，单位 m/s。 */
-            .mid_move_ms = 275u,                /* 中段平移持续时间，单位 ms。 */
-            .rear_retract_move_speed = 0.18f,   /* 后杆动作阶段 vx，单位 m/s。 */
-            .rear_retract_move_ms = 275u,       /* 后杆动作后继续移动时间，单位 ms。 */
+            .mid_move_ms = 280u,                /* 中段平移持续时间，单位 ms。 */
+            .rear_retract_move_speed = 0.3f,   /* 后杆动作阶段 vx，单位 m/s。 */
+            .rear_retract_move_ms = 250u,       /* 后杆动作后继续移动时间，单位 ms。 */
             .second_photo_retract_move_speed = 0.20f, /* step7 第二个下降沿后全收杆离开 vx，单位 m/s。 */
             .final_move_speed = 0.1f,          /* 收尾离开台阶 vx，单位 m/s。 */
             .final_move_ms = 100u,              /* 收尾离开台阶持续时间，单位 ms。 */
@@ -462,7 +463,7 @@ Config_RobotParam_t robot_config = {
             .front_photo_timeout_ms = 5000u,    /* 等待前光电触发/下降沿超时，单位 ms。 */
             .rear_photo_timeout_ms = 5000u,     /* 等待后光电触发/下降沿超时，单位 ms。 */
             .pole_extend_move_speed = 1.5f,    /* step6 四杆全伸行走 vx，单位 m/s。 */
-            .hold_ms = 250u,                    /* step6 四杆全伸行走持续时间，单位 ms。 */
+            .hold_ms = 100u,                    /* step6 四杆全伸行走持续时间，单位 ms。 */
         },
         /* 尾向 / 上台阶 / 200mm 模板参数。 */
         .tail_ascend_200 = {
@@ -580,10 +581,8 @@ Config_RobotParam_t robot_config = {
             .zero_pulse_us = ROD_NEW_SERVO_PULSE_NEUTRAL_US,
             /* TODO: 根据实际机构调整角度参数 */
             .angle_standby_rad = 0.0f,       /* 待机位：放平 */
-            .angle_ready_rad = 0.5f,          /* 预备位 */
-            .angle_grab_low_rad = 0.3f,     /* 低位夹取 */
             .angle_grab_high_rad = 0.8f,     /* 高位夹取 */
-            .angle_lift_rad = 1.2f,          /* 抬升位 */
+            .angle_dock_wait_rad = 1.2f,     /* 等待对接位置 */
             .angle_min_rad = -2.356f,        /* 约 -135°，270°舵机行程下限(500μs) */
             .angle_max_rad = 2.356f,         /* 约 +135°，270°舵机行程上限(2500μs) */
             .arrive_threshold_rad = 0.05f,  /* 到位判定阈值 */
@@ -591,7 +590,6 @@ Config_RobotParam_t robot_config = {
             .max_acc_rad_s = 5.0f,          /* 最大角加速度 */
         },
         .gripper = {
-            /* TODO: 在gpio.c中配置具体GPIO引脚 */
             .gripper_gpio = BSP_GPIO_ROD_SOLENOID,
             .grip_timeout_ms = 2000u,        /* 夹取超时 */
         },

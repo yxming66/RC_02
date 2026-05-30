@@ -19,7 +19,7 @@ class MotorFactory {
 public:
     template <MotorKind Kind, MotorModel Model>
     static MotorT<Kind, Model>* Create(
-        const MotorInstanceConfig<Kind>& config,
+        const MotorInstanceConfig<Kind>&  config,
         const MotorInstallSpec& install = kDirectDriveInstall,
         const MotorTemperatureProtectionConfig& temperature_protection = {}) {
         static_assert(MotorModelValidV<Kind, Model>, "Invalid motor kind/model combination");

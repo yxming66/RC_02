@@ -10,6 +10,7 @@
 #include "device/dr16.h"
 #include "module/autoCtrlAPI/api/auto_ctrl_api.h"
 #include "module/autoCtrlAPI/ore_store/auto_ore_store.h"
+#include "module/autoCtrlAPI/rod/auto_rod_spearhead.h"
 #include "module/chassis.h"
 #include "module/config.h"
 #include "module/pc_protocol/pc_protocol.h"
@@ -32,6 +33,9 @@ auto_ctrl_t auto_ctrl;
 bool auto_ctrl_inited = false;
 AutoOre_t auto_ore_ctrl;
 bool auto_ore_inited = false;
+volatile AutoOre_DebugControl_t g_auto_ore_debug = {0};//手动调用一键函数
+AutoRodSpearhead_t auto_rod_spearhead_ctrl;
+bool auto_rod_spearhead_inited = false;
 bool auto_ctrl_local_yaw_zero_initialized = false;
 float auto_ctrl_local_yaw_zero_rad = 0.0f;
 auto_ctrl_feedback_t feedback = {0};
@@ -127,7 +131,8 @@ static void AutoCtrlFeed_InitAutoOre(void) {
       .ore_store_arrive_threshold_rad = 0.05f,
       .pole_arrive_threshold_rad = AUTO_CTRL_POLE_TARGET_THRESHOLD_RAD,
   };
-  AutoOre_Init(&auto_ore_ctrl, &params, 0u);
+  AutoOre_Occupancy_t initial_occupancy = {0};
+  AutoOre_Init(&auto_ore_ctrl, &params, &initial_occupancy);
   auto_ore_inited = true;
 }
 
@@ -146,6 +151,30 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms) {
   AutoOre_Update(&auto_ore_ctrl, &auto_ore_feedback, now_ms);
 }
 
+static void AutoCtrlFeed_InitAutoRodSpearhead(void) {
+  Config_RobotParam_t *cfg = Config_GetRobotParam();
+  if (cfg == NULL) {
+    return;
+  }
+
+  AutoRodSpearhead_Params_t params = {
+      .rod_param = &cfg->rod_new_param,
+      .open_delay_ms = 20u,
+      .grab_high_delay_ms = 500u,
+      .dock_wait_delay_ms = 500u,
+  };
+  AutoRodSpearhead_Init(&auto_rod_spearhead_ctrl, &params);
+  auto_rod_spearhead_inited = true;
+}
+
+static void AutoCtrlFeed_UpdateAutoRodSpearhead(uint32_t now_ms) {
+  if (!auto_rod_spearhead_inited) {
+    return;
+  }
+
+  AutoRodSpearhead_Update(&auto_rod_spearhead_ctrl, now_ms);
+}
+
 bool Task_AutoOreStartStore(void) {
   return auto_ore_inited &&
          AutoOre_StartStore(&auto_ore_ctrl, osKernelGetTickCount());
@@ -156,16 +185,76 @@ bool Task_AutoOreStartRelease(void) {
          AutoOre_StartRelease(&auto_ore_ctrl, osKernelGetTickCount());
 }
 
+bool Task_AutoOreStartChamber(void) {
+  return auto_ore_inited &&
+         AutoOre_StartChamber(&auto_ore_ctrl, osKernelGetTickCount());
+}
+
 void Task_AutoOreAbort(void) {
   if (auto_ore_inited) {
     AutoOre_Abort(&auto_ore_ctrl);
   }
 }
 
-void Task_AutoOreSetHeldOreCount(uint8_t held_ore_count) {
-  if (auto_ore_inited) {
-    AutoOre_SetHeldOreCount(&auto_ore_ctrl, held_ore_count);
+static void AutoCtrlFeed_HandleAutoOreDebugRequest(void) {
+  const AutoOre_DebugRequest_t request = g_auto_ore_debug.request;
+  bool result = false;
+
+  if (request == AUTO_ORE_DEBUG_REQUEST_NONE) {
+    return;
   }
+
+  g_auto_ore_debug.request = AUTO_ORE_DEBUG_REQUEST_NONE;
+  g_auto_ore_debug.last_request = request;
+  g_auto_ore_debug.request_count++;
+
+  switch (request) {
+    case AUTO_ORE_DEBUG_REQUEST_STORE:
+      result = Task_AutoOreStartStore();
+      break;
+    case AUTO_ORE_DEBUG_REQUEST_RELEASE:
+      result = Task_AutoOreStartRelease();
+      break;
+    case AUTO_ORE_DEBUG_REQUEST_CHAMBER:
+      result = Task_AutoOreStartChamber();
+      break;
+    case AUTO_ORE_DEBUG_REQUEST_ABORT:
+      Task_AutoOreAbort();
+      result = true;
+      break;
+    case AUTO_ORE_DEBUG_REQUEST_NONE:
+    default:
+      result = false;
+      break;
+  }
+
+  g_auto_ore_debug.last_result = result;
+  if (result) {
+    g_auto_ore_debug.accept_count++;
+  }
+}
+
+bool Task_AutoRodSpearheadStart(void) {
+  return auto_rod_spearhead_inited &&
+         AutoRodSpearhead_Start(&auto_rod_spearhead_ctrl,
+                                osKernelGetTickCount());
+}
+
+void Task_AutoRodSpearheadAbort(void) {
+  if (auto_rod_spearhead_inited) {
+    AutoRodSpearhead_Abort(&auto_rod_spearhead_ctrl);
+  }
+}
+
+bool Task_AutoRodSpearheadIsBusy(void) {
+  return auto_rod_spearhead_inited &&
+         AutoRodSpearhead_IsBusy(&auto_rod_spearhead_ctrl);
+}
+
+const RodNew_CMD_t *Task_AutoRodSpearheadGetCommand(void) {
+  return auto_rod_spearhead_inited
+             ? AutoRodSpearhead_GetRodCommand(&auto_rod_spearhead_ctrl)
+             : NULL;
 }
 
 /* Exported functions ------------------------------------------------------- */
@@ -181,6 +270,7 @@ void Task_auto_ctrl(void *argument) {
   AutoCtrl_Init(&auto_ctrl);
   auto_ctrl_inited = true;
   AutoCtrlFeed_InitAutoOre();
+  AutoCtrlFeed_InitAutoRodSpearhead();
 
   while (1) {
     uint32_t now_ms;
@@ -225,7 +315,9 @@ void Task_auto_ctrl(void *argument) {
       AutoCtrl_SetFeedback(&auto_ctrl, &feedback);
 
       AutoCtrl_Update(&auto_ctrl, now_ms);
+      AutoCtrlFeed_HandleAutoOreDebugRequest();
       AutoCtrlFeed_UpdateAutoOre(now_ms);
+      AutoCtrlFeed_UpdateAutoRodSpearhead(now_ms);
 
       if (g_pc_protocol_ptr != NULL) {
         PC_StepFeedback_t step_feedback = {0};

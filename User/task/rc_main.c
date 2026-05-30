@@ -132,8 +132,13 @@ typedef struct {
   volatile AutoOre_Result_t auto_ore_result;
   volatile AutoOre_Fault_t auto_ore_fault;
   volatile AutoOre_Action_t auto_ore_action;
-  volatile uint8_t auto_ore_held_count;
+  volatile AutoOre_Position_t auto_ore_active_position;
+  volatile uint8_t auto_ore_occupancy_mask;
   volatile uint8_t auto_ore_step_index;
+  volatile AutoRodSpearhead_State_t auto_rod_spearhead_state;
+  volatile AutoRodSpearhead_Result_t auto_rod_spearhead_result;
+  volatile AutoRodSpearhead_Fault_t auto_rod_spearhead_fault;
+  volatile uint8_t auto_rod_spearhead_step_index;
 } RcControlDebug_t;
 
 volatile RcControlDebug_t g_rc_control_debug = {0};
@@ -813,8 +818,19 @@ static void Rc_ResetFrameDebug(void) {
   g_rc_control_debug.auto_ore_result = AutoOre_GetResult(&auto_ore_ctrl);
   g_rc_control_debug.auto_ore_fault = AutoOre_GetFault(&auto_ore_ctrl);
   g_rc_control_debug.auto_ore_action = auto_ore_ctrl.action;
-  g_rc_control_debug.auto_ore_held_count = AutoOre_GetHeldOreCount(&auto_ore_ctrl);
+    g_rc_control_debug.auto_ore_active_position =
+      AutoOre_GetActivePosition(&auto_ore_ctrl);
+    g_rc_control_debug.auto_ore_occupancy_mask =
+      AutoOre_GetOccupancyMask(&auto_ore_ctrl);
   g_rc_control_debug.auto_ore_step_index = AutoOre_GetStepIndex(&auto_ore_ctrl);
+    g_rc_control_debug.auto_rod_spearhead_state =
+      AutoRodSpearhead_GetState(&auto_rod_spearhead_ctrl);
+    g_rc_control_debug.auto_rod_spearhead_result =
+      AutoRodSpearhead_GetResult(&auto_rod_spearhead_ctrl);
+    g_rc_control_debug.auto_rod_spearhead_fault =
+      AutoRodSpearhead_GetFault(&auto_rod_spearhead_ctrl);
+    g_rc_control_debug.auto_rod_spearhead_step_index =
+      AutoRodSpearhead_GetStepIndex(&auto_rod_spearhead_ctrl);
   g_rc_ore_store_debug.assume_home_event = false;
 }
 
@@ -837,6 +853,9 @@ static void Rc_ApplySafeBehavior(void) {
   g_rc_control_debug.page = RC_CONTROL_PAGE_SAFE;
   if (auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl)) {
     Task_AutoOreAbort();
+  }
+  if (Task_AutoRodSpearheadIsBusy()) {
+    Task_AutoRodSpearheadAbort();
   }
   Rc_SetChassisRelax();
   Rc_SetPoleAuto(0.0f, 0.0f);
@@ -877,6 +896,18 @@ static void Rc_ApplyAutoOreOutputs(void) {
 
   g_rc_control_debug.ore_store_active = true;
   g_rc_control_debug.arm_simple_active = true;
+}
+
+static void Rc_ApplyAutoRodSpearheadOutputs(void) {
+  const RodNew_CMD_t *auto_rod_cmd = Task_AutoRodSpearheadGetCommand();
+  if (auto_rod_cmd != NULL) {
+    rod_cmd = *auto_rod_cmd;
+    rod_grip_latched = rod_cmd.grip;
+    rod_target_angle_latched_rad = rod_cmd.target_angle_rad;
+  } else {
+    Rc_SetRodHold();
+  }
+  g_rc_control_debug.rod_active = true;
 }
 
 static void Rc_ApplyAutoCtrlOutputs(void) {
@@ -1053,27 +1084,7 @@ static bool Rc_AutoOreSwitchEdgeFromMid(void) {
          last_sw_r == DR16_SW_MID && dr16.data.sw_r != DR16_SW_MID;
 }
 
-static void Rc_HandleAutoOreHeldCountCalibration(void) {
-  if (!dr16.header.online || dr16.data.sw_l != DR16_SW_DOWN ||
-      dr16.data.sw_r != DR16_SW_MID || !auto_ore_inited ||
-      AutoOre_IsBusy(&auto_ore_ctrl)) {
-    return;
-  }
-
-  if (Rc_KeyDown(DR16_KEY_Z)) {
-    Task_AutoOreSetHeldOreCount(0u);
-  } else if (Rc_KeyDown(DR16_KEY_X)) {
-    Task_AutoOreSetHeldOreCount(1u);
-  } else if (Rc_KeyDown(DR16_KEY_C)) {
-    Task_AutoOreSetHeldOreCount(2u);
-  } else if (Rc_KeyDown(DR16_KEY_V)) {
-    Task_AutoOreSetHeldOreCount(3u);
-  }
-}
-
 static void Rc_HandleBehaviorEvents(RcBehavior_t behavior) {
-  Rc_HandleAutoOreHeldCountCalibration();
-
   if (behavior == RC_BEHAVIOR_AUTO_ORE && Rc_AutoOreSwitchEdgeFromMid()) {
     g_rc_control_debug.auto_ore_start_event = true;
     if (auto_ore_inited && !AutoOre_IsBusy(&auto_ore_ctrl)) {
@@ -1094,6 +1105,11 @@ static void Rc_ApplyMappedBehavior(RcBehavior_t behavior) {
     }
     Rc_LatchAutoOreCurrentTargets();
     Task_AutoOreAbort();
+  }
+
+  if (Task_AutoRodSpearheadIsBusy()) {
+    Rc_ApplyAutoRodSpearheadOutputs();
+    return;
   }
 
   if (!Rc_BehaviorAllowsAutoCtrlOutput(behavior) &&

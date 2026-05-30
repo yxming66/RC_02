@@ -54,8 +54,10 @@ typedef enum {
 
 typedef enum {
     ARM_SIMPLE_BEHAVIOR_STANDBY = 0,  /* 一键存取矿：待机位置 */
-    ARM_SIMPLE_BEHAVIOR_PICK_ORE,     /* 一键存取矿：取矿位置 */
-    ARM_SIMPLE_BEHAVIOR_STORE_ORE,    /* 一键存取矿：存/放矿位置 */
+    ARM_SIMPLE_BEHAVIOR_STORE_ORE,        /* 一键存取矿：存矿位置 */
+    ARM_SIMPLE_BEHAVIOR_WAIT_STORE_ORE,   /* 一键存取矿：待存矿位置 */
+    ARM_SIMPLE_BEHAVIOR_WAIT_RELEASE_ORE, /* 一键存取矿：待放矿位置 */
+    ARM_SIMPLE_BEHAVIOR_RELEASE_ORE,      /* 一键存取矿：放矿位置 */
     ARM_SIMPLE_BEHAVIOR_NUM,
 } ArmSimple_BehaviorPoint_t;
 

@@ -28,22 +28,24 @@ extern "C" {
 #define ROD_NEW_SERVO_DEADBAND_US 1U        /* 死区 */
 #define ROD_NEW_SERVO_DEFAULT_FREQ_HZ 50U   /* 默认频率 50Hz */
 
+#ifndef ROD_NEW_GRIPPER_OPEN_LEVEL
+#define ROD_NEW_GRIPPER_OPEN_LEVEL (1u)
+#endif
+
 typedef enum {
   ROD_NEW_MODE_RELAX = 0,
   ROD_NEW_MODE_ACTIVE,
 } RodNew_Mode_t;
 
 typedef enum {
-  ROD_NEW_GRIP_RELEASE = 0, /* 释放 */
-  ROD_NEW_GRIP_GRAB,        /* 夹取 */
+  ROD_NEW_GRIP_RELEASE = 0, /* 打开 */
+  ROD_NEW_GRIP_GRAB,        /* 关闭 */
 } RodNew_GripState_t;
 
 typedef enum {
   ROD_NEW_POSE_STANDBY = 0,  /* 待机位（放平） */
-  ROD_NEW_POSE_READY,         /* 预备位 */
-  ROD_NEW_POSE_GRAB_LOW,      /* 低位夹取 */
   ROD_NEW_POSE_GRAB_HIGH,     /* 高位夹取 */
-  ROD_NEW_POSE_LIFT,          /* 抬升 */
+  ROD_NEW_POSE_DOCK_WAIT,     /* 等待对接位置 */
   ROD_NEW_POSE_MANUAL,        /* 手动角度 */
 } RodNew_Pose_t;
 
@@ -55,10 +57,8 @@ typedef struct {
 
   /* 角度参数（弧度） */
   float angle_standby_rad;
-  float angle_ready_rad;
-  float angle_grab_low_rad;
   float angle_grab_high_rad;
-  float angle_lift_rad;
+  float angle_dock_wait_rad;
 
   /* 角度限幅 */
   float angle_min_rad;

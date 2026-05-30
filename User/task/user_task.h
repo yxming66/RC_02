@@ -10,6 +10,7 @@
 #include <stdint.h>
 #include "module/autoCtrlAPI/api/auto_ctrl_api.h"
 #include "module/autoCtrlAPI/ore_store/auto_ore_store.h"
+#include "module/autoCtrlAPI/rod/auto_rod_spearhead.h"
 #include "module/arm_simple.h"
 #include "module/rod_new.h"
 #include "module/ore_store.h"
@@ -58,6 +59,22 @@ typedef struct {
     volatile uint32_t request_tick;
     volatile uint32_t min_duration_ms;
 } Buzzer_AlarmRequest_t;
+
+typedef enum {
+    AUTO_ORE_DEBUG_REQUEST_NONE = 0,
+    AUTO_ORE_DEBUG_REQUEST_STORE = 1,
+    AUTO_ORE_DEBUG_REQUEST_RELEASE = 2,
+    AUTO_ORE_DEBUG_REQUEST_CHAMBER = 3,
+    AUTO_ORE_DEBUG_REQUEST_ABORT = 4,
+} AutoOre_DebugRequest_t;
+
+typedef struct {
+    volatile AutoOre_DebugRequest_t request;
+    volatile AutoOre_DebugRequest_t last_request;
+    volatile bool last_result;
+    volatile uint32_t request_count;
+    volatile uint32_t accept_count;
+} AutoOre_DebugControl_t;
 
 /* 任务运行时结构体 */
 typedef struct {
@@ -144,6 +161,9 @@ extern auto_ctrl_t auto_ctrl;
 extern bool auto_ctrl_inited;
 extern AutoOre_t auto_ore_ctrl;
 extern bool auto_ore_inited;
+extern volatile AutoOre_DebugControl_t g_auto_ore_debug;
+extern AutoRodSpearhead_t auto_rod_spearhead_ctrl;
+extern bool auto_rod_spearhead_inited;
 extern bool auto_ctrl_local_yaw_zero_initialized;
 extern float auto_ctrl_local_yaw_zero_rad;
 extern BUZZER_t buzzer;
@@ -180,8 +200,12 @@ bool Task_ChassisMainPoleAllAtTarget(float threshold_rad);
 bool Task_ChassisMainGetPoleHoldCommand(Pole_CMD_t *cmd);
 bool Task_AutoOreStartStore(void);
 bool Task_AutoOreStartRelease(void);
+bool Task_AutoOreStartChamber(void);
 void Task_AutoOreAbort(void);
-void Task_AutoOreSetHeldOreCount(uint8_t held_ore_count);
+bool Task_AutoRodSpearheadStart(void);
+void Task_AutoRodSpearheadAbort(void);
+bool Task_AutoRodSpearheadIsBusy(void);
+const RodNew_CMD_t *Task_AutoRodSpearheadGetCommand(void);
 int8_t Task_OreStorePostCommand(const OreStore_CMD_t *cmd);
 void Task_OreStoreRequestRehome(void);
 int8_t Task_OreStoreAssumeAxisHomedAtCurrent(uint8_t axis,

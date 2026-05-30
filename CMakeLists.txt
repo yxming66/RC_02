@@ -125,6 +125,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     User/module/autoCtrlAPI/core/auto_ctrl_math.cpp
     User/module/autoCtrlAPI/primitive/auto_ctrl_primitive.cpp
     User/module/autoCtrlAPI/ore_store/auto_ore_store.c
+    User/module/autoCtrlAPI/rod/auto_rod_spearhead.c
     User/module/autoCtrlAPI/step/auto_ctrl_step.c
     User/module/autoCtrlAPI/template/auto_ctrl_template_runner.c
     User/module/arm_simple.c

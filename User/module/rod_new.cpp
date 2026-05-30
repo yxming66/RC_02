@@ -105,17 +105,11 @@ int8_t RodNew_Control(RodNew_t *r, RodNew_Mode_t mode, RodNew_Pose_t pose,
     case ROD_NEW_POSE_STANDBY:
       r->servo.target_angle_rad = r->param->servo.angle_standby_rad;
       break;
-    case ROD_NEW_POSE_READY:
-      r->servo.target_angle_rad = r->param->servo.angle_ready_rad;
-      break;
-    case ROD_NEW_POSE_GRAB_LOW:
-      r->servo.target_angle_rad = r->param->servo.angle_grab_low_rad;
-      break;
     case ROD_NEW_POSE_GRAB_HIGH:
       r->servo.target_angle_rad = r->param->servo.angle_grab_high_rad;
       break;
-    case ROD_NEW_POSE_LIFT:
-      r->servo.target_angle_rad = r->param->servo.angle_lift_rad;
+    case ROD_NEW_POSE_DOCK_WAIT:
+      r->servo.target_angle_rad = r->param->servo.angle_dock_wait_rad;
       break;
     case ROD_NEW_POSE_MANUAL:
       r->servo.target_angle_rad = target_angle_rad;
