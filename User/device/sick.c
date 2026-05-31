@@ -50,6 +50,32 @@ static uint16_t SICK_ParseAdcRaw16(const uint8_t *data, uint8_t index) {
   return ((uint16_t)data[offset] << 8) | (uint16_t)data[offset + 1u];
 }
 
+static uint16_t SICK_AddAdcOffset(uint16_t adc_raw_value, uint16_t offset) {
+  return (adc_raw_value > (uint16_t)(0xFFFFu - offset))
+             ? 0xFFFFu
+             : (uint16_t)(adc_raw_value + offset);
+}
+
+static uint16_t SICK_SubAdcOffset(uint16_t adc_raw_value, uint16_t offset) {
+  return (adc_raw_value > offset) ? (uint16_t)(adc_raw_value - offset) : 0u;
+}
+
+static uint16_t SICK_AdjustAdcRaw(uint8_t index, uint16_t adc_raw_value) {
+  if (index == 1u) {
+    return SICK_AddAdcOffset(adc_raw_value, SICK_CHANNEL_2_ADC_OFFSET);
+  }
+
+  if (index == 2u) {
+    return SICK_SubAdcOffset(adc_raw_value, SICK_CHANNEL_3_ADC_OFFSET);
+  }
+
+  if (index == 3u) {
+    return SICK_SubAdcOffset(adc_raw_value, SICK_CHANNEL_4_ADC_OFFSET);
+  }
+
+  return adc_raw_value;
+}
+
 static void SICK_SetAllDistanceInvalid(void) {
   for (uint8_t i = 0u; i < SICK_OUTPUT_CHANNEL_COUNT; i++) {
     sick_distance_m[i] = -1.0f;
@@ -104,7 +130,7 @@ static void SICK_UpdateAdcRaw(void) {
     }
 
     for (uint8_t i = 0u; i < SICK_OUTPUT_CHANNEL_COUNT; i++) {
-      sick_adc_raw[i] = SICK_ParseAdcRaw16(sick_msg.data, i);
+      sick_adc_raw[i] = SICK_AdjustAdcRaw(i, SICK_ParseAdcRaw16(sick_msg.data, i));
     }
     updated = true;
   }

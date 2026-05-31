@@ -152,8 +152,6 @@ typedef struct {
   volatile OreStore_Mode_t cmd_mode;
   volatile bool cmd_force_rehome;
   volatile float platform_target_rad; 
-  volatile float gate_target_rad[ORE_STORE_GATE_NUM];
-  volatile float track_target_rad[ORE_STORE_TRACK_NUM];
   volatile bool assume_home_event;
   volatile int8_t assume_home_ret;
   volatile int8_t post_ret;
@@ -428,37 +426,13 @@ static void Rc_InitOreStoreActiveTargets(void) {
 
     if (feedback != NULL) {
     if (feedback->homed[ORE_STORE_AXIS_PLATFORM]) {
-    ore_store_cmd.platform_target_rad =
+      ore_store_cmd.platform_target_rad =
         feedback->position_rad[ORE_STORE_AXIS_PLATFORM];
-    }
-    if (feedback->homed[ORE_STORE_AXIS_GATE_LEFT]) {
-    ore_store_cmd.gate_target_rad[0] =
-        feedback->position_rad[ORE_STORE_AXIS_GATE_LEFT];
-    }
-    if (feedback->homed[ORE_STORE_AXIS_GATE_RIGHT]) {
-    ore_store_cmd.gate_target_rad[1] =
-        feedback->position_rad[ORE_STORE_AXIS_GATE_RIGHT];
-    }
-    if (feedback->homed[ORE_STORE_AXIS_TRACK_LEFT]) {
-    ore_store_cmd.track_target_rad[0] =
-        feedback->position_rad[ORE_STORE_AXIS_TRACK_LEFT];
-    }
-    if (feedback->homed[ORE_STORE_AXIS_TRACK_RIGHT]) {
-    ore_store_cmd.track_target_rad[1] =
-        feedback->position_rad[ORE_STORE_AXIS_TRACK_RIGHT];
     }
   }
 
   ore_store_cmd.platform_target_rad = Rc_ClampOreStoreTarget(
       ORE_STORE_AXIS_PLATFORM, ore_store_cmd.platform_target_rad);
-  ore_store_cmd.gate_target_rad[0] = Rc_ClampOreStoreTarget(
-      ORE_STORE_AXIS_GATE_LEFT, ore_store_cmd.gate_target_rad[0]);
-  ore_store_cmd.gate_target_rad[1] = Rc_ClampOreStoreTarget(
-      ORE_STORE_AXIS_GATE_RIGHT, ore_store_cmd.gate_target_rad[1]);
-  ore_store_cmd.track_target_rad[0] = Rc_ClampOreStoreTarget(
-      ORE_STORE_AXIS_TRACK_LEFT, ore_store_cmd.track_target_rad[0]);
-  ore_store_cmd.track_target_rad[1] = Rc_ClampOreStoreTarget(
-      ORE_STORE_AXIS_TRACK_RIGHT, ore_store_cmd.track_target_rad[1]);
   ore_store_active_initialized = true;
 }
 
@@ -472,15 +446,7 @@ static void Rc_SetOreStoreActiveManual(void) {
   const float platform_velocity =
     Rc_ApplyOreStoreDeadband(dr16.data.ch_r_y) *
     Rc_OreStoreAxisMoveSpeed(ORE_STORE_AXIS_PLATFORM);
-  const float gate_velocity =
-    Rc_ApplyOreStoreDeadband(dr16.data.ch_r_x) *
-    Rc_OreStoreAxisMoveSpeed(ORE_STORE_AXIS_GATE_LEFT);
-  const float track_velocity =
-    Rc_ApplyOreStoreDeadband(dr16.data.ch_l_y) *
-    Rc_OreStoreAxisMoveSpeed(ORE_STORE_AXIS_TRACK_LEFT);
   const float platform_delta = platform_velocity * dt_s;
-  const float gate_delta = gate_velocity * dt_s;
-  const float track_delta = track_velocity * dt_s;
 
   if (!ore_store_active_initialized) {
     Rc_InitOreStoreActiveTargets();
@@ -490,14 +456,6 @@ static void Rc_SetOreStoreActiveManual(void) {
   ore_store_cmd.force_rehome = false;
   ore_store_cmd.platform_target_rad = Rc_ClampOreStoreTarget(
       ORE_STORE_AXIS_PLATFORM, ore_store_cmd.platform_target_rad + platform_delta);
-  ore_store_cmd.gate_target_rad[0] = Rc_ClampOreStoreTarget(
-      ORE_STORE_AXIS_GATE_LEFT, ore_store_cmd.gate_target_rad[0] + gate_delta);
-  ore_store_cmd.gate_target_rad[1] = Rc_ClampOreStoreTarget(
-      ORE_STORE_AXIS_GATE_RIGHT, ore_store_cmd.gate_target_rad[1] + gate_delta);
-  ore_store_cmd.track_target_rad[0] = Rc_ClampOreStoreTarget(
-      ORE_STORE_AXIS_TRACK_LEFT, ore_store_cmd.track_target_rad[0] + track_delta);
-  ore_store_cmd.track_target_rad[1] = Rc_ClampOreStoreTarget(
-      ORE_STORE_AXIS_TRACK_RIGHT, ore_store_cmd.track_target_rad[1] + track_delta);
 }
 
 static void Rc_SetPoleManual(float left, float right) {
@@ -898,6 +856,21 @@ static void Rc_ApplyAutoOreOutputs(void) {
   g_rc_control_debug.arm_simple_active = true;
 }
 
+static bool Rc_TryApplyAutoOreDebugOutputs(void) {
+  if (!g_auto_ore_debug.force_output_enable) {
+    return false;
+  }
+  if (!auto_ore_inited || !AutoOre_IsBusy(&auto_ore_ctrl)) {
+    g_auto_ore_debug.force_output_enable = false;
+    return false;
+  }
+
+  Rc_ApplyAutoOreOutputs();
+  g_rc_control_debug.page = RC_CONTROL_PAGE_AUTO_ORE;
+  g_auto_ore_debug.force_output_count++;
+  return true;
+}
+
 static void Rc_ApplyAutoRodSpearheadOutputs(void) {
   const RodNew_CMD_t *auto_rod_cmd = Task_AutoRodSpearheadGetCommand();
   if (auto_rod_cmd != NULL) {
@@ -1021,18 +994,6 @@ static void Rc_ApplyPcBehavior(void) {
       ore_store_cmd.platform_target_rad =
           Rc_ClampOreStoreTarget(ORE_STORE_AXIS_PLATFORM,
                                  pc_ore_store_cmd->platform_target_rad);
-      ore_store_cmd.gate_target_rad[0] =
-          Rc_ClampOreStoreTarget(ORE_STORE_AXIS_GATE_LEFT,
-                                 pc_ore_store_cmd->gate_target_rad[0]);
-      ore_store_cmd.gate_target_rad[1] =
-          Rc_ClampOreStoreTarget(ORE_STORE_AXIS_GATE_RIGHT,
-                                 pc_ore_store_cmd->gate_target_rad[1]);
-      ore_store_cmd.track_target_rad[0] =
-          Rc_ClampOreStoreTarget(ORE_STORE_AXIS_TRACK_LEFT,
-                                 pc_ore_store_cmd->track_target_rad[0]);
-      ore_store_cmd.track_target_rad[1] =
-          Rc_ClampOreStoreTarget(ORE_STORE_AXIS_TRACK_RIGHT,
-                                 pc_ore_store_cmd->track_target_rad[1]);
       ore_store_active_initialized = ore_store_cmd.mode == ORE_STORE_MODE_ACTIVE;
     } else {
       Rc_SetOreStoreHold();
@@ -1174,10 +1135,6 @@ static void Rc_PublishCommandsAndDebug(void) {
   g_rc_ore_store_debug.cmd_mode = ore_store_cmd.mode;
   g_rc_ore_store_debug.cmd_force_rehome = ore_store_cmd.force_rehome;
   g_rc_ore_store_debug.platform_target_rad = ore_store_cmd.platform_target_rad;
-  g_rc_ore_store_debug.gate_target_rad[0] = ore_store_cmd.gate_target_rad[0];
-  g_rc_ore_store_debug.gate_target_rad[1] = ore_store_cmd.gate_target_rad[1];
-  g_rc_ore_store_debug.track_target_rad[0] = ore_store_cmd.track_target_rad[0];
-  g_rc_ore_store_debug.track_target_rad[1] = ore_store_cmd.track_target_rad[1];
   g_rc_ore_store_debug.post_ret = g_rc_ore_store_post_ret;
 }
 
@@ -1286,7 +1243,9 @@ void Task_rc_main(void *argument) {
     }
 
     behavior = Rc_SelectMappedBehavior();
-    if (behavior == RC_BEHAVIOR_SAFE) {
+    if (Rc_TryApplyAutoOreDebugOutputs()) {
+      /* Commands were filled by AutoOre debug output. */
+    } else if (behavior == RC_BEHAVIOR_SAFE) {
       Rc_ApplySafeBehavior();
     } else if (auto_ctrl_inited && AutoCtrl_IsBusy(&auto_ctrl) &&
                Rc_BehaviorAllowsAutoCtrlOutput(behavior)) {

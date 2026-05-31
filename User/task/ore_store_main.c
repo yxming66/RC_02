@@ -42,18 +42,6 @@ typedef struct {
   volatile float platform_cmd_current_a;
   volatile int16_t platform_rm_output_raw;
   volatile uint16_t platform_rm_tx_frame_id;
-  volatile bool track_left_online;
-  volatile bool track_left_homed;
-  volatile float track_left_position_rad;
-  volatile float track_left_target_rad;
-  volatile float track_left_command_rad;
-  volatile int16_t track_left_rm_output_raw;
-  volatile bool track_right_online;
-  volatile bool track_right_homed;
-  volatile float track_right_position_rad;
-  volatile float track_right_target_rad;
-  volatile float track_right_command_rad;
-  volatile int16_t track_right_rm_output_raw;
 } OreStoreTask_DebugView_t;
 
 volatile OreStoreTask_DebugView_t g_ore_store_debug_view = {0};
@@ -88,23 +76,7 @@ static bool OreStoreTask_TargetsAreFinite(const OreStore_CMD_t *cmd) {
     return false;
   }
 
-  if (!isfinite(cmd->platform_target_rad)) {
-    return false;
-  }
-
-  for (uint8_t i = 0; i < ORE_STORE_GATE_NUM; ++i) {
-    if (!isfinite(cmd->gate_target_rad[i])) {
-      return false;
-    }
-  }
-
-  for (uint8_t i = 0; i < ORE_STORE_TRACK_NUM; ++i) {
-    if (!isfinite(cmd->track_target_rad[i])) {
-      return false;
-    }
-  }
-
-  return true;
+  return isfinite(cmd->platform_target_rad);
 }
 
 static void OreStoreTask_SanitizeCommand(OreStore_CMD_t *cmd) {
@@ -127,12 +99,6 @@ static bool OreStoreTask_TryApplyDebugCommand(OreStore_CMD_t *cmd) {
   cmd->mode = g_ore_store_debug_command.mode;
   cmd->force_rehome = g_ore_store_debug_command.force_rehome;
   cmd->platform_target_rad = g_ore_store_debug_command.platform_target_rad;
-  for (uint8_t i = 0; i < ORE_STORE_GATE_NUM; ++i) {
-    cmd->gate_target_rad[i] = g_ore_store_debug_command.gate_target_rad[i];
-  }
-  for (uint8_t i = 0; i < ORE_STORE_TRACK_NUM; ++i) {
-    cmd->track_target_rad[i] = g_ore_store_debug_command.track_target_rad[i];
-  }
 
   OreStoreTask_SanitizeCommand(cmd);
   ++g_ore_store_debug_command.applied_count;
@@ -159,8 +125,8 @@ static void OreStoreTask_ApplyDirectDebugOutput(void) {
     return;
   }
 
-  if (ore_store.param == NULL ||
-      g_ore_store_debug_command.direct_output_axis >= ORE_STORE_AXIS_NUM) {
+    if (ore_store.param == NULL ||
+      g_ore_store_debug_command.direct_output_axis != ORE_STORE_AXIS_PLATFORM) {
     g_ore_store_debug_command.direct_set_ret = ORE_STORE_ERR_NULL;
     g_ore_store_debug_command.direct_ctrl_ret = ORE_STORE_ERR_NULL;
     return;
@@ -230,30 +196,6 @@ static void OreStoreTask_UpdateDebugView(void) {
       ore_store.debug.rm_output_raw[ORE_STORE_AXIS_PLATFORM];
   g_ore_store_debug_view.platform_rm_tx_frame_id =
       ore_store.debug.rm_tx_frame_id[ORE_STORE_AXIS_PLATFORM];
-    g_ore_store_debug_view.track_left_online =
-      ore_store.feedback.online[ORE_STORE_AXIS_TRACK_LEFT];
-    g_ore_store_debug_view.track_left_homed =
-      ore_store.feedback.homed[ORE_STORE_AXIS_TRACK_LEFT];
-    g_ore_store_debug_view.track_left_position_rad =
-      ore_store.feedback.position_rad[ORE_STORE_AXIS_TRACK_LEFT];
-    g_ore_store_debug_view.track_left_target_rad =
-      ore_store.debug.target_position_rad[ORE_STORE_AXIS_TRACK_LEFT];
-    g_ore_store_debug_view.track_left_command_rad =
-      ore_store.debug.command_position_rad[ORE_STORE_AXIS_TRACK_LEFT];
-    g_ore_store_debug_view.track_left_rm_output_raw =
-      ore_store.debug.rm_output_raw[ORE_STORE_AXIS_TRACK_LEFT];
-    g_ore_store_debug_view.track_right_online =
-      ore_store.feedback.online[ORE_STORE_AXIS_TRACK_RIGHT];
-    g_ore_store_debug_view.track_right_homed =
-      ore_store.feedback.homed[ORE_STORE_AXIS_TRACK_RIGHT];
-    g_ore_store_debug_view.track_right_position_rad =
-      ore_store.feedback.position_rad[ORE_STORE_AXIS_TRACK_RIGHT];
-    g_ore_store_debug_view.track_right_target_rad =
-      ore_store.debug.target_position_rad[ORE_STORE_AXIS_TRACK_RIGHT];
-    g_ore_store_debug_view.track_right_command_rad =
-      ore_store.debug.command_position_rad[ORE_STORE_AXIS_TRACK_RIGHT];
-    g_ore_store_debug_view.track_right_rm_output_raw =
-      ore_store.debug.rm_output_raw[ORE_STORE_AXIS_TRACK_RIGHT];
 }
 
 static void OreStoreTask_UpdateTemperatureAlarm(uint32_t now_tick) {

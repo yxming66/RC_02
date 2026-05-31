@@ -58,9 +58,11 @@ arm_lib::Vec3 MakeVec3(float x, float y, float z) {
 mr::motor::MotorTemperatureProtectionConfig MakeTemperatureProtection(
     const MOTOR_TemperatureProtectionConfig_t& param) {
   mr::motor::MotorTemperatureProtectionConfig config{};
-  config.warning_c = param.warning_c;
-  config.limit_c = param.limit_c;
-  config.auto_relax_on_limit = param.auto_relax_on_limit;
+  const MOTOR_TemperatureProtectionConfig_t temperature_protection =
+      MOTOR_NormalizeTemperatureProtection(param);
+  config.warning_c = temperature_protection.warning_c;
+  config.limit_c = temperature_protection.limit_c;
+  config.auto_relax_on_limit = temperature_protection.auto_relax_on_limit;
   return config;
 }
 

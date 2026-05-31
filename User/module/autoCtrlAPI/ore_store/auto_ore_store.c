@@ -62,6 +62,7 @@ static bool AutoOre_WaitConditionThenDelay(AutoOre_t *ctrl, uint32_t now_ms,
                                            bool condition,
                                            uint32_t delay_ms) {
   if (!condition) {
+    ctrl->step_condition_met = false;
     return false;
   }
   if (!ctrl->step_condition_met) {
@@ -91,12 +92,11 @@ static bool AutoOre_CommandArm(AutoOre_t *ctrl, ArmSimple_BehaviorPoint_t point,
   return ctrl->arm_cmd_valid;
 }
 
-static bool AutoOre_CommandOreStore(AutoOre_t *ctrl, OreStore_TrackPoint_t track,
+static bool AutoOre_CommandOreStore(AutoOre_t *ctrl,
                                     OreStore_TransformPoint_t transform,
-                                    OreStore_GatePoint_t gate,
                                     bool cylinder_closed) {
   ctrl->ore_store_cmd_valid = OreStore_MakePresetCommand(
-      ctrl->param.ore_store_param, track, transform, gate, cylinder_closed,
+      ctrl->param.ore_store_param, transform, cylinder_closed,
       &ctrl->ore_store_cmd);
   return ctrl->ore_store_cmd_valid;
 }
@@ -227,9 +227,7 @@ static void AutoOre_RunStoreLow(AutoOre_t *ctrl, uint32_t now_ms) {
       AutoOre_EnterStep(ctrl, now_ms);
       if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_WAIT_STORE_ORE,
                               SUCTION_ON) ||
-          !AutoOre_CommandOreStore(ctrl, ORE_STORE_TRACK_STANDBY,
-                                   ORE_STORE_TRANSFORM_LIFT,
-                                   ORE_STORE_GATE_CLOSED, false)) {
+          !AutoOre_CommandOreStore(ctrl, ORE_STORE_TRANSFORM_LIFT, false)) {
         AutoOre_FailInvalidParam(ctrl);
         return;
       }
@@ -239,9 +237,7 @@ static void AutoOre_RunStoreLow(AutoOre_t *ctrl, uint32_t now_ms) {
       AutoOre_EnterStep(ctrl, now_ms);
       if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_STORE_ORE,
                               SUCTION_OFF) ||
-          !AutoOre_CommandOreStore(ctrl, ORE_STORE_TRACK_STANDBY,
-                                   ORE_STORE_TRANSFORM_LIFT,
-                                   ORE_STORE_GATE_CLOSED,
+          !AutoOre_CommandOreStore(ctrl, ORE_STORE_TRANSFORM_LIFT,
                                    ctrl->step_phase != 0u)) {
         AutoOre_FailInvalidParam(ctrl);
         return;
@@ -265,9 +261,7 @@ static void AutoOre_RunStoreLow(AutoOre_t *ctrl, uint32_t now_ms) {
       return;
     case 2:
       AutoOre_EnterStep(ctrl, now_ms);
-      if (!AutoOre_CommandOreStore(ctrl, ORE_STORE_TRACK_STANDBY,
-                                   ORE_STORE_TRANSFORM_LIFT,
-                                   ORE_STORE_GATE_CLOSED, false)) {
+      if (!AutoOre_CommandOreStore(ctrl, ORE_STORE_TRANSFORM_LIFT, false)) {
         AutoOre_FailInvalidParam(ctrl);
         return;
       }
@@ -278,9 +272,7 @@ static void AutoOre_RunStoreLow(AutoOre_t *ctrl, uint32_t now_ms) {
       return;
     case 3:
       AutoOre_EnterStep(ctrl, now_ms);
-      if (!AutoOre_CommandOreStore(ctrl, ORE_STORE_TRACK_STANDBY,
-                                   ORE_STORE_TRANSFORM_STANDBY,
-                                   ORE_STORE_GATE_CLOSED, false)) {
+      if (!AutoOre_CommandOreStore(ctrl, ORE_STORE_TRANSFORM_STANDBY, false)) {
         AutoOre_FailInvalidParam(ctrl);
         return;
       }
@@ -302,9 +294,7 @@ static void AutoOre_RunStoreHigh(AutoOre_t *ctrl, uint32_t now_ms) {
       AutoOre_EnterStep(ctrl, now_ms);
       if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_WAIT_STORE_ORE,
                               SUCTION_ON) ||
-          !AutoOre_CommandOreStore(ctrl, ORE_STORE_TRACK_STANDBY,
-                                   ORE_STORE_TRANSFORM_MID_WAIT,
-                                   ORE_STORE_GATE_CLOSED, false)) {
+          !AutoOre_CommandOreStore(ctrl, ORE_STORE_TRANSFORM_MID_WAIT, false)) {
         AutoOre_FailInvalidParam(ctrl);
         return;
       }
@@ -314,9 +304,7 @@ static void AutoOre_RunStoreHigh(AutoOre_t *ctrl, uint32_t now_ms) {
       AutoOre_EnterStep(ctrl, now_ms);
       if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_STORE_ORE,
                               SUCTION_OFF) ||
-          !AutoOre_CommandOreStore(ctrl, ORE_STORE_TRACK_STANDBY,
-                                   ORE_STORE_TRANSFORM_MID_WAIT,
-                                   ORE_STORE_GATE_CLOSED,
+          !AutoOre_CommandOreStore(ctrl, ORE_STORE_TRANSFORM_MID_WAIT,
                                    ctrl->step_phase != 0u)) {
         AutoOre_FailInvalidParam(ctrl);
         return;
@@ -340,9 +328,7 @@ static void AutoOre_RunStoreHigh(AutoOre_t *ctrl, uint32_t now_ms) {
       return;
     case 2:
       AutoOre_EnterStep(ctrl, now_ms);
-      if (!AutoOre_CommandOreStore(ctrl, ORE_STORE_TRACK_STANDBY,
-                                   ORE_STORE_TRANSFORM_MID_WAIT,
-                                   ORE_STORE_GATE_CLOSED, true)) {
+      if (!AutoOre_CommandOreStore(ctrl, ORE_STORE_TRANSFORM_MID_WAIT, true)) {
         AutoOre_FailInvalidParam(ctrl);
         return;
       }
@@ -369,9 +355,8 @@ static void AutoOre_RunStoreArm(AutoOre_t *ctrl, uint32_t now_ms) {
 
 static bool AutoOre_CommandReleaseOreStoreHold(
     AutoOre_t *ctrl, OreStore_TransformPoint_t transform,
-    OreStore_GatePoint_t gate, bool cylinder_closed) {
-  return AutoOre_CommandOreStore(ctrl, ORE_STORE_TRACK_STANDBY, transform, gate,
-                                 cylinder_closed);
+    bool cylinder_closed) {
+  return AutoOre_CommandOreStore(ctrl, transform, cylinder_closed);
 }
 
 static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
@@ -382,7 +367,7 @@ static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
                               SUCTION_ON) ||
           !AutoOre_CommandReleaseOreStoreHold(ctrl,
                                               ORE_STORE_TRANSFORM_STANDBY,
-                                              ORE_STORE_GATE_CLOSED, true)) {
+                                              true)) {
         AutoOre_FailInvalidParam(ctrl);
         return;
       }
@@ -402,7 +387,7 @@ static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
                               SUCTION_OFF) ||
           !AutoOre_CommandReleaseOreStoreHold(ctrl,
                                               ORE_STORE_TRANSFORM_STANDBY,
-                                              ORE_STORE_GATE_CLOSED, true)) {
+                                              true)) {
         AutoOre_FailInvalidParam(ctrl);
         return;
       }
@@ -420,7 +405,7 @@ static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
                               SUCTION_OFF) ||
           !AutoOre_CommandReleaseOreStoreHold(ctrl,
                                               ORE_STORE_TRANSFORM_STANDBY,
-                                              ORE_STORE_GATE_CLOSED, true)) {
+                                              true)) {
         AutoOre_FailInvalidParam(ctrl);
         return;
       }
@@ -442,9 +427,7 @@ static void AutoOre_RunChamberHigh(AutoOre_t *ctrl, uint32_t now_ms) {
       AutoOre_EnterStep(ctrl, now_ms);
       if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_WAIT_STORE_ORE,
                               SUCTION_ON) ||
-          !AutoOre_CommandOreStore(ctrl, ORE_STORE_TRACK_STANDBY,
-                                   ORE_STORE_TRANSFORM_STANDBY,
-                                   ORE_STORE_GATE_CLOSED, true)) {
+          !AutoOre_CommandOreStore(ctrl, ORE_STORE_TRANSFORM_STANDBY, true)) {
         AutoOre_FailInvalidParam(ctrl);
         return;
       }
@@ -454,9 +437,7 @@ static void AutoOre_RunChamberHigh(AutoOre_t *ctrl, uint32_t now_ms) {
       AutoOre_EnterStep(ctrl, now_ms);
       if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_STORE_ORE,
                               SUCTION_ON) ||
-          !AutoOre_CommandOreStore(ctrl, ORE_STORE_TRACK_STANDBY,
-                                   ORE_STORE_TRANSFORM_STANDBY,
-                                   ORE_STORE_GATE_CLOSED,
+          !AutoOre_CommandOreStore(ctrl, ORE_STORE_TRANSFORM_STANDBY,
                                    ctrl->step_phase == 0u)) {
         AutoOre_FailInvalidParam(ctrl);
         return;
@@ -482,9 +463,7 @@ static void AutoOre_RunChamberHigh(AutoOre_t *ctrl, uint32_t now_ms) {
       AutoOre_EnterStep(ctrl, now_ms);
       if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_STANDBY,
                               SUCTION_ON) ||
-          !AutoOre_CommandOreStore(ctrl, ORE_STORE_TRACK_STANDBY,
-                                   ORE_STORE_TRANSFORM_STANDBY,
-                                   ORE_STORE_GATE_CLOSED, false)) {
+          !AutoOre_CommandOreStore(ctrl, ORE_STORE_TRANSFORM_STANDBY, false)) {
         AutoOre_FailInvalidParam(ctrl);
         return;
       }
@@ -506,9 +485,7 @@ static void AutoOre_RunChamberLow(AutoOre_t *ctrl, uint32_t now_ms) {
       AutoOre_EnterStep(ctrl, now_ms);
       if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_WAIT_STORE_ORE,
                               SUCTION_ON) ||
-          !AutoOre_CommandOreStore(ctrl, ORE_STORE_TRACK_STANDBY,
-                                   ORE_STORE_TRANSFORM_LIFT,
-                                   ORE_STORE_GATE_CLOSED,
+          !AutoOre_CommandOreStore(ctrl, ORE_STORE_TRANSFORM_LIFT,
                                    ctrl->step_phase != 0u)) {
         AutoOre_FailInvalidParam(ctrl);
         return;
@@ -531,9 +508,7 @@ static void AutoOre_RunChamberLow(AutoOre_t *ctrl, uint32_t now_ms) {
       AutoOre_EnterStep(ctrl, now_ms);
       if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_STORE_ORE,
                               SUCTION_ON) ||
-          !AutoOre_CommandOreStore(ctrl, ORE_STORE_TRACK_STANDBY,
-                                   ORE_STORE_TRANSFORM_LIFT,
-                                   ORE_STORE_GATE_CLOSED,
+          !AutoOre_CommandOreStore(ctrl, ORE_STORE_TRANSFORM_LIFT,
                                    ctrl->step_phase == 0u)) {
         AutoOre_FailInvalidParam(ctrl);
         return;
@@ -559,9 +534,7 @@ static void AutoOre_RunChamberLow(AutoOre_t *ctrl, uint32_t now_ms) {
       AutoOre_EnterStep(ctrl, now_ms);
       if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_STANDBY,
                               SUCTION_ON) ||
-          !AutoOre_CommandOreStore(ctrl, ORE_STORE_TRACK_STANDBY,
-                                   ORE_STORE_TRANSFORM_LIFT,
-                                   ORE_STORE_GATE_CLOSED, false)) {
+          !AutoOre_CommandOreStore(ctrl, ORE_STORE_TRANSFORM_LIFT, false)) {
         AutoOre_FailInvalidParam(ctrl);
         return;
       }

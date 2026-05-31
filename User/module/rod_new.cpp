@@ -170,7 +170,6 @@ void RodNew_Output(RodNew_t *r) {
     r->servo.at_target = true;
     BSP_PWM_SetPulseUs(pwm_channel, pulse_us);
     SharedValve_SetRodRequest(g_rod_new_debug.grip == ROD_NEW_GRIP_GRAB);
-    SharedValve_Output();
     return;
   }
 
@@ -215,7 +214,6 @@ void RodNew_Output(RodNew_t *r) {
 
   /* 夹爪IO输出 */
   SharedValve_SetRodRequest(r->gripper.state == ROD_NEW_GRIP_GRAB);
-  SharedValve_Output();
 }
 
 float RodNew_AngleToPulseUs(float angle_rad,

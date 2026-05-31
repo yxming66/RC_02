@@ -79,11 +79,6 @@ Config_RobotParam_t robot_config = {
             .lateral_heading_hold_wz_deadband = 0.03f,
             .lateral_heading_hold_error_deadband = 0.005f,
         },
-        .motor_temperature_protection = {
-            .warning_c = 50.0f,
-            .limit_c = 80.0f,
-            .auto_relax_on_limit = true,
-        },
         .type = CHASSIS_TYPE_MECANUM,
     },
     .pole_param = {
@@ -130,46 +125,20 @@ Config_RobotParam_t robot_config = {
             .support_lift_speed = 70.0f,
             .support_lift_accel = 180.0f,
         },
-        .motor_temperature_protection = {
-            .warning_c = 40.0f,
-            .limit_c = 60.0f,
-            .auto_relax_on_limit = false,
-        },
     },
     .ore_store_param = {
-        .motor_temperature_protection = {
-            .warning_c = 50.0f,
-            .limit_c = 80.0f,
-            .auto_relax_on_limit = true,
-        },
         .motor_param = {
             [ORE_STORE_AXIS_PLATFORM] =    {.can = BSP_CAN_1, .id = 0x205, .module = MOTOR_M3508, .reverse = false, .gear = true},
-            [ORE_STORE_AXIS_GATE_LEFT] =   {.can = BSP_CAN_3, .id = 0x201, .module = MOTOR_M2006, .reverse = false, .gear = true},
-            [ORE_STORE_AXIS_GATE_RIGHT] =  {.can = BSP_CAN_3, .id = 0x202, .module = MOTOR_M2006, .reverse = true, .gear = true},
-            [ORE_STORE_AXIS_TRACK_LEFT] =  {.can = BSP_CAN_3, .id = 0x203, .module = MOTOR_M2006, .reverse = true, .gear = true},
-            [ORE_STORE_AXIS_TRACK_RIGHT] = {.can = BSP_CAN_3, .id = 0x204, .module = MOTOR_M2006, .reverse = false, .gear = true},
         },
         .motor_install = {
             [ORE_STORE_AXIS_PLATFORM] = {.external_ratio = 1.0f, .reverse_output = false},
-            [ORE_STORE_AXIS_GATE_LEFT] = {.external_ratio = 1.0f, .reverse_output = false},
-            [ORE_STORE_AXIS_GATE_RIGHT] = {.external_ratio = 1.0f, .reverse_output = false},
-            [ORE_STORE_AXIS_TRACK_LEFT] = {.external_ratio = 1.0f, .reverse_output = false},
-            [ORE_STORE_AXIS_TRACK_RIGHT] = {.external_ratio = 1.0f, .reverse_output = false},
         },
         .pid = {
             .position_pid = {
                 [ORE_STORE_AXIS_PLATFORM] = {.k = 1.0f, .p = 24.0f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 60.0f, .d_cutoff_freq = 80.0f, .range = 0.0f},
-                [ORE_STORE_AXIS_GATE_LEFT] = {.k = 1.0f,   .p = 22.0f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 45.0f, .d_cutoff_freq = 80.0f, .range = 0.0f},
-                [ORE_STORE_AXIS_GATE_RIGHT] = {.k = 1.0f,  .p = 22.0f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 45.0f, .d_cutoff_freq = 80.0f, .range = 0.0f},
-                [ORE_STORE_AXIS_TRACK_LEFT] = {.k = 1.0f,  .p = 40.0f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 60.0f, .d_cutoff_freq = 80.0f, .range = 0.0f},
-                [ORE_STORE_AXIS_TRACK_RIGHT] = {.k = 1.0f, .p = 40.0f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 60.0f, .d_cutoff_freq = 80.0f, .range = 0.0f},
             },
             .velocity_pid = {
                 [ORE_STORE_AXIS_PLATFORM] = {.k = 0.1f, .p = 1.550f, .i = 0.02f, .d = 0.0f, .i_limit = 0.35f, .out_limit = 2.5f, .d_cutoff_freq = 18.0f, .range = 0.0f},
-                [ORE_STORE_AXIS_GATE_LEFT] = {.k = 0.1f,   .p = 1.25f, .i = 0.02f, .d = 0.000f, .i_limit = 0.35f, .out_limit = 1.8f, .d_cutoff_freq = 100.0f, .range = 0.0f},
-                [ORE_STORE_AXIS_GATE_RIGHT] = {.k = 0.1f,  .p = 1.25f, .i = 0.02f, .d = 0.000f, .i_limit = 0.35f, .out_limit = 1.8f, .d_cutoff_freq = 100.0f, .range = 0.0f},
-                [ORE_STORE_AXIS_TRACK_LEFT] = {.k = 0.1f,  .p = 1.25f, .i = 0.02f, .d = 0.000f, .i_limit = 0.35f, .out_limit = 1.8f, .d_cutoff_freq = 100.0f, .range = 0.0f},
-                [ORE_STORE_AXIS_TRACK_RIGHT] = {.k = 0.1f, .p = 1.25f, .i = 0.02f, .d = 0.000f, .i_limit = 0.35f, .out_limit = 1.8f, .d_cutoff_freq = 100.0f, .range = 0.0f},
             },
             // MIT风格控制参数 (Kp/Kd)，用于 MIT_STYLE 模式
             // MIT控制律: torque = Kp * (target_pos - current_pos) - Kd * velocity + torque_ff
@@ -177,30 +146,26 @@ Config_RobotParam_t robot_config = {
             // Kd 单位: N·m·s/rad (每 rad/s 速度产生 N·m 阻尼)
             // PLATFORM 惯量大(减速器)，需要较小 Kp + 较大 Kd 阻尼；GATE/TRACK 惯量小
             // 震荡时优先增大 Kd 阻尼，Kp 适中即可
-            .mit_kp = {0.90f, 0.35f, 0.35f, 0.30f, 0.30f},
-            .mit_kd = {0.15f, 0.18f, 0.18f, 0.16f, 0.16f},
+            .mit_kp = {0.90f},
+            .mit_kd = {0.15f},
         },
         .controller = { 
             .sample_freq = 500.0f, 
-            .feedback_lowpass_cutoff_hz = {-1.0f, 160.0f, 160.0f, 160.0f, 160.0f},
-            .output_lowpass_cutoff_hz = {-1.0f, 120.0f, 120.0f, 120.0f, 120.0f},
+            .feedback_lowpass_cutoff_hz = {-1.0f},
+            .output_lowpass_cutoff_hz = {-1.0f},
         },
         .limit = {
             .config = { 
                 [ORE_STORE_AXIS_PLATFORM] = {.stall_velocity_threshold_rad_s = 0.04f, .stall_position_window_rad = 0.0015f, .stall_cycles_required = 30u, .seek_timeout_s = 8.0f, .online_wait_timeout_s = 1.5f, .limit_margin_rad = 0.02f, .learned_limit_margin_rad = 0.02f, .min_range_rad = 0.01f},
-                [ORE_STORE_AXIS_GATE_LEFT] = {.stall_velocity_threshold_rad_s = 0.04f, .stall_position_window_rad = 0.0015f, .stall_cycles_required = 30u, .seek_timeout_s = 6.0f, .online_wait_timeout_s = 1.5f, .limit_margin_rad = 0.01f, .learned_limit_margin_rad = 0.01f, .min_range_rad = 0.01f},
-                [ORE_STORE_AXIS_GATE_RIGHT] = {.stall_velocity_threshold_rad_s = 0.04f, .stall_position_window_rad = 0.0015f, .stall_cycles_required = 30u, .seek_timeout_s = 6.0f, .online_wait_timeout_s = 1.5f, .limit_margin_rad = 0.01f, .learned_limit_margin_rad = 0.01f, .min_range_rad = 0.01f},
-                [ORE_STORE_AXIS_TRACK_LEFT] = {.stall_velocity_threshold_rad_s = 0.04f, .stall_position_window_rad = 0.0015f, .stall_cycles_required = 30u, .seek_timeout_s = 6.0f, .online_wait_timeout_s = 1.5f, .limit_margin_rad = 0.02f, .learned_limit_margin_rad = 0.02f, .min_range_rad = 0.01f},
-                [ORE_STORE_AXIS_TRACK_RIGHT] = {.stall_velocity_threshold_rad_s = 0.04f, .stall_position_window_rad = 0.0015f, .stall_cycles_required = 30u, .seek_timeout_s = 6.0f, .online_wait_timeout_s = 1.5f, .limit_margin_rad = 0.02f, .learned_limit_margin_rad = 0.02f, .min_range_rad = 0.01f},
             },
-            .travel_rad = {22.7f, 2.5f, 2.5f, 40.0f, 40.0f},
-            .lower_seek_velocity_rad_s = {0.20f, 0.20f, 0.20f, 0.60f, 0.60f},
-            .move_velocity_rad_s = {400.0f, 80.0f, 80.0f, 200.00f, 200.00f},
-            .arrive_threshold_rad = {0.05f, 0.03f, 0.03f, 0.08f, 0.08f},
+            .travel_rad = {22.7f},
+            .lower_seek_velocity_rad_s = {0.20f},
+            .move_velocity_rad_s = {400.0f},
+            .arrive_threshold_rad = {0.05f},
         }, 
         .power_on = {
-            .fixed_position_enable = {false, false, false, false, false},
-            .fixed_position_rad = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f},
+            .fixed_position_enable = {false},
+            .fixed_position_rad = {0.0f},
             .auto_assume_on_active = false,
             .home_mode_uses_fixed_position = false,
         },
@@ -211,15 +176,6 @@ Config_RobotParam_t robot_config = {
                 [ORE_STORE_TRANSFORM_MID_WAIT] = 11.0f,  /* 平台中间等待位，存矿时先到此位等待交接。 */
                 [ORE_STORE_TRANSFORM_LIFT] = 22.7f,      /* 平台抬升位/满行程位，用于顶升后开门或释放。 */
                 [ORE_STORE_TRANSFORM_BUFFER] = 0.0f,     /* 平台缓冲/备用预设位，待实机标定。 */
-            },
-            /* 左右仓门预设位置：数组顺序为左门、右门。 */
-            .gate_position_rad = {
-                [ORE_STORE_GATE_CLOSED] = {2.5f, 2.5f},  /* 左右门关闭位置。 */
-                [ORE_STORE_GATE_OPEN] = {0.0f, 0.0f},    /* 左右门打开位置。 */
-            },
-            /* 左右轨道预设位置：数组顺序为左轨、右轨；自动流程中始终保持待机。 */
-            .track_position_rad = {
-                [ORE_STORE_TRACK_STANDBY] = {0.0f, 0.0f},    /* 轨道收回待机位置。 */
             },
         },
         .fixed_ore_cylinder = {
@@ -248,11 +204,6 @@ Config_RobotParam_t robot_config = {
             .can_id = 0x03,
             .module = MOTOR_DM_J4310P,
             .reverse = false,
-        },
-        .joint_temperature_protection = {
-            [0] = {.warning_c = 40.0f, .limit_c = 60.0f, .auto_relax_on_limit = true},
-            [1] = {.warning_c = 40.0f, .limit_c = 60.0f, .auto_relax_on_limit = true},
-            [2] = {.warning_c = 40.0f, .limit_c = 60.0f, .auto_relax_on_limit = true},
         },
         .joint_kp = {8.0f, 6.0f, 6.0f},
         .joint_kd = {3.35f, 2.65f, 2.45f},
@@ -325,11 +276,6 @@ Config_RobotParam_t robot_config = {
                 [ARM_SIMPLE_BEHAVIOR_RELEASE_ORE] = {.joint1_pos = 0.149153411f, .joint2_pos = -1.570796f},
             },
             .arrive_threshold_rad = 0.05f,
-        },
-        .joint1_temperature_protection = {
-            .warning_c = 40.0f,
-            .limit_c = 60.0f,
-            .auto_relax_on_limit = true,
         },
     },
     .auto_ctrl_param = {

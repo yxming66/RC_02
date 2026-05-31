@@ -143,6 +143,7 @@ typedef struct {
     bool calibrated;
     float lower[POLE_SUPPORT_MOTOR_NUM];
     float upper[POLE_SUPPORT_MOTOR_NUM];
+    float target_offset[POLE_SUPPORT_MOTOR_NUM];
     float final_target_lift[2];
     float tracked_target_lift[2];
     float tracked_target_velocity[2];

@@ -67,8 +67,12 @@ typedef struct {
     MOTOR_t motor;
     // 多圈相关变量，仅gear模式下有效
     uint16_t last_raw_angle;
+    bool angle_inited;
     int32_t gearbox_round_count;
+    int32_t gearbox_total_raw_count;
     float gearbox_total_angle;
+    uint32_t angle_lost_count;
+    uint32_t last_feedback_time;
 } MOTOR_RM_t;
 
 /*CAN管理器，管理一个CAN总线上所有的电机*/

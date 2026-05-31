@@ -148,10 +148,10 @@ static void PcComm_UpdateModuleFeedback(PC_Comm_t *comm) {
             }
         }
         pc_ore.platform_position_rad = ore_fb->position_rad[ORE_STORE_AXIS_PLATFORM];
-        pc_ore.gate_position_rad[0] = ore_fb->position_rad[ORE_STORE_AXIS_GATE_LEFT];
-        pc_ore.gate_position_rad[1] = ore_fb->position_rad[ORE_STORE_AXIS_GATE_RIGHT];
-        pc_ore.track_position_rad[0] = ore_fb->position_rad[ORE_STORE_AXIS_TRACK_LEFT];
-        pc_ore.track_position_rad[1] = ore_fb->position_rad[ORE_STORE_AXIS_TRACK_RIGHT];
+        pc_ore.gate_position_rad[0] = 0.0f;
+        pc_ore.gate_position_rad[1] = 0.0f;
+        pc_ore.track_position_rad[0] = 0.0f;
+        pc_ore.track_position_rad[1] = 0.0f;
         PC_Protocol_SetOreStoreFeedback(&comm->protocol, &pc_ore);
     }
 }

@@ -7,6 +7,7 @@
 
 #define POLE_TEMP_WARNING_ALARM_MS (3000u)
 #define POLE_TEMP_OVER_LIMIT_ALARM_MS (5000u)
+#define CHASSIS_POLE_UPDATE_DIVIDER (2u)
 
 namespace {
 
@@ -85,6 +86,7 @@ extern "C" void Task_chassis_main(void *argument) {
   osDelay(CHASSIS_MAIN_INIT_DELAY);
 
   uint32_t tick = osKernelGetTickCount();
+  uint32_t pole_update_phase = 0u;
 
   Config_RobotParam_t *cfg = Config_GetRobotParam();
   if (cfg == nullptr ||
@@ -119,11 +121,19 @@ extern "C" void Task_chassis_main(void *argument) {
     (void)chassis.Control(chassis_cmd, osKernelGetTickCount());
     chassis.Output();
 
-    osMessageQueueGet(task_runtime.msgq.pole.cmd, &pole_cmd, nullptr, 0);
-    Pole_UpdateFeedback(&pole);
-    Task_ChassisMainUpdatePoleTemperatureAlarm(osKernelGetTickCount());
-    Pole_Control(&pole, &pole_cmd, osKernelGetTickCount());
-    Pole_Output(&pole);
+    const bool run_pole_update = (pole_update_phase == 0u);
+    pole_update_phase++;
+    if (pole_update_phase >= CHASSIS_POLE_UPDATE_DIVIDER) {
+      pole_update_phase = 0u;
+    }
+
+    if (run_pole_update) {
+      osMessageQueueGet(task_runtime.msgq.pole.cmd, &pole_cmd, nullptr, 0);
+      Pole_UpdateFeedback(&pole);
+      Task_ChassisMainUpdatePoleTemperatureAlarm(osKernelGetTickCount());
+      Pole_Control(&pole, &pole_cmd, osKernelGetTickCount());
+      Pole_Output(&pole);
+    }
 
     /* 上位机反馈数据设置 */
     if (g_pc_protocol_ptr != nullptr) {

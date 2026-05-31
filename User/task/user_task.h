@@ -26,8 +26,8 @@ extern "C" {
 /* 任务运行频率 */
 #define BLINK_FREQ (50.0)
 #define ATTI_ESTI_FREQ (400.0)
-#define CHASSIS_MAIN_FREQ (500.0)
-#define RC_MAIN_FREQ (500.0)
+#define CHASSIS_MAIN_FREQ (1000.0)
+#define RC_MAIN_FREQ (1000.0)
 #define SICK_FREQ (100.0)
 #define AUTO_CTRL_FREQ (100.0)
 #define ARM_SIMPLE_FREQ (500.0)
@@ -75,6 +75,22 @@ typedef struct {
     volatile bool last_result;
     volatile uint32_t request_count;
     volatile uint32_t accept_count;
+    volatile bool force_output_enable;
+    volatile uint32_t force_output_count;
+    volatile bool busy;
+    volatile AutoOre_State_t state;
+    volatile AutoOre_Result_t result;
+    volatile AutoOre_Fault_t fault;
+    volatile AutoOre_Action_t action;
+    volatile AutoOre_Position_t active_position;
+    volatile uint8_t step_index;
+    volatile bool arm_cmd_valid;
+    volatile bool ore_store_cmd_valid;
+    volatile bool arm_at_target;
+    volatile bool ore_store_all_at_target;
+    volatile float arm_cmd_joint1_rad;
+    volatile float arm_cmd_joint2_rad;
+    volatile float ore_store_cmd_platform_rad;
 } AutoOre_DebugControl_t;
 
 /* 任务运行时结构体 */

@@ -18,7 +18,7 @@ extern "C" {
 #endif
 
 #ifndef SICK_MISS_THRESHOLD
-#define SICK_MISS_THRESHOLD (1u)
+#define SICK_MISS_THRESHOLD (2u)
 #endif
 
 #ifndef SICK_CAN_QUEUE_SIZE
@@ -51,6 +51,18 @@ extern "C" {
 
 #ifndef SICK_FRONT_S2_COMP_ENABLE
 #define SICK_FRONT_S2_COMP_ENABLE (1u)
+#endif
+
+#ifndef SICK_CHANNEL_2_ADC_OFFSET
+#define SICK_CHANNEL_2_ADC_OFFSET (20u)
+#endif
+
+#ifndef SICK_CHANNEL_3_ADC_OFFSET
+#define SICK_CHANNEL_3_ADC_OFFSET (20u)
+#endif
+
+#ifndef SICK_CHANNEL_4_ADC_OFFSET
+#define SICK_CHANNEL_4_ADC_OFFSET (0u)
 #endif
 
 /* USER DEFINE END */

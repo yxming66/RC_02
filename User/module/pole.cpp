@@ -27,6 +27,15 @@ void Pole_ResetSideTargetVelocity(Pole_t *c, uint8_t side) {
   c->support_angle.tracked_target_velocity[side] = 0.0f;
 }
 
+static void Pole_ClearSideTargetOffset(Pole_t *c, uint8_t side) {
+  if (c == NULL || side >= 2u) return;
+
+  const uint8_t start = (side == 0u) ? 0u : 2u;
+  for (uint8_t i = start; i < start + 2u; i++) {
+    c->support_angle.target_offset[i] = 0.0f;
+  }
+}
+
 float Pole_UpdateTrackedLift(Pole_t *c, uint8_t side, float speed_limit) {
   if (c == NULL || c->param == NULL || side >= 2u) return 0.0f;
 
@@ -62,11 +71,7 @@ static float Pole_GetSupportAngle(const Pole_t *c, uint8_t idx) {
   MOTOR_RM_t *motor = Pole_GetMotorHandle(c, idx);
   if (motor == NULL) return 0.0f;
 
-  float angle = motor->gearbox_total_angle;
-  if (c->param->motor_param[idx].reverse) {
-    angle = -angle;
-  }
-  return angle;
+  return motor->feedback.rotor_total_angle;
 }
 
 static void Pole_ResetControllers(Pole_t *c) {
@@ -84,8 +89,10 @@ static void Pole_UpdateMotorTemperatureFlags(Pole_t *c, uint8_t idx) {
   if (c == NULL || c->param == NULL || idx >= POLE_MOTOR_NUM) return;
 
   const float temp_c = c->feedback.motor[idx].temp;
-  const float warning_c = c->param->motor_temperature_protection.warning_c;
-  const float limit_c = c->param->motor_temperature_protection.limit_c;
+  const MOTOR_TemperatureProtectionConfig_t temperature_protection =
+      MOTOR_NormalizeTemperatureProtection(c->param->motor_temperature_protection);
+  const float warning_c = temperature_protection.warning_c;
+  const float limit_c = temperature_protection.limit_c;
   const bool temp_valid = isfinite(temp_c);
 
   c->feedback.temperature_warning[idx] =
@@ -146,9 +153,14 @@ static void Pole_SyncSideTargetToFeedback(Pole_t *c, uint8_t side) {
     return;
   }
 
+  const uint8_t start = (side == 0u) ? 0u : 2u;
   const float current_lift = Pole_GetCurrentSideLift(c, side);
   c->support_angle.final_target_lift[side] = current_lift;
   c->support_angle.tracked_target_lift[side] = current_lift;
+  for (uint8_t i = start; i < start + 2u; i++) {
+    c->support_angle.target_offset[i] =
+        Pole_GetSupportAngle(c, i) - c->support_angle.lower[i] - current_lift;
+  }
   Pole_ResetSideTargetVelocity(c, side);
 }
 
@@ -241,6 +253,9 @@ int8_t Pole_Control(Pole_t *c, const Pole_CMD_t *c_cmd, uint32_t now) {
     c->support_angle.tracked_target_lift[1] = 0.0f;
     c->support_angle.tracked_target_velocity[0] = 0.0f;
     c->support_angle.tracked_target_velocity[1] = 0.0f;
+    for (uint8_t i = 0; i < POLE_SUPPORT_MOTOR_NUM; i++) {
+      c->support_angle.target_offset[i] = 0.0f;
+    }
     c->support_angle.auto_target_was_enabled[0] = false;
     c->support_angle.auto_target_was_enabled[1] = false;
     c->support_angle.calibrated = true;
@@ -254,6 +269,7 @@ int8_t Pole_Control(Pole_t *c, const Pole_CMD_t *c_cmd, uint32_t now) {
     const bool auto_target_enabled = c_cmd->auto_target_enable[side];
 
     if (auto_target_enabled) {
+      Pole_ClearSideTargetOffset(c, side);
       c->support_angle.final_target_lift[side] = c_cmd->auto_target_lift[side];
     } else {
       if (c->support_angle.auto_target_was_enabled[side]) {
@@ -283,7 +299,9 @@ int8_t Pole_Control(Pole_t *c, const Pole_CMD_t *c_cmd, uint32_t now) {
 
   for (uint8_t i = 0; i < POLE_SUPPORT_MOTOR_NUM; i++) {
     uint8_t side = (i < 2u) ? 0u : 1u;
-    float target = c->support_angle.lower[i] + c->support_angle.tracked_target_lift[side];
+    float target = c->support_angle.lower[i] +
+                   c->support_angle.tracked_target_lift[side] +
+                   c->support_angle.target_offset[i];
     c->setpoint.support_target_angle[i] = mr::component::math::clamp_scalar(target, c->support_angle.lower[i],
                                                      c->support_angle.upper[i]);
   }
@@ -342,7 +360,8 @@ bool Pole_IsGroupAtFinalTarget(const Pole_t *c, uint8_t group,
     const float target_lift = mr::component::math::clamp_scalar(
         c->support_angle.final_target_lift[side], 0.0f,
         c->param->limit.support_total_travel);
-    const float target = c->support_angle.lower[i] + target_lift;
+    const float target = c->support_angle.lower[i] + target_lift +
+                         c->support_angle.target_offset[i];
     const float fb_angle = Pole_GetSupportAngle(c, i);
     if (fabsf(target - fb_angle) > threshold) return false;
   }

@@ -6,6 +6,7 @@
 
 #include "module/config.h"
 #include "module/rod_new.h"
+#include "module/shared_valve.h"
 
 static RodNew_t rod_new;
 static RodNew_CMD_t rod_new_cmd;
@@ -63,6 +64,7 @@ void Task_rod(void *argument) {
     rod_new_feedback.feedback_angle_rad = rod_new.servo.feedback_angle_rad;
     rod_new_feedback.at_target = rod_new.servo.at_target;
     RodNew_Output(&rod_new);
+    SharedValve_Output();
 
     task_runtime.stack_water_mark.rod = uxTaskGetStackHighWaterMark(NULL);
     osDelayUntil(tick);

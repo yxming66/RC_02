@@ -21,8 +21,6 @@ namespace scalar = mr::component::math;
 
 using PlatformMotor = mr::motor::RmM3508Motor;
 using PlatformController = mr::motor::MotorControllerT<PlatformMotor>;
-using SmallMotor = mr::motor::RmM2006Motor;
-using SmallController = mr::motor::MotorControllerT<SmallMotor>;
 
 constexpr float kDefaultDtS = 0.001f;
 constexpr float kMinDtS = 0.0005f;
@@ -34,8 +32,6 @@ constexpr float kDefaultOnlineWaitTimeoutS = 1.5f;
 
 alignas(PlatformController) unsigned char
     g_platform_controller_storage[sizeof(PlatformController)];
-alignas(SmallController) unsigned char
-    g_small_controller_storage[ORE_STORE_AXIS_NUM - 1u][sizeof(SmallController)];
 alignas(mr::motor::SoftLimitLearning) unsigned char
     g_soft_limit_storage[ORE_STORE_AXIS_NUM][sizeof(mr::motor::SoftLimitLearning)];
 
@@ -45,10 +41,6 @@ bool AxisValid(uint8_t axis) {
 
 bool IsPlatformAxis(uint8_t axis) {
   return axis == ORE_STORE_AXIS_PLATFORM;
-}
-
-uint8_t SmallAxisIndex(uint8_t axis) {
-  return (axis > 0u) ? static_cast<uint8_t>(axis - 1u) : 0u;
 }
 
 float PositiveOr(float value, float fallback) {
@@ -107,10 +99,6 @@ PlatformController *PlatformControllerPtr(const OreStore_t *store) {
       store->controller[ORE_STORE_AXIS_PLATFORM]);
 }
 
-SmallController *SmallControllerPtr(const OreStore_t *store, uint8_t axis) {
-  return reinterpret_cast<SmallController *>(store->controller[axis]);
-}
-
 mr::motor::SoftLimitLearning *SoftLimitPtr(const OreStore_t *store,
                                            uint8_t axis) {
   return reinterpret_cast<mr::motor::SoftLimitLearning *>(
@@ -118,123 +106,104 @@ mr::motor::SoftLimitLearning *SoftLimitPtr(const OreStore_t *store,
 }
 
 int8_t ControllerRegister(OreStore_t *store, uint8_t axis) {
-  return IsPlatformAxis(axis) ? PlatformControllerPtr(store)->Register()
-                              : SmallControllerPtr(store, axis)->Register();
+  (void)axis;
+  return PlatformControllerPtr(store)->Register();
 }
 
 int8_t ControllerEnable(OreStore_t *store, uint8_t axis) {
-  return IsPlatformAxis(axis) ? PlatformControllerPtr(store)->Enable()
-                              : SmallControllerPtr(store, axis)->Enable();
+  (void)axis;
+  return PlatformControllerPtr(store)->Enable();
 }
 
 int8_t ControllerRelax(OreStore_t *store, uint8_t axis) {
-  return IsPlatformAxis(axis) ? PlatformControllerPtr(store)->Relax()
-                              : SmallControllerPtr(store, axis)->Relax();
+  (void)axis;
+  return PlatformControllerPtr(store)->Relax();
 }
 
 int8_t ControllerUpdateFeedback(OreStore_t *store, uint8_t axis) {
-  return IsPlatformAxis(axis) ? PlatformControllerPtr(store)->UpdateFeedback()
-                              : SmallControllerPtr(store, axis)->UpdateFeedback();
+  (void)axis;
+  return PlatformControllerPtr(store)->UpdateFeedback();
 }
 
 int8_t ControllerUpdateCommand(OreStore_t *store, uint8_t axis) {
-  return IsPlatformAxis(axis) ? PlatformControllerPtr(store)->UpdateCommand()
-                              : SmallControllerPtr(store, axis)->UpdateCommand();
+  (void)axis;
+  return PlatformControllerPtr(store)->UpdateCommand();
 }
 
 int8_t ControllerCommit(OreStore_t *store, uint8_t axis) {
-  return IsPlatformAxis(axis) ? PlatformControllerPtr(store)->CommitCommand()
-                              : SmallControllerPtr(store, axis)->CommitCommand();
+  (void)axis;
+  return PlatformControllerPtr(store)->CommitCommand();
 }
 
 int8_t ControllerSetVelocity(OreStore_t *store, uint8_t axis,
                              float velocity_rad_s) {
-  return IsPlatformAxis(axis)
-             ? PlatformControllerPtr(store)->SetVelocity(velocity_rad_s)
-             : SmallControllerPtr(store, axis)->SetVelocity(velocity_rad_s);
+  (void)axis;
+  return PlatformControllerPtr(store)->SetVelocity(velocity_rad_s);
 }
 
 int8_t ControllerSetPosition(OreStore_t *store, uint8_t axis,
                              float raw_position_rad,
                              float max_velocity_rad_s) {
-  return IsPlatformAxis(axis)
-             ? PlatformControllerPtr(store)->SetPosition(raw_position_rad,
-                                                         max_velocity_rad_s)
-             : SmallControllerPtr(store, axis)->SetPosition(raw_position_rad,
-                                                            max_velocity_rad_s);
+  (void)axis;
+  return PlatformControllerPtr(store)->SetPosition(raw_position_rad,
+                                                   max_velocity_rad_s);
 }
 
 int8_t ControllerSetMIT(OreStore_t *store, uint8_t axis,
                        float target_position_rad, float target_velocity_rad_s,
                        float kp, float kd, float torque_ff) {
-  return IsPlatformAxis(axis)
-             ? PlatformControllerPtr(store)->SetMIT(target_position_rad,
-                                                    target_velocity_rad_s,
-                                                    kp, kd, torque_ff)
-             : SmallControllerPtr(store, axis)->SetMIT(target_position_rad,
-                                                        target_velocity_rad_s,
-                                                        kp, kd, torque_ff);
+  (void)axis;
+  return PlatformControllerPtr(store)->SetMIT(target_position_rad,
+                                             target_velocity_rad_s,
+                                             kp, kd, torque_ff);
 }
 
 void ResetAxisPid(OreStore_t *store, uint8_t axis) {
   if (store == nullptr || !AxisValid(axis)) {
     return;
   }
-  if (IsPlatformAxis(axis)) {
-    (void)PlatformControllerPtr(store)->ResetControllers();
-  } else {
-    (void)SmallControllerPtr(store, axis)->ResetControllers();
-  }
+  (void)PlatformControllerPtr(store)->ResetControllers();
 }
 
 bool ControllerHasPendingCommand(const OreStore_t *store, uint8_t axis) {
-  return IsPlatformAxis(axis)
-             ? PlatformControllerPtr(store)->HasPendingCommand()
-             : SmallControllerPtr(store, axis)->HasPendingCommand();
+  (void)axis;
+  return PlatformControllerPtr(store)->HasPendingCommand();
 }
 
 float ControllerLastSetTorqueNm(const OreStore_t *store, uint8_t axis) {
-  return IsPlatformAxis(axis)
-     ? PlatformControllerPtr(store)
-       ->GetMotor()
-       .ProtocolDebug()
-       .last_set_torque_nm
-     : SmallControllerPtr(store, axis)
-       ->GetMotor()
-       .ProtocolDebug()
-       .last_set_torque_nm;
+  (void)axis;
+  return PlatformControllerPtr(store)
+    ->GetMotor()
+    .ProtocolDebug()
+    .last_set_torque_nm;
 }
 
 float ControllerPendingCurrentA(const OreStore_t *store, uint8_t axis) {
-  return IsPlatformAxis(axis)
-     ? PlatformControllerPtr(store)
-       ->GetMotor()
-       .ProtocolDebug()
-       .pending_torque_current
-     : SmallControllerPtr(store, axis)
-       ->GetMotor()
-       .ProtocolDebug()
-       .pending_torque_current;
+  (void)axis;
+  return PlatformControllerPtr(store)
+    ->GetMotor()
+    .ProtocolDebug()
+    .pending_torque_current;
 }
 
 float ControllerFilteredPosition(const OreStore_t *store, uint8_t axis) {
-  return IsPlatformAxis(axis) ? PlatformControllerPtr(store)->GetLastFeedbackPosition()
-                              : SmallControllerPtr(store, axis)->GetLastFeedbackPosition();
+  (void)axis;
+  return PlatformControllerPtr(store)->GetLastFeedbackPosition();
 }
 
 float ControllerFilteredVelocity(const OreStore_t *store, uint8_t axis) {
-  return IsPlatformAxis(axis) ? PlatformControllerPtr(store)->GetLastFeedbackVelocity()
-                              : SmallControllerPtr(store, axis)->GetLastFeedbackVelocity();
+  (void)axis;
+  return PlatformControllerPtr(store)->GetLastFeedbackVelocity();
 }
 
 float ControllerFilteredOutputTorque(const OreStore_t *store, uint8_t axis) {
-  return IsPlatformAxis(axis) ? PlatformControllerPtr(store)->GetLastOutputTorque()
-                              : SmallControllerPtr(store, axis)->GetLastOutputTorque();
+  (void)axis;
+  return PlatformControllerPtr(store)->GetLastOutputTorque();
 }
 
 mr::motor::MotorState ControllerState(const OreStore_t *store, uint8_t axis) {
-  return IsPlatformAxis(axis) ? PlatformControllerPtr(store)->GetState()
-                              : SmallControllerPtr(store, axis)->GetState();
+  (void)axis;
+  return PlatformControllerPtr(store)->GetState();
 }
 
 void StoreFeedback(MOTOR_Feedback_t *feedback,
@@ -332,20 +301,9 @@ bool AxisFeedbackReady(const OreStore_t *store, uint8_t axis) {
 }
 
 float CommandTarget(const OreStore_CMD_t *cmd, uint8_t axis) {
-  switch (axis) {
-    case ORE_STORE_AXIS_PLATFORM:
-      return cmd->platform_target_rad;
-    case ORE_STORE_AXIS_GATE_LEFT:
-      return cmd->gate_target_rad[0];
-    case ORE_STORE_AXIS_GATE_RIGHT:
-      return cmd->gate_target_rad[1];
-    case ORE_STORE_AXIS_TRACK_LEFT:
-      return cmd->track_target_rad[0];
-    case ORE_STORE_AXIS_TRACK_RIGHT:
-      return cmd->track_target_rad[1];
-    default:
-      return 0.0f;
-  }
+  return (cmd != nullptr && axis == ORE_STORE_AXIS_PLATFORM)
+             ? cmd->platform_target_rad
+             : 0.0f;
 }
 
 void RefreshDebugAxis(OreStore_t *store, uint8_t axis) {
@@ -618,18 +576,15 @@ int8_t ActiveAxis(OreStore_t *store, const OreStore_CMD_t *cmd, uint8_t axis) {
     return ControllerSetMIT(store, axis, raw_target, target_velocity, kp, kd, 0.0f);
   }
 
-  // 默认双环PID控制
-  if (IsPlatformAxis(axis)) {
-    // Use proper cascade: SetPosition sets the target and velocity limit,
-    // Update() runs position PID + velocity PID in series.
-    return PlatformControllerPtr(store)->SetPosition(
-        raw_target, AxisMoveVelocity(store->param, axis));
-  }
   return ControllerSetPosition(store, axis, raw_target,
                                AxisMoveVelocity(store->param, axis));
 }
 
 int8_t ConstructAxis(OreStore_t *store, uint8_t axis, float target_freq) {
+  if (!IsPlatformAxis(axis)) {
+    return ORE_STORE_ERR;
+  }
+
   const auto motor_config =
       mr::motor::MotorInstanceConfig<mr::motor::MotorKind::RM>::
           FromVendorParam(store->param->motor_param[axis]);
@@ -639,34 +594,18 @@ int8_t ConstructAxis(OreStore_t *store, uint8_t axis, float target_freq) {
   const mr::motor::MotorTemperatureProtectionConfig temperature_config =
       BuildTemperatureProtectionConfig(store->param);
 
-  if (IsPlatformAxis(axis)) {
-    PlatformMotor *motor =
-        mr::motor::MotorFactory::Create<mr::motor::MotorKind::RM,
-                                        mr::motor::MotorModel::M3508>(
-            motor_config, install, temperature_config);
-    if (motor == nullptr) {
-      return ORE_STORE_ERR;
-    }
-    PlatformController *controller =
-        new (g_platform_controller_storage)
-            PlatformController(*motor, controller_config);
-    store->motor[axis] = motor;
-    store->controller[axis] = controller;
-  } else {
-    const uint8_t small_idx = SmallAxisIndex(axis);
-    SmallMotor *motor =
-        mr::motor::MotorFactory::Create<mr::motor::MotorKind::RM,
-                                        mr::motor::MotorModel::M2006>(
-        motor_config, install, temperature_config);
-    if (motor == nullptr) {
-      return ORE_STORE_ERR;
-    }
-    SmallController *controller =
-        new (g_small_controller_storage[small_idx])
-            SmallController(*motor, controller_config);
-    store->motor[axis] = motor;
-    store->controller[axis] = controller;
+  PlatformMotor *motor =
+      mr::motor::MotorFactory::Create<mr::motor::MotorKind::RM,
+                                      mr::motor::MotorModel::M3508>(
+          motor_config, install, temperature_config);
+  if (motor == nullptr) {
+    return ORE_STORE_ERR;
   }
+  PlatformController *controller =
+      new (g_platform_controller_storage)
+          PlatformController(*motor, controller_config);
+  store->motor[axis] = motor;
+  store->controller[axis] = controller;
 
   mr::motor::SoftLimitLearning *limit =
       new (g_soft_limit_storage[axis]) mr::motor::SoftLimitLearning();
@@ -687,15 +626,11 @@ extern "C" {
 extern volatile OreStore_DebugCommand_t g_ore_store_debug_command;
 
 bool OreStore_MakePresetCommand(const OreStore_Params_t *param,
-                                OreStore_TrackPoint_t track,
                                 OreStore_TransformPoint_t transform,
-                                OreStore_GatePoint_t gate,
                                 bool fixed_ore_cylinder_closed,
                                 OreStore_CMD_t *cmd) {
   if (param == nullptr || cmd == nullptr ||
-      track >= ORE_STORE_TRACK_POINT_NUM ||
-      transform >= ORE_STORE_TRANSFORM_POINT_NUM ||
-      gate >= ORE_STORE_GATE_POINT_NUM) {
+      transform >= ORE_STORE_TRANSFORM_POINT_NUM) {
     return false;
   }
 
@@ -704,12 +639,6 @@ bool OreStore_MakePresetCommand(const OreStore_Params_t *param,
   cmd->force_rehome = false;
   cmd->fixed_ore_cylinder_closed = fixed_ore_cylinder_closed;
   cmd->platform_target_rad = param->preset.transform_position_rad[transform];
-  for (uint8_t i = 0; i < ORE_STORE_GATE_NUM; ++i) {
-    cmd->gate_target_rad[i] = param->preset.gate_position_rad[gate][i];
-  }
-  for (uint8_t i = 0; i < ORE_STORE_TRACK_NUM; ++i) {
-    cmd->track_target_rad[i] = param->preset.track_position_rad[track][i];
-  }
   return true;
 }
 
@@ -876,7 +805,6 @@ void OreStore_Output(OreStore_t *store) {
   }
 
   SharedValve_SetOreStoreRequest(store->fixed_ore_cylinder_closed);
-  SharedValve_Output();
 
   for (uint8_t axis = 0; axis < ORE_STORE_AXIS_NUM; ++axis) {
     if (store->controller[axis] == nullptr) {
@@ -889,8 +817,6 @@ void OreStore_Output(OreStore_t *store) {
 
   (void)MOTOR_RM_FlushGroup(
       (MOTOR_RM_Param_t *)&store->param->motor_param[ORE_STORE_AXIS_PLATFORM]);
-  (void)MOTOR_RM_FlushGroup(
-      (MOTOR_RM_Param_t *)&store->param->motor_param[ORE_STORE_AXIS_GATE_LEFT]);
 }
 
 void OreStore_ResetOutput(OreStore_t *store) {
@@ -1009,21 +935,10 @@ OreStore_ControlMode_t OreStore_GetControlMode(const OreStore_t *store) {
 }
 
 void OreStore_SetDebugCommand(bool enable, OreStore_Mode_t mode,
-                              float platform_target, const float gate_target[2],
-                              const float track_target[2]) {
+                              float platform_target) {
   g_ore_store_debug_command.enable = enable;
   g_ore_store_debug_command.mode = mode;
   g_ore_store_debug_command.platform_target_rad = platform_target;
-  if (gate_target != nullptr) {
-    for (int i = 0; i < 2; ++i) {
-      g_ore_store_debug_command.gate_target_rad[i] = gate_target[i];
-    }
-  }
-  if (track_target != nullptr) {
-    for (int i = 0; i < 2; ++i) {
-      g_ore_store_debug_command.track_target_rad[i] = track_target[i];
-    }
-  }
 }
 
 void OreStore_DisableDebugCommand(void) {

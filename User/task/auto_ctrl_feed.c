@@ -149,6 +149,23 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms) {
           AUTO_CTRL_POLE_TARGET_THRESHOLD_RAD),
   };
   AutoOre_Update(&auto_ore_ctrl, &auto_ore_feedback, now_ms);
+
+  g_auto_ore_debug.busy = AutoOre_IsBusy(&auto_ore_ctrl);
+  g_auto_ore_debug.state = AutoOre_GetState(&auto_ore_ctrl);
+  g_auto_ore_debug.result = AutoOre_GetResult(&auto_ore_ctrl);
+  g_auto_ore_debug.fault = AutoOre_GetFault(&auto_ore_ctrl);
+  g_auto_ore_debug.action = auto_ore_ctrl.action;
+  g_auto_ore_debug.active_position = AutoOre_GetActivePosition(&auto_ore_ctrl);
+  g_auto_ore_debug.step_index = AutoOre_GetStepIndex(&auto_ore_ctrl);
+  g_auto_ore_debug.arm_cmd_valid = auto_ore_ctrl.arm_cmd_valid;
+  g_auto_ore_debug.ore_store_cmd_valid = auto_ore_ctrl.ore_store_cmd_valid;
+  g_auto_ore_debug.arm_at_target = auto_ore_feedback.arm_at_target;
+  g_auto_ore_debug.ore_store_all_at_target =
+      auto_ore_feedback.ore_store_all_at_target;
+  g_auto_ore_debug.arm_cmd_joint1_rad = auto_ore_ctrl.arm_cmd.target_joint.joint1;
+  g_auto_ore_debug.arm_cmd_joint2_rad = auto_ore_ctrl.arm_cmd.target_joint.joint2;
+  g_auto_ore_debug.ore_store_cmd_platform_rad =
+      auto_ore_ctrl.ore_store_cmd.platform_target_rad;
 }
 
 static void AutoCtrlFeed_InitAutoRodSpearhead(void) {
@@ -231,6 +248,10 @@ static void AutoCtrlFeed_HandleAutoOreDebugRequest(void) {
   g_auto_ore_debug.last_result = result;
   if (result) {
     g_auto_ore_debug.accept_count++;
+    g_auto_ore_debug.force_output_enable = request != AUTO_ORE_DEBUG_REQUEST_ABORT;
+  }
+  if (request == AUTO_ORE_DEBUG_REQUEST_ABORT) {
+    g_auto_ore_debug.force_output_enable = false;
   }
 }
 

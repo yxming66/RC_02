@@ -7,6 +7,7 @@
 
 #include "component/math/scalar.hpp"
 #include "device/device.h"
+#include "device/motor.h"
 #include "device/motor/core/motor_instance_config.hpp"
 #include "device/motor/core/motor_install_spec.hpp"
 #include "device/motor/core/motor_kind.hpp"
@@ -181,12 +182,17 @@ private:
 
     static MotorTemperatureProtectionConfig NormalizeTemperatureProtection(
         const MotorTemperatureProtectionConfig& config) {
-        MotorTemperatureProtectionConfig normalized{};
+        MotorTemperatureProtectionConfig normalized = config;
+        if (!TemperatureThresholdEnabled(normalized.warning_c)) {
+            normalized.warning_c = kMotorDefaultTemperatureProtection.warning_c;
+        }
+        if (!TemperatureThresholdEnabled(normalized.limit_c)) {
+            normalized.limit_c = kMotorDefaultTemperatureProtection.limit_c;
+        }
         normalized.warning_c =
-            TemperatureThresholdEnabled(config.warning_c) ? config.warning_c : 0.0f;
+            TemperatureThresholdEnabled(normalized.warning_c) ? normalized.warning_c : 0.0f;
         normalized.limit_c =
-            TemperatureThresholdEnabled(config.limit_c) ? config.limit_c : 0.0f;
-        normalized.auto_relax_on_limit = config.auto_relax_on_limit;
+            TemperatureThresholdEnabled(normalized.limit_c) ? normalized.limit_c : 0.0f;
         if (normalized.warning_c > 0.0f && normalized.limit_c > 0.0f &&
             normalized.warning_c > normalized.limit_c) {
             normalized.warning_c = normalized.limit_c;

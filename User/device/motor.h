@@ -19,10 +19,15 @@ extern "C" {
 /* Exported macro ----------------------------------------------------------- */
 /* Exported types ----------------------------------------------------------- */
 typedef struct {
-    float rotor_abs_angle; /* 转子绝对角度 */
+    float rotor_abs_angle; /* 兼容旧接口：RM gear 模式下为输出端连续多圈角度 */
+    float rotor_single_angle; /* 单圈角度，范围 [0, 2pi) */
+    float rotor_total_angle; /* 连续多圈角度 */
     float rotor_speed; /* 实际转子转速 */
     float torque_current; /* 转矩电流 */
     float temp; /* 温度 */
+    bool angle_valid; /* 连续角度是否可信 */
+    uint32_t angle_lost_count; /* 疑似跨零/反馈丢失计数 */
+    uint32_t last_update_time; /* 最近反馈更新时间，单位由底层驱动决定 */
 } MOTOR_Feedback_t;
 
 typedef struct {
@@ -49,6 +54,8 @@ typedef struct {
     float limit_c;
     bool auto_relax_on_limit;
 } MOTOR_TemperatureProtectionConfig_t;
+
+extern const MOTOR_TemperatureProtectionConfig_t kMotorDefaultTemperatureProtection;
 
 /**
  * @brief 力位混控模式参数结构体 (DM-H3510)
@@ -79,10 +86,16 @@ typedef struct {
 
 /* Exported functions prototypes -------------------------------------------- */
 float MOTOR_GetRotorAbsAngle(const MOTOR_t *motor);
+float MOTOR_GetRotorSingleAngle(const MOTOR_t *motor);
+float MOTOR_GetRotorTotalAngle(const MOTOR_t *motor);
+bool MOTOR_IsAngleValid(const MOTOR_t *motor);
+uint32_t MOTOR_GetAngleLostCount(const MOTOR_t *motor);
 float MOTOR_GetRotorSpeed(const MOTOR_t *motor);
 float MOTOR_GetTorqueCurrent(const MOTOR_t *motor);
 float MOTOR_GetTemp(const MOTOR_t *motor);
 const MOTOR_RawFeedback_t* MOTOR_GetRawFeedback(const MOTOR_t *motor);
+MOTOR_TemperatureProtectionConfig_t MOTOR_NormalizeTemperatureProtection(
+    MOTOR_TemperatureProtectionConfig_t config);
 
 /* USER FUNCTION BEGIN */
 

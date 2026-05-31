@@ -20,6 +20,13 @@ struct RmProtocolDebugSnapshot {
     int8_t last_commit_ret = DEVICE_OK;
     bool last_commit_skipped = false;
     uint8_t last_error_code = 0;
+    bool rotor_position_initialized = false;
+    bool angle_valid = false;
+    uint32_t position_fault = 0;
+    uint32_t large_delta_count = 0;
+    float max_abs_delta_rad = 0.0f;
+    uint32_t feedback_lost_count = 0;
+    uint32_t last_feedback_tick = 0;
 };
 
 template <MotorModel Model>
@@ -51,7 +58,9 @@ private:
     void ResetPositionTracker();
     void SyncRotorPosition(float single_turn_rotor_position_rad);
     void SetRotorPositionZero(float single_turn_rotor_position_rad);
-    float AccumulateRotorPosition(float single_turn_rotor_position_rad, float rotor_velocity_rad_s);
+    float AccumulateRotorPosition(float single_turn_rotor_position_rad, float rotor_velocity_rad_s, float dt_s);
+    void MarkPositionInvalid(uint32_t fault_mask);
+    void RefreshPositionDiagnostics(MotorState& next);
     float ApplyRotorPositionOffset(float rotor_position_rad) const;
     float ToOutputPosition(float rotor_position_rad) const;
     float ToOutputVelocity(float rotor_velocity_rad_s) const;
@@ -77,6 +86,12 @@ private:
     float last_single_turn_rotor_position_rad_ = 0.0f;
     float accumulated_rotor_position_rad_ = 0.0f;
     float rotor_zero_offset_rad_ = 0.0f;
+    bool angle_valid_ = false;
+    uint32_t position_fault_ = 0;
+    uint32_t large_delta_count_ = 0;
+    uint32_t feedback_lost_count_ = 0;
+    uint32_t last_feedback_tick_ = 0;
+    float max_abs_delta_rad_ = 0.0f;
 };
 
 } // namespace mr::motor

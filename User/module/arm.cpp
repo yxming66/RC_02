@@ -377,9 +377,12 @@ int8_t Arm_UpdateFeedback(Arm_t *a) {
   if (a->joint3cil.motor != NULL) {
     (void)a->joint3cil.motor->Update();
     a->feedback.rmmotor_feedback.rotor_abs_angle = a->joint3cil.motor->GetRawAngleRad();
+    a->feedback.rmmotor_feedback.rotor_single_angle = a->joint3cil.motor->GetRawAngleRad();
+    a->feedback.rmmotor_feedback.rotor_total_angle = a->joint3cil.motor->GetPositionRad();
     a->feedback.rmmotor_feedback.rotor_speed = a->joint3cil.motor->GetVelocityRadPerSec();
     a->feedback.rmmotor_feedback.torque_current = a->joint3cil.motor->GetTorqueCurrentAmp();
     a->feedback.rmmotor_feedback.temp = (uint8_t)a->joint3cil.motor->GetTemperatureCelsius();
+    a->feedback.rmmotor_feedback.angle_valid = a->joint3cil.motor->GetState().position_valid;
   }
 
   float j3_rel = (a->joint3cil.motor != NULL) ? a->joint3cil.motor->GetPositionRad()

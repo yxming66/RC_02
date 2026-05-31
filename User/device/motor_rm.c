@@ -39,6 +39,7 @@
 
 #define MOTOR_ENC_RES            (8192)   /* 电机编码器分辨率 */
 #define MOTOR_CUR_RES            (16384)  /* 电机转矩电流分辨率 */
+#define MOTOR_RM_SUSPICIOUS_DELTA_COUNT ((MOTOR_ENC_RES * 9) / 20)
 
 /* USER DEFINE BEGIN */
 
@@ -225,6 +226,35 @@ static float MOTOR_RM_GetCurrentRangeAmp(MOTOR_RM_Module_t module) {
     }
 }
 
+static float MOTOR_RM_WrapAnglePositive(float angle) {
+    while (angle < 0.0f) {
+        angle += M_2PI;
+    }
+    while (angle >= M_2PI) {
+        angle -= M_2PI;
+    }
+    return angle;
+}
+
+static int32_t MOTOR_RM_UnwrapRawDelta(uint16_t current_raw_angle, uint16_t last_raw_angle) {
+    int32_t delta = (int32_t)current_raw_angle - (int32_t)last_raw_angle;
+    if (delta > (MOTOR_ENC_RES / 2)) {
+        delta -= MOTOR_ENC_RES;
+    } else if (delta < -(MOTOR_ENC_RES / 2)) {
+        delta += MOTOR_ENC_RES;
+    }
+    return delta;
+}
+
+static void MOTOR_RM_ResetAngleTracker(MOTOR_RM_t *motor, uint16_t raw_angle) {
+    if (motor == NULL) return;
+    motor->last_raw_angle = raw_angle;
+    motor->angle_inited = true;
+    motor->gearbox_round_count = 0;
+    motor->gearbox_total_raw_count = 0;
+    motor->gearbox_total_angle = 0.0f;
+}
+
 static MOTOR_RM_CANManager_t* MOTOR_RM_GetCANManager(BSP_CAN_t can) {
     if (can >= BSP_CAN_NUM) return NULL;
     return can_managers[can];
@@ -247,6 +277,7 @@ static void Motor_RM_Decode(MOTOR_RM_t *motor, BSP_CAN_Message_t *msg) {
     int16_t lsb = MOTOR_RM_GetLSB(motor->param.module);
     float ratio = MOTOR_RM_GetRatio(motor->param.module);
 
+    uint64_t now_time = BSP_TIME_Get();
     float rotor_angle = raw_angle / (float)MOTOR_ENC_RES * M_2PI;
     float rotor_speed = raw_speed;
     float torque_current = raw_current * lsb / (float)MOTOR_CUR_RES;
@@ -258,41 +289,46 @@ static void Motor_RM_Decode(MOTOR_RM_t *motor, BSP_CAN_Message_t *msg) {
     motor->motor.raw_feedback.raw_error_code = msg->data[7];
 
     if (motor->param.gear) {
-        // 多圈累加
-        int32_t delta = (int32_t)raw_angle - (int32_t)motor->last_raw_angle;
-        if (delta > (MOTOR_ENC_RES / 2)) {
-            motor->gearbox_round_count--;
-        } else if (delta < -(MOTOR_ENC_RES / 2)) {
-            motor->gearbox_round_count++;
+        if (!motor->angle_inited) {
+            MOTOR_RM_ResetAngleTracker(motor, raw_angle);
         }
+        int32_t delta = MOTOR_RM_UnwrapRawDelta(raw_angle, motor->last_raw_angle);
+        if (delta >= MOTOR_RM_SUSPICIOUS_DELTA_COUNT || delta <= -MOTOR_RM_SUSPICIOUS_DELTA_COUNT) {
+            motor->angle_lost_count++;
+        }
+        motor->gearbox_total_raw_count += delta;
+        motor->gearbox_round_count = motor->gearbox_total_raw_count / MOTOR_ENC_RES;
         motor->last_raw_angle = raw_angle;
-        float single_turn = rotor_angle;
-        motor->gearbox_total_angle = (motor->gearbox_round_count * M_2PI + single_turn) / ratio;
+        motor->gearbox_total_angle = ((float)motor->gearbox_total_raw_count / (float)MOTOR_ENC_RES) * M_2PI / ratio;
         // 输出轴多圈绝对值
         motor->feedback.rotor_abs_angle = motor->gearbox_total_angle;
+        motor->feedback.rotor_total_angle = motor->gearbox_total_angle;
+        motor->feedback.rotor_single_angle = MOTOR_RM_WrapAnglePositive(motor->gearbox_total_angle);
         motor->feedback.rotor_speed = rotor_speed / ratio;
         motor->feedback.torque_current = torque_current * ratio;
     } else {
         // 非gear模式，直接用转子单圈
-        motor->gearbox_round_count = 0;
-        motor->last_raw_angle = raw_angle;
-        motor->gearbox_total_angle = 0.0f;
+        MOTOR_RM_ResetAngleTracker(motor, raw_angle);
         motor->feedback.rotor_abs_angle = rotor_angle;
+        motor->feedback.rotor_total_angle = rotor_angle;
+        motor->feedback.rotor_single_angle = rotor_angle;
         motor->feedback.rotor_speed = rotor_speed;
         motor->feedback.torque_current = torque_current;
     }
-        while (motor->feedback.rotor_abs_angle < 0) {
-            motor->feedback.rotor_abs_angle += M_2PI;
-        }
-        while (motor->feedback.rotor_abs_angle >= M_2PI) {
-            motor->feedback.rotor_abs_angle -= M_2PI;
-        }
+    motor->feedback.angle_valid = (motor->angle_lost_count == 0U);
     if (motor->motor.reverse) {
-        motor->feedback.rotor_abs_angle = M_2PI - motor->feedback.rotor_abs_angle;
+        motor->feedback.rotor_total_angle = -motor->feedback.rotor_total_angle;
+        motor->feedback.rotor_single_angle = MOTOR_RM_WrapAnglePositive(-motor->feedback.rotor_single_angle);
+        motor->feedback.rotor_abs_angle = motor->param.gear
+            ? motor->feedback.rotor_total_angle
+            : motor->feedback.rotor_single_angle;
         motor->feedback.rotor_speed = -motor->feedback.rotor_speed;
         motor->feedback.torque_current = -motor->feedback.torque_current;
     }
     motor->feedback.temp = msg->data[6];
+    motor->feedback.angle_lost_count = motor->angle_lost_count;
+    motor->feedback.last_update_time = (uint32_t)now_time;
+    motor->last_feedback_time = (uint32_t)now_time;
 }
 
 static int8_t MOTOR_RM_BindMotor(MOTOR_RM_CANManager_t *manager, MOTOR_RM_Param_t *param, MOTOR_RM_t *motor) {

@@ -2,6 +2,7 @@
 
 #include <math.h>
 
+#include "cmsis_os2.h"
 #include "component/math/scalar.hpp"
 #include "component/user_math.h"
 #include "device/device.h"
@@ -14,22 +15,41 @@ namespace {
 constexpr float kPi = 3.14159265358979323846f;
 constexpr float kTwoPi = 6.28318530717958647692f;
 constexpr float kDefaultResyncDeltaRad = 1.75f * kPi;
+constexpr float kSuspiciousDeltaRad = 0.90f * kPi;
+constexpr float kVelocityCorrectionThresholdRad = kPi;
+constexpr float kVelocityMismatchWarnRad = 0.75f * kPi;
 constexpr float kMotorEncoderResolution = 8192.0f;
 constexpr float kSecondsPerMinute = 60.0f;
+constexpr uint32_t kFeedbackLostTicks = 100u;
+
+constexpr uint32_t kRmPositionFaultNone = 0u;
+constexpr uint32_t kRmPositionFaultLargeDelta = (1u << 0);
+constexpr uint32_t kRmPositionFaultFeedbackLost = (1u << 1);
 
 float ResolvePositiveRatio(float ratio) {
     return mr::component::math::positive_or(ratio, 1.0f);
 }
 
-float ResolveRmAngleDelta(float current_rad, float last_rad, float velocity_rad_s) {
-    const float raw_delta = current_rad - last_rad;
-    if (raw_delta > kPi) {
-        return (velocity_rad_s > 0.0f) ? raw_delta : raw_delta - kTwoPi;
+float ResolveRmAngleDelta(float current_rad, float last_rad) {
+    float delta = current_rad - last_rad;
+    if (delta > kPi) {
+        delta -= kTwoPi;
+    } else if (delta < -kPi) {
+        delta += kTwoPi;
     }
-    if (raw_delta < -kPi) {
-        return (velocity_rad_s < 0.0f) ? raw_delta : raw_delta + kTwoPi;
+    return delta;
+}
+
+float CorrectRmDeltaByVelocity(float wrapped_delta_rad, float rotor_velocity_rad_s, float dt_s) {
+    if (dt_s <= 0.0f || !isfinite(rotor_velocity_rad_s)) {
+        return wrapped_delta_rad;
     }
-    return raw_delta;
+    const float expected_delta = rotor_velocity_rad_s * dt_s;
+    if (fabsf(expected_delta) <= kVelocityCorrectionThresholdRad) {
+        return wrapped_delta_rad;
+    }
+    const float turn_count = roundf((expected_delta - wrapped_delta_rad) / kTwoPi);
+    return wrapped_delta_rad + turn_count * kTwoPi;
 }
 
 float WrapToPi(float angle_rad) {
@@ -48,6 +68,18 @@ uint32_t EncodeRmC610Fault(uint8_t error_code) {
         return (1u << error_code);
     }
     return (1u << 31);
+}
+
+uint32_t CurrentTick() {
+    return osKernelGetTickCount();
+}
+
+float TickDeltaSeconds(uint32_t newer_tick, uint32_t older_tick) {
+    const uint32_t tick_freq = osKernelGetTickFreq();
+    if (older_tick == 0u || tick_freq == 0u) {
+        return 0.0f;
+    }
+    return static_cast<float>((uint32_t)(newer_tick - older_tick)) / static_cast<float>(tick_freq);
 }
 
 } // namespace
@@ -87,11 +119,16 @@ void MotorProtocol<MotorKind::RM, Model>::ResetPositionTracker() {
     last_single_turn_rotor_position_rad_ = 0.0f;
     accumulated_rotor_position_rad_ = 0.0f;
     rotor_zero_offset_rad_ = 0.0f;
+    angle_valid_ = false;
+    position_fault_ = kRmPositionFaultNone;
+    last_feedback_tick_ = 0u;
 }
 
 template <MotorModel Model>
 void MotorProtocol<MotorKind::RM, Model>::SyncRotorPosition(float single_turn_rotor_position_rad) {
     rotor_position_initialized_ = true;
+    angle_valid_ = true;
+    position_fault_ = kRmPositionFaultNone;
     last_single_turn_rotor_position_rad_ = single_turn_rotor_position_rad;
     accumulated_rotor_position_rad_ = single_turn_rotor_position_rad;
 }
@@ -99,33 +136,73 @@ void MotorProtocol<MotorKind::RM, Model>::SyncRotorPosition(float single_turn_ro
 template <MotorModel Model>
 void MotorProtocol<MotorKind::RM, Model>::SetRotorPositionZero(float single_turn_rotor_position_rad) {
     rotor_position_initialized_ = true;
+    angle_valid_ = true;
+    position_fault_ = kRmPositionFaultNone;
     last_single_turn_rotor_position_rad_ = single_turn_rotor_position_rad;
     accumulated_rotor_position_rad_ = single_turn_rotor_position_rad;
     rotor_zero_offset_rad_ = single_turn_rotor_position_rad;
 }
 
 template <MotorModel Model>
-float MotorProtocol<MotorKind::RM, Model>::AccumulateRotorPosition(float single_turn_rotor_position_rad, float rotor_velocity_rad_s) {
+float MotorProtocol<MotorKind::RM, Model>::AccumulateRotorPosition(float single_turn_rotor_position_rad, float rotor_velocity_rad_s, float dt_s) {
     if (!rotor_position_initialized_) {
         SyncRotorPosition(single_turn_rotor_position_rad);
         return accumulated_rotor_position_rad_;
     }
 
-    const float delta = ResolveRmAngleDelta(single_turn_rotor_position_rad,
-                                            last_single_turn_rotor_position_rad_,
-                                            rotor_velocity_rad_s);
-    const float delta_limit = (fabsf(rotor_velocity_rad_s) > 0.0f)
-        ? fabsf(rotor_velocity_rad_s) + kPi
+    const float wrapped_delta = ResolveRmAngleDelta(single_turn_rotor_position_rad,
+                                                    last_single_turn_rotor_position_rad_);
+    const float delta = CorrectRmDeltaByVelocity(wrapped_delta, rotor_velocity_rad_s, dt_s);
+    const float abs_delta = fabsf(delta);
+    if (abs_delta > max_abs_delta_rad_) {
+        max_abs_delta_rad_ = abs_delta;
+    }
+    const float expected_delta = rotor_velocity_rad_s * dt_s;
+    if (fabsf(expected_delta) > kVelocityCorrectionThresholdRad &&
+        fabsf(delta - expected_delta) > kVelocityMismatchWarnRad) {
+        ++large_delta_count_;
+        MarkPositionInvalid(kRmPositionFaultLargeDelta);
+    } else if (fabsf(wrapped_delta) >= kSuspiciousDeltaRad) {
+        ++large_delta_count_;
+        MarkPositionInvalid(kRmPositionFaultLargeDelta);
+    }
+    const float delta_limit = (fabsf(expected_delta) > 0.0f)
+        ? fabsf(expected_delta) + kPi
         : kDefaultResyncDeltaRad;
 
     if (fabsf(delta) > delta_limit) {
         last_single_turn_rotor_position_rad_ = single_turn_rotor_position_rad;
+        MarkPositionInvalid(kRmPositionFaultLargeDelta);
         return accumulated_rotor_position_rad_;
     }
 
     accumulated_rotor_position_rad_ += delta;
     last_single_turn_rotor_position_rad_ = single_turn_rotor_position_rad;
     return accumulated_rotor_position_rad_;
+}
+
+template <MotorModel Model>
+void MotorProtocol<MotorKind::RM, Model>::MarkPositionInvalid(uint32_t fault_mask) {
+    angle_valid_ = false;
+    position_fault_ |= fault_mask;
+}
+
+template <MotorModel Model>
+void MotorProtocol<MotorKind::RM, Model>::RefreshPositionDiagnostics(MotorState& next) {
+    next.position_valid = angle_valid_;
+    next.position_fault = position_fault_;
+    next.position_large_delta_count = large_delta_count_;
+    next.position_max_delta_rad = max_abs_delta_rad_;
+    next.feedback_lost_count = feedback_lost_count_;
+    next.last_feedback_tick = last_feedback_tick_;
+
+    debug_.rotor_position_initialized = rotor_position_initialized_;
+    debug_.angle_valid = angle_valid_;
+    debug_.position_fault = position_fault_;
+    debug_.large_delta_count = large_delta_count_;
+    debug_.max_abs_delta_rad = max_abs_delta_rad_;
+    debug_.feedback_lost_count = feedback_lost_count_;
+    debug_.last_feedback_tick = last_feedback_tick_;
 }
 
 template <MotorModel Model>
@@ -206,6 +283,7 @@ void MotorProtocol<MotorKind::RM, Model>::RefreshStateCache() {
         ResetPositionTracker();
         last_online_ = false;
         ResetStateCache();
+        RefreshPositionDiagnostics(state_);
         return;
     }
 
@@ -214,8 +292,16 @@ void MotorProtocol<MotorKind::RM, Model>::RefreshStateCache() {
         ResetPositionTracker();
         last_online_ = false;
         next.temperature_c = MOTOR_GetTemp(motor);
+        RefreshPositionDiagnostics(next);
         state_ = next;
         return;
+    }
+
+    const uint32_t now_tick = CurrentTick();
+    const float dt_s = TickDeltaSeconds(now_tick, last_feedback_tick_);
+    if (last_feedback_tick_ != 0u && (uint32_t)(now_tick - last_feedback_tick_) > kFeedbackLostTicks) {
+        ++feedback_lost_count_;
+        position_fault_ |= kRmPositionFaultFeedbackLost;
     }
 
     float rotor_position_rad = 0.0f;
@@ -227,6 +313,7 @@ void MotorProtocol<MotorKind::RM, Model>::RefreshStateCache() {
         ResetPositionTracker();
         last_online_ = next.online;
         next.temperature_c = MOTOR_GetTemp(motor);
+        RefreshPositionDiagnostics(next);
         state_ = next;
         return;
     }
@@ -240,7 +327,8 @@ void MotorProtocol<MotorKind::RM, Model>::RefreshStateCache() {
     }
 
     next.position_rad = ToOutputPosition(ApplyRotorPositionOffset(
-        AccumulateRotorPosition(rotor_position_rad, rotor_velocity_rad_s)));
+        AccumulateRotorPosition(rotor_position_rad, rotor_velocity_rad_s, dt_s)));
+    last_feedback_tick_ = now_tick;
     next.position_single_turn_rad = WrapToPi(next.position_rad);
     next.velocity_rad_s = ToOutputVelocity(rotor_velocity_rad_s);
     next.torque_nm = ToOutputTorque(torque_current);
@@ -253,6 +341,7 @@ void MotorProtocol<MotorKind::RM, Model>::RefreshStateCache() {
         next.protocol_state = last_non_fault_protocol_state_;
     }
     debug_.last_error_code = error_code;
+    RefreshPositionDiagnostics(next);
 
     if (install_.reverse_output) {
         next.position_rad = -next.position_rad;
@@ -393,6 +482,12 @@ int8_t MotorProtocol<MotorKind::RM, Model>::SetZero() {
         SetRotorPositionZero(rotor_position_rad);
         state_.position_rad = 0.0f;
         state_.position_single_turn_rad = 0.0f;
+        state_.position_valid = angle_valid_;
+        state_.position_fault = position_fault_;
+        state_.position_large_delta_count = large_delta_count_;
+        state_.position_max_delta_rad = max_abs_delta_rad_;
+        state_.feedback_lost_count = feedback_lost_count_;
+        state_.last_feedback_tick = last_feedback_tick_;
         state_.velocity_rad_s = ToOutputVelocity(rotor_velocity_rad_s);
         state_.torque_nm = ToOutputTorque(torque_current);
         state_.temperature_c = temperature_c;

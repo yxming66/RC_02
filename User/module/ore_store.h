@@ -16,16 +16,10 @@ extern "C" {
 #define ORE_STORE_ERR (-1)
 #define ORE_STORE_ERR_NULL (-2)
 
-#define ORE_STORE_GATE_NUM (2u)
-#define ORE_STORE_TRACK_NUM (2u)
-#define ORE_STORE_AXIS_NUM (5u)
+#define ORE_STORE_AXIS_NUM (1u)
 
 typedef enum {
   ORE_STORE_AXIS_PLATFORM = 0,
-  ORE_STORE_AXIS_GATE_LEFT,   // 兜底矿机构左 2006，行程约 2 rad
-  ORE_STORE_AXIS_GATE_RIGHT,  // 兜底矿机构右 2006，行程约 2 rad
-  ORE_STORE_AXIS_TRACK_LEFT,  // 滑轨机构左 2006，行程约 37 rad
-  ORE_STORE_AXIS_TRACK_RIGHT, // 滑轨机构右 2006，行程约 37 rad
 } OreStore_Axis_t;
 
 typedef enum {
@@ -40,23 +34,12 @@ typedef enum {
 } OreStore_ControlMode_t;
 
 typedef enum {
-  ORE_STORE_TRACK_STANDBY = 0,  // 轨道收回待机位置
-  ORE_STORE_TRACK_POINT_NUM,
-} OreStore_TrackPoint_t;
-
-typedef enum {
   ORE_STORE_TRANSFORM_STANDBY = 0,  // 平台待机/复位低位
   ORE_STORE_TRANSFORM_MID_WAIT,     // 平台中间等待位
   ORE_STORE_TRANSFORM_LIFT,         // 平台抬升/满行程位
   ORE_STORE_TRANSFORM_BUFFER,       // 平台缓冲/备用预设位
   ORE_STORE_TRANSFORM_POINT_NUM,
 } OreStore_TransformPoint_t;
-
-typedef enum {
-  ORE_STORE_GATE_CLOSED = 0,  // 左右门关闭位置
-  ORE_STORE_GATE_OPEN,        // 左右门打开位置
-  ORE_STORE_GATE_POINT_NUM,
-} OreStore_GatePoint_t;
 
 typedef struct {
   float stall_velocity_threshold_rad_s;
@@ -109,8 +92,6 @@ typedef struct {
 
   struct {
     float transform_position_rad[ORE_STORE_TRANSFORM_POINT_NUM];
-    float gate_position_rad[ORE_STORE_GATE_POINT_NUM][ORE_STORE_GATE_NUM];
-    float track_position_rad[ORE_STORE_TRACK_POINT_NUM][ORE_STORE_TRACK_NUM];
   } preset;
 
   struct {
@@ -123,8 +104,6 @@ typedef struct {
   bool force_rehome;
   bool fixed_ore_cylinder_closed;
   float platform_target_rad;
-  float gate_target_rad[ORE_STORE_GATE_NUM];
-  float track_target_rad[ORE_STORE_TRACK_NUM];
 } OreStore_CMD_t;
 
 typedef struct {
@@ -225,9 +204,7 @@ bool OreStore_IsAxisAtTarget(const OreStore_t *store, uint8_t axis,
 bool OreStore_IsAllAtTarget(const OreStore_t *store, float threshold_rad);
 const OreStore_Debug_t *OreStore_GetDebug(const OreStore_t *store);
 bool OreStore_MakePresetCommand(const OreStore_Params_t *param,
-                                OreStore_TrackPoint_t track,
                                 OreStore_TransformPoint_t transform,
-                                OreStore_GatePoint_t gate,
                                 bool fixed_ore_cylinder_closed,
                                 OreStore_CMD_t *cmd);
 
@@ -240,8 +217,6 @@ typedef struct OreStore_DebugCommand_t {
   volatile OreStore_Mode_t mode;
   volatile bool force_rehome;
   volatile float platform_target_rad;
-  volatile float gate_target_rad[ORE_STORE_GATE_NUM];
-  volatile float track_target_rad[ORE_STORE_TRACK_NUM];
   volatile bool direct_output_enable;
   volatile uint8_t direct_output_axis;
   volatile float direct_output;
@@ -256,8 +231,7 @@ typedef struct OreStore_DebugCommand_t {
 
 // 调试命令API（用于阶跃测试）
 void OreStore_SetDebugCommand(bool enable, OreStore_Mode_t mode,
-                              float platform_target, const float gate_target[2],
-                              const float track_target[2]);
+                              float platform_target);
 void OreStore_DisableDebugCommand(void);
 
 #ifdef __cplusplus

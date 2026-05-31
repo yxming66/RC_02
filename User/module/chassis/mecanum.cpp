@@ -54,10 +54,12 @@ mr::motor::MotorTemperatureProtectionConfig MakeTemperatureProtection(
   if (param == nullptr) {
     return config;
   }
-  config.warning_c = param->motor_temperature_protection.warning_c;
-  config.limit_c = param->motor_temperature_protection.limit_c;
+  const MOTOR_TemperatureProtectionConfig_t temperature_protection =
+      MOTOR_NormalizeTemperatureProtection(param->motor_temperature_protection);
+  config.warning_c = temperature_protection.warning_c;
+  config.limit_c = temperature_protection.limit_c;
   config.auto_relax_on_limit =
-      param->motor_temperature_protection.auto_relax_on_limit;
+      temperature_protection.auto_relax_on_limit;
   return config;
 }
 

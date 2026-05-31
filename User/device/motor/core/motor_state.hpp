@@ -27,6 +27,12 @@ struct MotorState {
     float position_rad = 0.0f;
     // 输出端单圈角，范围 [-pi, pi)。
     float position_single_turn_rad = 0.0f;
+    bool position_valid = false;
+    uint32_t position_fault = 0;
+    uint32_t position_large_delta_count = 0;
+    float position_max_delta_rad = 0.0f;
+    uint32_t feedback_lost_count = 0;
+    uint32_t last_feedback_tick = 0;
     float velocity_rad_s = 0.0f;
     // 统一为输出端力矩，单位 N*m。
     float torque_nm = 0.0f;
