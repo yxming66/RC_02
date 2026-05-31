@@ -58,6 +58,9 @@ typedef enum {
     ARM_SIMPLE_BEHAVIOR_WAIT_STORE_ORE,   /* 一键存取矿：待存矿位置 */
     ARM_SIMPLE_BEHAVIOR_WAIT_RELEASE_ORE, /* 一键存取矿：待放矿位置 */
     ARM_SIMPLE_BEHAVIOR_RELEASE_ORE,      /* 一键存取矿：放矿位置 */
+    ARM_SIMPLE_BEHAVIOR_PICK_POS_400,     /* 一键取矿：取正400矿位置 */
+    ARM_SIMPLE_BEHAVIOR_PICK_POS_200,     /* 一键取矿：取正200矿位置 */
+    ARM_SIMPLE_BEHAVIOR_PICK_NEG_200,     /* 一键取矿：取负200矿位置 */
     ARM_SIMPLE_BEHAVIOR_NUM,
 } ArmSimple_BehaviorPoint_t;
 
@@ -74,6 +77,8 @@ typedef struct {
     Suction_State_t suction;
     ArmSimple_JointAngle_t target_joint;  /* 目标关节角度 */
     float joint1_vel;                     /* 兼容旧字段，角度控制链路不使用 */
+    float joint1_max_vel_rad_s;           /* <=0时使用参数默认速度上限 */
+    float joint2_max_vel_rad_s;           /* <=0时使用参数默认速度上限 */
 } ArmSimple_CMD_t;
 
 typedef struct {
@@ -81,6 +86,8 @@ typedef struct {
     ArmSimple_Mode_t mode;
     float target_joint1_rad;
     float target_joint2_rad;
+    float joint1_max_vel_rad_s;
+    float joint2_max_vel_rad_s;
     Suction_State_t suction;
 } ArmSimple_DebugControl_t;
 
@@ -97,6 +104,10 @@ typedef struct {
     float joint2_angle_rad;
     float target_joint1_rad;
     float target_joint2_rad;
+    float output_target_joint1_rad;
+    float output_target_joint2_rad;
+    float joint1_max_vel_rad_s;
+    float joint2_max_vel_rad_s;
 } ArmSimple_Feedback_t;
 
 /* 初始化参数 */
@@ -180,7 +191,12 @@ typedef struct {
     struct {
         float joint1_target;
         float joint2_target;
+        float joint1_output_target;
+        float joint2_output_target;
         float joint1_vel_target;
+        float joint1_max_vel_rad_s;
+        float joint2_max_vel_rad_s;
+        bool output_target_initialized;
     } target;
 
     /* 预设姿态 */
@@ -204,6 +220,12 @@ bool ArmSimple_MakeBehaviorCommand(const ArmSimple_Params_t *param,
                                    ArmSimple_BehaviorPoint_t point,
                                    Suction_State_t suction,
                                    ArmSimple_CMD_t *cmd);
+bool ArmSimple_MakeBehaviorCommandWithSpeed(const ArmSimple_Params_t *param,
+                                            ArmSimple_BehaviorPoint_t point,
+                                            Suction_State_t suction,
+                                            float joint1_max_vel_rad_s,
+                                            float joint2_max_vel_rad_s,
+                                            ArmSimple_CMD_t *cmd);
 
 extern volatile ArmSimple_DebugControl_t g_arm_simple_debug;
 

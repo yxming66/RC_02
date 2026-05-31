@@ -21,6 +21,8 @@ volatile ArmSimple_DebugControl_t g_arm_simple_debug = {
     ARM_SIMPLE_MODE_RELAX,
     0.0f,
     0.0f,
+    0.0f,
+    0.0f,
     SUCTION_OFF,
 };
 
@@ -89,6 +91,10 @@ void Task_arm_simple(void *argument)
         arm_simple_feedback.joint2_angle_rad = arm_simple.feedback.joint2_angle;
         arm_simple_feedback.target_joint1_rad = arm_simple.target.joint1_target;
         arm_simple_feedback.target_joint2_rad = arm_simple.target.joint2_target;
+        arm_simple_feedback.output_target_joint1_rad = arm_simple.target.joint1_output_target;
+        arm_simple_feedback.output_target_joint2_rad = arm_simple.target.joint2_output_target;
+        arm_simple_feedback.joint1_max_vel_rad_s = arm_simple.target.joint1_max_vel_rad_s;
+        arm_simple_feedback.joint2_max_vel_rad_s = arm_simple.target.joint2_max_vel_rad_s;
 
         ArmSimple_CMD_t cmd;
         if (task_runtime.msgq.arm_simple.cmd != NULL &&
@@ -106,6 +112,8 @@ void Task_arm_simple(void *argument)
                     .joint2 = g_arm_simple_debug.target_joint2_rad,
                 },
                 .joint1_vel = 0.0f,
+                .joint1_max_vel_rad_s = g_arm_simple_debug.joint1_max_vel_rad_s,
+                .joint2_max_vel_rad_s = g_arm_simple_debug.joint2_max_vel_rad_s,
             };
             ArmSimple_Control(&arm_simple, &debug_cmd);
         }

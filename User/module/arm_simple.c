@@ -41,6 +41,78 @@ static float ClampFloat(float value, float min_value, float max_value)
     return value;
 }
 
+static float ArmSimple_ResolveMaxVel(float command_max_vel,
+                                     float default_max_vel)
+{
+    if (command_max_vel > 0.0f && isfinite(command_max_vel)) {
+        return command_max_vel;
+    }
+    return (default_max_vel > 0.0f && isfinite(default_max_vel))
+               ? default_max_vel
+               : -1.0f;
+}
+
+static float ArmSimple_MoveToward(float current, float target,
+                                  float max_delta)
+{
+    if (max_delta < 0.0f || !isfinite(max_delta)) {
+        return target;
+    }
+
+    if (max_delta == 0.0f) {
+        return current;
+    }
+
+    const float delta = target - current;
+    if (fabsf(delta) <= max_delta) {
+        return target;
+    }
+    return current + ((delta > 0.0f) ? max_delta : -max_delta);
+}
+
+static void ArmSimple_UpdateOutputTargets(ArmSimple_t *a)
+{
+    if (a == NULL || a->param == NULL) {
+        return;
+    }
+
+    if (!a->target.output_target_initialized) {
+        a->target.joint1_output_target = ClampAngle(
+            a->feedback.joint1_angle,
+            a->param->soft_limit.joint1_min,
+            a->param->soft_limit.joint1_max);
+        a->target.joint2_output_target = ClampAngle(
+            a->feedback.joint2_angle,
+            a->param->soft_limit.joint2_min,
+            a->param->soft_limit.joint2_max);
+        a->target.output_target_initialized = true;
+    }
+
+    const float dt = (a->timer.dt > 0.0f && isfinite(a->timer.dt))
+                         ? a->timer.dt
+                         : 0.001f;
+    const float joint1_max_delta = a->target.joint1_max_vel_rad_s * dt;
+    const float joint2_max_delta = a->target.joint2_max_vel_rad_s * dt;
+
+    a->target.joint1_output_target = ArmSimple_MoveToward(
+        a->target.joint1_output_target,
+        a->target.joint1_target,
+        joint1_max_delta);
+    a->target.joint2_output_target = ArmSimple_MoveToward(
+        a->target.joint2_output_target,
+        a->target.joint2_target,
+        joint2_max_delta);
+
+    a->target.joint1_output_target = ClampAngle(
+        a->target.joint1_output_target,
+        a->param->soft_limit.joint1_min,
+        a->param->soft_limit.joint1_max);
+    a->target.joint2_output_target = ClampAngle(
+        a->target.joint2_output_target,
+        a->param->soft_limit.joint2_min,
+        a->param->soft_limit.joint2_max);
+}
+
 static float ArmSimple_Joint1GravityTorque(const ArmSimple_t *a)
 {
     if (a == NULL || a->param == NULL) {
@@ -112,7 +184,14 @@ int8_t ArmSimple_Init(ArmSimple_t *a, ArmSimple_Params_t *param, float target_fr
     /* 初始化目标 */
     a->target.joint1_target = 0.0f;
     a->target.joint2_target = 0.0f;
+    a->target.joint1_output_target = 0.0f;
+    a->target.joint2_output_target = 0.0f;
     a->target.joint1_vel_target = 0.0f;
+    a->target.joint1_max_vel_rad_s = ArmSimple_ResolveMaxVel(
+        0.0f, param->vel_limit.joint1_max_vel);
+    a->target.joint2_max_vel_rad_s = ArmSimple_ResolveMaxVel(
+        0.0f, param->vel_limit.joint2_max_vel);
+    a->target.output_target_initialized = false;
 
     const auto dm_config =
         mr::motor::MotorInstanceConfig<mr::motor::MotorKind::DM>::FromVendorParam(
@@ -197,8 +276,21 @@ int8_t ArmSimple_Control(ArmSimple_t *a, const ArmSimple_CMD_t *cmd)
 
     if (cmd->mode == ARM_SIMPLE_MODE_RELAX) {
         a->target.joint1_vel_target = 0.0f;
+        a->target.output_target_initialized = false;
         ArmSimple_SetSuction(a, cmd->suction);
         return ARM_SIMPLE_OK;
+    }
+
+    if (!a->target.output_target_initialized) {
+        a->target.joint1_output_target = ClampAngle(
+            a->feedback.joint1_angle,
+            a->param->soft_limit.joint1_min,
+            a->param->soft_limit.joint1_max);
+        a->target.joint2_output_target = ClampAngle(
+            a->feedback.joint2_angle,
+            a->param->soft_limit.joint2_min,
+            a->param->soft_limit.joint2_max);
+        a->target.output_target_initialized = true;
     }
 
     if (cmd->point_mode < ARM_SIMPLE_POINT_NONE) {
@@ -215,7 +307,10 @@ int8_t ArmSimple_Control(ArmSimple_t *a, const ArmSimple_CMD_t *cmd)
                                           a->param->soft_limit.joint2_min,
                                           a->param->soft_limit.joint2_max);
     a->target.joint1_vel_target = 0.0f;
-    a->feedback.joint2_angle = a->target.joint2_target;
+    a->target.joint1_max_vel_rad_s = ArmSimple_ResolveMaxVel(
+        cmd->joint1_max_vel_rad_s, a->param->vel_limit.joint1_max_vel);
+    a->target.joint2_max_vel_rad_s = ArmSimple_ResolveMaxVel(
+        cmd->joint2_max_vel_rad_s, a->param->vel_limit.joint2_max_vel);
 
     /* 吸盘控制 */
     ArmSimple_SetSuction(a, cmd->suction);
@@ -237,8 +332,11 @@ int8_t ArmSimple_Output(ArmSimple_t *a)
     if (a->mode == ARM_SIMPLE_MODE_RELAX) {
         (void)motor->Relax();
         a->dm_enabled = false;
+        a->target.output_target_initialized = false;
     } else {
-        (void)motor->SetMIT(a->target.joint1_target,
+        ArmSimple_UpdateOutputTargets(a);
+        a->feedback.joint2_angle = a->target.joint2_output_target;
+        (void)motor->SetMIT(a->target.joint1_output_target,
                             a->target.joint1_vel_target,
                             a->param->mit.joint1_kp,
                             a->param->mit.joint1_kd,
@@ -247,7 +345,7 @@ int8_t ArmSimple_Output(ArmSimple_t *a)
         (void)motor->CommitCommand();
     }
     BSP_PWM_SetPulseUs(a->param->servo_param.pwm_channel,
-                       ArmSimple_AngleToPulseUs(a->target.joint2_target, a->param));
+                       ArmSimple_AngleToPulseUs(a->target.joint2_output_target, a->param));
 
     return ARM_SIMPLE_OK;
 }
@@ -337,6 +435,17 @@ bool ArmSimple_MakeBehaviorCommand(const ArmSimple_Params_t *param,
                                    Suction_State_t suction,
                                    ArmSimple_CMD_t *cmd)
 {
+    return ArmSimple_MakeBehaviorCommandWithSpeed(param, point, suction,
+                                                  0.0f, 0.0f, cmd);
+}
+
+bool ArmSimple_MakeBehaviorCommandWithSpeed(const ArmSimple_Params_t *param,
+                                            ArmSimple_BehaviorPoint_t point,
+                                            Suction_State_t suction,
+                                            float joint1_max_vel_rad_s,
+                                            float joint2_max_vel_rad_s,
+                                            ArmSimple_CMD_t *cmd)
+{
     if (param == NULL || cmd == NULL || point >= ARM_SIMPLE_BEHAVIOR_NUM) {
         return false;
     }
@@ -348,5 +457,7 @@ bool ArmSimple_MakeBehaviorCommand(const ArmSimple_Params_t *param,
     cmd->target_joint.joint1 = param->preset.behavior_point[point].joint1_pos;
     cmd->target_joint.joint2 = param->preset.behavior_point[point].joint2_pos;
     cmd->joint1_vel = 0.0f;
+    cmd->joint1_max_vel_rad_s = joint1_max_vel_rad_s;
+    cmd->joint2_max_vel_rad_s = joint2_max_vel_rad_s;
     return true;
 }

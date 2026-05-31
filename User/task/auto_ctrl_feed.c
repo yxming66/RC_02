@@ -32,7 +32,10 @@ auto_ctrl_t auto_ctrl;
 bool auto_ctrl_inited = false;
 AutoOre_t auto_ore_ctrl;
 bool auto_ore_inited = false;
+
+/* Ozone/调试器手动触发一键存取矿：request=1存矿，2放矿，3上膛，4中止，5取正400，6取正200，7取负200。 */
 volatile AutoOre_DebugControl_t g_auto_ore_debug = {0};//手动调用一键函数
+
 AutoRodSpearhead_t auto_rod_spearhead_ctrl;
 bool auto_rod_spearhead_inited = false;
 bool auto_ctrl_local_yaw_zero_initialized = false;
@@ -122,15 +125,10 @@ static void AutoCtrlFeed_InitAutoOre(void) {
     return;
   }
 
-  AutoOre_Params_t params = {
-      .arm_param = &cfg->arm_simple_param,
-      .ore_store_param = &cfg->ore_store_param,
-      .pole_param = &cfg->pole_param,
-      .default_step_timeout_ms = 5000u,
-      .arm_arrive_threshold_rad = cfg->arm_simple_param.preset.arrive_threshold_rad,
-      .ore_store_arrive_threshold_rad = 0.05f,
-      .pole_arrive_threshold_rad = AUTO_CTRL_POLE_TARGET_THRESHOLD_RAD,
-  };
+  AutoOre_Params_t params = cfg->auto_ore_param;
+  params.arm_param = &cfg->arm_simple_param;
+  params.ore_store_param = &cfg->ore_store_param;
+  params.pole_param = &cfg->pole_param;
   AutoOre_Occupancy_t initial_occupancy = {0};
   AutoOre_Init(&auto_ore_ctrl, &params, &initial_occupancy);
   auto_ore_inited = true;
@@ -144,9 +142,10 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms) {
   AutoOre_Feedback_t auto_ore_feedback = {
       .arm_at_target = AutoCtrlFeed_ArmSimpleAtTarget(),
       .ore_store_all_homed = Task_OreStoreIsAllHomed(),
-      .ore_store_all_at_target = Task_OreStoreIsAllAtTarget(0.05f),
+      .ore_store_all_at_target = Task_OreStoreIsAllAtTarget(
+        auto_ore_ctrl.param.ore_store_arrive_threshold_rad),
       .pole_all_at_target = Task_ChassisMainPoleAllAtTarget(
-          AUTO_CTRL_POLE_TARGET_THRESHOLD_RAD),
+        auto_ore_ctrl.param.pole_arrive_threshold_rad),
   };
   AutoOre_Update(&auto_ore_ctrl, &auto_ore_feedback, now_ms);
 
@@ -164,8 +163,21 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms) {
       auto_ore_feedback.ore_store_all_at_target;
   g_auto_ore_debug.arm_cmd_joint1_rad = auto_ore_ctrl.arm_cmd.target_joint.joint1;
   g_auto_ore_debug.arm_cmd_joint2_rad = auto_ore_ctrl.arm_cmd.target_joint.joint2;
+  g_auto_ore_debug.arm_cmd_joint1_max_vel_rad_s =
+      auto_ore_ctrl.arm_cmd.joint1_max_vel_rad_s;
+  g_auto_ore_debug.arm_cmd_joint2_max_vel_rad_s =
+      auto_ore_ctrl.arm_cmd.joint2_max_vel_rad_s;
   g_auto_ore_debug.ore_store_cmd_platform_rad =
       auto_ore_ctrl.ore_store_cmd.platform_target_rad;
+  g_auto_ore_debug.pole_cmd_valid = auto_ore_ctrl.pole_cmd_valid;
+  g_auto_ore_debug.chassis_cmd_valid = auto_ore_ctrl.chassis_cmd_valid;
+  g_auto_ore_debug.pole_all_at_target = auto_ore_feedback.pole_all_at_target;
+  g_auto_ore_debug.pole_cmd_front_lift_rad =
+      auto_ore_ctrl.pole_cmd.auto_target_lift[0];
+  g_auto_ore_debug.pole_cmd_rear_lift_rad =
+      auto_ore_ctrl.pole_cmd.auto_target_lift[1];
+  g_auto_ore_debug.chassis_cmd_vx_mps =
+      auto_ore_ctrl.chassis_cmd.ctrl_vec.vx;
 }
 
 static void AutoCtrlFeed_InitAutoRodSpearhead(void) {
@@ -207,6 +219,21 @@ bool Task_AutoOreStartChamber(void) {
          AutoOre_StartChamber(&auto_ore_ctrl, osKernelGetTickCount());
 }
 
+bool Task_AutoOreStartPickPos400(void) {
+  return auto_ore_inited &&
+         AutoOre_StartPickPos400(&auto_ore_ctrl, osKernelGetTickCount());
+}
+
+bool Task_AutoOreStartPickPos200(void) {
+  return auto_ore_inited &&
+         AutoOre_StartPickPos200(&auto_ore_ctrl, osKernelGetTickCount());
+}
+
+bool Task_AutoOreStartPickNeg200(void) {
+  return auto_ore_inited &&
+         AutoOre_StartPickNeg200(&auto_ore_ctrl, osKernelGetTickCount());
+}
+
 void Task_AutoOreAbort(void) {
   if (auto_ore_inited) {
     AutoOre_Abort(&auto_ore_ctrl);
@@ -234,6 +261,15 @@ static void AutoCtrlFeed_HandleAutoOreDebugRequest(void) {
       break;
     case AUTO_ORE_DEBUG_REQUEST_CHAMBER:
       result = Task_AutoOreStartChamber();
+      break;
+    case AUTO_ORE_DEBUG_REQUEST_PICK_POS_400:
+      result = Task_AutoOreStartPickPos400();
+      break;
+    case AUTO_ORE_DEBUG_REQUEST_PICK_POS_200:
+      result = Task_AutoOreStartPickPos200();
+      break;
+    case AUTO_ORE_DEBUG_REQUEST_PICK_NEG_200:
+      result = Task_AutoOreStartPickNeg200();
       break;
     case AUTO_ORE_DEBUG_REQUEST_ABORT:
       Task_AutoOreAbort();

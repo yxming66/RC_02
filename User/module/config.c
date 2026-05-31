@@ -111,19 +111,26 @@ Config_RobotParam_t robot_config = {
             },
         },
         .preset = {
+            /* 200mm 台阶四杆全伸位；一键取矿 PICK_POS_200 也使用该撑杆高度。 */
             .step_200_all_extend = {13.8f, 13.8f},//13.3f
+            /* 200mm 台阶前杆收回、后杆保持支撑位。 */
             .step_200_front_retract = {0.0f, 13.8f},
+            /* 200mm 台阶四杆全收位。 */
             .step_200_all_retract = {0.0f, 0.0f},
+            /* 200mm 小抬升位；一键取矿 PICK_NEG_200 使用该撑杆高度。 */
             .step_200_small = {3.0f, 3.0f},
+            /* 400mm 台阶四杆全伸位；一键取矿 PICK_POS_400 也使用该撑杆高度。 */
             .step_400_all_extend = {26.7f, 26.7f},
+            /* 400mm 台阶前杆收回、后杆保持支撑位。 */
             .step_400_front_retract = {0.0f, 26.7f},
+            /* 400mm 台阶四杆全收位。 */
             .step_400_all_retract = {0.0f, 0.0f},
         },
         .limit = {
             .max_current = 1.0f,
             .support_total_travel = 26.7f,
-            .support_lift_speed = 70.0f,
-            .support_lift_accel = 180.0f,
+            .support_lift_speed = 70.0f,//70
+            .support_lift_accel = 0.0f,//180
         },
     },
     .ore_store_param = {
@@ -172,10 +179,14 @@ Config_RobotParam_t robot_config = {
         .preset = {
             /* 平台升降轴预设位置：低位待机 -> 中间等待 -> 抬升交接，BUFFER 预留待标定。 */
             .transform_position_rad = {
-                [ORE_STORE_TRANSFORM_STANDBY] = 0.0f,    /* 平台待机/复位低位。 */
-                [ORE_STORE_TRANSFORM_MID_WAIT] = 11.0f,  /* 平台中间等待位，存矿时先到此位等待交接。 */
-                [ORE_STORE_TRANSFORM_LIFT] = 22.7f,      /* 平台抬升位/满行程位，用于顶升后开门或释放。 */
-                [ORE_STORE_TRANSFORM_BUFFER] = 0.0f,     /* 平台缓冲/备用预设位，待实机标定。 */
+                /* 平台待机/复位低位。 */
+                [ORE_STORE_TRANSFORM_STANDBY] = 0.0f,
+                /* 平台中间等待位，存高位矿时等待 arm 交接。 */
+                [ORE_STORE_TRANSFORM_MID_WAIT] = 11.0f,
+                /* 平台抬升位/满行程位，用于低位存矿或低位上膛交接。 */
+                [ORE_STORE_TRANSFORM_LIFT] = 22.7f,
+                /* 平台缓冲/备用预设位，待实机标定。 */
+                [ORE_STORE_TRANSFORM_BUFFER] = 0.0f,
             },
         },
         .fixed_ore_cylinder = {
@@ -269,14 +280,70 @@ Config_RobotParam_t robot_config = {
         },
         .preset = {
             .behavior_point = {
+                /* ArmSimple 待机/安全收回位，一键动作开始和结束常用位置。 */
                 [ARM_SIMPLE_BEHAVIOR_STANDBY] = {.joint1_pos = 0.149153411f, .joint2_pos = 0.0f},
+                /* ArmSimple 存矿位，arm 伸到 ore_store 交接处释放矿。 */
                 [ARM_SIMPLE_BEHAVIOR_STORE_ORE] = {.joint1_pos = 1.4756968f, .joint2_pos = 0.0f},
+                /* ArmSimple 存矿等待位，等待平台到位后再伸到存矿位。 */
                 [ARM_SIMPLE_BEHAVIOR_WAIT_STORE_ORE] = {.joint1_pos = 0.149153411f, .joint2_pos = 0.0f},
+                /* ArmSimple 放矿等待位，放矿动作前的预备/稳定位置。 */
                 [ARM_SIMPLE_BEHAVIOR_WAIT_RELEASE_ORE] = {.joint1_pos = 0.149153411f, .joint2_pos = 0.0f},
+                /* ArmSimple 放矿位，吸盘关闭后从该位置把矿释放出去。 */
                 [ARM_SIMPLE_BEHAVIOR_RELEASE_ORE] = {.joint1_pos = 0.149153411f, .joint2_pos = -1.570796f},
+                /* ArmSimple 正向 400mm 取矿位，配合 pole 的 step_400_all_extend 使用。 */
+                [ARM_SIMPLE_BEHAVIOR_PICK_POS_400] = {.joint1_pos = 0.149153411f, .joint2_pos = 0.0f},
+                /* ArmSimple 正向 200mm 取矿位，配合 pole 的 step_200_all_extend 使用。 */
+                [ARM_SIMPLE_BEHAVIOR_PICK_POS_200] = {.joint1_pos = 0.149153411f, .joint2_pos = 0.0f},
+                /* ArmSimple 反向/负向 200mm 取矿位，配合 pole 的 step_200_small 使用。 */
+                [ARM_SIMPLE_BEHAVIOR_PICK_NEG_200] = {.joint1_pos = 0.149153411f, .joint2_pos = 0.0f},
             },
             .arrive_threshold_rad = 0.05f,
         },
+    },
+    .auto_ore_param = {
+        /* ArmSimple 一键行为速度上限，单位 rad/s；<=0 表示使用 arm_simple_param.vel_limit 默认值。 */
+        .arm_speed = {
+            /* store_*：一键存矿流程，wait=等待/预备位，place=伸到存矿位，standby=回待机位。 */
+            .store_wait = {.joint1_max_vel_rad_s = 15.5f, .joint2_max_vel_rad_s = 50.0f},
+            .store_place = {.joint1_max_vel_rad_s = 15.5f, .joint2_max_vel_rad_s = 50.0f},
+            .store_standby = {.joint1_max_vel_rad_s = 15.5f, .joint2_max_vel_rad_s = 50.0f},
+            /* release_*：一键放矿流程，wait=放矿前等待位，place=放矿位，standby=放矿后回待机位。 */
+            .release_wait = {.joint1_max_vel_rad_s = 15.5f, .joint2_max_vel_rad_s = 50.0f},
+            .release_place = {.joint1_max_vel_rad_s = 15.5f, .joint2_max_vel_rad_s = 50.0f},
+            .release_standby = {.joint1_max_vel_rad_s = 15.5f, .joint2_max_vel_rad_s = 50.0f},
+            /* chamber_*：一键上膛流程，wait=对接等待位，place=取/交接位，standby=上膛后回待机位。 */
+            .chamber_wait = {.joint1_max_vel_rad_s = 15.5f, .joint2_max_vel_rad_s = 50.0f},
+            .chamber_place = {.joint1_max_vel_rad_s = 15.5f, .joint2_max_vel_rad_s = 50.0f},
+            .chamber_standby = {.joint1_max_vel_rad_s = 15.5f, .joint2_max_vel_rad_s = 50.0f},
+            /* pick_*：一键取矿流程，standby=取矿前/后待机位，place=伸到取矿位，fetch=底盘前进取矿时保持取矿位。 */
+            .pick_standby = {.joint1_max_vel_rad_s = 15.5f, .joint2_max_vel_rad_s = 50.0f},
+            .pick_place = {.joint1_max_vel_rad_s = 15.5f, .joint2_max_vel_rad_s = 50.0f},
+            .pick_fetch = {.joint1_max_vel_rad_s = 15.5f, .joint2_max_vel_rad_s = 50.0f},
+        },
+        /* 一键存/放/上膛/取矿流程中的动作延时，单位 ms；<=0 时使用状态机内置默认值。 */
+        .timing = {
+            /* 存矿：arm 到存矿位后的稳定等待、固矿气缸关闭等待、气缸重新打开等待。 */
+            .store_arm_settle_ms = 2000u,
+            .store_cylinder_close_ms = 2000u,
+            .store_cylinder_open_ms = 2000u,
+            /* 放矿：放矿前 arm/ore_store 到位稳定等待、吸盘关闭后矿石脱离等待。 */
+            .release_wait_ms = 2000u,
+            .release_suction_off_ms = 2000u,
+            /* 上膛：低位矿夹紧等待、arm 到交接位稳定等待、气缸打开释放等待。 */
+            .chamber_low_clamp_ms = 2000u,
+            .chamber_arm_settle_ms = 2000u,
+            .chamber_cylinder_open_ms = 2000u,
+            /* 取矿：底盘向矿位前进的持续时间。 */
+            .fetch_chassis_move_ms = 1000u,
+        },
+        /* 单个状态机 step 的超时时间，单位 ms。 */
+        .default_step_timeout_ms = 5000u,
+        /* 到位判定阈值：arm/ore_store/pole 分别使用的误差阈值，单位 rad。 */
+        .arm_arrive_threshold_rad = 0.05f,
+        .ore_store_arrive_threshold_rad = 0.05f,
+        .pole_arrive_threshold_rad = 0.30f,
+        /* 取矿流程中底盘前进速度，单位 m/s。 */
+        .fetch_chassis_vx_mps = 0.50f,
     },
     .auto_ctrl_param = {
         .common = {
@@ -526,11 +593,16 @@ Config_RobotParam_t robot_config = {
             .freq_hz = 50.0f,
             .zero_pulse_us = ROD_NEW_SERVO_PULSE_NEUTRAL_US,
             /* TODO: 根据实际机构调整角度参数 */
-            .angle_standby_rad = 0.0f,       /* 待机位：放平 */
-            .angle_grab_high_rad = 0.8f,     /* 高位夹取 */
-            .angle_dock_wait_rad = 1.2f,     /* 等待对接位置 */
-            .angle_min_rad = -2.356f,        /* 约 -135°，270°舵机行程下限(500μs) */
-            .angle_max_rad = 2.356f,         /* 约 +135°，270°舵机行程上限(2500μs) */
+            /* Rod 舵机待机位：机构放平/收回。 */
+            .angle_standby_rad = 0.0f,
+            /* Rod 舵机高位夹取位。 */
+            .angle_grab_high_rad = 0.8f,
+            /* Rod 舵机等待对接位。 */
+            .angle_dock_wait_rad = 1.2f,
+            /* Rod 舵机行程下限：约 -135°，对应 270° 舵机 500μs。 */
+            .angle_min_rad = -2.356f,
+            /* Rod 舵机行程上限：约 +135°，对应 270° 舵机 2500μs。 */
+            .angle_max_rad = 2.356f,
             .arrive_threshold_rad = 0.05f,  /* 到位判定阈值 */
             .max_vel_rad_s = 2.0f,           /* 最大角速度 */
             .max_acc_rad_s = 5.0f,          /* 最大角加速度 */

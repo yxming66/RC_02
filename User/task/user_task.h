@@ -67,6 +67,9 @@ typedef enum {
     AUTO_ORE_DEBUG_REQUEST_RELEASE = 2,
     AUTO_ORE_DEBUG_REQUEST_CHAMBER = 3,
     AUTO_ORE_DEBUG_REQUEST_ABORT = 4,
+    AUTO_ORE_DEBUG_REQUEST_PICK_POS_400 = 5,
+    AUTO_ORE_DEBUG_REQUEST_PICK_POS_200 = 6,
+    AUTO_ORE_DEBUG_REQUEST_PICK_NEG_200 = 7,
 } AutoOre_DebugRequest_t;
 
 typedef struct {
@@ -86,11 +89,19 @@ typedef struct {
     volatile uint8_t step_index;
     volatile bool arm_cmd_valid;
     volatile bool ore_store_cmd_valid;
+    volatile bool pole_cmd_valid;
+    volatile bool chassis_cmd_valid;
     volatile bool arm_at_target;
     volatile bool ore_store_all_at_target;
+    volatile bool pole_all_at_target;
     volatile float arm_cmd_joint1_rad;
     volatile float arm_cmd_joint2_rad;
+    volatile float arm_cmd_joint1_max_vel_rad_s;
+    volatile float arm_cmd_joint2_max_vel_rad_s;
     volatile float ore_store_cmd_platform_rad;
+    volatile float pole_cmd_front_lift_rad;
+    volatile float pole_cmd_rear_lift_rad;
+    volatile float chassis_cmd_vx_mps;
 } AutoOre_DebugControl_t;
 
 /* 任务运行时结构体 */
@@ -218,6 +229,9 @@ bool Task_ChassisMainGetPoleHoldCommand(Pole_CMD_t *cmd);
 bool Task_AutoOreStartStore(void);
 bool Task_AutoOreStartRelease(void);
 bool Task_AutoOreStartChamber(void);
+bool Task_AutoOreStartPickPos400(void);
+bool Task_AutoOreStartPickPos200(void);
+bool Task_AutoOreStartPickNeg200(void);
 void Task_AutoOreAbort(void);
 bool Task_AutoRodSpearheadStart(void);
 void Task_AutoRodSpearheadAbort(void);

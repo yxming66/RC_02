@@ -15,6 +15,7 @@
 #include "module/pole.h"
 #include "module/rod_new.h"
 #include "module/arm_simple.h"
+#include "module/autoCtrlAPI/ore_store/auto_ore_store.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -84,6 +85,7 @@ typedef struct {
   OreStore_Params_t ore_store_param;
   Arm_Params_t arm_param;
   ArmSimple_Params_t arm_simple_param;
+  AutoOre_Params_t auto_ore_param;
   AutoCtrl_Params_t auto_ctrl_param;
   RodNew_Params_t rod_new_param;
 } Config_RobotParam_t;

@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 #include "module/arm_simple.h"
+#include "module/chassis.h"
 #include "module/ore_store.h"
 #include "module/pole.h"
 
@@ -16,6 +17,9 @@ typedef enum {
   AUTO_ORE_ACTION_STORE,
   AUTO_ORE_ACTION_RELEASE,
   AUTO_ORE_ACTION_CHAMBER,
+  AUTO_ORE_ACTION_PICK_POS_400,
+  AUTO_ORE_ACTION_PICK_POS_200,
+  AUTO_ORE_ACTION_PICK_NEG_200,
 } AutoOre_Action_t;
 
 typedef enum {
@@ -70,13 +74,48 @@ typedef struct {
 } AutoOre_Feedback_t;
 
 typedef struct {
+  uint32_t store_arm_settle_ms;
+  uint32_t store_cylinder_close_ms;
+  uint32_t store_cylinder_open_ms;
+  uint32_t release_wait_ms;
+  uint32_t release_suction_off_ms;
+  uint32_t chamber_low_clamp_ms;
+  uint32_t chamber_arm_settle_ms;
+  uint32_t chamber_cylinder_open_ms;
+  uint32_t fetch_chassis_move_ms;
+} AutoOre_TimingParam_t;
+
+typedef struct {
+  float joint1_max_vel_rad_s;
+  float joint2_max_vel_rad_s;
+} AutoOre_ArmSpeedLimit_t;
+
+typedef struct {
+  AutoOre_ArmSpeedLimit_t store_wait;
+  AutoOre_ArmSpeedLimit_t store_place;
+  AutoOre_ArmSpeedLimit_t store_standby;
+  AutoOre_ArmSpeedLimit_t release_wait;
+  AutoOre_ArmSpeedLimit_t release_place;
+  AutoOre_ArmSpeedLimit_t release_standby;
+  AutoOre_ArmSpeedLimit_t chamber_wait;
+  AutoOre_ArmSpeedLimit_t chamber_place;
+  AutoOre_ArmSpeedLimit_t chamber_standby;
+  AutoOre_ArmSpeedLimit_t pick_standby;
+  AutoOre_ArmSpeedLimit_t pick_place;
+  AutoOre_ArmSpeedLimit_t pick_fetch;
+} AutoOre_ArmSpeedParam_t;
+
+typedef struct {
   const ArmSimple_Params_t *arm_param;
   const OreStore_Params_t *ore_store_param;
   const Pole_Params_t *pole_param;
+  AutoOre_ArmSpeedParam_t arm_speed;
+  AutoOre_TimingParam_t timing;
   uint32_t default_step_timeout_ms;
   float arm_arrive_threshold_rad;
   float ore_store_arrive_threshold_rad;
   float pole_arrive_threshold_rad;
+  float fetch_chassis_vx_mps;
 } AutoOre_Params_t;
 
 typedef struct {
@@ -95,9 +134,11 @@ typedef struct {
   bool arm_cmd_valid;
   bool ore_store_cmd_valid;
   bool pole_cmd_valid;
+  bool chassis_cmd_valid;
   ArmSimple_CMD_t arm_cmd;
   OreStore_CMD_t ore_store_cmd;
   Pole_CMD_t pole_cmd;
+  Chassis_CMD_t chassis_cmd;
   AutoOre_Params_t param;
   AutoOre_Feedback_t feedback;
 } AutoOre_t;
@@ -109,6 +150,9 @@ uint8_t AutoOre_GetOccupancyMask(const AutoOre_t *ctrl);
 bool AutoOre_StartStore(AutoOre_t *ctrl, uint32_t now_ms);
 bool AutoOre_StartRelease(AutoOre_t *ctrl, uint32_t now_ms);
 bool AutoOre_StartChamber(AutoOre_t *ctrl, uint32_t now_ms);
+bool AutoOre_StartPickPos400(AutoOre_t *ctrl, uint32_t now_ms);
+bool AutoOre_StartPickPos200(AutoOre_t *ctrl, uint32_t now_ms);
+bool AutoOre_StartPickNeg200(AutoOre_t *ctrl, uint32_t now_ms);
 void AutoOre_Update(AutoOre_t *ctrl, const AutoOre_Feedback_t *feedback,
                     uint32_t now_ms);
 void AutoOre_Abort(AutoOre_t *ctrl);
@@ -121,6 +165,7 @@ uint8_t AutoOre_GetStepIndex(const AutoOre_t *ctrl);
 const ArmSimple_CMD_t *AutoOre_GetArmCommand(const AutoOre_t *ctrl);
 const OreStore_CMD_t *AutoOre_GetOreStoreCommand(const AutoOre_t *ctrl);
 const Pole_CMD_t *AutoOre_GetPoleCommand(const AutoOre_t *ctrl);
+const Chassis_CMD_t *AutoOre_GetChassisCommand(const AutoOre_t *ctrl);
 
 #ifdef __cplusplus
 }
