@@ -151,6 +151,7 @@ typedef struct {
 /* Pole反馈 */
 typedef struct {
     float lift[2];
+    float motor_total_angle[4];
 } PC_PoleFeedback_t;
 
 /* Arm反馈 */

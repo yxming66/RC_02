@@ -101,16 +101,19 @@ static bool AutoCtrlFeed_DebouncePoleReady(bool raw_ready,
   return *stable_count >= AUTO_CTRL_POLE_TARGET_STABLE_CYCLES;
 }
 
-static bool AutoCtrlFeed_ArmSimpleAtTarget(void) {
+static bool AutoCtrlFeed_ArmSimpleAtTarget(float threshold) {
   const ArmSimple_Feedback_t *arm_fb = Task_ArmSimpleGetFeedback();
   if (arm_fb == NULL) {
     return false;
   }
 
-  Config_RobotParam_t *cfg = Config_GetRobotParam();
-  float threshold = 0.05f;
-  if (cfg != NULL && cfg->arm_simple_param.preset.arrive_threshold_rad > 0.0f) {
-    threshold = cfg->arm_simple_param.preset.arrive_threshold_rad;
+  if (threshold <= 0.0f) {
+    Config_RobotParam_t *cfg = Config_GetRobotParam();
+    threshold = 0.05f;
+    if (cfg != NULL &&
+        cfg->arm_simple_param.preset.arrive_threshold_rad > 0.0f) {
+      threshold = cfg->arm_simple_param.preset.arrive_threshold_rad;
+    }
   }
 
   return fabsf(arm_fb->joint1_angle_rad - arm_fb->target_joint1_rad) <=
@@ -140,7 +143,8 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms) {
   }
 
   AutoOre_Feedback_t auto_ore_feedback = {
-      .arm_at_target = AutoCtrlFeed_ArmSimpleAtTarget(),
+      .arm_at_target = AutoCtrlFeed_ArmSimpleAtTarget(
+        auto_ore_ctrl.param.arm_arrive_threshold_rad),
       .ore_store_all_homed = Task_OreStoreIsAllHomed(),
       .ore_store_all_at_target = Task_OreStoreIsAllAtTarget(
         auto_ore_ctrl.param.ore_store_arrive_threshold_rad),

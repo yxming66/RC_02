@@ -146,6 +146,9 @@ extern "C" void Task_chassis_main(void *argument) {
       PC_PoleFeedback_t pole_fb = {0};
       pole_fb.lift[0] = pole.feedback.support_angle_avg;
       pole_fb.lift[1] = pole.feedback.support_angle_avg;
+      for (uint8_t i = 0u; i < POLE_MOTOR_NUM; i++) {
+        pole_fb.motor_total_angle[i] = pole.feedback.motor[i].rotor_total_angle;
+      }
       PC_Protocol_SetPoleFeedback(g_pc_protocol_ptr, &pole_fb);
     }
 

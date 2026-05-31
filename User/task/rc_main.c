@@ -301,9 +301,14 @@ static void Rc_UpdateRodIoFromLeftX(void) {
   rod_cmd.grip = rod_grip_latched;
 }
 
-static void Rc_UpdateManualIoFromLeftX(void) {
-  Rc_UpdateArmSimpleIoFromLeftX();
-  Rc_UpdateRodIoFromLeftX();
+static bool Rc_OreStoreCylinderClosedFromLeftX(bool current_closed) {
+  if (dr16.data.ch_l_x <= -RC_MANUAL_IO_CH_THRESHOLD) {
+    return false;
+  }
+  if (dr16.data.ch_l_x >= RC_MANUAL_IO_CH_THRESHOLD) {
+    return true;
+  }
+  return current_closed;
 }
 
 static void Rc_SetRodHold(void) {
@@ -459,8 +464,9 @@ static void Rc_SetOreStoreActiveManual(void) {
 
   ore_store_cmd.mode = ORE_STORE_MODE_ACTIVE;
   ore_store_cmd.force_rehome = false;
-    ore_store_cmd.fixed_ore_cylinder_closed =
-      (rod_grip_latched == ROD_NEW_GRIP_GRAB);
+  ore_store_cmd.fixed_ore_cylinder_closed =
+      Rc_OreStoreCylinderClosedFromLeftX(
+          ore_store_cmd.fixed_ore_cylinder_closed);
   ore_store_cmd.platform_target_rad = Rc_ClampOreStoreTarget(
       ORE_STORE_AXIS_PLATFORM, ore_store_cmd.platform_target_rad + platform_delta);
 }
@@ -1025,7 +1031,6 @@ static void Rc_ApplyOreStoreBehavior(void) {
   Rc_SetChassisRelax();
   Rc_SetPoleHold();
   Rc_SetArmSimpleHold();
-  Rc_UpdateManualIoFromLeftX();
   Rc_SetOreStoreActiveManual();
   Rc_SetRodHold();
   g_rc_control_debug.ore_store_active = true;
