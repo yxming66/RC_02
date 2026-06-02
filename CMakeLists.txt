@@ -87,6 +87,8 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     User/device/motor/packages/controller/motor_controller.cpp
     User/device/motor/packages/soft_limit_learning/soft_limit_learning.cpp
     User/device/wheel/wheel.cpp
+    User/device/mrlink/mrlink_ringbuf.c
+    User/device/mrlink/mrlink.c
     User/component/toolbox/matrix.cpp
     User/component/toolbox/robotics.cpp
     User/component/toolbox/utils.cpp
@@ -159,6 +161,7 @@ set_source_files_properties(User/module/arm_simple.c PROPERTIES LANGUAGE CXX)
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined include paths
     User
+    User/device
     Drivers/CMSIS/DSP/Include
 )
 
