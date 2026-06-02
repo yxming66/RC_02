@@ -29,6 +29,22 @@ extern "C" {
 #define SICK_CAN_ID (0x121u)
 #endif
 
+#ifndef SICK_CAN_ID_1
+#define SICK_CAN_ID_1 SICK_CAN_ID
+#endif
+
+#ifndef SICK_CAN_ID_2
+#define SICK_CAN_ID_2 (0x122u)
+#endif
+
+#ifndef SICK_CAN_ID_3
+#define SICK_CAN_ID_3 (0x123u)
+#endif
+
+#ifndef SICK_CAN_ID_4
+#define SICK_CAN_ID_4 (0x124u)
+#endif
+
 #ifndef SICK_CAN_BUS
 #define SICK_CAN_BUS BSP_CAN_3
 #endif

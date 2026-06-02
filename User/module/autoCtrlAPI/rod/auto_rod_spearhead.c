@@ -5,6 +5,7 @@
 #define AUTO_ROD_SPEARHEAD_DEFAULT_OPEN_DELAY_MS (20u)
 #define AUTO_ROD_SPEARHEAD_DEFAULT_GRAB_HIGH_DELAY_MS (500u)
 #define AUTO_ROD_SPEARHEAD_DEFAULT_DOCK_WAIT_DELAY_MS (500u)
+#define AUTO_ROD_SPEARHEAD_DEFAULT_PHOTO_CHECK_MS (1000u)
 
 static uint32_t AutoRodSpearhead_OpenDelayMs(
     const AutoRodSpearhead_t *ctrl) {
@@ -25,6 +26,13 @@ static uint32_t AutoRodSpearhead_DockWaitDelayMs(
   return ctrl->param.dock_wait_delay_ms > 0u
              ? ctrl->param.dock_wait_delay_ms
              : AUTO_ROD_SPEARHEAD_DEFAULT_DOCK_WAIT_DELAY_MS;
+}
+
+static uint32_t AutoRodSpearhead_PhotoCheckMs(
+    const AutoRodSpearhead_t *ctrl) {
+  return ctrl->param.photo_check_ms > 0u
+             ? ctrl->param.photo_check_ms
+             : AUTO_ROD_SPEARHEAD_DEFAULT_PHOTO_CHECK_MS;
 }
 
 static uint32_t AutoRodSpearhead_StepElapsed(
@@ -71,6 +79,21 @@ static void AutoRodSpearhead_FinishSuccess(AutoRodSpearhead_t *ctrl) {
   ctrl->fault = AUTO_ROD_SPEARHEAD_FAULT_NONE;
 }
 
+static void AutoRodSpearhead_FinishNoSpearhead(AutoRodSpearhead_t *ctrl) {
+  ctrl->state = AUTO_ROD_SPEARHEAD_STATE_FAIL;
+  ctrl->result = AUTO_ROD_SPEARHEAD_RESULT_FAIL;
+  ctrl->fault = AUTO_ROD_SPEARHEAD_FAULT_NO_SPEARHEAD;
+}
+
+static void AutoRodSpearhead_UpdatePhotoStable(
+    AutoRodSpearhead_t *ctrl, bool triggered, uint32_t now_ms) {
+  if (!ctrl->photo_stable_started || ctrl->photo_stable_state != triggered) {
+    ctrl->photo_stable_started = true;
+    ctrl->photo_stable_state = triggered;
+    ctrl->photo_stable_start_time_ms = now_ms;
+  }
+}
+
 void AutoRodSpearhead_Init(AutoRodSpearhead_t *ctrl,
                            const AutoRodSpearhead_Params_t *param) {
   if (ctrl == 0) {
@@ -101,14 +124,22 @@ bool AutoRodSpearhead_Start(AutoRodSpearhead_t *ctrl, uint32_t now_ms) {
   ctrl->step_index = 0u;
   ctrl->step_entered = false;
   ctrl->step_enter_time_ms = now_ms;
+  ctrl->photo_stable_started = false;
+  ctrl->photo_stable_state = false;
+  ctrl->photo_stable_start_time_ms = now_ms;
   ctrl->rod_cmd_valid = false;
   return true;
 }
 
-void AutoRodSpearhead_Update(AutoRodSpearhead_t *ctrl, uint32_t now_ms) {
+void AutoRodSpearhead_Update(AutoRodSpearhead_t *ctrl,
+                             const AutoRodSpearhead_Feedback_t *feedback,
+                             uint32_t now_ms) {
   if (ctrl == 0 || ctrl->state != AUTO_ROD_SPEARHEAD_STATE_RUNNING) {
     return;
   }
+
+  const bool rod_photo_triggered =
+      feedback != 0 && feedback->rod_photo_triggered;
 
   ctrl->rod_cmd_valid = false;
   switch (ctrl->step_index) {
@@ -126,7 +157,7 @@ void AutoRodSpearhead_Update(AutoRodSpearhead_t *ctrl, uint32_t now_ms) {
     case 1:
       AutoRodSpearhead_EnterStep(ctrl, now_ms);
       if (!AutoRodSpearhead_CommandRod(ctrl, ROD_NEW_POSE_GRAB_HIGH,
-                                       ROD_NEW_GRIP_RELEASE)) {
+                                       ROD_NEW_GRIP_GRAB)) {
         return;
       }
       if (AutoRodSpearhead_StepElapsed(ctrl, now_ms) >=
@@ -137,12 +168,32 @@ void AutoRodSpearhead_Update(AutoRodSpearhead_t *ctrl, uint32_t now_ms) {
     case 2:
       AutoRodSpearhead_EnterStep(ctrl, now_ms);
       if (!AutoRodSpearhead_CommandRod(ctrl, ROD_NEW_POSE_DOCK_WAIT,
-                                       ROD_NEW_GRIP_RELEASE)) {
+                                       ROD_NEW_GRIP_GRAB)) {
         return;
       }
       if (AutoRodSpearhead_StepElapsed(ctrl, now_ms) >=
           AutoRodSpearhead_DockWaitDelayMs(ctrl)) {
-        AutoRodSpearhead_FinishSuccess(ctrl);
+        if (ctrl->param.use_photo_check) {
+          AutoRodSpearhead_NextStep(ctrl);
+        } else {
+          AutoRodSpearhead_FinishSuccess(ctrl);
+        }
+      }
+      return;
+    case 3:
+      AutoRodSpearhead_EnterStep(ctrl, now_ms);
+      if (!AutoRodSpearhead_CommandRod(ctrl, ROD_NEW_POSE_DOCK_WAIT,
+                                       ROD_NEW_GRIP_GRAB)) {
+        return;
+      }
+      AutoRodSpearhead_UpdatePhotoStable(ctrl, rod_photo_triggered, now_ms);
+      if ((now_ms - ctrl->photo_stable_start_time_ms) >=
+          AutoRodSpearhead_PhotoCheckMs(ctrl)) {
+        if (ctrl->photo_stable_state) {
+          AutoRodSpearhead_FinishSuccess(ctrl);
+        } else {
+          AutoRodSpearhead_FinishNoSpearhead(ctrl);
+        }
       }
       return;
     default:

@@ -55,6 +55,25 @@ static const GPIO_PinState photo4_active_state = GPIO_PIN_RESET;
 #define AUTO_CTRL_POLE_TARGET_STABLE_CYCLES (5u)
 #endif
 
+#ifndef AUTO_ROD_SPEARHEAD_PHOTO_CHECK_MS
+#define AUTO_ROD_SPEARHEAD_PHOTO_CHECK_MS (1000u)
+#endif
+
+#ifndef AUTO_ROD_SPEARHEAD_USE_PHOTO_CHECK
+#define AUTO_ROD_SPEARHEAD_USE_PHOTO_CHECK (0u)//一键取矛头是否用光电检测
+#endif
+
+#ifndef AUTO_ROD_SPEARHEAD_PHOTO_ACTIVE_STATE
+#define AUTO_ROD_SPEARHEAD_PHOTO_ACTIVE_STATE GPIO_PIN_SET
+#endif
+
+#if defined(AUTO_ROD_SPEARHEAD_PHOTO_GPIO_PORT) && \
+  defined(AUTO_ROD_SPEARHEAD_PHOTO_PIN)
+#define AUTO_ROD_SPEARHEAD_PHOTO_CONFIGURED (1u)
+#else
+#define AUTO_ROD_SPEARHEAD_PHOTO_CONFIGURED (0u)
+#endif
+
 static uint8_t pole_front_at_target_stable_count = 0u;
 static uint8_t pole_rear_at_target_stable_count = 0u;
 static uint8_t pole_all_at_target_stable_count = 0u;
@@ -101,6 +120,16 @@ static bool AutoCtrlFeed_DebouncePoleReady(bool raw_ready,
   return *stable_count >= AUTO_CTRL_POLE_TARGET_STABLE_CYCLES;
 }
 
+static bool AutoCtrlFeed_ReadRodSpearheadPhoto(void) {
+#if AUTO_ROD_SPEARHEAD_PHOTO_CONFIGURED
+  return HAL_GPIO_ReadPin(AUTO_ROD_SPEARHEAD_PHOTO_GPIO_PORT,
+                         AUTO_ROD_SPEARHEAD_PHOTO_PIN) ==
+         AUTO_ROD_SPEARHEAD_PHOTO_ACTIVE_STATE;
+#else
+  return false;
+#endif
+}
+
 static bool AutoCtrlFeed_ArmSimpleAtTarget(float threshold) {
   const ArmSimple_Feedback_t *arm_fb = Task_ArmSimpleGetFeedback();
   if (arm_fb == NULL) {
@@ -120,6 +149,39 @@ static bool AutoCtrlFeed_ArmSimpleAtTarget(float threshold) {
              threshold &&
          fabsf(arm_fb->joint2_angle_rad - arm_fb->target_joint2_rad) <=
              threshold;
+}
+
+static bool AutoCtrlFeed_ArmSimpleAtCommandTarget(
+    const ArmSimple_CMD_t *cmd, float threshold) {
+  const ArmSimple_Feedback_t *arm_fb = Task_ArmSimpleGetFeedback();
+  if (arm_fb == NULL || cmd == NULL) {
+    return false;
+  }
+
+  if (threshold <= 0.0f) {
+    threshold = 0.05f;
+  }
+
+  return fabsf(arm_fb->joint1_angle_rad - cmd->target_joint.joint1) <=
+             threshold &&
+         fabsf(arm_fb->joint2_angle_rad - cmd->target_joint.joint2) <=
+             threshold;
+}
+
+static bool AutoCtrlFeed_OreStoreAtCommandTarget(
+    const OreStore_CMD_t *cmd, float threshold) {
+  const OreStore_Feedback_t *ore_store_fb = Task_OreStoreGetFeedback();
+  if (ore_store_fb == NULL || cmd == NULL ||
+      !Task_OreStoreIsAllHomed()) {
+    return false;
+  }
+
+  if (threshold <= 0.0f) {
+    threshold = 0.05f;
+  }
+
+  return fabsf(ore_store_fb->position_rad[ORE_STORE_AXIS_PLATFORM] -
+               cmd->platform_target_rad) <= threshold;
 }
 
 static void AutoCtrlFeed_InitAutoOre(void) {
@@ -142,14 +204,38 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms) {
     return;
   }
 
+  bool arm_at_target = AutoCtrlFeed_ArmSimpleAtTarget(
+      auto_ore_ctrl.param.arm_arrive_threshold_rad);
+  if (auto_ore_ctrl.arm_cmd_valid) {
+    arm_at_target = AutoCtrlFeed_ArmSimpleAtCommandTarget(
+        &auto_ore_ctrl.arm_cmd, auto_ore_ctrl.param.arm_arrive_threshold_rad);
+  }
+  bool ore_store_all_at_target = Task_OreStoreIsAllAtTarget(
+      auto_ore_ctrl.param.ore_store_arrive_threshold_rad);
+  float ore_store_platform_error_rad = 0.0f;
+  const OreStore_Feedback_t *ore_store_fb = Task_OreStoreGetFeedback();
+  if (ore_store_fb != NULL) {
+    const float ore_store_cmd_target = auto_ore_ctrl.ore_store_cmd_valid
+                                          ? auto_ore_ctrl.ore_store_cmd
+                                                .platform_target_rad
+                                          : 0.0f;
+    ore_store_platform_error_rad =
+        ore_store_cmd_target -
+        ore_store_fb->position_rad[ORE_STORE_AXIS_PLATFORM];
+  }
+  if (auto_ore_ctrl.ore_store_cmd_valid) {
+    ore_store_all_at_target = AutoCtrlFeed_OreStoreAtCommandTarget(
+        &auto_ore_ctrl.ore_store_cmd,
+        auto_ore_ctrl.param.ore_store_arrive_threshold_rad);
+  }
+
   AutoOre_Feedback_t auto_ore_feedback = {
-      .arm_at_target = AutoCtrlFeed_ArmSimpleAtTarget(
-        auto_ore_ctrl.param.arm_arrive_threshold_rad),
+      .arm_at_target = arm_at_target,
       .ore_store_all_homed = Task_OreStoreIsAllHomed(),
-      .ore_store_all_at_target = Task_OreStoreIsAllAtTarget(
-        auto_ore_ctrl.param.ore_store_arrive_threshold_rad),
+      .ore_store_all_at_target = ore_store_all_at_target,
       .pole_all_at_target = Task_ChassisMainPoleAllAtTarget(
         auto_ore_ctrl.param.pole_arrive_threshold_rad),
+      .ore_store_platform_error_rad = ore_store_platform_error_rad,
   };
   AutoOre_Update(&auto_ore_ctrl, &auto_ore_feedback, now_ms);
 
@@ -159,10 +245,38 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms) {
   g_auto_ore_debug.fault = AutoOre_GetFault(&auto_ore_ctrl);
   g_auto_ore_debug.action = auto_ore_ctrl.action;
   g_auto_ore_debug.active_position = AutoOre_GetActivePosition(&auto_ore_ctrl);
+  if (g_auto_ore_debug.active_position != AUTO_ORE_POSITION_NONE) {
+    g_auto_ore_debug.last_active_position = g_auto_ore_debug.active_position;
+  }
   g_auto_ore_debug.step_index = AutoOre_GetStepIndex(&auto_ore_ctrl);
+  g_auto_ore_debug.step_phase = auto_ore_ctrl.step_phase;
+  const AutoOre_Occupancy_t occupancy = AutoOre_GetOccupancy(&auto_ore_ctrl);
+  g_auto_ore_debug.occupancy_mask = AutoOre_GetOccupancyMask(&auto_ore_ctrl);
+  g_auto_ore_debug.transform_low_has_ore = occupancy.transform_low_has_ore;
+  g_auto_ore_debug.transform_high_has_ore = occupancy.transform_high_has_ore;
+  g_auto_ore_debug.arm_has_ore = occupancy.arm_has_ore;
   g_auto_ore_debug.arm_cmd_valid = auto_ore_ctrl.arm_cmd_valid;
   g_auto_ore_debug.ore_store_cmd_valid = auto_ore_ctrl.ore_store_cmd_valid;
   g_auto_ore_debug.arm_at_target = auto_ore_feedback.arm_at_target;
+  const ArmSimple_Feedback_t *arm_fb = Task_ArmSimpleGetFeedback();
+  if (arm_fb != NULL) {
+    g_auto_ore_debug.arm_feedback_joint1_rad = arm_fb->joint1_angle_rad;
+    g_auto_ore_debug.arm_feedback_joint2_rad = arm_fb->joint2_angle_rad;
+    g_auto_ore_debug.arm_feedback_target_joint1_rad = arm_fb->target_joint1_rad;
+    g_auto_ore_debug.arm_feedback_target_joint2_rad = arm_fb->target_joint2_rad;
+    g_auto_ore_debug.arm_feedback_output_target_joint1_rad =
+        arm_fb->output_target_joint1_rad;
+    g_auto_ore_debug.arm_feedback_output_target_joint2_rad =
+        arm_fb->output_target_joint2_rad;
+    g_auto_ore_debug.arm_joint1_error_rad =
+        auto_ore_ctrl.arm_cmd.target_joint.joint1 - arm_fb->joint1_angle_rad;
+    g_auto_ore_debug.arm_joint2_error_rad =
+        auto_ore_ctrl.arm_cmd.target_joint.joint2 - arm_fb->joint2_angle_rad;
+    g_auto_ore_debug.arm_output_joint1_error_rad =
+        arm_fb->output_target_joint1_rad - arm_fb->joint1_angle_rad;
+    g_auto_ore_debug.arm_output_joint2_error_rad =
+        arm_fb->output_target_joint2_rad - arm_fb->joint2_angle_rad;
+  }
   g_auto_ore_debug.ore_store_all_at_target =
       auto_ore_feedback.ore_store_all_at_target;
   g_auto_ore_debug.arm_cmd_joint1_rad = auto_ore_ctrl.arm_cmd.target_joint.joint1;
@@ -173,6 +287,11 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms) {
       auto_ore_ctrl.arm_cmd.joint2_max_vel_rad_s;
   g_auto_ore_debug.ore_store_cmd_platform_rad =
       auto_ore_ctrl.ore_store_cmd.platform_target_rad;
+  if (ore_store_fb != NULL) {
+    g_auto_ore_debug.ore_store_feedback_platform_rad =
+        ore_store_fb->position_rad[ORE_STORE_AXIS_PLATFORM];
+    g_auto_ore_debug.ore_store_platform_error_rad = ore_store_platform_error_rad;
+  }
   g_auto_ore_debug.pole_cmd_valid = auto_ore_ctrl.pole_cmd_valid;
   g_auto_ore_debug.chassis_cmd_valid = auto_ore_ctrl.chassis_cmd_valid;
   g_auto_ore_debug.pole_all_at_target = auto_ore_feedback.pole_all_at_target;
@@ -195,6 +314,8 @@ static void AutoCtrlFeed_InitAutoRodSpearhead(void) {
       .open_delay_ms = 20u,
       .grab_high_delay_ms = 500u,
       .dock_wait_delay_ms = 500u,
+        .use_photo_check = AUTO_ROD_SPEARHEAD_USE_PHOTO_CHECK != 0u,
+      .photo_check_ms = AUTO_ROD_SPEARHEAD_PHOTO_CHECK_MS,
   };
   AutoRodSpearhead_Init(&auto_rod_spearhead_ctrl, &params);
   auto_rod_spearhead_inited = true;
@@ -205,7 +326,10 @@ static void AutoCtrlFeed_UpdateAutoRodSpearhead(uint32_t now_ms) {
     return;
   }
 
-  AutoRodSpearhead_Update(&auto_rod_spearhead_ctrl, now_ms);
+  AutoRodSpearhead_Feedback_t feedback = {
+      .rod_photo_triggered = AutoCtrlFeed_ReadRodSpearheadPhoto(),
+  };
+  AutoRodSpearhead_Update(&auto_rod_spearhead_ctrl, &feedback, now_ms);
 }
 
 bool Task_AutoOreStartStore(void) {

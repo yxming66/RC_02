@@ -81,6 +81,8 @@ void Error_Handler(void);
 #define GYRO_INT_Pin GPIO_PIN_12
 #define GYRO_INT_GPIO_Port GPIOE
 #define GYRO_INT_EXTI_IRQn EXTI15_10_IRQn
+#define checkphoto_spear_Pin GPIO_PIN_14
+#define checkphoto_spear_GPIO_Port GPIOE
 #define USER_KEY_Pin GPIO_PIN_15
 #define USER_KEY_GPIO_Port GPIOA
 #define USER_KEY_EXTI_IRQn EXTI15_10_IRQn
@@ -88,6 +90,10 @@ void Error_Handler(void);
 #define valve_arm_GPIO_Port GPIOC
 #define valve_rod_Pin GPIO_PIN_11
 #define valve_rod_GPIO_Port GPIOC
+#define checkphoto_orelow_Pin GPIO_PIN_0
+#define checkphoto_orelow_GPIO_Port GPIOE
+#define checkphoto_orehigh_Pin GPIO_PIN_1
+#define checkphoto_orehigh_GPIO_Port GPIOE
 
 /* USER CODE BEGIN Private defines */
 

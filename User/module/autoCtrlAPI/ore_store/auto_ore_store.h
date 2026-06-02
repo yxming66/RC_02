@@ -70,6 +70,7 @@ typedef struct {
   bool ore_store_all_homed;
   bool ore_store_all_at_target;
   bool pole_all_at_target;
+  float ore_store_platform_error_rad;
   AutoOre_Occupancy_t photoelectric_occupancy;
 } AutoOre_Feedback_t;
 
@@ -78,6 +79,7 @@ typedef struct {
   uint32_t store_cylinder_close_ms;
   uint32_t store_cylinder_open_ms;
   uint32_t release_wait_ms;
+  uint32_t release_arm_settle_ms;
   uint32_t release_suction_off_ms;
   uint32_t chamber_low_clamp_ms;
   uint32_t chamber_arm_settle_ms;

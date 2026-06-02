@@ -6,6 +6,7 @@
 #define AUTO_ORE_DEFAULT_STORE_CYLINDER_CLOSE_MS (50u)
 #define AUTO_ORE_DEFAULT_STORE_CYLINDER_OPEN_MS (50u)
 #define AUTO_ORE_DEFAULT_RELEASE_WAIT_MS (50u)
+#define AUTO_ORE_DEFAULT_RELEASE_ARM_SETTLE_MS (10u)
 #define AUTO_ORE_DEFAULT_RELEASE_SUCTION_OFF_MS (100u)
 #define AUTO_ORE_DEFAULT_CHAMBER_LOW_CLAMP_MS (50u)
 #define AUTO_ORE_DEFAULT_CHAMBER_ARM_SETTLE_MS (100u)
@@ -14,20 +15,33 @@
 #define AUTO_ORE_DEFAULT_STEP_TIMEOUT_MS (5000u)
 #define AUTO_ORE_DEFAULT_FETCH_CHASSIS_VX_MPS (0.20f)
 
-#ifndef AUTO_ORE_LOW_OCCUPANCY_SOURCE
-#define AUTO_ORE_LOW_OCCUPANCY_SOURCE AUTO_ORE_OCCUPANCY_SOURCE_STATE_MACHINE
+#define AUTO_ORE_OCCUPANCY_SOURCE_STATE_MACHINE_VALUE (0u)
+#define AUTO_ORE_OCCUPANCY_SOURCE_PHOTOELECTRIC_VALUE (1u)
+
+#if !defined(AUTO_ORE_LOW_OCCUPANCY_SOURCE) || \
+  AUTO_ORE_LOW_OCCUPANCY_SOURCE != AUTO_ORE_OCCUPANCY_SOURCE_PHOTOELECTRIC_VALUE
+#undef AUTO_ORE_LOW_OCCUPANCY_SOURCE
+#define AUTO_ORE_LOW_OCCUPANCY_SOURCE AUTO_ORE_OCCUPANCY_SOURCE_STATE_MACHINE_VALUE
 #endif
 
-#ifndef AUTO_ORE_HIGH_OCCUPANCY_SOURCE
-#define AUTO_ORE_HIGH_OCCUPANCY_SOURCE AUTO_ORE_OCCUPANCY_SOURCE_STATE_MACHINE
+#if !defined(AUTO_ORE_HIGH_OCCUPANCY_SOURCE) || \
+  AUTO_ORE_HIGH_OCCUPANCY_SOURCE != AUTO_ORE_OCCUPANCY_SOURCE_PHOTOELECTRIC_VALUE
+#undef AUTO_ORE_HIGH_OCCUPANCY_SOURCE
+#define AUTO_ORE_HIGH_OCCUPANCY_SOURCE AUTO_ORE_OCCUPANCY_SOURCE_STATE_MACHINE_VALUE
 #endif
 
-#ifndef AUTO_ORE_ARM_OCCUPANCY_SOURCE
-#define AUTO_ORE_ARM_OCCUPANCY_SOURCE AUTO_ORE_OCCUPANCY_SOURCE_STATE_MACHINE
+#if !defined(AUTO_ORE_ARM_OCCUPANCY_SOURCE) || \
+  AUTO_ORE_ARM_OCCUPANCY_SOURCE != AUTO_ORE_OCCUPANCY_SOURCE_PHOTOELECTRIC_VALUE
+#undef AUTO_ORE_ARM_OCCUPANCY_SOURCE
+#define AUTO_ORE_ARM_OCCUPANCY_SOURCE AUTO_ORE_OCCUPANCY_SOURCE_STATE_MACHINE_VALUE
 #endif
 
 static uint32_t AutoOre_StepElapsed(const AutoOre_t *ctrl, uint32_t now_ms) {
   return now_ms - ctrl->step_enter_time_ms;
+}
+
+static float AutoOre_AbsFloat(float value) {
+  return (value >= 0.0f) ? value : -value;
 }
 
 static void AutoOre_EnterStep(AutoOre_t *ctrl, uint32_t now_ms) {
@@ -75,6 +89,11 @@ static uint32_t AutoOre_ReleaseWaitMs(const AutoOre_t *ctrl) {
                              AUTO_ORE_DEFAULT_RELEASE_WAIT_MS);
 }
 
+static uint32_t AutoOre_ReleaseArmSettleMs(const AutoOre_t *ctrl) {
+  return AutoOre_TimingValue(ctrl->param.timing.release_arm_settle_ms,
+                             AUTO_ORE_DEFAULT_RELEASE_ARM_SETTLE_MS);
+}
+
 static uint32_t AutoOre_ReleaseSuctionOffMs(const AutoOre_t *ctrl) {
   return AutoOre_TimingValue(ctrl->param.timing.release_suction_off_ms,
                              AUTO_ORE_DEFAULT_RELEASE_SUCTION_OFF_MS);
@@ -98,6 +117,17 @@ static uint32_t AutoOre_ChamberCylinderOpenMs(const AutoOre_t *ctrl) {
 static uint32_t AutoOre_FetchChassisMoveMs(const AutoOre_t *ctrl) {
   return AutoOre_TimingValue(ctrl->param.timing.fetch_chassis_move_ms,
                              AUTO_ORE_DEFAULT_FETCH_CHASSIS_MOVE_MS);
+}
+
+static float AutoOre_OreStoreArriveThresholdRad(const AutoOre_t *ctrl) {
+  return (ctrl->param.ore_store_arrive_threshold_rad > 0.0f)
+             ? ctrl->param.ore_store_arrive_threshold_rad
+             : 0.05f;
+}
+
+static float AutoOre_ChamberLowPlatformThresholdRad(const AutoOre_t *ctrl) {
+  const float base_threshold = AutoOre_OreStoreArriveThresholdRad(ctrl);
+  return (base_threshold < 0.20f) ? 0.20f : base_threshold;
 }
 
 static float AutoOre_FetchChassisVxMps(const AutoOre_t *ctrl) {
@@ -128,6 +158,38 @@ static bool AutoOre_WaitConditionThenDelay(AutoOre_t *ctrl, uint32_t now_ms,
     ctrl->step_condition_time_ms = now_ms;
   }
   return (now_ms - ctrl->step_condition_time_ms) >= delay_ms;
+}
+
+static bool AutoOre_WaitArmCommandTarget(AutoOre_t *ctrl, uint32_t now_ms) {
+  if (!ctrl->step_condition_met) {
+    ctrl->step_condition_met = true;
+    ctrl->step_condition_time_ms = now_ms;
+    return false;
+  }
+  if (now_ms == ctrl->step_condition_time_ms) {
+    return false;
+  }
+  return ctrl->feedback.arm_at_target;
+}
+
+static bool AutoOre_WaitOreStoreCommandTarget(AutoOre_t *ctrl,
+                                              uint32_t now_ms) {
+  if (!ctrl->step_condition_met) {
+    ctrl->step_condition_met = true;
+    ctrl->step_condition_time_ms = now_ms;
+    return false;
+  }
+  if (now_ms == ctrl->step_condition_time_ms) {
+    return false;
+  }
+  return ctrl->feedback.ore_store_all_at_target;
+}
+
+static bool AutoOre_OreStorePlatformAtTarget(const AutoOre_t *ctrl,
+                                             float threshold_rad) {
+  return ctrl != 0 &&
+         AutoOre_AbsFloat(ctrl->feedback.ore_store_platform_error_rad) <=
+             threshold_rad;
 }
 
 static void AutoOre_SetStepPhase(AutoOre_t *ctrl, uint8_t phase,
@@ -213,15 +275,15 @@ static bool AutoOre_OccupancyIsFull(const AutoOre_Occupancy_t *occupancy) {
 }
 
 static void AutoOre_ApplyFeedbackOccupancy(AutoOre_t *ctrl) {
-#if AUTO_ORE_LOW_OCCUPANCY_SOURCE == AUTO_ORE_OCCUPANCY_SOURCE_PHOTOELECTRIC
+#if AUTO_ORE_LOW_OCCUPANCY_SOURCE == AUTO_ORE_OCCUPANCY_SOURCE_PHOTOELECTRIC_VALUE
   ctrl->occupancy.transform_low_has_ore =
       ctrl->feedback.photoelectric_occupancy.transform_low_has_ore;
 #endif
-#if AUTO_ORE_HIGH_OCCUPANCY_SOURCE == AUTO_ORE_OCCUPANCY_SOURCE_PHOTOELECTRIC
+#if AUTO_ORE_HIGH_OCCUPANCY_SOURCE == AUTO_ORE_OCCUPANCY_SOURCE_PHOTOELECTRIC_VALUE
   ctrl->occupancy.transform_high_has_ore =
       ctrl->feedback.photoelectric_occupancy.transform_high_has_ore;
 #endif
-#if AUTO_ORE_ARM_OCCUPANCY_SOURCE == AUTO_ORE_OCCUPANCY_SOURCE_PHOTOELECTRIC
+#if AUTO_ORE_ARM_OCCUPANCY_SOURCE == AUTO_ORE_OCCUPANCY_SOURCE_PHOTOELECTRIC_VALUE
   ctrl->occupancy.arm_has_ore = ctrl->feedback.photoelectric_occupancy.arm_has_ore;
 #endif
 }
@@ -258,17 +320,17 @@ static AutoOre_Position_t AutoOre_SelectChamberPosition(
 }
 
 static void AutoOre_SetActivePositionHasOre(AutoOre_t *ctrl, bool has_ore) {
-#if AUTO_ORE_LOW_OCCUPANCY_SOURCE == AUTO_ORE_OCCUPANCY_SOURCE_STATE_MACHINE
+#if AUTO_ORE_LOW_OCCUPANCY_SOURCE == AUTO_ORE_OCCUPANCY_SOURCE_STATE_MACHINE_VALUE
   if (ctrl->active_position == AUTO_ORE_POSITION_TRANSFORM_LOW) {
     ctrl->occupancy.transform_low_has_ore = has_ore;
   }
 #endif
-#if AUTO_ORE_HIGH_OCCUPANCY_SOURCE == AUTO_ORE_OCCUPANCY_SOURCE_STATE_MACHINE
+#if AUTO_ORE_HIGH_OCCUPANCY_SOURCE == AUTO_ORE_OCCUPANCY_SOURCE_STATE_MACHINE_VALUE
   if (ctrl->active_position == AUTO_ORE_POSITION_TRANSFORM_HIGH) {
     ctrl->occupancy.transform_high_has_ore = has_ore;
   }
 #endif
-#if AUTO_ORE_ARM_OCCUPANCY_SOURCE == AUTO_ORE_OCCUPANCY_SOURCE_STATE_MACHINE
+#if AUTO_ORE_ARM_OCCUPANCY_SOURCE == AUTO_ORE_OCCUPANCY_SOURCE_STATE_MACHINE_VALUE
   if (ctrl->active_position == AUTO_ORE_POSITION_ARM) {
     ctrl->occupancy.arm_has_ore = has_ore;
   }
@@ -276,7 +338,7 @@ static void AutoOre_SetActivePositionHasOre(AutoOre_t *ctrl, bool has_ore) {
 }
 
 static void AutoOre_SetArmHasOre(AutoOre_t *ctrl, bool has_ore) {
-#if AUTO_ORE_ARM_OCCUPANCY_SOURCE == AUTO_ORE_OCCUPANCY_SOURCE_STATE_MACHINE
+#if AUTO_ORE_ARM_OCCUPANCY_SOURCE == AUTO_ORE_OCCUPANCY_SOURCE_STATE_MACHINE_VALUE
   ctrl->occupancy.arm_has_ore = has_ore;
 #else
   (void)ctrl;
@@ -333,8 +395,10 @@ static void AutoOre_RunStoreLow(AutoOre_t *ctrl, uint32_t now_ms) {
       return;
     case 1:
       AutoOre_EnterStep(ctrl, now_ms);
+      const Suction_State_t suction =
+        (ctrl->step_phase == 0u) ? SUCTION_ON : SUCTION_OFF;
       if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_STORE_ORE,
-              SUCTION_OFF, &ctrl->param.arm_speed.store_place) ||
+          suction, &ctrl->param.arm_speed.store_place) ||
           !AutoOre_CommandOreStore(ctrl, ORE_STORE_TRANSFORM_LIFT,
                                    ctrl->step_phase != 0u)) {
         AutoOre_FailInvalidParam(ctrl);
@@ -374,7 +438,7 @@ static void AutoOre_RunStoreLow(AutoOre_t *ctrl, uint32_t now_ms) {
         AutoOre_FailInvalidParam(ctrl);
         return;
       }
-      if (ctrl->feedback.ore_store_all_at_target) {
+      if (AutoOre_WaitOreStoreCommandTarget(ctrl, now_ms)) {
         AutoOre_FinishSuccess(ctrl);
       } else {
         (void)AutoOre_CheckTimeout(ctrl, now_ms);
@@ -390,47 +454,34 @@ static void AutoOre_RunStoreHigh(AutoOre_t *ctrl, uint32_t now_ms) {
   switch (ctrl->step_index) {
     case 0:
       AutoOre_EnterStep(ctrl, now_ms);
-      if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_WAIT_STORE_ORE,
-              SUCTION_ON, &ctrl->param.arm_speed.store_wait) ||
-          !AutoOre_CommandOreStore(ctrl, ORE_STORE_TRANSFORM_MID_WAIT, false)) {
-        AutoOre_FailInvalidParam(ctrl);
-        return;
-      }
-      (void)AutoOre_WaitAll(ctrl, now_ms);
-      return;
-    case 1:
-      AutoOre_EnterStep(ctrl, now_ms);
       if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_STORE_ORE,
-              SUCTION_OFF, &ctrl->param.arm_speed.store_place) ||
-          !AutoOre_CommandOreStore(ctrl, ORE_STORE_TRANSFORM_MID_WAIT,
-                                   ctrl->step_phase != 0u)) {
+          SUCTION_ON, &ctrl->param.arm_speed.store_place) ||
+          !AutoOre_CommandOreStore(ctrl, ORE_STORE_TRANSFORM_STANDBY, false)) {
         AutoOre_FailInvalidParam(ctrl);
         return;
       }
-      if (ctrl->step_phase == 0u) {
-        if (AutoOre_WaitConditionThenDelay(
-                ctrl, now_ms, ctrl->feedback.arm_at_target,
-                AutoOre_StoreArmSettleMs(ctrl))) {
-          AutoOre_SetStepPhase(ctrl, 1u, now_ms);
-        } else {
-          (void)AutoOre_CheckTimeout(ctrl, now_ms);
-        }
-        return;
-      }
-      if (AutoOre_WaitConditionThenDelay(ctrl, now_ms, true,
-                                         AutoOre_StoreCylinderCloseMs(ctrl))) {
+      if (AutoOre_WaitConditionThenDelay(
+              ctrl, now_ms, ctrl->feedback.arm_at_target,
+              AutoOre_StoreArmSettleMs(ctrl))) {
         AutoOre_NextStep(ctrl);
       } else {
         (void)AutoOre_CheckTimeout(ctrl, now_ms);
       }
       return;
-    case 2:
+    case 1:
       AutoOre_EnterStep(ctrl, now_ms);
-      if (!AutoOre_CommandOreStore(ctrl, ORE_STORE_TRANSFORM_MID_WAIT, true)) {
+      if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_STORE_ORE,
+          SUCTION_OFF, &ctrl->param.arm_speed.store_place) ||
+          !AutoOre_CommandOreStore(ctrl, ORE_STORE_TRANSFORM_STANDBY, true)) {
         AutoOre_FailInvalidParam(ctrl);
         return;
       }
-      AutoOre_FinishSuccess(ctrl);
+      if (AutoOre_WaitConditionThenDelay(ctrl, now_ms, true,
+                                         AutoOre_StoreCylinderCloseMs(ctrl))) {
+        AutoOre_FinishSuccess(ctrl);
+      } else {
+        (void)AutoOre_CheckTimeout(ctrl, now_ms);
+      }
       return;
     default:
       AutoOre_FinishSuccess(ctrl);
@@ -472,9 +523,7 @@ static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
         return;
       }
       if (AutoOre_WaitConditionThenDelay(
-              ctrl, now_ms,
-              ctrl->feedback.arm_at_target &&
-                  ctrl->feedback.ore_store_all_at_target,
+              ctrl, now_ms, ctrl->feedback.arm_at_target,
               AutoOre_ReleaseWaitMs(ctrl))) {
         AutoOre_NextStep(ctrl);
       } else {
@@ -482,6 +531,25 @@ static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
       }
       return;
     case 1:
+      AutoOre_EnterStep(ctrl, now_ms);
+      if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_RELEASE_ORE,
+              SUCTION_ON,
+              &ctrl->param.arm_speed.release_place) ||
+          !AutoOre_CommandReleaseOreStoreHold(ctrl,
+                                              ORE_STORE_TRANSFORM_STANDBY,
+                                              true)) {
+        AutoOre_FailInvalidParam(ctrl);
+        return;
+      }
+      if (AutoOre_WaitConditionThenDelay(ctrl, now_ms,
+                                         ctrl->feedback.arm_at_target,
+                                         AutoOre_ReleaseArmSettleMs(ctrl))) {
+        AutoOre_NextStep(ctrl);
+      } else {
+        (void)AutoOre_CheckTimeout(ctrl, now_ms);
+      }
+      return;
+    case 2:
       AutoOre_EnterStep(ctrl, now_ms);
       if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_RELEASE_ORE,
               SUCTION_OFF,
@@ -492,15 +560,14 @@ static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
         AutoOre_FailInvalidParam(ctrl);
         return;
       }
-      if (AutoOre_WaitConditionThenDelay(ctrl, now_ms,
-                                         ctrl->feedback.arm_at_target,
+      if (AutoOre_WaitConditionThenDelay(ctrl, now_ms, true,
                                          AutoOre_ReleaseSuctionOffMs(ctrl))) {
         AutoOre_NextStep(ctrl);
       } else {
         (void)AutoOre_CheckTimeout(ctrl, now_ms);
       }
       return;
-    case 2:
+    case 3:
       AutoOre_EnterStep(ctrl, now_ms);
       if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_STANDBY,
               SUCTION_OFF,
@@ -511,7 +578,7 @@ static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
         AutoOre_FailInvalidParam(ctrl);
         return;
       }
-      if (ctrl->feedback.arm_at_target) {
+      if (AutoOre_WaitArmCommandTarget(ctrl, now_ms)) {
         AutoOre_FinishSuccess(ctrl);
       } else {
         (void)AutoOre_CheckTimeout(ctrl, now_ms);
@@ -538,7 +605,7 @@ static void AutoOre_RunChamberHigh(AutoOre_t *ctrl, uint32_t now_ms) {
       return;
     case 1:
       AutoOre_EnterStep(ctrl, now_ms);
-      if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_STORE_ORE,
+      if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_CHAMBER_ORE,
               SUCTION_ON,
               &ctrl->param.arm_speed.chamber_place) ||
           !AutoOre_CommandOreStore(ctrl, ORE_STORE_TRANSFORM_STANDBY,
@@ -572,7 +639,7 @@ static void AutoOre_RunChamberHigh(AutoOre_t *ctrl, uint32_t now_ms) {
         AutoOre_FailInvalidParam(ctrl);
         return;
       }
-      if (ctrl->feedback.arm_at_target) {
+      if (AutoOre_WaitArmCommandTarget(ctrl, now_ms)) {
         AutoOre_FinishSuccess(ctrl);
       } else {
         (void)AutoOre_CheckTimeout(ctrl, now_ms);
@@ -591,43 +658,44 @@ static void AutoOre_RunChamberLow(AutoOre_t *ctrl, uint32_t now_ms) {
       if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_WAIT_STORE_ORE,
               SUCTION_ON,
               &ctrl->param.arm_speed.chamber_wait) ||
-          !AutoOre_CommandOreStore(ctrl, ORE_STORE_TRANSFORM_LIFT,
-                                   ctrl->step_phase != 0u)) {
+          !AutoOre_CommandOreStore(ctrl, ORE_STORE_TRANSFORM_LIFT, false)) {
         AutoOre_FailInvalidParam(ctrl);
         return;
       }
-      if (ctrl->step_phase == 0u) {
-        if (AutoOre_WaitConditionThenDelay(
-                ctrl, now_ms,
-                ctrl->feedback.arm_at_target &&
-                    ctrl->feedback.ore_store_all_at_target,
-                AutoOre_ChamberLowClampMs(ctrl))) {
-          AutoOre_SetStepPhase(ctrl, 1u, now_ms);
-        } else {
-          (void)AutoOre_CheckTimeout(ctrl, now_ms);
-        }
-        return;
+      if (AutoOre_WaitConditionThenDelay(
+            ctrl, now_ms,
+            AutoOre_OreStorePlatformAtTarget(
+              ctrl, AutoOre_ChamberLowPlatformThresholdRad(ctrl)),
+              AutoOre_ChamberLowClampMs(ctrl))) {
+        AutoOre_NextStep(ctrl);
+      } else {
+        (void)AutoOre_CheckTimeout(ctrl, now_ms);
       }
-      AutoOre_NextStep(ctrl);
       return;
     case 1:
       AutoOre_EnterStep(ctrl, now_ms);
-      if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_STORE_ORE,
+      if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_CHAMBER_ORE,
               SUCTION_ON,
               &ctrl->param.arm_speed.chamber_place) ||
-          !AutoOre_CommandOreStore(ctrl, ORE_STORE_TRANSFORM_LIFT,
-                                   ctrl->step_phase == 0u)) {
+          !AutoOre_CommandOreStore(ctrl, ORE_STORE_TRANSFORM_LIFT, false)) {
         AutoOre_FailInvalidParam(ctrl);
         return;
       }
-      if (ctrl->step_phase == 0u) {
-        if (AutoOre_WaitConditionThenDelay(
-                ctrl, now_ms, ctrl->feedback.arm_at_target,
-                AutoOre_ChamberArmSettleMs(ctrl))) {
-          AutoOre_SetStepPhase(ctrl, 1u, now_ms);
-        } else {
-          (void)AutoOre_CheckTimeout(ctrl, now_ms);
-        }
+      if (AutoOre_WaitConditionThenDelay(
+              ctrl, now_ms, ctrl->feedback.arm_at_target,
+              AutoOre_ChamberArmSettleMs(ctrl))) {
+        AutoOre_NextStep(ctrl);
+      } else {
+        (void)AutoOre_CheckTimeout(ctrl, now_ms);
+      }
+      return;
+    case 2:
+      AutoOre_EnterStep(ctrl, now_ms);
+      if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_CHAMBER_ORE,
+              SUCTION_ON,
+              &ctrl->param.arm_speed.chamber_place) ||
+          !AutoOre_CommandOreStore(ctrl, ORE_STORE_TRANSFORM_LIFT, false)) {
+        AutoOre_FailInvalidParam(ctrl);
         return;
       }
       if (AutoOre_WaitConditionThenDelay(ctrl, now_ms, true,
@@ -637,7 +705,7 @@ static void AutoOre_RunChamberLow(AutoOre_t *ctrl, uint32_t now_ms) {
         (void)AutoOre_CheckTimeout(ctrl, now_ms);
       }
       return;
-    case 2:
+    case 3:
       AutoOre_EnterStep(ctrl, now_ms);
       if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_STANDBY,
               SUCTION_ON,
@@ -646,7 +714,7 @@ static void AutoOre_RunChamberLow(AutoOre_t *ctrl, uint32_t now_ms) {
         AutoOre_FailInvalidParam(ctrl);
         return;
       }
-      if (ctrl->feedback.arm_at_target) {
+      if (AutoOre_WaitArmCommandTarget(ctrl, now_ms)) {
         AutoOre_FinishSuccess(ctrl);
       } else {
         (void)AutoOre_CheckTimeout(ctrl, now_ms);
@@ -756,7 +824,7 @@ static void AutoOre_RunPickOre(AutoOre_t *ctrl, uint32_t now_ms) {
         AutoOre_FailInvalidParam(ctrl);
         return;
       }
-      if (ctrl->feedback.arm_at_target) {
+      if (AutoOre_WaitArmCommandTarget(ctrl, now_ms)) {
         AutoOre_FinishSuccess(ctrl);
       } else {
         (void)AutoOre_CheckTimeout(ctrl, now_ms);

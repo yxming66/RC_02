@@ -260,16 +260,16 @@ Config_RobotParam_t robot_config = {
             .gpio = BSP_GPIO_ARM_SOLENOID,
         },
         .mit = {
-            .joint1_kp = 100.0f,
+            .joint1_kp = 150.0f,
             .joint1_kd = 5.0f,
             .joint1_torque_ff = 0.0f,
-            .joint1_gravity_mass_kg = -1.0f,
-            .joint1_gravity_com_m = 0.32f,
+            .joint1_gravity_mass_kg = -0.10f,
+            .joint1_gravity_com_m = 0.12f,
             .joint1_gravity_zero_rad = 0.0f,
-            .joint1_gravity_ff_limit_nm = 3.0f,
+            .joint1_gravity_ff_limit_nm = 5.0f,
         },
         .soft_limit = {
-            .joint1_min = -0.164264619f,
+            .joint1_min = -0.269599289f,
             .joint1_max = 1.82628715f,
             .joint2_min = -2.356194f,   /* 舵机中心0点向负方向最大约-135° */
             .joint2_max = 2.356194f,    /* 舵机中心0点向正方向最大约+135° */
@@ -284,8 +284,10 @@ Config_RobotParam_t robot_config = {
                 [ARM_SIMPLE_BEHAVIOR_STANDBY] = {.joint1_pos = 0.0f, .joint2_pos = 0.0f},
                 /* ArmSimple 存矿位，arm 伸到 ore_store 交接处释放矿。 */
                 [ARM_SIMPLE_BEHAVIOR_STORE_ORE] = {.joint1_pos = 0.0f, .joint2_pos = -1.57431853f},
+                /* ArmSimple 上膛位，arm 伸到 ore_store 上膛交接处吸取矿。 */
+                [ARM_SIMPLE_BEHAVIOR_CHAMBER_ORE] = {.joint1_pos = -0.216335908f, .joint2_pos = -1.64886379f},
                 /* ArmSimple 存矿等待位，等待平台到位后再伸到存矿位。 */
-                [ARM_SIMPLE_BEHAVIOR_WAIT_STORE_ORE] = {.joint1_pos = 0.585293353f, .joint2_pos = -1.69818246f},
+                [ARM_SIMPLE_BEHAVIOR_WAIT_STORE_ORE] = {.joint1_pos = 0.174757361f, .joint2_pos = -2.04568338f},
                 /* ArmSimple 放矿等待位，放矿动作前的预备/稳定位置。 */
                 [ARM_SIMPLE_BEHAVIOR_WAIT_RELEASE_ORE] = {.joint1_pos = -0.164476007f, .joint2_pos = 1.64204562f},
                 /* ArmSimple 放矿位，吸盘关闭后从该位置把矿释放出去。 */
@@ -312,8 +314,8 @@ Config_RobotParam_t robot_config = {
             .release_place = {.joint1_max_vel_rad_s = 1.0f, .joint2_max_vel_rad_s = 2.0f},
             .release_standby = {.joint1_max_vel_rad_s = 1.0f, .joint2_max_vel_rad_s = 2.0f},
             /* chamber_*：一键上膛流程，wait=对接等待位，place=取/交接位，standby=上膛后回待机位。 */
-            .chamber_wait = {.joint1_max_vel_rad_s = 1.0f, .joint2_max_vel_rad_s = 2.0f},
-            .chamber_place = {.joint1_max_vel_rad_s = 1.0f, .joint2_max_vel_rad_s = 2.0f},
+            .chamber_wait = {.joint1_max_vel_rad_s = 5.0f, .joint2_max_vel_rad_s = 8.0f},
+            .chamber_place = {.joint1_max_vel_rad_s = 1.0f, .joint2_max_vel_rad_s = 4.0f},
             .chamber_standby = {.joint1_max_vel_rad_s = 1.0f, .joint2_max_vel_rad_s = 2.0f},
             /* pick_*：一键取矿流程，standby=取矿前/后待机位，place=伸到取矿位，fetch=底盘前进取矿时保持取矿位。 */
             .pick_standby = {.joint1_max_vel_rad_s = 1.0f, .joint2_max_vel_rad_s = 2.0f},
@@ -323,23 +325,24 @@ Config_RobotParam_t robot_config = {
         /* 一键存/放/上膛/取矿流程中的动作延时，单位 ms；<=0 时使用状态机内置默认值。 */
         .timing = {
             /* 存矿：arm 到存矿位后的稳定等待、固矿气缸关闭等待、气缸重新打开等待。 */
-            .store_arm_settle_ms = 2000u,
-            .store_cylinder_close_ms = 2000u,
-            .store_cylinder_open_ms = 2000u,
-            /* 放矿：放矿前 arm/ore_store 到位稳定等待、吸盘关闭后矿石脱离等待。 */
-            .release_wait_ms = 2000u,
-            .release_suction_off_ms = 2000u,
+            .store_arm_settle_ms = 400u,
+            .store_cylinder_close_ms = 200u,
+            .store_cylinder_open_ms = 200u, 
+            /* 放矿：放矿前等待、到放矿位后短暂停稳、吸盘关闭后矿石脱离等待。 */
+            .release_wait_ms = 400u,
+            .release_arm_settle_ms = 10u,
+            .release_suction_off_ms = 400u,
             /* 上膛：低位矿夹紧等待、arm 到交接位稳定等待、气缸打开释放等待。 */
-            .chamber_low_clamp_ms = 2000u,
-            .chamber_arm_settle_ms = 2000u,
-            .chamber_cylinder_open_ms = 2000u,
+            .chamber_low_clamp_ms = 400u,
+            .chamber_arm_settle_ms = 400u,
+            .chamber_cylinder_open_ms = 400u,
             /* 取矿：底盘向矿位前进的持续时间。 */
             .fetch_chassis_move_ms = 1000u,
         },
         /* 单个状态机 step 的超时时间，单位 ms。 */
         .default_step_timeout_ms = 5000u,
         /* 到位判定阈值：arm/ore_store/pole 分别使用的误差阈值，单位 rad。 */
-        .arm_arrive_threshold_rad = 0.15f,
+        .arm_arrive_threshold_rad = 0.1f,
         .ore_store_arrive_threshold_rad = 0.05f,
         .pole_arrive_threshold_rad = 0.30f,
         /* 取矿流程中底盘前进速度，单位 m/s。 */

@@ -60,7 +60,7 @@ typedef enum {
 /* Chassis命令 */
 typedef struct {
     float vx;
-    float vy;
+    float vy;       
     float wz;
 } PC_ChassisCMD_t;
 

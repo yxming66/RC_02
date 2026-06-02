@@ -9,18 +9,23 @@
 #define SICK_ADC_MAX (32100.0)
 #define SICK_DISTANCE_MIN_M (0.000)
 #define SICK_DISTANCE_MAX_M (7.190)
-#define SICK_CAN_DATA_LEN (8u)
+#define SICK_CAN_DATA_LEN (2u)
 
 /* Private variables -------------------------------------------------------- */
 static uint16_t sick_adc_raw[SICK_OUTPUT_CHANNEL_COUNT] = {0u, 0u, 0u, 0u};
 static float sick_distance_m[SICK_OUTPUT_CHANNEL_COUNT] = {0.0f, 0.0f, 0.0f, 0.0f};
-static uint16_t sick_miss_count = 0u;
+static uint16_t sick_miss_count[SICK_OUTPUT_CHANNEL_COUNT] = {0u, 0u, 0u, 0u};
 static BSP_CAN_Message_t sick_msg;
 static bool sick_can_available = false;
 static bool sick_inited = false;
 static osMutexId_t sick_mutex = NULL;
 static Sick_Output_t sick_latest_output = {0};
-static const uint32_t sick_can_id = SICK_CAN_ID;
+static const uint32_t sick_can_ids[SICK_OUTPUT_CHANNEL_COUNT] = {
+  SICK_CAN_ID_1,
+  SICK_CAN_ID_2,
+  SICK_CAN_ID_3,
+  SICK_CAN_ID_4,
+};
 
 /* Private function --------------------------------------------------------- */
 static double SICK_MapAdcToDistanceM(uint16_t adc_raw_value) {
@@ -76,10 +81,16 @@ static uint16_t SICK_AdjustAdcRaw(uint8_t index, uint16_t adc_raw_value) {
   return adc_raw_value;
 }
 
-static void SICK_SetAllDistanceInvalid(void) {
+static uint16_t SICK_GetMaxMissCount(void) {
+  uint16_t max_miss_count = 0u;
+
   for (uint8_t i = 0u; i < SICK_OUTPUT_CHANNEL_COUNT; i++) {
-    sick_distance_m[i] = -1.0f;
+    if (sick_miss_count[i] > max_miss_count) {
+      max_miss_count = sick_miss_count[i];
+    }
   }
+
+  return max_miss_count;
 }
 
 static double SICK_ApplyChannelCalibrationM(uint8_t index, double distance_m_raw) {
@@ -104,7 +115,7 @@ static void SICK_PublishLatestOutput(uint32_t now_ms) {
     output.valid[i] = sick_distance_m[i] >= 0.0f;
   }
 
-  output.miss_count = sick_miss_count;
+  output.miss_count = SICK_GetMaxMissCount();
   output.update_tick = now_ms;
 
   if (sick_mutex != NULL && osMutexAcquire(sick_mutex, osWaitForever) == osOK) {
@@ -114,44 +125,46 @@ static void SICK_PublishLatestOutput(uint32_t now_ms) {
 }
 
 static void SICK_UpdateAdcRaw(void) {
-  bool updated = false;
-
   if (!sick_can_available) {
-    if (sick_miss_count < 0xFFFFu) {
-      sick_miss_count++;
-    }
-    return;
-  }
-
-  while (BSP_CAN_GetMessage(SICK_CAN_BUS, sick_can_id, &sick_msg, BSP_CAN_TIMEOUT_IMMEDIATE) ==
-         BSP_OK) {
-    if (sick_msg.dlc < SICK_CAN_DATA_LEN) {
-      continue;
-    }
-
     for (uint8_t i = 0u; i < SICK_OUTPUT_CHANNEL_COUNT; i++) {
-      sick_adc_raw[i] = SICK_AdjustAdcRaw(i, SICK_ParseAdcRaw16(sick_msg.data, i));
+      if (sick_miss_count[i] < 0xFFFFu) {
+        sick_miss_count[i]++;
+      }
     }
-    updated = true;
-  }
-
-  if (updated) {
-    sick_miss_count = 0u;
-    return;
-  }
-
-  if (sick_miss_count < 0xFFFFu) {
-    sick_miss_count++;
-  }
-}
-
-static void SICK_UpdateDistance(void) {
-  if (sick_miss_count >= SICK_MISS_THRESHOLD) {
-    SICK_SetAllDistanceInvalid();
     return;
   }
 
   for (uint8_t i = 0u; i < SICK_OUTPUT_CHANNEL_COUNT; i++) {
+    bool updated = false;
+
+    while (BSP_CAN_GetMessage(SICK_CAN_BUS, sick_can_ids[i], &sick_msg,
+                              BSP_CAN_TIMEOUT_IMMEDIATE) == BSP_OK) {
+      if (sick_msg.dlc < SICK_CAN_DATA_LEN) {
+        continue;
+      }
+
+      sick_adc_raw[i] = SICK_AdjustAdcRaw(i, SICK_ParseAdcRaw16(sick_msg.data, 0u));
+      updated = true;
+    }
+
+    if (updated) {
+      sick_miss_count[i] = 0u;
+      continue;
+    }
+
+    if (sick_miss_count[i] < 0xFFFFu) {
+      sick_miss_count[i]++;
+    }
+  }
+}
+
+static void SICK_UpdateDistance(void) {
+  for (uint8_t i = 0u; i < SICK_OUTPUT_CHANNEL_COUNT; i++) {
+    if (sick_miss_count[i] >= SICK_MISS_THRESHOLD) {
+      sick_distance_m[i] = -1.0f;
+      continue;
+    }
+
     const double mapped_m = SICK_MapAdcToDistanceM(sick_adc_raw[i]);
     const double calibrated_m = SICK_ApplyChannelCalibrationM(i, mapped_m);
     sick_distance_m[i] = (float)calibrated_m;
@@ -174,9 +187,13 @@ int8_t SICK_Init(void) {
     return DEVICE_ERR;
   }
 
-  const int8_t reg_ret = BSP_CAN_RegisterId(SICK_CAN_BUS, sick_can_id, SICK_CAN_QUEUE_SIZE);
-  if (reg_ret == BSP_OK || BSP_CAN_GetQueueCount(SICK_CAN_BUS, sick_can_id) >= 0) {
-    sick_can_available = true;
+  sick_can_available = true;
+  for (uint8_t i = 0u; i < SICK_OUTPUT_CHANNEL_COUNT; i++) {
+    const int8_t reg_ret = BSP_CAN_RegisterId(SICK_CAN_BUS, sick_can_ids[i], SICK_CAN_QUEUE_SIZE);
+    if (reg_ret != BSP_OK && BSP_CAN_GetQueueCount(SICK_CAN_BUS, sick_can_ids[i]) < 0) {
+      sick_can_available = false;
+      break;
+    }
   }
 
   if (!sick_can_available) {
@@ -186,8 +203,8 @@ int8_t SICK_Init(void) {
   sick_inited = true;
   memset(sick_adc_raw, 0, sizeof(sick_adc_raw));
   memset(sick_distance_m, 0, sizeof(sick_distance_m));
+  memset(sick_miss_count, 0, sizeof(sick_miss_count));
   memset(&sick_latest_output, 0, sizeof(sick_latest_output));
-  sick_miss_count = 0u;
   return DEVICE_OK;
 }
 
