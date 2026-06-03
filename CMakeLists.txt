@@ -138,7 +138,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     User/module/cloudmusic/cloudmusic.c
     User/module/config.c
     User/module/rod_new.cpp
-    User/module/pc_protocol/pc_protocol.cpp
+    User/module/mrlink_pc_comm/mrlink_pc_comm.cpp
 
     # User/task sources
     User/task/blink.c

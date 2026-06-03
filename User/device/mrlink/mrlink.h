@@ -49,6 +49,8 @@ extern "C" {
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "mrlink/mrlink_ringbuf.h"
+
 /* Exported constants ------------------------------------------------------- */
 
 /* Return codes / 错误码 */
@@ -159,6 +161,37 @@ typedef int8_t (*MrLink_TypedHandler_t)(uint8_t cmd,
                                             const void *typed_data,
                                             uint16_t typed_size,
                                             void *ctx);
+
+/**
+ * @brief cmd → handler 映射条目 / Handler dispatch entry.
+ */
+typedef struct {
+  bool used;
+  uint8_t cmd;
+  uint16_t expected_size;   /**< 0 = raw handler, >0 = typed */
+  union {
+    MrLink_FrameHandler_t raw;
+    MrLink_TypedHandler_t typed;
+  } handler;
+  void *ctx;
+} MrLink_HandlerEntry_t;
+
+/**
+ * @brief 协议实例存储 / Protocol instance storage.
+ *
+ * 字段由库内部维护，应用侧只应通过 MrLink_* API 访问。
+ */
+struct MrLink {
+  MrLink_Config_t cfg;
+  MrLink_RingBuf_t rx_rb;
+  uint8_t *rx_buf;
+  uint16_t rx_buf_size;
+  uint8_t *tx_buf;
+  uint16_t tx_buf_size;
+  uint8_t frame_buf[MRLINK_MAX_FRAME_SIZE];
+  MrLink_HandlerEntry_t handlers[MRLINK_MAX_HANDLERS];
+  MrLink_Stats_t stats;
+};
 
 /* Exported function prototypes --------------------------------------------- */
 

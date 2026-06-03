@@ -15,7 +15,7 @@
 #include "module/rod_new.h"
 #include "module/autoCtrlAPI/api/auto_ctrl_api.h"
 #include "module/autoCtrlAPI/core/auto_ctrl_def.h"
-#include "module/pc_protocol/pc_protocol.h"
+#include "module/mrlink_pc_comm/mrlink_pc_comm.h"
 #include "main.h"
 #include <math.h>
 #include <string.h>
@@ -79,7 +79,6 @@ extern auto_ctrl_t auto_ctrl;
 extern bool auto_ctrl_inited;
 extern Chassis_IMU_t chassis_imu;
 
-extern PC_Protocol_t* g_pc_protocol_ptr;
 volatile PC_CommandSource_t g_pc_command_source = PC_COMMAND_SOURCE_RC;
 volatile int8_t g_rc_ore_store_post_ret = ORE_STORE_ERR_NULL;
 volatile int8_t g_rc_ore_store_assume_home_ret = ORE_STORE_ERR_NULL;
@@ -724,8 +723,7 @@ static bool Rc_ShouldExitAutoCtrlBySwitch(void) {
 }
 
 static bool Rc_ShouldUsePcCommand(void) {
-  return g_pc_protocol_ptr != NULL &&
-         PC_Protocol_IsPCControlMode(g_pc_protocol_ptr) &&
+  return MrlinkPc_IsPCControlMode() &&
          dr16.data.sw_l != DR16_SW_UP;
 }
 
@@ -941,15 +939,14 @@ static void Rc_ApplyPcBehavior(void) {
     Rc_SetAutoDryRunCommands();
 #endif
   } else {
-    const PC_ChassisCMD_t* pc_chassis_cmd =
-        PC_Protocol_GetChassisCMD(g_pc_protocol_ptr);
-    const PC_PoleCMD_t* pc_pole_cmd = PC_Protocol_GetPoleCMD(g_pc_protocol_ptr);
+    const PC_ChassisCMD_t* pc_chassis_cmd = MrlinkPc_GetChassisCMD();
+    const PC_PoleCMD_t* pc_pole_cmd = MrlinkPc_GetPoleCMD();
     const PC_ArmSimpleCMD_t* pc_arm_simple_cmd =
-      PC_Protocol_GetArmSimpleCMD(g_pc_protocol_ptr);
+      MrlinkPc_GetArmSimpleCMD();
     const PC_RodNewCMD_t* pc_rod_new_cmd =
-      PC_Protocol_GetRodNewCMD(g_pc_protocol_ptr);
+      MrlinkPc_GetRodNewCMD();
     const PC_OreStoreCMD_t* pc_ore_store_cmd =
-      PC_Protocol_GetOreStoreCMD(g_pc_protocol_ptr);
+      MrlinkPc_GetOreStoreCMD();
 
     if (pc_chassis_cmd != NULL) {
       chassis_cmd.mode = CHASSIS_MODE_INDEPENDENT;

@@ -3,7 +3,7 @@
 #include "module/chassis/mecanum.hpp"
 #include "module/config.h"
 #include "module/pole.h"
-#include "module/pc_protocol/pc_protocol.h"
+#include "module/mrlink_pc_comm/mrlink_pc_comm.h"
 
 #define POLE_TEMP_WARNING_ALARM_MS (3000u)
 #define POLE_TEMP_OVER_LIMIT_ALARM_MS (5000u)
@@ -22,8 +22,6 @@ static Pole_CMD_t pole_cmd{};
 extern "C" {
 Chassis_IMU_t chassis_imu{};
 float chassis_motor_speed_rpm[4] = {0.0f, 0.0f, 0.0f, 0.0f};
-
-extern PC_Protocol_t *g_pc_protocol_ptr;
 
 bool Task_ChassisMainPoleGroupAtTarget(uint8_t group, float threshold_rad) {
   return Pole_IsGroupAtFinalTarget(&pole, group, threshold_rad);
@@ -136,12 +134,12 @@ extern "C" void Task_chassis_main(void *argument) {
     }
 
     /* 上位机反馈数据设置 */
-    if (g_pc_protocol_ptr != nullptr) {
+    if (MrlinkPc_GetState() != nullptr) {
       PC_ChassisFeedback_t chassis_fb = {0};
       chassis_fb.vx = fb.chassis_vel.vx;
       chassis_fb.vy = fb.chassis_vel.vy;
       chassis_fb.wz = fb.chassis_vel.wz;
-      PC_Protocol_SetChassisFeedback(g_pc_protocol_ptr, &chassis_fb);
+      MrlinkPc_SetChassisFeedback(&chassis_fb);
 
       PC_PoleFeedback_t pole_fb = {0};
       pole_fb.lift[0] = pole.feedback.support_angle_avg;
@@ -149,7 +147,7 @@ extern "C" void Task_chassis_main(void *argument) {
       for (uint8_t i = 0u; i < POLE_MOTOR_NUM; i++) {
         pole_fb.motor_total_angle[i] = pole.feedback.motor[i].rotor_total_angle;
       }
-      PC_Protocol_SetPoleFeedback(g_pc_protocol_ptr, &pole_fb);
+      MrlinkPc_SetPoleFeedback(&pole_fb);
     }
 
     task_runtime.stack_water_mark.chassis_main =

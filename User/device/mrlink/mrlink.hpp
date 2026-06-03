@@ -67,8 +67,8 @@ class Instance {
   ~Instance() {
     for (uint8_t i = 0u; i < MAX_TYPED_HANDLERS; i++) {
       if (slots_[i].used) {
-        (void)MrLink_RegisterTypedHandler(&proto_, slots_[i].cmd,
-                                             0u, nullptr, nullptr);
+        (void)MrLink_RegisterHandler(&proto_, slots_[i].cmd,
+                                     nullptr, nullptr);
         slots_[i].used = false;
       }
     }
@@ -117,6 +117,35 @@ class Instance {
     return MrLink_Build(&proto_, cmd, payload, payload_len);
   }
 
+  /**
+   * @brief 注册空 payload handler / Register empty-payload handler.
+   *
+   * 适用于 heartbeat 等 length=0 的命令。收到匹配 cmd 且 payload_len=0
+   * 时调用 handler；若长度非 0，则计入 stats.frame_rx_size_mismatch。
+   */
+  int8_t On(uint8_t cmd, std::function<void()> handler) {
+    if (handler == nullptr) {
+      return Off(cmd);
+    }
+
+    int slot = FindSlot(cmd);
+    if (slot < 0) {
+      slot = AllocSlot();
+      if (slot < 0) {
+        return MRLINK_ERR_ARGS;
+      }
+    }
+
+    slots_[slot].used = true;
+    slots_[slot].cmd = cmd;
+    slots_[slot].typed = nullptr;
+    slots_[slot].empty = handler;
+
+    return MrLink_RegisterHandler(&proto_, cmd,
+                                  &Instance::EmptyTrampoline,
+                                  &slots_[slot]);
+  }
+
   /** 获取运行统计 / Get runtime stats. */
   const MrLink_Stats_t* GetStats() const {
     return MrLink_GetStats(&proto_);
@@ -157,6 +186,7 @@ class Instance {
 
     slots_[slot].used = true;
     slots_[slot].cmd = cmd;
+    slots_[slot].empty = nullptr;
     slots_[slot].typed = [handler](const uint8_t* pl) {
       T value;
       std::memcpy(&value, pl, sizeof(T));
@@ -179,8 +209,8 @@ class Instance {
     }
     slots_[slot].used = false;
     slots_[slot].typed = nullptr;
-    return MrLink_RegisterTypedHandler(&proto_, cmd, 0u,
-                                           nullptr, nullptr);
+    slots_[slot].empty = nullptr;
+    return MrLink_RegisterHandler(&proto_, cmd, nullptr, nullptr);
   }
 
  private:
@@ -189,6 +219,7 @@ class Instance {
     bool used = false;
     uint8_t cmd = 0u;
     std::function<void(const uint8_t*)> typed;  // type-erased
+    std::function<void()> empty;
   };
 
   MrLink_t proto_{};
@@ -205,6 +236,19 @@ class Instance {
     const auto* slot = static_cast<const Slot*>(ctx);
     if (slot->typed) {
       slot->typed(static_cast<const uint8_t*>(data));
+    }
+    return MRLINK_OK;
+  }
+
+  static int8_t EmptyTrampoline(uint8_t cmd, const uint8_t* payload,
+                                uint16_t payload_len, void* ctx) {
+    (void)cmd; (void)payload;
+    const auto* slot = static_cast<const Slot*>(ctx);
+    if (payload_len != 0u) {
+      return MRLINK_ERR_ARGS;
+    }
+    if (slot->empty) {
+      slot->empty();
     }
     return MRLINK_OK;
   }

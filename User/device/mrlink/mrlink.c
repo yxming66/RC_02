@@ -6,50 +6,12 @@
   */
 
 #include "mrlink/mrlink.h"
-#include "mrlink/mrlink_ringbuf.h"
-
 #include <string.h>
 
 #include "cmsis_compiler.h"   /**< __disable_irq / __enable_irq / __get_PRIMASK */
 #include "component/crc16.h"
 
-/* Private constants -------------------------------------------------------- */
-
-/** Max frame size with default payload + CRC. */
-#define MRLINK_MAX_FRAME_SIZE \
-  (MRLINK_HEADER_LEN + MRLINK_LEN_FIELD_LEN + MRLINK_CMD_FIELD_LEN + \
-   MRLINK_MAX_PAYLOAD_DEFAULT + MRLINK_CRC_LEN)  /* 70 */
-
 /* Private types ------------------------------------------------------------ */
-
-/**
- * @brief cmd → handler 映射条目 / Handler dispatch entry.
- */
-typedef struct {
-  bool used;
-  uint8_t cmd;
-  uint16_t expected_size;   /**< 0 = raw handler, &gt;0 = typed (须 length 一致) */
-  union {
-    MrLink_FrameHandler_t raw;
-    MrLink_TypedHandler_t typed;
-  } handler;
-  void *ctx;
-} HandlerEntry_t;
-
-/**
- * @brief 协议实例内部结构 / Internal layout of MrLink_t.
- */
-struct MrLink {
-  MrLink_Config_t cfg;        /**< 配置 (Init 后只读) */
-  MrLink_RingBuf_t rx_rb;           /**< RX 字节流缓冲 (mrlink_ringbuf 实例) */
-  uint8_t *rx_buf;               /**< RX 外部存储指针 */
-  uint16_t rx_buf_size;
-  uint8_t *tx_buf;               /**< TX 外部存储指针 */
-  uint16_t tx_buf_size;
-  uint8_t frame_buf[MRLINK_MAX_FRAME_SIZE];   /**< typed handler 内部 payload 缓冲 */
-  HandlerEntry_t handlers[MRLINK_MAX_HANDLERS]; /**< cmd 派发表 */
-  MrLink_Stats_t stats;
-};
 
 /* Private function prototypes --------------------------------------------- */
 
@@ -180,8 +142,11 @@ static int8_t Proto_ProcessRx(MrLink_t *p, bool want_one_frame,
     }
 
     if (want_one_frame && !found_one) {
+      if (length > 0u) {
+        memcpy(p->frame_buf, payload, length);
+      }
       *out_cmd = cmd;
-      *out_payload = payload;
+      *out_payload = p->frame_buf;
       *out_payload_len = length;
       found_one = true;
     }
@@ -233,8 +198,9 @@ int8_t MrLink_Init(MrLink_t *p, const MrLink_Config_t *cfg,
     applied = *cfg;
   }
 
-  /* max_payload_size 范围: 1~255 (length 字段是 1 字节) */
-  if (applied.max_payload_size == 0u || applied.max_payload_size > 255u) {
+  /* max_payload_size 范围: 1~MRLINK_MAX_PAYLOAD_DEFAULT */
+  if (applied.max_payload_size == 0u ||
+      applied.max_payload_size > MRLINK_MAX_PAYLOAD_DEFAULT) {
     return MRLINK_ERR_ARGS;
   }
 
@@ -324,8 +290,7 @@ int8_t MrLink_FeedBytes(MrLink_t *p, const uint8_t *data, uint16_t len) {
  *   调 Proto_ProcessRx(want_one_frame=true)
  *     - 找到: 写 *out_cmd / *out_payload / *out_payload_len, 返回 MRLINK_OK
  *     - 无完整帧: 返回 MRLINK_ERR
- *   注意: payload 指针指向 ring buffer 内部, 仅本次 Parse 返回前有效
- *         跨调用要 memcpy
+ *   注意: payload 指针指向实例内 frame_buf, 下次 Parse/Feed 前有效。
  *   配合: ISR 里 FeedBytes, 任务里循环 Parse (适用于不注册 handler 的场景)
  */
 int8_t MrLink_Parse(MrLink_t *p, uint8_t *out_cmd,

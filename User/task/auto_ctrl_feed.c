@@ -13,7 +13,7 @@
 #include "module/autoCtrlAPI/rod/auto_rod_spearhead.h"
 #include "module/chassis.h"
 #include "module/config.h"
-#include "module/pc_protocol/pc_protocol.h"
+#include "module/mrlink_pc_comm/mrlink_pc_comm.h"
 
 #include <math.h>
 
@@ -26,7 +26,6 @@
 /* USER STRUCT BEGIN */
 extern Chassis_IMU_t chassis_imu;
 extern DR16_t dr16;
-extern PC_Protocol_t *g_pc_protocol_ptr;
 
 auto_ctrl_t auto_ctrl;
 bool auto_ctrl_inited = false;
@@ -82,8 +81,8 @@ static uint8_t pole_all_at_target_stable_count = 0u;
 /* Private function --------------------------------------------------------- */
 static float AutoCtrlFeed_SelectYawRad(void) {
   if (AutoCtrl_GetYawSource(&auto_ctrl) == AUTO_CTRL_YAW_SOURCE_PC &&
-      g_pc_protocol_ptr != NULL) {
-    const PC_ImuCMD_t *pc_imu = PC_Protocol_GetImuCMD(g_pc_protocol_ptr);
+      MrlinkPc_IsHeartbeatValid()) {
+    const PC_ImuCMD_t *pc_imu = MrlinkPc_GetImuCMD();
     if (pc_imu != NULL && isfinite(pc_imu->yaw)) {
       return pc_imu->yaw;
     }
@@ -509,7 +508,7 @@ void Task_auto_ctrl(void *argument) {
       AutoCtrlFeed_UpdateAutoOre(now_ms);
       AutoCtrlFeed_UpdateAutoRodSpearhead(now_ms);
 
-      if (g_pc_protocol_ptr != NULL) {
+      if (MrlinkPc_GetState() != NULL) {
         PC_StepFeedback_t step_feedback = {0};
         step_feedback.state = (PC_StepState_t)AutoCtrl_GetState(&auto_ctrl);
         step_feedback.result = (PC_StepResult_t)AutoCtrl_GetResult(&auto_ctrl);
@@ -517,7 +516,7 @@ void Task_auto_ctrl(void *argument) {
         step_feedback.template_id = (PC_StepTemplate_t)AutoCtrl_GetTemplate(&auto_ctrl);
         step_feedback.step_index = AutoCtrl_GetStepIndex(&auto_ctrl);
         step_feedback.progress = 0.0f;
-        PC_Protocol_SetStepFeedback(g_pc_protocol_ptr, &step_feedback);
+        MrlinkPc_SetStepFeedback(&step_feedback);
       }
     }
 
