@@ -106,9 +106,9 @@ typedef enum {
     PC_AUTO_ACTION_STORE = 1,            /* 一键存矿 */
     PC_AUTO_ACTION_RELEASE = 2,          /* 一键放矿 */
     PC_AUTO_ACTION_CHAMBER = 3,          /* 一键上膛 */
-    PC_AUTO_ACTION_PICK_POS_400 = 4,     /* 一键取正向 400mm 矿 */
-    PC_AUTO_ACTION_PICK_POS_200 = 5,     /* 一键取正向 200mm 矿 */
-    PC_AUTO_ACTION_PICK_NEG_200 = 6,     /* 一键取反向 200mm 矿 */
+    PC_AUTO_ACTION_PICK_POS_400 = 4,     /* 一键取正 400mm 矿 */
+    PC_AUTO_ACTION_PICK_POS_200 = 5,     /* 一键取正 200mm 矿 */
+    PC_AUTO_ACTION_PICK_NEG_200 = 6,     /* 一键取反 200mm 矿 */
     PC_AUTO_ACTION_ROD_SPEARHEAD = 7,    /* 一键取矛头 */
     PC_AUTO_ACTION_ABORT = 8,            /* 中止一键动作 */
 } PC_AutoAction_t;

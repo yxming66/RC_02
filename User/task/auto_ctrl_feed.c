@@ -50,7 +50,7 @@ static const GPIO_PinState photo1_active_state = GPIO_PIN_RESET;
 static const GPIO_PinState photo2_active_state = GPIO_PIN_RESET;
 static const GPIO_PinState photo3_active_state = GPIO_PIN_RESET;
 static const GPIO_PinState photo4_active_state = GPIO_PIN_RESET;
-static const GPIO_PinState checkphoto_ore_has_ore_state = GPIO_PIN_SET;
+static const GPIO_PinState checkphoto_ore_has_ore_state = GPIO_PIN_RESET;
 
 #ifndef AUTO_CTRL_POLE_TARGET_THRESHOLD_RAD
 #define AUTO_CTRL_POLE_TARGET_THRESHOLD_RAD (0.30f)
@@ -81,7 +81,7 @@ static const GPIO_PinState checkphoto_ore_has_ore_state = GPIO_PIN_SET;
 #endif
 
 #ifndef AUTO_ROD_SPEARHEAD_PHOTO_ACTIVE_STATE
-#define AUTO_ROD_SPEARHEAD_PHOTO_ACTIVE_STATE GPIO_PIN_SET
+#define AUTO_ROD_SPEARHEAD_PHOTO_ACTIVE_STATE GPIO_PIN_RESET
 #endif
 
 #if defined(AUTO_ROD_SPEARHEAD_PHOTO_GPIO_PORT) && \
