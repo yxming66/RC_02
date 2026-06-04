@@ -55,6 +55,12 @@ static void AutoCtrlTemplate_CommandPole(auto_ctrl_t *ctrl, float front_target,
                                          float rear_speed) {
   AutoCtrlPrimitive_CommandPoleTargetWithSpeed(ctrl, front_target, rear_target,
                                                front_speed, rear_speed);
+  /* descend 模板：不对 lift 加速度限幅（保留速度限） */
+  ctrl->pole_cmd.disable_lift_accel =
+      (ctrl->template_id == AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD) ||
+      (ctrl->template_id == AUTO_CTRL_TEMPLATE_DESCEND_400_HEAD) ||
+      (ctrl->template_id == AUTO_CTRL_TEMPLATE_DESCEND_200_TAIL) ||
+      (ctrl->template_id == AUTO_CTRL_TEMPLATE_DESCEND_400_TAIL);
 }
 
 static float AutoCtrlTemplate_SecondPhotoRetractVx(

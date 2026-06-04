@@ -41,6 +41,7 @@ typedef struct {
   bool auto_target_enable[2];
   float auto_target_lift[2];   /* rad, relative to calibrated lower limit */
   float auto_lift_speed[2];    /* rad/s, <=0 means use default support_lift_speed */
+  bool disable_lift_accel;     /* true: 该 cmd 不对 lift 加速度限幅（仅限速） */
 } Pole_CMD_t;
 
 typedef struct {
@@ -162,6 +163,7 @@ typedef struct {
 
   struct {
     float support_target_angle[POLE_SUPPORT_MOTOR_NUM];
+    bool disable_lift_accel;   /* 保存最近一次 cmd 的标志 */
   } setpoint;
 
   struct {

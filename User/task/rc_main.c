@@ -480,6 +480,7 @@ static void Rc_SetPoleManual(float left, float right) {
   pole_cmd.auto_target_lift[1] = 0.0f;
   pole_cmd.auto_lift_speed[0] = 0.0f;
   pole_cmd.auto_lift_speed[1] = 0.0f;
+  pole_cmd.disable_lift_accel = false;
 }
 
 static void Rc_SetPoleAuto(float left_target, float right_target) {
@@ -494,6 +495,7 @@ static void Rc_SetPoleAuto(float left_target, float right_target) {
   pole_cmd.auto_target_lift[1] = 0.0f;
   pole_cmd.auto_lift_speed[0] = 0.0f;
   pole_cmd.auto_lift_speed[1] = 0.0f;
+  pole_cmd.disable_lift_accel = false;
 }
 
 static void Rc_SetPoleHold(void) {
@@ -974,6 +976,7 @@ static void Rc_ApplyPcBehavior(void) {
       pole_cmd.auto_target_lift[1] = pc_pole_cmd->lift[1];
       pole_cmd.auto_lift_speed[0] = 0.0f;
       pole_cmd.auto_lift_speed[1] = 0.0f;
+      pole_cmd.disable_lift_accel = false;
     }
 
     if (pc_arm_simple_cmd != NULL) {

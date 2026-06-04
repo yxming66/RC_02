@@ -40,8 +40,9 @@ float Pole_UpdateTrackedLift(Pole_t *c, uint8_t side, float speed_limit) {
   if (c == NULL || c->param == NULL || side >= 2u) return 0.0f;
 
   const float max_velocity = Pole_PositiveOrZero(speed_limit);
-  const float max_acceleration =
-      Pole_PositiveOrZero(c->param->limit.support_lift_accel);
+  const float max_acceleration = c->setpoint.disable_lift_accel
+      ? 0.0f
+      : Pole_PositiveOrZero(c->param->limit.support_lift_accel);
 
   if (max_velocity <= 0.0f || max_acceleration <= 0.0f) {
     c->support_angle.tracked_target_velocity[side] = 0.0f;
@@ -231,6 +232,8 @@ int8_t Pole_Control(Pole_t *c, const Pole_CMD_t *c_cmd, uint32_t now) {
   c->dt = (float)(now - c->last_wakeup) / 1000.0f;
   c->last_wakeup = now;
   c->dt = mr::component::math::sanitize_dt(c->dt, 0.001f, 0.0005f, 0.050f);
+
+  c->setpoint.disable_lift_accel = c_cmd->disable_lift_accel;
 
   Pole_SetMode(c, c_cmd->mode);
 

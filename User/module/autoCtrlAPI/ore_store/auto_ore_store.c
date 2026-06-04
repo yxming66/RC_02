@@ -250,6 +250,7 @@ static bool AutoOre_CommandPoleTarget(AutoOre_t *ctrl,
   ctrl->pole_cmd.auto_target_lift[1] = target_lift[1];
   ctrl->pole_cmd.auto_lift_speed[0] = 0.0f;
   ctrl->pole_cmd.auto_lift_speed[1] = 0.0f;
+  ctrl->pole_cmd.disable_lift_accel = false;
   ctrl->pole_cmd_valid = true;
   return true;
 }
