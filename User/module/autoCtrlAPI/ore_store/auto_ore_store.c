@@ -21,13 +21,13 @@
 #if !defined(AUTO_ORE_LOW_OCCUPANCY_SOURCE) || \
   AUTO_ORE_LOW_OCCUPANCY_SOURCE != AUTO_ORE_OCCUPANCY_SOURCE_PHOTOELECTRIC_VALUE
 #undef AUTO_ORE_LOW_OCCUPANCY_SOURCE
-#define AUTO_ORE_LOW_OCCUPANCY_SOURCE AUTO_ORE_OCCUPANCY_SOURCE_STATE_MACHINE_VALUE
+#define AUTO_ORE_LOW_OCCUPANCY_SOURCE AUTO_ORE_OCCUPANCY_SOURCE_PHOTOELECTRIC_VALUE
 #endif
 
 #if !defined(AUTO_ORE_HIGH_OCCUPANCY_SOURCE) || \
   AUTO_ORE_HIGH_OCCUPANCY_SOURCE != AUTO_ORE_OCCUPANCY_SOURCE_PHOTOELECTRIC_VALUE
 #undef AUTO_ORE_HIGH_OCCUPANCY_SOURCE
-#define AUTO_ORE_HIGH_OCCUPANCY_SOURCE AUTO_ORE_OCCUPANCY_SOURCE_STATE_MACHINE_VALUE
+#define AUTO_ORE_HIGH_OCCUPANCY_SOURCE AUTO_ORE_OCCUPANCY_SOURCE_PHOTOELECTRIC_VALUE
 #endif
 
 #if !defined(AUTO_ORE_ARM_OCCUPANCY_SOURCE) || \
@@ -115,6 +115,9 @@ static uint32_t AutoOre_ChamberCylinderOpenMs(const AutoOre_t *ctrl) {
 }
 
 static uint32_t AutoOre_FetchChassisMoveMs(const AutoOre_t *ctrl) {
+  if (ctrl->action == AUTO_ORE_ACTION_PICK_NEG_200) {
+    return ctrl->param.timing.fetch_neg_200_chassis_move_ms;
+  }
   return AutoOre_TimingValue(ctrl->param.timing.fetch_chassis_move_ms,
                              AUTO_ORE_DEFAULT_FETCH_CHASSIS_MOVE_MS);
 }
@@ -131,6 +134,9 @@ static float AutoOre_ChamberLowPlatformThresholdRad(const AutoOre_t *ctrl) {
 }
 
 static float AutoOre_FetchChassisVxMps(const AutoOre_t *ctrl) {
+  if (ctrl->action == AUTO_ORE_ACTION_PICK_NEG_200) {
+    return ctrl->param.fetch_neg_200_chassis_vx_mps;
+  }
   return (ctrl->param.fetch_chassis_vx_mps > 0.0f)
              ? ctrl->param.fetch_chassis_vx_mps
              : AUTO_ORE_DEFAULT_FETCH_CHASSIS_VX_MPS;
@@ -794,7 +800,7 @@ static void AutoOre_RunPickOre(AutoOre_t *ctrl, uint32_t now_ms) {
         AutoOre_FailInvalidParam(ctrl);
         return;
       }
-      if (ctrl->feedback.arm_at_target) {
+      if (AutoOre_WaitArmCommandTarget(ctrl, now_ms)) {
         AutoOre_NextStep(ctrl);
       } else {
         (void)AutoOre_CheckTimeout(ctrl, now_ms);

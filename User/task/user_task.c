@@ -60,3 +60,8 @@ const osThreadAttr_t attr_ore_store = {
     .priority = osPriorityAboveNormal,
     .stack_size = 512 * 4,
 };
+const osThreadAttr_t attr_ir_dock = {
+    .name = "ir_dock",
+    .priority = osPriorityNormal,
+    .stack_size = 256 * 4,
+};

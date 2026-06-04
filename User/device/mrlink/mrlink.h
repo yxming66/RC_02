@@ -30,7 +30,8 @@
   *   MrLink_Init(&s_link, &cfg, s_rx, sizeof(s_rx), s_tx, sizeof(s_tx));
   *   MrLink_RegisterHandler(&s_link, 0x10, OnX, NULL);
   *
-  *   MrLink_FeedBytes(&s_link, rx_buf, Size);                       // ISR
+  *   MrLink_PushBytes(&s_link, rx_buf, Size);                       // RX / ISR
+  *   MrLink_Dispatch(&s_link);                                      // task
   *   uint16_t n = MrLink_Build(&s_link, 0x10, pl, len);            // TX
   *   if (n > 0u) BSP_UART_Transmit(BSP_UART_X, s_tx, n, true);
   *   ```
@@ -49,7 +50,9 @@ extern "C" {
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "mrlink/mrlink_ringbuf.h"
+#ifdef MRLINK_INTERNAL_BUILD
+#include "component/container/spsc_ringbuf.h"
+#endif
 
 /* Exported constants ------------------------------------------------------- */
 
@@ -85,12 +88,15 @@ extern "C" {
 #define MRLINK_MAX_HANDLERS (32u)
 
 /** 单帧最大长度 (header 2 + len 1 + cmd 1 + max_payload + crc 2)
- *  默认 max_payload=64, use_crc16=true 时 = 70. 内部 typed handler 缓冲
- *  按此大小分配。 */
+ *  默认 max_payload=64, use_crc16=true 时 = 70. 当前 parser 与内部 frame_buf
+ *  以此编译期宏为上限；未来支持分片或更大 payload 时，需同步重审
+ *  MrLink_t storage、Parse/typed handler 临时缓冲和各 channel max_frame_size。 */
 #define MRLINK_MAX_FRAME_SIZE \
   (MRLINK_HEADER_LEN + MRLINK_LEN_FIELD_LEN + \
    MRLINK_CMD_FIELD_LEN + MRLINK_MAX_PAYLOAD_DEFAULT + \
    MRLINK_CRC_LEN)
+
+#define MRLINK_INSTANCE_STORAGE_SIZE (768u)
 
 /* Exported types ----------------------------------------------------------- */
 
@@ -124,8 +130,39 @@ typedef struct {
   uint32_t frame_rx_size_mismatch; /**< typed handler 期望长度不匹配 (comm_rx_size_mismatch) */
   uint32_t frame_tx_ok;            /**< 成功 build 的帧数 */
   uint32_t feed_bytes_total;       /**< FeedBytes 喂入字节总数 */
+  uint32_t feed_bytes_dropped;     /**< RX ring buffer 满导致丢弃的字节数 */
   uint32_t feed_calls;             /**< FeedBytes 调用次数 */
 } MrLink_Stats_t;
+
+/**
+ * @brief 错误事件类型 / Error event code.
+ */
+typedef enum {
+  MRLINK_ERROR_HEADER_SKIP = 1,     /**< 跳过非帧头字节 */
+  MRLINK_ERROR_OVERSIZE = 2,        /**< payload length 超配置上限 */
+  MRLINK_ERROR_TRUNCATED = 3,       /**< 当前缓冲不足一帧 */
+  MRLINK_ERROR_CRC = 4,             /**< CRC 校验失败 */
+  MRLINK_ERROR_UNKNOWN_CMD = 5,     /**< 无 handler 的 cmd */
+  MRLINK_ERROR_SIZE_MISMATCH = 6,   /**< typed payload 长度不匹配 */
+  MRLINK_ERROR_RX_DROPPED = 7,      /**< RX ring buffer 满导致丢字节 */
+} MrLink_ErrorCode_t;
+
+/**
+ * @brief 错误事件信息 / Error event details.
+ */
+typedef struct {
+  MrLink_ErrorCode_t code;
+  uint8_t cmd;
+  uint16_t payload_len;
+  uint16_t expected_size;
+  uint16_t available;
+  uint16_t dropped_bytes;
+  uint16_t crc_received;
+  uint16_t crc_calculated;
+} MrLink_ErrorInfo_t;
+
+typedef void (*MrLink_ErrorHandler_t)(const MrLink_ErrorInfo_t *info,
+                                      void *ctx);
 
 /**
  * @brief 帧回调 / Frame handler callback.
@@ -162,9 +199,7 @@ typedef int8_t (*MrLink_TypedHandler_t)(uint8_t cmd,
                                             uint16_t typed_size,
                                             void *ctx);
 
-/**
- * @brief cmd → handler 映射条目 / Handler dispatch entry.
- */
+#ifdef MRLINK_INTERNAL_BUILD
 typedef struct {
   bool used;
   uint8_t cmd;
@@ -175,6 +210,7 @@ typedef struct {
   } handler;
   void *ctx;
 } MrLink_HandlerEntry_t;
+#endif
 
 /**
  * @brief 协议实例存储 / Protocol instance storage.
@@ -182,8 +218,9 @@ typedef struct {
  * 字段由库内部维护，应用侧只应通过 MrLink_* API 访问。
  */
 struct MrLink {
+#ifdef MRLINK_INTERNAL_BUILD
   MrLink_Config_t cfg;
-  MrLink_RingBuf_t rx_rb;
+  SpscRingBuf_t rx_rb;
   uint8_t *rx_buf;
   uint16_t rx_buf_size;
   uint8_t *tx_buf;
@@ -191,6 +228,15 @@ struct MrLink {
   uint8_t frame_buf[MRLINK_MAX_FRAME_SIZE];
   MrLink_HandlerEntry_t handlers[MRLINK_MAX_HANDLERS];
   MrLink_Stats_t stats;
+  MrLink_ErrorHandler_t error_handler;
+  void *error_ctx;
+#else
+  union {
+    uint32_t words[(MRLINK_INSTANCE_STORAGE_SIZE + 3u) / 4u];
+    void *ptr_align;
+    uint64_t u64_align;
+  } storage;
+#endif
 };
 
 /* Exported function prototypes --------------------------------------------- */
@@ -200,7 +246,7 @@ struct MrLink {
  *
  * @param proto        非 NULL / Non-NULL
  * @param cfg          NULL 则用默认 (max=64, crc=true)
- * @param rx_buf       外部 RX 流缓冲 (由 mrlink_ringbuf 使用)，非 NULL
+ * @param rx_buf       外部 RX 流缓冲 (由 component/container/spsc_ringbuf 使用)，非 NULL
  * @param rx_buf_size  ≥ 4 (起码能装一帧最小)
  * @param tx_buf       外部 TX 缓冲 (Build 写入)，非 NULL
  * @param tx_buf_size  ≥ 4 + max_payload_size (无 CRC) 或 ≥ 6 + max_payload_size (有 CRC)
@@ -212,6 +258,15 @@ int8_t MrLink_Init(MrLink_t *proto,
                       uint8_t *tx_buf, uint16_t tx_buf_size);
 
 /**
+ * @brief  Calculate the maximum frame size for a config.
+ *
+ * NULL config uses the default config. Returns 0 for invalid config.
+ * Current parser/internal frame buffer support is capped by the compile-time
+ * MRLINK_MAX_FRAME_SIZE; larger payload or fragmentation support needs review.
+ */
+uint16_t MrLink_MaxFrameSizeForConfig(const MrLink_Config_t *cfg);
+
+/**
  * @brief  重置 (清空 RX 缓冲、清零 stats、清除 handler) / Reset.
  *
  * 调用方需保证此时没有并发的 FeedBytes 在执行。
@@ -219,9 +274,10 @@ int8_t MrLink_Init(MrLink_t *proto,
 void MrLink_Reset(MrLink_t *proto);
 
 /**
- * @brief  喂入接收到的字节 / Feed received bytes.
+ * @brief  推入接收到的字节 / Push received bytes.
  *
- * 内部依次: 写入 ring buffer → 扫描帧 → 若注册 handler 则触发回调。
+ * 只写入 RX ring buffer，不扫描帧、不触发 handler。推荐在 ISR / DMA
+ * callback / channel RX 路径中调用，然后在任务上下文调用 MrLink_Dispatch()。
  *
  * ISR / 任务上下文均可调用。
  *
@@ -230,8 +286,24 @@ void MrLink_Reset(MrLink_t *proto);
  * @param len   字节数
  * @return MRLINK_OK
  */
+int8_t MrLink_PushBytes(MrLink_t *proto,
+                        const uint8_t *data, uint16_t len);
+
+/**
+ * @brief  Dispatch all complete frames currently buffered in RX stream.
+ *
+ * This is the preferred task-context companion to MrLink_PushBytes(). It keeps
+ * interrupt/channel receive paths cheap: RX code only pushes bytes, while this
+ * function runs registered business handlers later in a task.
+ *
+ * @return MRLINK_OK if called with a valid instance. MRLINK_ERR means there was
+ *         no complete frame to dispatch yet; malformed bytes may still have
+ *         been consumed and reported through stats/error callback.
+ */
+int8_t MrLink_Dispatch(MrLink_t *proto);
+
 int8_t MrLink_FeedBytes(MrLink_t *proto,
-                            const uint8_t *data, uint16_t len);
+                        const uint8_t *data, uint16_t len);
 
 /**
  * @brief  拉取一帧 / Pull one frame from the RX stream.
@@ -296,9 +368,31 @@ int8_t MrLink_RegisterTypedHandler(MrLink_t *proto, uint8_t cmd,
                                        void *ctx);
 
 /**
+ * @brief  注册错误事件回调 / Register error event handler.
+ *
+ * handler = NULL 表示清除错误回调。回调在 FeedBytes/Parse 上下文触发，
+ * 应保持短小、非阻塞。
+ */
+int8_t MrLink_SetErrorHandler(MrLink_t *proto,
+                              MrLink_ErrorHandler_t handler,
+                              void *ctx);
+
+/**
  * @brief  获取运行统计 / Get runtime stats.
  */
 const MrLink_Stats_t *MrLink_GetStats(const MrLink_t *proto);
+
+/**
+ * @brief 进入短临界区 / Enter short critical section.
+ * @return 调用前 PRIMASK 状态，需传给 MrLink_ExitCritical().
+ */
+uint32_t MrLink_EnterCritical(void);
+
+/**
+ * @brief 退出短临界区 / Exit short critical section.
+ * @param primask MrLink_EnterCritical() 返回值。
+ */
+void MrLink_ExitCritical(uint32_t primask);
 
 #ifdef __cplusplus
 }

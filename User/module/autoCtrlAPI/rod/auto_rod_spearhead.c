@@ -85,13 +85,10 @@ static void AutoRodSpearhead_FinishNoSpearhead(AutoRodSpearhead_t *ctrl) {
   ctrl->fault = AUTO_ROD_SPEARHEAD_FAULT_NO_SPEARHEAD;
 }
 
-static void AutoRodSpearhead_UpdatePhotoStable(
-    AutoRodSpearhead_t *ctrl, bool triggered, uint32_t now_ms) {
-  if (!ctrl->photo_stable_started || ctrl->photo_stable_state != triggered) {
-    ctrl->photo_stable_started = true;
-    ctrl->photo_stable_state = triggered;
-    ctrl->photo_stable_start_time_ms = now_ms;
-  }
+static void AutoRodSpearhead_FinishTimeout(AutoRodSpearhead_t *ctrl) {
+  ctrl->state = AUTO_ROD_SPEARHEAD_STATE_FAIL;
+  ctrl->result = AUTO_ROD_SPEARHEAD_RESULT_FAIL;
+  ctrl->fault = AUTO_ROD_SPEARHEAD_FAULT_TIMEOUT;
 }
 
 void AutoRodSpearhead_Init(AutoRodSpearhead_t *ctrl,
@@ -140,6 +137,9 @@ void AutoRodSpearhead_Update(AutoRodSpearhead_t *ctrl,
 
   const bool rod_photo_triggered =
       feedback != 0 && feedback->rod_photo_triggered;
+  const bool rod_at_target = feedback != 0 && feedback->rod_at_target;
+  const bool dock_complete_received =
+      feedback != 0 && feedback->dock_complete_received;
 
   ctrl->rod_cmd_valid = false;
   switch (ctrl->step_index) {
@@ -166,34 +166,55 @@ void AutoRodSpearhead_Update(AutoRodSpearhead_t *ctrl,
       }
       return;
     case 2:
+    {
       AutoRodSpearhead_EnterStep(ctrl, now_ms);
       if (!AutoRodSpearhead_CommandRod(ctrl, ROD_NEW_POSE_DOCK_WAIT,
                                        ROD_NEW_GRIP_GRAB)) {
         return;
       }
-      if (AutoRodSpearhead_StepElapsed(ctrl, now_ms) >=
-          AutoRodSpearhead_DockWaitDelayMs(ctrl)) {
-        if (ctrl->param.use_photo_check) {
+      if (!ctrl->param.use_photo_check) {
+        if (rod_at_target) {
+          AutoRodSpearhead_NextStep(ctrl);
+        }
+        return;
+      }
+      if (!rod_at_target) {
+        ctrl->photo_stable_started = false;
+        ctrl->photo_stable_state = false;
+        return;
+      }
+      if (!ctrl->photo_stable_started) {
+        ctrl->photo_stable_started = true;
+        ctrl->photo_stable_state = rod_photo_triggered;
+        ctrl->photo_stable_start_time_ms = now_ms;
+        return;
+      }
+      if (!rod_photo_triggered) {
+        ctrl->photo_stable_state = false;
+      }
+      if ((now_ms - ctrl->photo_stable_start_time_ms) >=
+          AutoRodSpearhead_PhotoCheckMs(ctrl)) {
+        if (ctrl->photo_stable_state) {
           AutoRodSpearhead_NextStep(ctrl);
         } else {
-          AutoRodSpearhead_FinishSuccess(ctrl);
+          AutoRodSpearhead_FinishNoSpearhead(ctrl);
         }
       }
       return;
+    }
     case 3:
       AutoRodSpearhead_EnterStep(ctrl, now_ms);
       if (!AutoRodSpearhead_CommandRod(ctrl, ROD_NEW_POSE_DOCK_WAIT,
                                        ROD_NEW_GRIP_GRAB)) {
         return;
       }
-      AutoRodSpearhead_UpdatePhotoStable(ctrl, rod_photo_triggered, now_ms);
-      if ((now_ms - ctrl->photo_stable_start_time_ms) >=
-          AutoRodSpearhead_PhotoCheckMs(ctrl)) {
-        if (ctrl->photo_stable_state) {
-          AutoRodSpearhead_FinishSuccess(ctrl);
-        } else {
-          AutoRodSpearhead_FinishNoSpearhead(ctrl);
-        }
+      if (dock_complete_received) {
+        AutoRodSpearhead_FinishSuccess(ctrl);
+        return;
+      }
+      if (AutoRodSpearhead_StepElapsed(ctrl, now_ms) >=
+          AutoRodSpearhead_DockWaitDelayMs(ctrl)) {
+        AutoRodSpearhead_FinishTimeout(ctrl);
       }
       return;
     default:

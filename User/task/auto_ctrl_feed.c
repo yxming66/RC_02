@@ -8,6 +8,7 @@
 /* USER INCLUDE BEGIN */
 #include "main.h"
 #include "device/dr16.h"
+#include "device/ir_dock/ir_dock.h"
 #include "module/autoCtrlAPI/api/auto_ctrl_api.h"
 #include "module/autoCtrlAPI/ore_store/auto_ore_store.h"
 #include "module/autoCtrlAPI/rod/auto_rod_spearhead.h"
@@ -32,7 +33,7 @@ bool auto_ctrl_inited = false;
 AutoOre_t auto_ore_ctrl;
 bool auto_ore_inited = false;
 
-/* Ozone/调试器手动触发一键存取矿：request=1存矿，2放矿，3上膛，4中止，5取正400，6取正200，7取负200。 */
+/* Ozone/调试器手动触发一键存取矿：request=1存矿，2放矿，3上膛，4中止，5取正400，6取正200，7取负200，8取矛头。 */
 volatile AutoOre_DebugControl_t g_auto_ore_debug = {0};//手动调用一键函数
 
 AutoRodSpearhead_t auto_rod_spearhead_ctrl;
@@ -41,10 +42,15 @@ bool auto_ctrl_local_yaw_zero_initialized = false;
 float auto_ctrl_local_yaw_zero_rad = 0.0f;
 auto_ctrl_feedback_t feedback = {0};
 static Sick_Output_t auto_ctrl_sick_output = {0};
+static PC_AutoAction_t auto_action_last_action = PC_AUTO_ACTION_NONE;
+static PC_AutoActionSubsystem_t auto_action_last_subsystem =
+    PC_AUTO_ACTION_SUBSYSTEM_NONE;
+static AutoOre_Action_t auto_ore_last_action = AUTO_ORE_ACTION_NONE;
 static const GPIO_PinState photo1_active_state = GPIO_PIN_RESET;
 static const GPIO_PinState photo2_active_state = GPIO_PIN_RESET;
 static const GPIO_PinState photo3_active_state = GPIO_PIN_RESET;
 static const GPIO_PinState photo4_active_state = GPIO_PIN_RESET;
+static const GPIO_PinState checkphoto_ore_has_ore_state = GPIO_PIN_SET;
 
 #ifndef AUTO_CTRL_POLE_TARGET_THRESHOLD_RAD
 #define AUTO_CTRL_POLE_TARGET_THRESHOLD_RAD (0.30f)
@@ -54,12 +60,24 @@ static const GPIO_PinState photo4_active_state = GPIO_PIN_RESET;
 #define AUTO_CTRL_POLE_TARGET_STABLE_CYCLES (5u)
 #endif
 
+#ifndef AUTO_ORE_PHOTO_STABLE_MS
+#define AUTO_ORE_PHOTO_STABLE_MS (500u)
+#endif
+
 #ifndef AUTO_ROD_SPEARHEAD_PHOTO_CHECK_MS
 #define AUTO_ROD_SPEARHEAD_PHOTO_CHECK_MS (1000u)
 #endif
 
 #ifndef AUTO_ROD_SPEARHEAD_USE_PHOTO_CHECK
-#define AUTO_ROD_SPEARHEAD_USE_PHOTO_CHECK (0u)//一键取矛头是否用光电检测
+#define AUTO_ROD_SPEARHEAD_USE_PHOTO_CHECK (1u)//一键取矛头是否用光电检测
+#endif
+
+#ifndef AUTO_ROD_SPEARHEAD_PHOTO_GPIO_PORT
+#define AUTO_ROD_SPEARHEAD_PHOTO_GPIO_PORT checkphoto_spear_GPIO_Port
+#endif
+
+#ifndef AUTO_ROD_SPEARHEAD_PHOTO_PIN
+#define AUTO_ROD_SPEARHEAD_PHOTO_PIN checkphoto_spear_Pin
 #endif
 
 #ifndef AUTO_ROD_SPEARHEAD_PHOTO_ACTIVE_STATE
@@ -76,6 +94,12 @@ static const GPIO_PinState photo4_active_state = GPIO_PIN_RESET;
 static uint8_t pole_front_at_target_stable_count = 0u;
 static uint8_t pole_rear_at_target_stable_count = 0u;
 static uint8_t pole_all_at_target_stable_count = 0u;
+static bool checkphoto_orelow_has_ore = false;
+static bool checkphoto_orehigh_has_ore = false;
+static GPIO_PinState checkphoto_orelow_candidate_state = GPIO_PIN_RESET;
+static GPIO_PinState checkphoto_orehigh_candidate_state = GPIO_PIN_RESET;
+static uint32_t checkphoto_orelow_candidate_start_ms = 0u;
+static uint32_t checkphoto_orehigh_candidate_start_ms = 0u;
 /* USER STRUCT END */
 
 /* Private function --------------------------------------------------------- */
@@ -127,6 +151,327 @@ static bool AutoCtrlFeed_ReadRodSpearheadPhoto(void) {
 #else
   return false;
 #endif
+}
+
+static bool AutoCtrlFeed_DebounceOrePhoto(GPIO_PinState raw_state,
+                                          bool *stable_has_ore,
+                                          GPIO_PinState *candidate_state,
+                                          uint32_t *candidate_start_ms,
+                                          uint32_t now_ms) {
+  if (stable_has_ore == NULL || candidate_state == NULL ||
+      candidate_start_ms == NULL) {
+    return false;
+  }
+
+  if (raw_state != *candidate_state) {
+    *candidate_state = raw_state;
+    *candidate_start_ms = now_ms;
+    return *stable_has_ore;
+  }
+
+  if ((now_ms - *candidate_start_ms) >= AUTO_ORE_PHOTO_STABLE_MS) {
+    if (raw_state == checkphoto_ore_has_ore_state) {
+      *stable_has_ore = true;
+    } else {
+      *stable_has_ore = false;
+    }
+  }
+
+  return *stable_has_ore;
+}
+
+static bool AutoCtrlFeed_ReadOreLowPhoto(uint32_t now_ms) {
+  const GPIO_PinState raw_state = HAL_GPIO_ReadPin(checkphoto_orelow_GPIO_Port,
+                                                  checkphoto_orelow_Pin);
+  return AutoCtrlFeed_DebounceOrePhoto(raw_state, &checkphoto_orelow_has_ore,
+                                       &checkphoto_orelow_candidate_state,
+                                       &checkphoto_orelow_candidate_start_ms,
+                                       now_ms);
+}
+
+static bool AutoCtrlFeed_ReadOreHighPhoto(uint32_t now_ms) {
+  const GPIO_PinState raw_state = HAL_GPIO_ReadPin(checkphoto_orehigh_GPIO_Port,
+                                                  checkphoto_orehigh_Pin);
+  return AutoCtrlFeed_DebounceOrePhoto(raw_state, &checkphoto_orehigh_has_ore,
+                                       &checkphoto_orehigh_candidate_state,
+                                       &checkphoto_orehigh_candidate_start_ms,
+                                       now_ms);
+}
+
+static PC_AutoAction_t AutoCtrlFeed_MapOreAction(AutoOre_Action_t action) {
+  switch (action) {
+    case AUTO_ORE_ACTION_STORE:
+      return PC_AUTO_ACTION_STORE;
+    case AUTO_ORE_ACTION_RELEASE:
+      return PC_AUTO_ACTION_RELEASE;
+    case AUTO_ORE_ACTION_CHAMBER:
+      return PC_AUTO_ACTION_CHAMBER;
+    case AUTO_ORE_ACTION_PICK_POS_400:
+      return PC_AUTO_ACTION_PICK_POS_400;
+    case AUTO_ORE_ACTION_PICK_POS_200:
+      return PC_AUTO_ACTION_PICK_POS_200;
+    case AUTO_ORE_ACTION_PICK_NEG_200:
+      return PC_AUTO_ACTION_PICK_NEG_200;
+    case AUTO_ORE_ACTION_NONE:
+    default:
+      return PC_AUTO_ACTION_NONE;
+  }
+}
+
+static PC_AutoActionState_t AutoCtrlFeed_MapOreState(AutoOre_State_t state) {
+  switch (state) {
+    case AUTO_ORE_STATE_RUNNING:
+      return PC_AUTO_ACTION_STATE_RUNNING;
+    case AUTO_ORE_STATE_SUCCESS:
+      return PC_AUTO_ACTION_STATE_SUCCESS;
+    case AUTO_ORE_STATE_FAIL:
+      return PC_AUTO_ACTION_STATE_FAIL;
+    case AUTO_ORE_STATE_ABORT:
+      return PC_AUTO_ACTION_STATE_ABORT;
+    case AUTO_ORE_STATE_IDLE:
+    default:
+      return PC_AUTO_ACTION_STATE_IDLE;
+  }
+}
+
+static PC_AutoActionResult_t AutoCtrlFeed_MapOreResult(
+    AutoOre_Result_t result) {
+  switch (result) {
+    case AUTO_ORE_RESULT_RUNNING:
+      return PC_AUTO_ACTION_RESULT_RUNNING;
+    case AUTO_ORE_RESULT_SUCCESS:
+      return PC_AUTO_ACTION_RESULT_SUCCESS;
+    case AUTO_ORE_RESULT_FAIL:
+      return PC_AUTO_ACTION_RESULT_FAIL;
+    case AUTO_ORE_RESULT_ABORTED:
+      return PC_AUTO_ACTION_RESULT_ABORTED;
+    case AUTO_ORE_RESULT_NONE:
+    default:
+      return PC_AUTO_ACTION_RESULT_NONE;
+  }
+}
+
+static PC_AutoActionFault_t AutoCtrlFeed_MapOreFault(AutoOre_Fault_t fault) {
+  switch (fault) {
+    case AUTO_ORE_FAULT_INVALID_OCCUPANCY:
+      return PC_AUTO_ACTION_FAULT_INVALID_OCCUPANCY;
+    case AUTO_ORE_FAULT_INVALID_PARAM:
+      return PC_AUTO_ACTION_FAULT_INVALID_PARAM;
+    case AUTO_ORE_FAULT_NOT_HOMED:
+      return PC_AUTO_ACTION_FAULT_NOT_HOMED;
+    case AUTO_ORE_FAULT_TIMEOUT:
+      return PC_AUTO_ACTION_FAULT_TIMEOUT;
+    case AUTO_ORE_FAULT_ABORTED:
+      return PC_AUTO_ACTION_FAULT_ABORTED;
+    case AUTO_ORE_FAULT_NONE:
+    default:
+      return PC_AUTO_ACTION_FAULT_NONE;
+  }
+}
+
+static PC_AutoActionState_t AutoCtrlFeed_MapRodState(
+    AutoRodSpearhead_State_t state) {
+  switch (state) {
+    case AUTO_ROD_SPEARHEAD_STATE_RUNNING:
+      return PC_AUTO_ACTION_STATE_RUNNING;
+    case AUTO_ROD_SPEARHEAD_STATE_SUCCESS:
+      return PC_AUTO_ACTION_STATE_SUCCESS;
+    case AUTO_ROD_SPEARHEAD_STATE_FAIL:
+      return PC_AUTO_ACTION_STATE_FAIL;
+    case AUTO_ROD_SPEARHEAD_STATE_ABORT:
+      return PC_AUTO_ACTION_STATE_ABORT;
+    case AUTO_ROD_SPEARHEAD_STATE_IDLE:
+    default:
+      return PC_AUTO_ACTION_STATE_IDLE;
+  }
+}
+
+static PC_AutoActionResult_t AutoCtrlFeed_MapRodResult(
+    AutoRodSpearhead_Result_t result) {
+  switch (result) {
+    case AUTO_ROD_SPEARHEAD_RESULT_RUNNING:
+      return PC_AUTO_ACTION_RESULT_RUNNING;
+    case AUTO_ROD_SPEARHEAD_RESULT_SUCCESS:
+      return PC_AUTO_ACTION_RESULT_SUCCESS;
+    case AUTO_ROD_SPEARHEAD_RESULT_FAIL:
+      return PC_AUTO_ACTION_RESULT_FAIL;
+    case AUTO_ROD_SPEARHEAD_RESULT_ABORTED:
+      return PC_AUTO_ACTION_RESULT_ABORTED;
+    case AUTO_ROD_SPEARHEAD_RESULT_NONE:
+    default:
+      return PC_AUTO_ACTION_RESULT_NONE;
+  }
+}
+
+static PC_AutoActionFault_t AutoCtrlFeed_MapRodFault(
+    AutoRodSpearhead_Fault_t fault) {
+  switch (fault) {
+    case AUTO_ROD_SPEARHEAD_FAULT_TIMEOUT:
+      return PC_AUTO_ACTION_FAULT_TIMEOUT;
+    case AUTO_ROD_SPEARHEAD_FAULT_INVALID_PARAM:
+      return PC_AUTO_ACTION_FAULT_INVALID_PARAM;
+    case AUTO_ROD_SPEARHEAD_FAULT_ABORTED:
+      return PC_AUTO_ACTION_FAULT_ABORTED;
+    case AUTO_ROD_SPEARHEAD_FAULT_NO_SPEARHEAD:
+      return PC_AUTO_ACTION_FAULT_NO_SPEARHEAD;
+    case AUTO_ROD_SPEARHEAD_FAULT_NONE:
+    default:
+      return PC_AUTO_ACTION_FAULT_NONE;
+  }
+}
+
+static void AutoCtrlFeed_RememberOreAction(AutoOre_Action_t action) {
+  const PC_AutoAction_t pc_action = AutoCtrlFeed_MapOreAction(action);
+  if (pc_action == PC_AUTO_ACTION_NONE) {
+    return;
+  }
+
+  auto_ore_last_action = action;
+  auto_action_last_action = pc_action;
+  auto_action_last_subsystem = PC_AUTO_ACTION_SUBSYSTEM_ORE;
+}
+
+static void AutoCtrlFeed_RememberRodSpearheadAction(void) {
+  auto_action_last_action = PC_AUTO_ACTION_ROD_SPEARHEAD;
+  auto_action_last_subsystem = PC_AUTO_ACTION_SUBSYSTEM_ROD_SPEARHEAD;
+}
+
+static PC_AutoAction_t AutoCtrlFeed_GetOreFeedbackAction(void) {
+  PC_AutoAction_t action = AutoCtrlFeed_MapOreAction(auto_ore_ctrl.action);
+  if (action == PC_AUTO_ACTION_NONE) {
+    action = AutoCtrlFeed_MapOreAction(auto_ore_last_action);
+  }
+  return action;
+}
+
+static bool AutoCtrlFeed_StartOreAction(AutoOre_Action_t action) {
+  if (!auto_ore_inited) {
+    return false;
+  }
+  if (AutoOre_IsBusy(&auto_ore_ctrl)) {
+    return false;
+  }
+
+  bool result = false;
+  const uint32_t now_ms = osKernelGetTickCount();
+  switch (action) {
+    case AUTO_ORE_ACTION_STORE:
+      result = AutoOre_StartStore(&auto_ore_ctrl, now_ms);
+      break;
+    case AUTO_ORE_ACTION_RELEASE:
+      result = AutoOre_StartRelease(&auto_ore_ctrl, now_ms);
+      break;
+    case AUTO_ORE_ACTION_CHAMBER:
+      result = AutoOre_StartChamber(&auto_ore_ctrl, now_ms);
+      break;
+    case AUTO_ORE_ACTION_PICK_POS_400:
+      result = AutoOre_StartPickPos400(&auto_ore_ctrl, now_ms);
+      break;
+    case AUTO_ORE_ACTION_PICK_POS_200:
+      result = AutoOre_StartPickPos200(&auto_ore_ctrl, now_ms);
+      break;
+    case AUTO_ORE_ACTION_PICK_NEG_200:
+      result = AutoOre_StartPickNeg200(&auto_ore_ctrl, now_ms);
+      break;
+    case AUTO_ORE_ACTION_NONE:
+    default:
+      result = false;
+      break;
+  }
+
+  if (result || AutoOre_GetState(&auto_ore_ctrl) == AUTO_ORE_STATE_FAIL) {
+    AutoCtrlFeed_RememberOreAction(action);
+  }
+  return result;
+}
+
+static void AutoCtrlFeed_PublishAutoActionFeedback(void) {
+  PC_AutoActionFeedback_t pc_feedback = {0};
+  const bool ore_busy = auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl);
+  const bool rod_busy = auto_rod_spearhead_inited &&
+                        AutoRodSpearhead_IsBusy(&auto_rod_spearhead_ctrl);
+
+  if (auto_ore_inited) {
+    pc_feedback.flags |= PC_AUTO_ACTION_FLAG_ORE_INITED;
+    if (ore_busy) {
+      pc_feedback.flags |= PC_AUTO_ACTION_FLAG_ORE_BUSY;
+      AutoCtrlFeed_RememberOreAction(auto_ore_ctrl.action);
+    }
+
+    pc_feedback.ore_action =
+        (uint8_t)AutoCtrlFeed_GetOreFeedbackAction();
+    pc_feedback.ore_state =
+        (uint8_t)AutoCtrlFeed_MapOreState(AutoOre_GetState(&auto_ore_ctrl));
+    pc_feedback.ore_result =
+        (uint8_t)AutoCtrlFeed_MapOreResult(AutoOre_GetResult(&auto_ore_ctrl));
+    pc_feedback.ore_fault =
+        (uint8_t)AutoCtrlFeed_MapOreFault(AutoOre_GetFault(&auto_ore_ctrl));
+    pc_feedback.ore_step_index = AutoOre_GetStepIndex(&auto_ore_ctrl);
+    pc_feedback.ore_step_phase = auto_ore_ctrl.step_phase;
+    pc_feedback.ore_active_position =
+        (uint8_t)AutoOre_GetActivePosition(&auto_ore_ctrl);
+    pc_feedback.ore_occupancy_mask = AutoOre_GetOccupancyMask(&auto_ore_ctrl);
+  }
+
+  if (auto_rod_spearhead_inited) {
+    pc_feedback.flags |= PC_AUTO_ACTION_FLAG_ROD_INITED;
+    if (rod_busy) {
+      pc_feedback.flags |= PC_AUTO_ACTION_FLAG_ROD_BUSY;
+      AutoCtrlFeed_RememberRodSpearheadAction();
+    }
+
+    pc_feedback.rod_state = (uint8_t)AutoCtrlFeed_MapRodState(
+        AutoRodSpearhead_GetState(&auto_rod_spearhead_ctrl));
+    pc_feedback.rod_result = (uint8_t)AutoCtrlFeed_MapRodResult(
+        AutoRodSpearhead_GetResult(&auto_rod_spearhead_ctrl));
+    pc_feedback.rod_fault = (uint8_t)AutoCtrlFeed_MapRodFault(
+        AutoRodSpearhead_GetFault(&auto_rod_spearhead_ctrl));
+    pc_feedback.rod_step_index =
+        AutoRodSpearhead_GetStepIndex(&auto_rod_spearhead_ctrl);
+  }
+
+  PC_AutoActionSubsystem_t active_subsystem = PC_AUTO_ACTION_SUBSYSTEM_NONE;
+  if (ore_busy && rod_busy) {
+    active_subsystem =
+        (auto_action_last_subsystem != PC_AUTO_ACTION_SUBSYSTEM_NONE)
+            ? auto_action_last_subsystem
+            : PC_AUTO_ACTION_SUBSYSTEM_ORE;
+  } else if (ore_busy) {
+    active_subsystem = PC_AUTO_ACTION_SUBSYSTEM_ORE;
+  } else if (rod_busy) {
+    active_subsystem = PC_AUTO_ACTION_SUBSYSTEM_ROD_SPEARHEAD;
+  } else {
+    active_subsystem = auto_action_last_subsystem;
+  }
+
+  pc_feedback.busy = (ore_busy || rod_busy) ? 1u : 0u;
+  pc_feedback.subsystem = (uint8_t)active_subsystem;
+  pc_feedback.action = (uint8_t)auto_action_last_action;
+
+  if (active_subsystem == PC_AUTO_ACTION_SUBSYSTEM_ORE && auto_ore_inited) {
+    pc_feedback.action = (uint8_t)AutoCtrlFeed_GetOreFeedbackAction();
+    pc_feedback.state = pc_feedback.ore_state;
+    pc_feedback.result = pc_feedback.ore_result;
+    pc_feedback.fault = pc_feedback.ore_fault;
+    pc_feedback.step_index = pc_feedback.ore_step_index;
+    pc_feedback.step_phase = pc_feedback.ore_step_phase;
+    pc_feedback.active_position = pc_feedback.ore_active_position;
+    pc_feedback.occupancy_mask = pc_feedback.ore_occupancy_mask;
+  } else if (active_subsystem ==
+             PC_AUTO_ACTION_SUBSYSTEM_ROD_SPEARHEAD &&
+             auto_rod_spearhead_inited) {
+    pc_feedback.action = (uint8_t)PC_AUTO_ACTION_ROD_SPEARHEAD;
+    pc_feedback.state = pc_feedback.rod_state;
+    pc_feedback.result = pc_feedback.rod_result;
+    pc_feedback.fault = pc_feedback.rod_fault;
+    pc_feedback.step_index = pc_feedback.rod_step_index;
+    pc_feedback.step_phase = 0u;
+    pc_feedback.active_position = 0u;
+    pc_feedback.occupancy_mask = 0u;
+  }
+
+  pc_feedback.reserved = 0u;
+  (void)MrlinkPc_PublishFeedback(PC_FEEDBACK_AUTO_ACTION, &pc_feedback);
 }
 
 static bool AutoCtrlFeed_ArmSimpleAtTarget(float threshold) {
@@ -227,6 +572,9 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms) {
         &auto_ore_ctrl.ore_store_cmd,
         auto_ore_ctrl.param.ore_store_arrive_threshold_rad);
   }
+  const bool ore_low_photo_triggered = AutoCtrlFeed_ReadOreLowPhoto(now_ms);
+  const bool ore_high_photo_triggered = AutoCtrlFeed_ReadOreHighPhoto(now_ms);
+  const bool spear_photo_triggered = AutoCtrlFeed_ReadRodSpearheadPhoto();
 
   AutoOre_Feedback_t auto_ore_feedback = {
       .arm_at_target = arm_at_target,
@@ -235,6 +583,11 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms) {
       .pole_all_at_target = Task_ChassisMainPoleAllAtTarget(
         auto_ore_ctrl.param.pole_arrive_threshold_rad),
       .ore_store_platform_error_rad = ore_store_platform_error_rad,
+      .photoelectric_occupancy = {
+          .transform_low_has_ore = ore_low_photo_triggered,
+          .transform_high_has_ore = ore_high_photo_triggered,
+          .arm_has_ore = false,
+      },
   };
   AutoOre_Update(&auto_ore_ctrl, &auto_ore_feedback, now_ms);
 
@@ -254,6 +607,9 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms) {
   g_auto_ore_debug.transform_low_has_ore = occupancy.transform_low_has_ore;
   g_auto_ore_debug.transform_high_has_ore = occupancy.transform_high_has_ore;
   g_auto_ore_debug.arm_has_ore = occupancy.arm_has_ore;
+  g_auto_ore_debug.checkphoto_spear_triggered = spear_photo_triggered;
+  g_auto_ore_debug.checkphoto_orelow_triggered = ore_low_photo_triggered;
+  g_auto_ore_debug.checkphoto_orehigh_triggered = ore_high_photo_triggered;
   g_auto_ore_debug.arm_cmd_valid = auto_ore_ctrl.arm_cmd_valid;
   g_auto_ore_debug.ore_store_cmd_valid = auto_ore_ctrl.ore_store_cmd_valid;
   g_auto_ore_debug.arm_at_target = auto_ore_feedback.arm_at_target;
@@ -312,8 +668,8 @@ static void AutoCtrlFeed_InitAutoRodSpearhead(void) {
       .rod_param = &cfg->rod_new_param,
       .open_delay_ms = 20u,
       .grab_high_delay_ms = 500u,
-      .dock_wait_delay_ms = 500u,
-        .use_photo_check = AUTO_ROD_SPEARHEAD_USE_PHOTO_CHECK != 0u,
+      .dock_wait_delay_ms = 30000u,
+      .use_photo_check = AUTO_ROD_SPEARHEAD_USE_PHOTO_CHECK != 0u,
       .photo_check_ms = AUTO_ROD_SPEARHEAD_PHOTO_CHECK_MS,
   };
   AutoRodSpearhead_Init(&auto_rod_spearhead_ctrl, &params);
@@ -327,42 +683,72 @@ static void AutoCtrlFeed_UpdateAutoRodSpearhead(uint32_t now_ms) {
 
   AutoRodSpearhead_Feedback_t feedback = {
       .rod_photo_triggered = AutoCtrlFeed_ReadRodSpearheadPhoto(),
+      .rod_at_target = false,
+      .dock_complete_received = IrDock_IsDockCompleteFresh(now_ms),
   };
+  const RodNew_Feedback_t *rod_fb = Task_RodNewGetFeedback();
+  if (rod_fb != NULL) {
+    feedback.rod_at_target = rod_fb->at_target;
+  }
   AutoRodSpearhead_Update(&auto_rod_spearhead_ctrl, &feedback, now_ms);
+
+  g_auto_ore_debug.auto_rod_spearhead_busy =
+      AutoRodSpearhead_IsBusy(&auto_rod_spearhead_ctrl);
+  g_auto_ore_debug.auto_rod_spearhead_state =
+      AutoRodSpearhead_GetState(&auto_rod_spearhead_ctrl);
+  g_auto_ore_debug.auto_rod_spearhead_result =
+      AutoRodSpearhead_GetResult(&auto_rod_spearhead_ctrl);
+  g_auto_ore_debug.auto_rod_spearhead_fault =
+      AutoRodSpearhead_GetFault(&auto_rod_spearhead_ctrl);
+  g_auto_ore_debug.auto_rod_spearhead_step_index =
+      AutoRodSpearhead_GetStepIndex(&auto_rod_spearhead_ctrl);
+    g_auto_ore_debug.auto_rod_spearhead_rod_at_target = feedback.rod_at_target;
+  g_auto_ore_debug.auto_rod_spearhead_photo_stable_state =
+      auto_rod_spearhead_ctrl.photo_stable_state;
+  g_auto_ore_debug.auto_rod_spearhead_rod_cmd_valid =
+      auto_rod_spearhead_ctrl.rod_cmd_valid;
+  g_auto_ore_debug.auto_rod_spearhead_rod_cmd_pose =
+      auto_rod_spearhead_ctrl.rod_cmd.pose;
+  g_auto_ore_debug.auto_rod_spearhead_rod_cmd_grip =
+      auto_rod_spearhead_ctrl.rod_cmd.grip;
+  g_auto_ore_debug.auto_rod_spearhead_rod_cmd_target_angle_rad =
+      auto_rod_spearhead_ctrl.rod_cmd.target_angle_rad;
+  g_auto_ore_debug.ir_dock_complete_fresh = feedback.dock_complete_received;
+  g_auto_ore_debug.ir_dock_last_rx_status = g_ir_dock_debug.last_rx_status;
+  g_auto_ore_debug.ir_dock_last_rx_age_ms = g_ir_dock_debug.last_rx_age_ms;
+  g_auto_ore_debug.ir_dock_rx_count = g_ir_dock_debug.rx_count;
+  g_auto_ore_debug.ir_dock_error_count = g_ir_dock_debug.error_count;
 }
 
 bool Task_AutoOreStartStore(void) {
-  return auto_ore_inited &&
-         AutoOre_StartStore(&auto_ore_ctrl, osKernelGetTickCount());
+  return AutoCtrlFeed_StartOreAction(AUTO_ORE_ACTION_STORE);
 }
 
 bool Task_AutoOreStartRelease(void) {
-  return auto_ore_inited &&
-         AutoOre_StartRelease(&auto_ore_ctrl, osKernelGetTickCount());
+  return AutoCtrlFeed_StartOreAction(AUTO_ORE_ACTION_RELEASE);
 }
 
 bool Task_AutoOreStartChamber(void) {
-  return auto_ore_inited &&
-         AutoOre_StartChamber(&auto_ore_ctrl, osKernelGetTickCount());
+  return AutoCtrlFeed_StartOreAction(AUTO_ORE_ACTION_CHAMBER);
 }
 
 bool Task_AutoOreStartPickPos400(void) {
-  return auto_ore_inited &&
-         AutoOre_StartPickPos400(&auto_ore_ctrl, osKernelGetTickCount());
+  return AutoCtrlFeed_StartOreAction(AUTO_ORE_ACTION_PICK_POS_400);
 }
 
 bool Task_AutoOreStartPickPos200(void) {
-  return auto_ore_inited &&
-         AutoOre_StartPickPos200(&auto_ore_ctrl, osKernelGetTickCount());
+  return AutoCtrlFeed_StartOreAction(AUTO_ORE_ACTION_PICK_POS_200);
 }
 
 bool Task_AutoOreStartPickNeg200(void) {
-  return auto_ore_inited &&
-         AutoOre_StartPickNeg200(&auto_ore_ctrl, osKernelGetTickCount());
+  return AutoCtrlFeed_StartOreAction(AUTO_ORE_ACTION_PICK_NEG_200);
 }
 
 void Task_AutoOreAbort(void) {
   if (auto_ore_inited) {
+    if (AutoOre_IsBusy(&auto_ore_ctrl)) {
+      AutoCtrlFeed_RememberOreAction(auto_ore_ctrl.action);
+    }
     AutoOre_Abort(&auto_ore_ctrl);
   }
 }
@@ -398,8 +784,12 @@ static void AutoCtrlFeed_HandleAutoOreDebugRequest(void) {
     case AUTO_ORE_DEBUG_REQUEST_PICK_NEG_200:
       result = Task_AutoOreStartPickNeg200();
       break;
+    case AUTO_ORE_DEBUG_REQUEST_ROD_SPEARHEAD:
+      result = Task_AutoRodSpearheadStart();
+      break;
     case AUTO_ORE_DEBUG_REQUEST_ABORT:
       Task_AutoOreAbort();
+      Task_AutoRodSpearheadAbort();
       result = true;
       break;
     case AUTO_ORE_DEBUG_REQUEST_NONE:
@@ -411,7 +801,9 @@ static void AutoCtrlFeed_HandleAutoOreDebugRequest(void) {
   g_auto_ore_debug.last_result = result;
   if (result) {
     g_auto_ore_debug.accept_count++;
-    g_auto_ore_debug.force_output_enable = request != AUTO_ORE_DEBUG_REQUEST_ABORT;
+    g_auto_ore_debug.force_output_enable =
+        request != AUTO_ORE_DEBUG_REQUEST_ABORT &&
+        request != AUTO_ORE_DEBUG_REQUEST_ROD_SPEARHEAD;
   }
   if (request == AUTO_ORE_DEBUG_REQUEST_ABORT) {
     g_auto_ore_debug.force_output_enable = false;
@@ -419,13 +811,23 @@ static void AutoCtrlFeed_HandleAutoOreDebugRequest(void) {
 }
 
 bool Task_AutoRodSpearheadStart(void) {
-  return auto_rod_spearhead_inited &&
-         AutoRodSpearhead_Start(&auto_rod_spearhead_ctrl,
-                                osKernelGetTickCount());
+  const bool result =
+      auto_rod_spearhead_inited &&
+      AutoRodSpearhead_Start(&auto_rod_spearhead_ctrl,
+                             osKernelGetTickCount());
+  if (result ||
+      AutoRodSpearhead_GetState(&auto_rod_spearhead_ctrl) ==
+          AUTO_ROD_SPEARHEAD_STATE_FAIL) {
+    AutoCtrlFeed_RememberRodSpearheadAction();
+  }
+  return result;
 }
 
 void Task_AutoRodSpearheadAbort(void) {
   if (auto_rod_spearhead_inited) {
+    if (AutoRodSpearhead_IsBusy(&auto_rod_spearhead_ctrl)) {
+      AutoCtrlFeed_RememberRodSpearheadAction();
+    }
     AutoRodSpearhead_Abort(&auto_rod_spearhead_ctrl);
   }
 }
@@ -439,6 +841,10 @@ const RodNew_CMD_t *Task_AutoRodSpearheadGetCommand(void) {
   return auto_rod_spearhead_inited
              ? AutoRodSpearhead_GetRodCommand(&auto_rod_spearhead_ctrl)
              : NULL;
+}
+
+bool Task_IrDockIsDockCompleteFresh(void) {
+  return IrDock_IsDockCompleteFresh(osKernelGetTickCount());
 }
 
 /* Exported functions ------------------------------------------------------- */
@@ -507,6 +913,7 @@ void Task_auto_ctrl(void *argument) {
       AutoCtrlFeed_HandleAutoOreDebugRequest();
       AutoCtrlFeed_UpdateAutoOre(now_ms);
       AutoCtrlFeed_UpdateAutoRodSpearhead(now_ms);
+      AutoCtrlFeed_PublishAutoActionFeedback();
 
       if (MrlinkPc_GetState() != NULL) {
         PC_StepFeedback_t step_feedback = {0};
@@ -516,7 +923,7 @@ void Task_auto_ctrl(void *argument) {
         step_feedback.template_id = (PC_StepTemplate_t)AutoCtrl_GetTemplate(&auto_ctrl);
         step_feedback.step_index = AutoCtrl_GetStepIndex(&auto_ctrl);
         step_feedback.progress = 0.0f;
-        MrlinkPc_SetStepFeedback(&step_feedback);
+        (void)MrlinkPc_PublishFeedback(PC_FEEDBACK_STEP, &step_feedback);
       }
     }
 

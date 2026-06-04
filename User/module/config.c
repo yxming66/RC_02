@@ -261,7 +261,7 @@ Config_RobotParam_t robot_config = {
         },
         .mit = {
             .joint1_kp = 150.0f,
-            .joint1_kd = 5.0f,
+            .joint1_kd = 10.0f,
             .joint1_torque_ff = 0.0f,
             .joint1_gravity_mass_kg = -0.10f,
             .joint1_gravity_com_m = 0.12f,
@@ -297,7 +297,7 @@ Config_RobotParam_t robot_config = {
                 /* ArmSimple 正向 200mm 取矿位，配合 pole 的 step_200_all_extend 使用。 */
                 [ARM_SIMPLE_BEHAVIOR_PICK_POS_200] = {.joint1_pos = 1.44307637f, .joint2_pos = 0.0f},
                 /* ArmSimple 反向/负向 200mm 取矿位，配合 pole 的 step_200_small 使用。 */
-                [ARM_SIMPLE_BEHAVIOR_PICK_NEG_200] = {.joint1_pos = 1.82628715f, .joint2_pos = -0.405909151f},
+                [ARM_SIMPLE_BEHAVIOR_PICK_NEG_200] = {.joint1_pos = 1.79958475f, .joint2_pos = -0.41113618f},
             },
             .arrive_threshold_rad = 0.05f,
         },
@@ -318,8 +318,8 @@ Config_RobotParam_t robot_config = {
             .chamber_place = {.joint1_max_vel_rad_s = 1.0f, .joint2_max_vel_rad_s = 4.0f},
             .chamber_standby = {.joint1_max_vel_rad_s = 1.0f, .joint2_max_vel_rad_s = 2.0f},
             /* pick_*：一键取矿流程，standby=取矿前/后待机位，place=伸到取矿位，fetch=底盘前进取矿时保持取矿位。 */
-            .pick_standby = {.joint1_max_vel_rad_s = 1.0f, .joint2_max_vel_rad_s = 2.0f},
-            .pick_place = {.joint1_max_vel_rad_s = 1.0f, .joint2_max_vel_rad_s = 2.0f},
+            .pick_standby = {.joint1_max_vel_rad_s = 2.0f, .joint2_max_vel_rad_s = 2.0f},
+            .pick_place = {.joint1_max_vel_rad_s = 8.0f, .joint2_max_vel_rad_s = 2.0f},
             .pick_fetch = {.joint1_max_vel_rad_s = 1.0f, .joint2_max_vel_rad_s = 2.0f},
         },
         /* 一键存/放/上膛/取矿流程中的动作延时，单位 ms；<=0 时使用状态机内置默认值。 */
@@ -336,8 +336,10 @@ Config_RobotParam_t robot_config = {
             .chamber_low_clamp_ms = 400u,
             .chamber_arm_settle_ms = 400u,
             .chamber_cylinder_open_ms = 400u,
-            /* 取矿：底盘向矿位前进的持续时间。 */
+            /* 取矿：正向 200/400 取矿时，底盘向矿位前进的持续时间。 */
             .fetch_chassis_move_ms = 1000u,
+            /* 取 -200 矿：底盘向矿位前进的独立持续时间；可设为 0 禁止底盘前进，避免走太多掉下去。 */
+            .fetch_neg_200_chassis_move_ms = 1000u,
         },
         /* 单个状态机 step 的超时时间，单位 ms。 */
         .default_step_timeout_ms = 5000u,
@@ -345,8 +347,10 @@ Config_RobotParam_t robot_config = {
         .arm_arrive_threshold_rad = 0.1f,
         .ore_store_arrive_threshold_rad = 0.05f,
         .pole_arrive_threshold_rad = 0.30f,
-        /* 取矿流程中底盘前进速度，单位 m/s。 */
+        /* 取矿流程中正向 200/400 取矿的底盘前进速度，单位 m/s。 */
         .fetch_chassis_vx_mps = 0.50f,
+        /* 取 -200 矿时底盘前进速度，单位 m/s；可设为 0 禁止底盘前进。 */
+        .fetch_neg_200_chassis_vx_mps = 0.20f,
     },
     .auto_ctrl_param = {
         .common = {
@@ -373,14 +377,14 @@ Config_RobotParam_t robot_config = {
             .pole_extend_move_speed = 0.50f,    /* 撑杆伸出阶段 vx，单位 m/s。 */
             .front_retract_move_speed = 0.50f,  /* 前杆动作阶段 vx，单位 m/s。 */
             .front_retract_timeout_ms = 5000u,  /* 前光电触发后，等待前杆收回到位超时，单位 ms。 */
-            .mid_move_speed = 3.0f,             /* 前杆收回到位后的中段平移 vx，单位 m/s。 */
-            .mid_move_ms = 350u,                  /* 中段平移持续时间，单位 ms。 */
+            .mid_move_speed = 1.5f,             /* 前杆收回到位后的中段平移 vx，单位 m/s。 */
+            .mid_move_ms = 250u,                  /* 中段平移持续时间，单位 ms。 */
             .rear_retract_move_speed = 0.40f,   /* 等待后光电触发的低速 vx，单位 m/s。 */
             .rear_retract_timeout_ms = 5000u,   /* 后光电触发后，全收腿动作超时，单位 ms。 */
             .rear_retract_move_ms = 300u,       /* 后光电触发后，全收腿移动持续时间，单位 ms。 */
             .second_photo_retract_move_speed = 0.50f, /* 后一个光电触发收腿时向头向移动 vx，单位 m/s。 */
             .final_move_speed = 2.5f,          /* 收尾离开台阶 vx，单位 m/s。 */
-            .final_move_ms = 400u,               /* 收尾离开台阶持续时间，单位 ms。 */
+            .final_move_ms = 400u,                /* 收尾离开台阶持续时间，单位 ms。 */
             .pole_all_extend_speed = 50.0f,     /* 四杆全伸目标跟随速度，单位 rad/s。 */
             .pole_front_extend_speed = 20.0f,   /* 前杆伸出目标跟随速度，单位 rad/s。 */
             .pole_front_retract_speed = 65.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
@@ -403,8 +407,8 @@ Config_RobotParam_t robot_config = {
             .pole_extend_move_speed = 0.50f,    /* 撑杆伸出阶段 vx，单位 m/s。 */
             .front_retract_move_speed = 0.50f,  /* 前杆动作阶段 vx，单位 m/s。 */
             .front_retract_timeout_ms = 5000u,  /* 前光电触发后，等待前杆收回到位超时，单位 ms。 */
-            .mid_move_speed = 3.0f,             /* 前杆收回到位后的中段平移 vx，单位 m/s。 */
-            .mid_move_ms = 350u,               /* 中段平移持续时间，单位 ms。 */
+            .mid_move_speed = 1.5f,             /* 前杆收回到位后的中段平移 vx，单位 m/s。 */
+            .mid_move_ms = 250u,               /* 中段平移持续时间，单位 ms。 */
             .rear_retract_move_speed = 0.40f,   /* 等待后光电触发的低速 vx，单位 m/s。 */
             .rear_retract_timeout_ms = 5000u,   /* 后光电触发后，全收腿动作超时，单位 ms。 */
             .rear_retract_move_ms = 300u,       /* 后光电触发后，全收腿移动持续时间，单位 ms。 */
@@ -436,7 +440,7 @@ Config_RobotParam_t robot_config = {
             .prealign_move_speed = 0.20f,       /* PREALIGN yaw 对正时叠加的前进 vx，单位 m/s。 */
             .front_retract_move_speed = 0.3f,  /* step4 等待 PE13/photo1 下降沿的慢速 vx，单位 m/s。 */
             .mid_move_speed = 1.50f,            /* step0/step3 两段固定快跑 vx，单位 m/s。 */
-            .mid_move_ms = 280u,                /* step0 第一次固定快跑持续时间，单位 ms。 */
+            .mid_move_ms = 250u,                /* step0 第一次固定快跑持续时间，单位 ms。 */ 
             .rear_retract_move_speed = 0.3f,   /* step1 等待 PA2/photo3 下降沿的慢速 vx，单位 m/s。 */
             .rear_retract_move_ms = 280u,       /* step3 第二次固定快跑持续时间，单位 ms。 */
             .second_photo_retract_move_speed = 0.20f, /* step7 第二个下降沿后全收杆离开 vx，单位 m/s。 */

@@ -44,6 +44,8 @@ typedef struct {
 
 typedef struct {
   bool rod_photo_triggered;
+  bool rod_at_target;
+  bool dock_complete_received;
 } AutoRodSpearhead_Feedback_t;
 
 typedef struct {

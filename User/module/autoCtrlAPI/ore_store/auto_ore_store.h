@@ -85,6 +85,7 @@ typedef struct {
   uint32_t chamber_arm_settle_ms;
   uint32_t chamber_cylinder_open_ms;
   uint32_t fetch_chassis_move_ms;
+  uint32_t fetch_neg_200_chassis_move_ms;
 } AutoOre_TimingParam_t;
 
 typedef struct {
@@ -118,6 +119,7 @@ typedef struct {
   float ore_store_arrive_threshold_rad;
   float pole_arrive_threshold_rad;
   float fetch_chassis_vx_mps;
+  float fetch_neg_200_chassis_vx_mps;
 } AutoOre_Params_t;
 
 typedef struct {

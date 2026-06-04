@@ -5,6 +5,7 @@
   ******************************************************************************
   */
 
+#define MRLINK_INTERNAL_BUILD
 #include "mrlink/mrlink.h"
 #include <string.h>
 
@@ -13,14 +14,25 @@
 
 /* Private types ------------------------------------------------------------ */
 
+_Static_assert(sizeof(MrLink_t) <= MRLINK_INSTANCE_STORAGE_SIZE,
+               "MRLINK_INSTANCE_STORAGE_SIZE is too small");
+
 /* Private function prototypes --------------------------------------------- */
 
 static int8_t Proto_ProcessRx(MrLink_t *p, bool want_one_frame,
                               uint8_t *out_cmd,
                               const uint8_t **out_payload,
                               uint16_t *out_payload_len);
+static void Proto_ReportError(MrLink_t *p, const MrLink_ErrorInfo_t *info);
 
 /* Private functions -------------------------------------------------------- */
+
+static void Proto_ReportError(MrLink_t *p, const MrLink_ErrorInfo_t *info) {
+  if (p == NULL || info == NULL || p->error_handler == NULL) {
+    return;
+  }
+  p->error_handler(info, p->error_ctx);
+}
 
 /**
  * @brief 扫描 ring buffer 中所有可解析的字节，处理有效帧。
@@ -49,7 +61,7 @@ static int8_t Proto_ProcessRx(MrLink_t *p, bool want_one_frame,
                               uint8_t *out_cmd,
                               const uint8_t **out_payload,
                               uint16_t *out_payload_len) {
-  const uint16_t avail = MrLink_RingBuf_Size(&p->rx_rb);
+  const uint16_t avail = SpscRingBuf_Size(&p->rx_rb);
   if (avail == 0u) {
     return MRLINK_ERR;
   }
@@ -58,7 +70,7 @@ static int8_t Proto_ProcessRx(MrLink_t *p, bool want_one_frame,
   uint8_t buf[MRLINK_MAX_FRAME_SIZE];
   const uint16_t to_peek =
       (avail > MRLINK_MAX_FRAME_SIZE) ? MRLINK_MAX_FRAME_SIZE : avail;
-  const uint16_t n = MrLink_RingBuf_Peek(&p->rx_rb, buf, to_peek);
+  const uint16_t n = SpscRingBuf_Peek(&p->rx_rb, buf, to_peek);
 
   bool found_one = false;
   uint16_t offset = 0u;
@@ -72,6 +84,11 @@ static int8_t Proto_ProcessRx(MrLink_t *p, bool want_one_frame,
         buf[offset + 1u] != MRLINK_HEADER_1) {
       offset = (uint16_t)(offset + 1u);
       p->stats.frame_rx_header_skip++;
+      const MrLink_ErrorInfo_t info = {
+          .code = MRLINK_ERROR_HEADER_SKIP,
+          .available = n,
+      };
+      Proto_ReportError(p, &info);
       continue;
     }
 
@@ -84,6 +101,13 @@ static int8_t Proto_ProcessRx(MrLink_t *p, bool want_one_frame,
     if (length > p->cfg.max_payload_size) {
       offset = (uint16_t)(offset + MRLINK_HEADER_LEN);
       p->stats.frame_rx_oversize++;
+      const MrLink_ErrorInfo_t info = {
+          .code = MRLINK_ERROR_OVERSIZE,
+          .payload_len = length,
+          .expected_size = p->cfg.max_payload_size,
+          .available = n,
+      };
+      Proto_ReportError(p, &info);
       continue;
     }
 
@@ -94,6 +118,13 @@ static int8_t Proto_ProcessRx(MrLink_t *p, bool want_one_frame,
         (p->cfg.use_crc16 ? MRLINK_CRC_LEN : 0u));
     if ((uint16_t)(n - offset) < total) {
       p->stats.frame_rx_truncated++;
+      const MrLink_ErrorInfo_t info = {
+          .code = MRLINK_ERROR_TRUNCATED,
+          .payload_len = length,
+          .expected_size = total,
+          .available = (uint16_t)(n - offset),
+      };
+      Proto_ReportError(p, &info);
       break;  /* 等下次喂入更多数据 */
     }
 
@@ -108,6 +139,14 @@ static int8_t Proto_ProcessRx(MrLink_t *p, bool want_one_frame,
       if (crc_recv != crc_calc) {
         offset = (uint16_t)(offset + 1u);  /* 滑窗 1 字节 */
         p->stats.frame_rx_crc_err++;
+        const MrLink_ErrorInfo_t info = {
+            .code = MRLINK_ERROR_CRC,
+            .payload_len = length,
+            .available = n,
+            .crc_received = crc_recv,
+            .crc_calculated = crc_calc,
+        };
+        Proto_ReportError(p, &info);
         continue;
       }
     }
@@ -125,11 +164,26 @@ static int8_t Proto_ProcessRx(MrLink_t *p, bool want_one_frame,
     }
     if (found_idx == 0xFFu) {
       p->stats.frame_rx_unknown_cmd++;
+      const MrLink_ErrorInfo_t info = {
+          .code = MRLINK_ERROR_UNKNOWN_CMD,
+          .cmd = cmd,
+          .payload_len = length,
+          .available = n,
+      };
+      Proto_ReportError(p, &info);
     } else if (p->handlers[found_idx].expected_size > 0u) {
       /* typed handler: 库校验长度, memcpy 到内部缓冲 */
       if (length != p->handlers[found_idx].expected_size) {
         p->stats.frame_rx_size_mismatch++;
-        offset = (uint16_t)(offset + 1u);  /* 滑窗 1 字节 */
+        const MrLink_ErrorInfo_t info = {
+            .code = MRLINK_ERROR_SIZE_MISMATCH,
+            .cmd = cmd,
+            .payload_len = length,
+            .expected_size = p->handlers[found_idx].expected_size,
+            .available = n,
+        };
+        Proto_ReportError(p, &info);
+        offset = (uint16_t)(offset + total);
         continue;
       }
       memcpy(p->frame_buf, payload, length);
@@ -157,8 +211,7 @@ static int8_t Proto_ProcessRx(MrLink_t *p, bool want_one_frame,
 
   /* 丢弃已消费的字节 (offset 之前的所有字节) */
   if (offset > 0u) {
-    uint8_t discard[MRLINK_MAX_FRAME_SIZE];
-    (void)MrLink_RingBuf_Get(&p->rx_rb, discard, offset);
+    (void)SpscRingBuf_Drop(&p->rx_rb, offset);
   }
 
   if (want_one_frame) {
@@ -198,18 +251,12 @@ int8_t MrLink_Init(MrLink_t *p, const MrLink_Config_t *cfg,
     applied = *cfg;
   }
 
-  /* max_payload_size 范围: 1~MRLINK_MAX_PAYLOAD_DEFAULT */
-  if (applied.max_payload_size == 0u ||
-      applied.max_payload_size > MRLINK_MAX_PAYLOAD_DEFAULT) {
-    return MRLINK_ERR_ARGS;
-  }
-
   /* 计算当前配置下的最大帧长, 验证 rx/tx 缓冲足够装下完整一帧。
    * 否则 parser 会永久 truncated (rx_buf) 或 Build 永远失败 (tx_buf). */
-  const uint16_t max_frame = (uint16_t)(
-      MRLINK_HEADER_LEN + MRLINK_LEN_FIELD_LEN +
-      MRLINK_CMD_FIELD_LEN + applied.max_payload_size +
-      (applied.use_crc16 ? MRLINK_CRC_LEN : 0u));
+  const uint16_t max_frame = MrLink_MaxFrameSizeForConfig(&applied);
+  if (max_frame == 0u) {
+    return MRLINK_ERR_ARGS;
+  }
   if (rx_buf_size < max_frame) {
     return MRLINK_ERR_ARGS;
   }
@@ -217,8 +264,8 @@ int8_t MrLink_Init(MrLink_t *p, const MrLink_Config_t *cfg,
     return MRLINK_ERR_ARGS;
   }
 
-  const int8_t ret = MrLink_RingBuf_Init(&p->rx_rb, rx_buf, rx_buf_size);
-  if (ret != MRLINK_RINGBUF_OK) {
+  const int8_t ret = SpscRingBuf_Init(&p->rx_rb, rx_buf, rx_buf_size);
+  if (ret != SPSC_RINGBUF_OK) {
     return MRLINK_ERR_ARGS;
   }
 
@@ -229,8 +276,29 @@ int8_t MrLink_Init(MrLink_t *p, const MrLink_Config_t *cfg,
   p->tx_buf_size = tx_buf_size;
   memset(p->handlers, 0, sizeof(p->handlers));
   memset(&p->stats, 0, sizeof(p->stats));
+  p->error_handler = NULL;
+  p->error_ctx = NULL;
 
   return MRLINK_OK;
+}
+
+uint16_t MrLink_MaxFrameSizeForConfig(const MrLink_Config_t *cfg) {
+  MrLink_Config_t applied = {
+      .max_payload_size = MRLINK_MAX_PAYLOAD_DEFAULT,
+      .use_crc16 = true,
+  };
+  if (cfg != NULL) {
+    applied = *cfg;
+  }
+
+  if (applied.max_payload_size == 0u ||
+      applied.max_payload_size > MRLINK_MAX_PAYLOAD_DEFAULT) {
+    return 0u;
+  }
+
+  return (uint16_t)(MRLINK_HEADER_LEN + MRLINK_LEN_FIELD_LEN +
+                    MRLINK_CMD_FIELD_LEN + applied.max_payload_size +
+                    (applied.use_crc16 ? MRLINK_CRC_LEN : 0u));
 }
 
 /**
@@ -246,7 +314,7 @@ void MrLink_Reset(MrLink_t *p) {
   if (p == NULL) {
     return;
   }
-  MrLink_RingBuf_Reset(&p->rx_rb);
+  SpscRingBuf_Reset(&p->rx_rb);
   memset(p->handlers, 0, sizeof(p->handlers));
   memset(&p->stats, 0, sizeof(p->stats));
 }
@@ -264,7 +332,7 @@ void MrLink_Reset(MrLink_t *p) {
  *   - 拉取模式: 不注册 handler → FeedBytes (ISR) → MrLink_Parse (任务)
  * ISR/任务上下文均可调用 (ring buffer Put 用 PRIMASK 临界区互斥)
  */
-int8_t MrLink_FeedBytes(MrLink_t *p, const uint8_t *data, uint16_t len) {
+int8_t MrLink_PushBytes(MrLink_t *p, const uint8_t *data, uint16_t len) {
   if (p == NULL || (data == NULL && len > 0u)) {
     return MRLINK_ERR_ARGS;
   }
@@ -273,13 +341,43 @@ int8_t MrLink_FeedBytes(MrLink_t *p, const uint8_t *data, uint16_t len) {
     return MRLINK_OK;
   }
 
-  const uint16_t written = MrLink_RingBuf_Put(&p->rx_rb, data, len);
+  const uint16_t written = SpscRingBuf_Put(&p->rx_rb, data, len);
   p->stats.feed_bytes_total += written;
+  p->stats.feed_bytes_dropped += (uint32_t)(len - written);
   p->stats.feed_calls++;
+  if (written < len) {
+    const MrLink_ErrorInfo_t info = {
+        .code = MRLINK_ERROR_RX_DROPPED,
+        .available = written,
+        .dropped_bytes = (uint16_t)(len - written),
+    };
+    Proto_ReportError(p, &info);
+  }
 
-  /* 扫描并触发 handler (如果注册了) */
-  (void)Proto_ProcessRx(p, false, NULL, NULL, NULL);
+  return MRLINK_OK;
+}
 
+int8_t MrLink_Dispatch(MrLink_t *p) {
+  if (p == NULL) {
+    return MRLINK_ERR_NULL;
+  }
+
+  const uint32_t prev_frame_rx_ok = p->stats.frame_rx_ok;
+  const int8_t ret = Proto_ProcessRx(p, false, NULL, NULL, NULL);
+  if (ret != MRLINK_OK) {
+    return ret;
+  }
+  return (p->stats.frame_rx_ok != prev_frame_rx_ok) ? MRLINK_OK : MRLINK_ERR;
+}
+
+int8_t MrLink_FeedBytes(MrLink_t *p, const uint8_t *data, uint16_t len) {
+  const int8_t ret = MrLink_PushBytes(p, data, len);
+  if (ret != MRLINK_OK) {
+    return ret;
+  }
+
+  /* Backward-compatible behavior: push and immediately dispatch handlers. */
+  (void)MrLink_Dispatch(p);
   return MRLINK_OK;
 }
 
@@ -426,7 +524,7 @@ int8_t MrLink_RegisterHandler(MrLink_t *p, uint8_t cmd,
  *
  * 派发时 (在 Proto_ProcessRx):
  *   - length == expected_size: memcpy 到 p->frame_buf, 调 typed handler
- *   - length != expected_size: 统计 frame_rx_size_mismatch, 滑窗 1 字节
+ *   - length != expected_size: 统计 frame_rx_size_mismatch, 消费完整坏帧
  * 业务侧收到 `(cmd, const void* data, size, ctx)`, data 指向 frame_buf
  */
 int8_t MrLink_RegisterTypedHandler(MrLink_t *p, uint8_t cmd,
@@ -480,6 +578,17 @@ int8_t MrLink_RegisterTypedHandler(MrLink_t *p, uint8_t cmd,
   return MRLINK_ERR_ARGS;  /* 表满 */
 }
 
+int8_t MrLink_SetErrorHandler(MrLink_t *p,
+                              MrLink_ErrorHandler_t handler,
+                              void *ctx) {
+  if (p == NULL) {
+    return MRLINK_ERR_NULL;
+  }
+  p->error_handler = handler;
+  p->error_ctx = ctx;
+  return MRLINK_OK;
+}
+
 /**
  * @brief 获取 stats 指针 (只读, 常驻).
  *
@@ -493,4 +602,16 @@ const MrLink_Stats_t *MrLink_GetStats(const MrLink_t *p) {
     return NULL;
   }
   return &p->stats;
+}
+
+uint32_t MrLink_EnterCritical(void) {
+  const uint32_t primask = __get_PRIMASK();
+  __disable_irq();
+  return primask;
+}
+
+void MrLink_ExitCritical(uint32_t primask) {
+  if (primask == 0u) {
+    __enable_irq();
+  }
 }

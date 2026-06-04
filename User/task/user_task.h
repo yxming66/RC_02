@@ -11,6 +11,7 @@
 #include "module/autoCtrlAPI/api/auto_ctrl_api.h"
 #include "module/autoCtrlAPI/ore_store/auto_ore_store.h"
 #include "module/autoCtrlAPI/rod/auto_rod_spearhead.h"
+#include "device/ir_dock/ir_dock.h"
 #include "module/arm_simple.h"
 #include "module/rod_new.h"
 #include "module/ore_store.h"
@@ -34,6 +35,7 @@ extern "C" {
 #define ROD_FREQ (400.0)
 #define PC_COMM_FREQ (100.0)
 #define ORE_STORE_FREQ (500.0)
+#define IR_DOCK_FREQ (4.0)
 /* 任务初始化延时ms */
 #define TASK_INIT_DELAY (100u)
 #define BLINK_INIT_DELAY (0)
@@ -46,6 +48,7 @@ extern "C" {
 #define ROD_INIT_DELAY (0)
 #define PC_COMM_INIT_DELAY (500u)
 #define ORE_STORE_INIT_DELAY (100u)
+#define IR_DOCK_INIT_DELAY (0)
 /* Exported defines --------------------------------------------------------- */
 /* Exported macro ----------------------------------------------------------- */
 /* Exported types ----------------------------------------------------------- */
@@ -70,6 +73,7 @@ typedef enum {
     AUTO_ORE_DEBUG_REQUEST_PICK_POS_400 = 5,
     AUTO_ORE_DEBUG_REQUEST_PICK_POS_200 = 6,
     AUTO_ORE_DEBUG_REQUEST_PICK_NEG_200 = 7,
+    AUTO_ORE_DEBUG_REQUEST_ROD_SPEARHEAD = 8,
 } AutoOre_DebugRequest_t;
 
 typedef struct {
@@ -93,6 +97,9 @@ typedef struct {
     volatile bool transform_low_has_ore;
     volatile bool transform_high_has_ore;
     volatile bool arm_has_ore;
+    volatile bool checkphoto_spear_triggered;
+    volatile bool checkphoto_orelow_triggered;
+    volatile bool checkphoto_orehigh_triggered;
     volatile bool arm_cmd_valid;
     volatile bool ore_store_cmd_valid;
     volatile bool pole_cmd_valid;
@@ -120,6 +127,22 @@ typedef struct {
     volatile float pole_cmd_front_lift_rad;
     volatile float pole_cmd_rear_lift_rad;
     volatile float chassis_cmd_vx_mps;
+    volatile bool auto_rod_spearhead_busy;
+    volatile AutoRodSpearhead_State_t auto_rod_spearhead_state;
+    volatile AutoRodSpearhead_Result_t auto_rod_spearhead_result;
+    volatile AutoRodSpearhead_Fault_t auto_rod_spearhead_fault;
+    volatile uint8_t auto_rod_spearhead_step_index;
+    volatile bool auto_rod_spearhead_rod_at_target;
+    volatile bool auto_rod_spearhead_photo_stable_state;
+    volatile bool auto_rod_spearhead_rod_cmd_valid;
+    volatile RodNew_Pose_t auto_rod_spearhead_rod_cmd_pose;
+    volatile RodNew_GripState_t auto_rod_spearhead_rod_cmd_grip;
+    volatile float auto_rod_spearhead_rod_cmd_target_angle_rad;
+    volatile bool ir_dock_complete_fresh;
+    volatile uint8_t ir_dock_last_rx_status;
+    volatile uint32_t ir_dock_last_rx_age_ms;
+    volatile uint32_t ir_dock_rx_count;
+    volatile uint32_t ir_dock_error_count;
 } AutoOre_DebugControl_t;
 
 /* 任务运行时结构体 */
@@ -136,6 +159,7 @@ typedef struct {
         osThreadId_t rod;
         osThreadId_t pc_comm;
         osThreadId_t ore_store;
+        osThreadId_t ir_dock;
 
     } thread;
 
@@ -195,6 +219,7 @@ typedef struct {
         UBaseType_t rod;
         UBaseType_t pc_comm;
         UBaseType_t ore_store;
+        UBaseType_t ir_dock;
 
     } stack_water_mark;
 
@@ -208,6 +233,7 @@ extern bool auto_ctrl_inited;
 extern AutoOre_t auto_ore_ctrl;
 extern bool auto_ore_inited;
 extern volatile AutoOre_DebugControl_t g_auto_ore_debug;
+extern volatile IrDock_Debug_t g_ir_dock_debug;
 extern AutoRodSpearhead_t auto_rod_spearhead_ctrl;
 extern bool auto_rod_spearhead_inited;
 extern bool auto_ctrl_local_yaw_zero_initialized;
@@ -228,6 +254,7 @@ extern const osThreadAttr_t attr_arm_simple;
 extern const osThreadAttr_t attr_rod;
 extern const osThreadAttr_t attr_pc_comm;
 extern const osThreadAttr_t attr_ore_store;
+extern const osThreadAttr_t attr_ir_dock;
 /* 任务函数声明 */
 void Task_Init(void *argument);
 void Task_blink(void *argument);
@@ -240,6 +267,7 @@ void Task_arm_simple(void *argument);
 void Task_rod(void *argument);
 void Task_pc_comm(void *argument);
 void Task_ore_store(void *argument);
+void Task_ir_dock(void *argument);
 
 bool Task_ChassisMainPoleGroupAtTarget(uint8_t group, float threshold_rad);
 bool Task_ChassisMainPoleAllAtTarget(float threshold_rad);
@@ -255,6 +283,7 @@ bool Task_AutoRodSpearheadStart(void);
 void Task_AutoRodSpearheadAbort(void);
 bool Task_AutoRodSpearheadIsBusy(void);
 const RodNew_CMD_t *Task_AutoRodSpearheadGetCommand(void);
+bool Task_IrDockIsDockCompleteFresh(void);
 int8_t Task_OreStorePostCommand(const OreStore_CMD_t *cmd);
 void Task_OreStoreRequestRehome(void);
 int8_t Task_OreStoreAssumeAxisHomedAtCurrent(uint8_t axis,

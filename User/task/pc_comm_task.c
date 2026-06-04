@@ -8,7 +8,6 @@
 #include "module/autoCtrlAPI/api/auto_ctrl_api.h"
 #include "module/arm_simple.h"
 #include "module/rod_new.h"
-#include "bsp/uart.h"
 #include "main.h"
 
 #define PC_COMM_TX_PERIOD_MS (20u)  /* 50Hz */
@@ -27,6 +26,8 @@ static const uint8_t s_feedback_cmds[] = {
     PC_FEEDBACK_ARM_SIMPLE,
     PC_FEEDBACK_ROD_NEW,
     PC_FEEDBACK_ORE_STORE,
+    PC_FEEDBACK_AUTO_ACTION,
+    PC_FEEDBACK_IR_ORE,
     PC_FEEDBACK_STEP,
     PC_FEEDBACK_STATUS,
 };
@@ -73,6 +74,52 @@ static void PcComm_TxErrorCallback(void) {
     g_pc_comm_debug.tx_dma_error_count++;
 }
 
+static AutoOre_DebugRequest_t PcComm_MapAutoAction(uint8_t action) {
+    switch ((PC_AutoAction_t)action) {
+        case PC_AUTO_ACTION_STORE:
+            return AUTO_ORE_DEBUG_REQUEST_STORE;
+        case PC_AUTO_ACTION_RELEASE:
+            return AUTO_ORE_DEBUG_REQUEST_RELEASE;
+        case PC_AUTO_ACTION_CHAMBER:
+            return AUTO_ORE_DEBUG_REQUEST_CHAMBER;
+        case PC_AUTO_ACTION_PICK_POS_400:
+            return AUTO_ORE_DEBUG_REQUEST_PICK_POS_400;
+        case PC_AUTO_ACTION_PICK_POS_200:
+            return AUTO_ORE_DEBUG_REQUEST_PICK_POS_200;
+        case PC_AUTO_ACTION_PICK_NEG_200:
+            return AUTO_ORE_DEBUG_REQUEST_PICK_NEG_200;
+        case PC_AUTO_ACTION_ROD_SPEARHEAD:
+            return AUTO_ORE_DEBUG_REQUEST_ROD_SPEARHEAD;
+        case PC_AUTO_ACTION_ABORT:
+            return AUTO_ORE_DEBUG_REQUEST_ABORT;
+        case PC_AUTO_ACTION_NONE:
+        default:
+            return AUTO_ORE_DEBUG_REQUEST_NONE;
+    }
+}
+
+static bool PcComm_ProcessAutoActionCommand(void) {
+    const PC_AutoActionCMD_t *cmd = MrlinkPc_GetAutoActionCMD();
+    if (cmd == NULL) {
+        return false;
+    }
+
+    const AutoOre_DebugRequest_t request = PcComm_MapAutoAction(cmd->action);
+    if (request == AUTO_ORE_DEBUG_REQUEST_NONE) {
+        MrlinkPc_ClearAutoActionCommand();
+        return false;
+    }
+
+    if (g_auto_ore_debug.request != AUTO_ORE_DEBUG_REQUEST_NONE &&
+        request != AUTO_ORE_DEBUG_REQUEST_ABORT) {
+        return true;
+    }
+
+    g_auto_ore_debug.request = request;
+    MrlinkPc_ClearAutoActionCommand();
+    return true;
+}
+
 static bool PcComm_AppendFeedbackFrame(uint8_t cmd, uint16_t *tx_len) {
     if (tx_len == NULL || *tx_len >= sizeof(s_tx_buf)) {
         return false;
@@ -95,19 +142,10 @@ static void PcComm_UpdateModuleFeedback(void) {
         pc_arm.mode = (uint8_t)arm_fb->mode;
         pc_arm.point_mode = (uint8_t)arm_fb->point_mode;
         pc_arm.suction = (uint8_t)arm_fb->suction;
-        pc_arm.joint1_temperature_warning =
-            arm_fb->joint1_temperature_warning ? 1u : 0u;
-        pc_arm.joint1_temperature_over_limit =
-            arm_fb->joint1_temperature_over_limit ? 1u : 0u;
-        pc_arm.joint1_temperature_limit_latched =
-            arm_fb->joint1_temperature_limit_latched ? 1u : 0u;
         pc_arm.joint1_angle_rad = arm_fb->joint1_angle_rad;
         pc_arm.joint1_velocity_rad_s = arm_fb->joint1_velocity_rad_s;
-        pc_arm.joint1_temperature_c = arm_fb->joint1_temperature_c;
         pc_arm.joint2_angle_rad = arm_fb->joint2_angle_rad;
-        pc_arm.target_joint1_rad = arm_fb->target_joint1_rad;
-        pc_arm.target_joint2_rad = arm_fb->target_joint2_rad;
-        MrlinkPc_SetArmSimpleFeedback(&pc_arm);
+        (void)MrlinkPc_PublishFeedback(PC_FEEDBACK_ARM_SIMPLE, &pc_arm);
     }
 
     const RodNew_Feedback_t *rod_fb = Task_RodNewGetFeedback();
@@ -121,7 +159,7 @@ static void PcComm_UpdateModuleFeedback(void) {
         pc_rod.tracked_angle_rad = rod_fb->tracked_angle_rad;
         pc_rod.tracked_velocity_rad_s = rod_fb->tracked_velocity_rad_s;
         pc_rod.feedback_angle_rad = rod_fb->feedback_angle_rad;
-        MrlinkPc_SetRodNewFeedback(&pc_rod);
+        (void)MrlinkPc_PublishFeedback(PC_FEEDBACK_ROD_NEW, &pc_rod);
     }
 
     const OreStore_Feedback_t *ore_fb = Task_OreStoreGetFeedback();
@@ -139,12 +177,25 @@ static void PcComm_UpdateModuleFeedback(void) {
             }
         }
         pc_ore.platform_position_rad = ore_fb->position_rad[ORE_STORE_AXIS_PLATFORM];
-        pc_ore.gate_position_rad[0] = 0.0f;
-        pc_ore.gate_position_rad[1] = 0.0f;
-        pc_ore.track_position_rad[0] = 0.0f;
-        pc_ore.track_position_rad[1] = 0.0f;
-        MrlinkPc_SetOreStoreFeedback(&pc_ore);
+        (void)MrlinkPc_PublishFeedback(PC_FEEDBACK_ORE_STORE, &pc_ore);
     }
+}
+
+static void PcComm_UpdateIrOreFeedback(uint32_t now_ms) {
+    IrDock_OreInfo_t ir_info = {0};
+    PC_IrOreFeedback_t pc_ir_ore = {0};
+
+    (void)IrDock_GetOreInfo(&ir_info, now_ms);
+    pc_ir_ore.valid = ir_info.valid ? 1u : 0u;
+    pc_ir_ore.fresh = ir_info.fresh ? 1u : 0u;
+    pc_ir_ore.status = ir_info.status;
+    pc_ir_ore.count = PC_IR_ORE_POSITION_COUNT;
+    for (uint8_t i = 0u; i < PC_IR_ORE_POSITION_COUNT; ++i) {
+        pc_ir_ore.ore_type[i] = ir_info.ore_type[i];
+    }
+    pc_ir_ore.age_ms = ir_info.age_ms;
+    pc_ir_ore.rx_count = ir_info.rx_count;
+    (void)MrlinkPc_PublishFeedback(PC_FEEDBACK_IR_ORE, &pc_ir_ore);
 }
 
 static void PcComm_UpdateStatusFeedback(void) {
@@ -154,7 +205,7 @@ static void PcComm_UpdateStatusFeedback(void) {
     status.recv_count = (state != NULL) ? state->recv_count : 0u;
     status.cpu_temp = task_runtime.status.cpu_temp;
     status.command_source = g_pc_command_source;
-    MrlinkPc_SetStatusFeedback(&status);
+    (void)MrlinkPc_PublishFeedback(PC_FEEDBACK_STATUS, &status);
 }
 
 static bool PcComm_TransmitFeedback(void) {
@@ -175,6 +226,7 @@ static bool PcComm_TransmitFeedback(void) {
 
     PcComm_UpdateStatusFeedback();
     PcComm_UpdateModuleFeedback();
+    PcComm_UpdateIrOreFeedback(now);
 
     for (uint8_t i = 0; i < (uint8_t)(sizeof(s_feedback_cmds) / sizeof(s_feedback_cmds[0])); ++i) {
         if (PcComm_AppendFeedbackFrame(s_feedback_cmds[i], &tx_len)) {
@@ -185,16 +237,16 @@ static bool PcComm_TransmitFeedback(void) {
     if (tx_len > 0u) {
         s_tx_dma_busy = true;
         s_tx_dma_start_tick = now;
-        int8_t tx_result = BSP_UART_Transmit(BSP_UART_PC, s_tx_buf, tx_len, true);
-        if (tx_result != BSP_OK) {
+        int8_t tx_result = MrlinkPc_SendFrame(s_tx_buf, tx_len);
+        if (tx_result != MRLINK_CHANNEL_OK) {
             s_tx_dma_busy = false;
             g_pc_comm_debug.tx_dma_error_count++;
         }
         PcComm_DebugRecordTx(s_tx_buf, tx_len, frame_count, tx_result);
-        return tx_result == BSP_OK;
+        return tx_result == MRLINK_CHANNEL_OK;
     }
 
-    PcComm_DebugRecordTx(s_tx_buf, 0, frame_count, BSP_ERR);
+    PcComm_DebugRecordTx(s_tx_buf, 0, frame_count, MRLINK_CHANNEL_ERR);
     return false;
 }
 
@@ -206,12 +258,9 @@ void Task_pc_comm(void *argument) {
         osDelay(20u);
     }
 
-    while (BSP_UART_RegisterCallback(BSP_UART_PC, BSP_UART_TX_CPLT_CB,
-                                     PcComm_TxDoneCallback) != BSP_OK ||
-           BSP_UART_RegisterCallback(BSP_UART_PC, BSP_UART_ERROR_CB,
-                                     PcComm_TxErrorCallback) != BSP_OK ||
-           BSP_UART_RegisterCallback(BSP_UART_PC, BSP_UART_ABORT_TX_CPLT_CB,
-                                     PcComm_TxErrorCallback) != BSP_OK) {
+    while (MrlinkPc_RegisterTxCallbacks(PcComm_TxDoneCallback,
+                             PcComm_TxErrorCallback) !=
+            MRLINK_CHANNEL_OK) {
         PcComm_DebugRecordInitFail(-30);
         osDelay(20u);
     }
@@ -233,7 +282,9 @@ void Task_pc_comm(void *argument) {
         if (auto_ctrl_inited &&
             g_pc_command_source == PC_COMMAND_SOURCE_PC &&
             MrlinkPc_IsPCControlMode()) {
-            const PC_AutoStepParams_t *step_params = MrlinkPc_GetAutoStepParams();
+            const bool auto_action_pending = PcComm_ProcessAutoActionCommand();
+            const PC_AutoStepParams_t *step_params =
+                auto_action_pending ? NULL : MrlinkPc_GetAutoStepParams();
             if (step_params != NULL && !AutoCtrl_IsBusy(&auto_ctrl)) {
                 AutoCtrl_SetYawSource(&auto_ctrl, AUTO_CTRL_YAW_SOURCE_PC);
                 AutoCtrl_SetYawZeroOffset(&auto_ctrl, 0.0f);

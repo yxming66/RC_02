@@ -839,6 +839,12 @@ static void Rc_ApplyAutoOreOutputs(void) {
   Rc_SetChassisRelax();
   Rc_SetRodHold();
 
+  const Chassis_CMD_t *auto_chassis_cmd =
+      AutoOre_GetChassisCommand(&auto_ore_ctrl);
+  if (auto_chassis_cmd != NULL) {
+    chassis_cmd = *auto_chassis_cmd;
+  }
+
   const Pole_CMD_t *auto_pole_cmd = AutoOre_GetPoleCommand(&auto_ore_ctrl);
   if (auto_pole_cmd != NULL) {
     pole_cmd = *auto_pole_cmd;

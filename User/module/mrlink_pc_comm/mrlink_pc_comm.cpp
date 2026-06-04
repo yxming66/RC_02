@@ -5,21 +5,28 @@
 
 #include "bsp/time.h"
 #include "bsp/uart.h"
-#include "cmsis_compiler.h"
 #include "cmsis_os2.h"
+#include "device/mrlink/mrlink_channel.h"
 #include "device/mrlink/mrlink.hpp"
 #include "main.h"
+#include "module/mrlink_pc_comm/pc_messages.hpp"
 
 namespace {
 
+namespace wire = pc_comm::wire;
+
 constexpr uint32_t kRxCompleteFlag = (1u << 0);
 constexpr uint32_t kHeartbeatTimeoutMs = 500u;
-constexpr uint8_t kRxDmaSlotCount = 4u;
-constexpr uint16_t kRxDmaBufSize = 256u;
-constexpr uint16_t kMrlinkRxBufSize = 512u;
+constexpr uint8_t kRxDmaSlotCount = MRLINK_PC_RX_DMA_SLOT_COUNT;
+constexpr uint16_t kRxDmaBufSize = MRLINK_PC_RX_DMA_BUF_SIZE;
+constexpr uint16_t kMrlinkRxBufSize = MRLINK_PC_RX_STREAM_BUF_SIZE;
 constexpr uint16_t kMrlinkTxBufSize = MRLINK_PC_MAX_FRAME_SIZE;
 
-struct HeartbeatWire {};
+static_assert(kRxDmaSlotCount >= 2u, "MRLINK_PC_RX_DMA_SLOT_COUNT must be >= 2");
+static_assert(kRxDmaBufSize >= MRLINK_PC_MAX_FRAME_SIZE,
+              "MRLINK_PC_RX_DMA_BUF_SIZE must fit one mrlink frame");
+static_assert(kMrlinkRxBufSize >= MRLINK_PC_MAX_FRAME_SIZE,
+              "MRLINK_PC_RX_STREAM_BUF_SIZE must fit one mrlink frame");
 
 template <typename T>
 void CopyPlainToVolatile(volatile T *dst, const T *src) {
@@ -30,111 +37,22 @@ void CopyPlainToVolatile(volatile T *dst, const T *src) {
   }
 }
 
-struct __attribute__((packed)) PoleCmdWire {
-  uint8_t mode;
-  float lift0;
-  float lift1;
-};
-
-struct __attribute__((packed)) ArmSimpleCmdWire {
-  uint8_t mode;
-  uint8_t point_mode;
-  uint8_t suction;
-  float target_joint1_rad;
-  float target_joint2_rad;
-};
-
-struct __attribute__((packed)) RodNewCmdWire {
-  uint8_t mode;
-  uint8_t pose;
-  uint8_t grip;
-  float target_angle_rad;
-};
-
-struct __attribute__((packed)) OreStoreCmdWire {
-  uint8_t mode;
-  uint8_t force_rehome;
-  float platform_target_rad;
-  float gate_target_rad0;
-  float gate_target_rad1;
-  float track_target_rad0;
-  float track_target_rad1;
-};
-
-struct __attribute__((packed)) StepCmdWire {
-  uint8_t template_id;
-  uint8_t travel_dir;
-  float target_yaw_rad;
-  float yaw_tolerance_rad;
-};
-
-struct __attribute__((packed)) ArmSimpleFeedbackWire {
-  uint8_t mode;
-  uint8_t point_mode;
-  uint8_t suction;
-  uint8_t joint1_temperature_warning;
-  uint8_t joint1_temperature_over_limit;
-  uint8_t joint1_temperature_limit_latched;
-  float joint1_angle_rad;
-  float joint1_velocity_rad_s;
-  float joint1_temperature_c;
-  float joint2_angle_rad;
-  float target_joint1_rad;
-  float target_joint2_rad;
-};
-
-struct __attribute__((packed)) RodNewFeedbackWire {
-  uint8_t mode;
-  uint8_t pose;
-  uint8_t grip;
-  uint8_t at_target;
-  float target_angle_rad;
-  float tracked_angle_rad;
-  float tracked_velocity_rad_s;
-  float feedback_angle_rad;
-};
-
-struct __attribute__((packed)) OreStoreFeedbackWire {
-  uint8_t mode;
-  uint8_t all_homed;
-  uint8_t online_mask;
-  uint8_t homed_mask;
-  float platform_position_rad;
-  float gate_position_rad0;
-  float gate_position_rad1;
-  float track_position_rad0;
-  float track_position_rad1;
-};
-
-struct __attribute__((packed)) StepFeedbackWire {
-  uint8_t state;
-  uint8_t result;
-  uint8_t fault;
-  uint8_t template_id;
-  uint8_t step_index;
-  uint8_t reserved;
-  float progress;
-};
-
-struct __attribute__((packed)) StatusFeedbackWire {
-  uint8_t online;
-  uint32_t recv_count;
-  float cpu_temp;
-  uint8_t command_source;
-};
-
-mr::link::Instance s_link;
+mr::link::Bus<kMrlinkRxBufSize,
+              kMrlinkTxBufSize,
+              kRxDmaBufSize,
+              kRxDmaSlotCount,
+              kRxDmaBufSize>
+    s_bus;
 MrlinkPc_State_t s_state{};
-static uint8_t s_mrlink_rx_buf[kMrlinkRxBufSize];
-static uint8_t s_mrlink_tx_buf[kMrlinkTxBufSize];
-static uint8_t s_rx_dma_buf[kRxDmaSlotCount][kRxDmaBufSize];
 static uint8_t s_rx_parse_buf[kRxDmaBufSize];
-static volatile bool s_rx_active = false;
-static volatile uint8_t s_rx_dma_write_idx = 0;
-static volatile uint8_t s_rx_dma_read_idx = 0;
-static volatile uint16_t s_rx_dma_len[kRxDmaSlotCount] = {0};
 static osThreadId_t s_thread_id = nullptr;
 static PC_AutoStepParams_t s_auto_step_params{};
+static PC_AutoActionFeedback_t s_auto_action_feedback{};
+static PC_IrOreFeedback_t s_ir_ore_feedback{};
+static MrlinkPc_TxCallback_t s_tx_done_callback = nullptr;
+static MrlinkPc_TxCallback_t s_tx_error_callback = nullptr;
+static BSP_UART_t s_channel_uart = BSP_UART_PC;
+static bool s_comm_initialized = false;
 
 uint16_t DebugCopyRaw(volatile uint8_t *dst, uint16_t dst_size,
                       const uint8_t *src, uint16_t src_len) {
@@ -151,8 +69,11 @@ uint16_t DebugCopyRaw(volatile uint8_t *dst, uint16_t dst_size,
   return copy_len;
 }
 
+void MarkLastRxFrame(uint8_t cmd, uint16_t payload_len, int8_t result,
+                     uint16_t crc_received, uint16_t crc_calculated);
+
 void DebugUpdateUsartConfig() {
-  UART_HandleTypeDef *huart = BSP_UART_GetHandle(BSP_UART_PC);
+  UART_HandleTypeDef *huart = BSP_UART_GetHandle(s_channel_uart);
   if (huart == nullptr) {
     g_pc_comm_debug.usart10_config_ok = 0;
     return;
@@ -174,6 +95,11 @@ void DebugUpdateUsartConfig() {
 
 void MarkRxFrame(uint8_t cmd, uint16_t payload_len, int8_t result) {
   g_pc_comm_debug.rx_batch_frame_count++;
+  MarkLastRxFrame(cmd, payload_len, result, 0u, 0u);
+}
+
+void MarkLastRxFrame(uint8_t cmd, uint16_t payload_len, int8_t result,
+                     uint16_t crc_received, uint16_t crc_calculated) {
   g_pc_comm_debug.last_rx_result = result;
   g_pc_comm_debug.last_rx_cmd = cmd;
   g_pc_comm_debug.last_rx_len = static_cast<uint8_t>(payload_len);
@@ -181,8 +107,8 @@ void MarkRxFrame(uint8_t cmd, uint16_t payload_len, int8_t result) {
       static_cast<uint16_t>(MRLINK_HEADER_LEN + MRLINK_LEN_FIELD_LEN +
                             MRLINK_CMD_FIELD_LEN + payload_len +
                             MRLINK_CRC_LEN);
-  g_pc_comm_debug.last_rx_crc_received = 0u;
-  g_pc_comm_debug.last_rx_crc_calculated = 0u;
+  g_pc_comm_debug.last_rx_crc_received = crc_received;
+  g_pc_comm_debug.last_rx_crc_calculated = crc_calculated;
 }
 
 void TouchOnline(uint8_t cmd) {
@@ -213,6 +139,9 @@ void TouchOnline(uint8_t cmd) {
     case PC_CMD_ORE_STORE:
       g_pc_comm_debug.rx_ore_store_count++;
       break;
+    case PC_CMD_AUTO_ACTION:
+      g_pc_comm_debug.rx_auto_action_count++;
+      break;
     case PC_CMD_STEP:
       g_pc_comm_debug.rx_step_count++;
       break;
@@ -235,52 +164,54 @@ void OnChassis(const PC_ChassisCMD_t &cmd) {
   TouchOnline(PC_CMD_CHASSIS);
 }
 
-void OnPole(const PoleCmdWire &wire) {
-  s_state.cmd.pole.mode = wire.mode;
-  s_state.cmd.pole.lift[0] = wire.lift0;
-  s_state.cmd.pole.lift[1] = wire.lift1;
-  MarkRxFrame(PC_CMD_POLE, sizeof(wire), MRLINK_OK);
+void OnPole(const wire::PoleCmd &cmd) {
+  s_state.cmd.pole.mode = cmd.mode;
+  s_state.cmd.pole.lift[0] = cmd.lift0;
+  s_state.cmd.pole.lift[1] = cmd.lift1;
+  MarkRxFrame(PC_CMD_POLE, sizeof(cmd), MRLINK_OK);
   TouchOnline(PC_CMD_POLE);
 }
 
-void OnArmSimple(const ArmSimpleCmdWire &wire) {
-  s_state.cmd.arm_simple.mode = wire.mode;
-  s_state.cmd.arm_simple.point_mode = wire.point_mode;
-  s_state.cmd.arm_simple.suction = wire.suction;
-  s_state.cmd.arm_simple.target_joint1_rad = wire.target_joint1_rad;
-  s_state.cmd.arm_simple.target_joint2_rad = wire.target_joint2_rad;
-  MarkRxFrame(PC_CMD_ARM_SIMPLE, sizeof(wire), MRLINK_OK);
+void OnArmSimple(const wire::ArmSimpleCmd &cmd) {
+  s_state.cmd.arm_simple.mode = cmd.mode;
+  s_state.cmd.arm_simple.point_mode = cmd.point_mode;
+  s_state.cmd.arm_simple.suction = cmd.suction;
+  s_state.cmd.arm_simple.target_joint1_rad = cmd.target_joint1_rad;
+  s_state.cmd.arm_simple.target_joint2_rad = cmd.target_joint2_rad;
+  MarkRxFrame(PC_CMD_ARM_SIMPLE, sizeof(cmd), MRLINK_OK);
   TouchOnline(PC_CMD_ARM_SIMPLE);
 }
 
-void OnRodNew(const RodNewCmdWire &wire) {
-  s_state.cmd.rod_new.mode = wire.mode;
-  s_state.cmd.rod_new.pose = wire.pose;
-  s_state.cmd.rod_new.grip = wire.grip;
-  s_state.cmd.rod_new.target_angle_rad = wire.target_angle_rad;
-  MarkRxFrame(PC_CMD_ROD_NEW, sizeof(wire), MRLINK_OK);
+void OnRodNew(const wire::RodNewCmd &cmd) {
+  s_state.cmd.rod_new.mode = cmd.mode;
+  s_state.cmd.rod_new.pose = cmd.pose;
+  s_state.cmd.rod_new.grip = cmd.grip;
+  s_state.cmd.rod_new.target_angle_rad = cmd.target_angle_rad;
+  MarkRxFrame(PC_CMD_ROD_NEW, sizeof(cmd), MRLINK_OK);
   TouchOnline(PC_CMD_ROD_NEW);
 }
 
-void OnOreStore(const OreStoreCmdWire &wire) {
-  s_state.cmd.ore_store.mode = wire.mode;
-  s_state.cmd.ore_store.force_rehome = wire.force_rehome;
-  s_state.cmd.ore_store.platform_target_rad = wire.platform_target_rad;
-  s_state.cmd.ore_store.gate_target_rad[0] = wire.gate_target_rad0;
-  s_state.cmd.ore_store.gate_target_rad[1] = wire.gate_target_rad1;
-  s_state.cmd.ore_store.track_target_rad[0] = wire.track_target_rad0;
-  s_state.cmd.ore_store.track_target_rad[1] = wire.track_target_rad1;
-  MarkRxFrame(PC_CMD_ORE_STORE, sizeof(wire), MRLINK_OK);
+void OnOreStore(const wire::OreStoreCmd &cmd) {
+  s_state.cmd.ore_store.mode = cmd.mode;
+  s_state.cmd.ore_store.force_rehome = cmd.force_rehome;
+  s_state.cmd.ore_store.platform_target_rad = cmd.platform_target_rad;
+  MarkRxFrame(PC_CMD_ORE_STORE, sizeof(cmd), MRLINK_OK);
   TouchOnline(PC_CMD_ORE_STORE);
 }
 
-void OnStep(const StepCmdWire &wire) {
+void OnAutoAction(const wire::AutoActionCmd &cmd) {
+  s_state.cmd.auto_action.action = cmd.action;
+  MarkRxFrame(PC_CMD_AUTO_ACTION, sizeof(cmd), MRLINK_OK);
+  TouchOnline(PC_CMD_AUTO_ACTION);
+}
+
+void OnStep(const wire::StepCmd &cmd) {
   s_state.cmd.step.template_id =
-      static_cast<PC_StepTemplate_t>(wire.template_id);
-  s_state.cmd.step.travel_dir = static_cast<PC_StepDir_t>(wire.travel_dir);
-  s_state.cmd.step.target_yaw_rad = wire.target_yaw_rad;
-  s_state.cmd.step.yaw_tolerance_rad = wire.yaw_tolerance_rad;
-  MarkRxFrame(PC_CMD_STEP, sizeof(wire), MRLINK_OK);
+      static_cast<PC_StepTemplate_t>(cmd.template_id);
+  s_state.cmd.step.travel_dir = static_cast<PC_StepDir_t>(cmd.travel_dir);
+  s_state.cmd.step.target_yaw_rad = cmd.target_yaw_rad;
+  s_state.cmd.step.yaw_tolerance_rad = cmd.yaw_tolerance_rad;
+  MarkRxFrame(PC_CMD_STEP, sizeof(cmd), MRLINK_OK);
   TouchOnline(PC_CMD_STEP);
 }
 
@@ -290,105 +221,53 @@ void OnImu(const PC_ImuCMD_t &cmd) {
   TouchOnline(PC_CMD_IMU);
 }
 
+void OnMrlinkError(const MrLink_ErrorInfo_t &err) {
+  g_pc_comm_debug.mrlink_error_count++;
+  g_pc_comm_debug.mrlink_last_error_code = static_cast<uint8_t>(err.code);
+  g_pc_comm_debug.mrlink_last_error_cmd = err.cmd;
+  g_pc_comm_debug.mrlink_last_error_payload_len = err.payload_len;
+  g_pc_comm_debug.mrlink_last_error_expected_size = err.expected_size;
+  g_pc_comm_debug.mrlink_last_error_available = err.available;
+  g_pc_comm_debug.mrlink_last_error_dropped_bytes = err.dropped_bytes;
+  g_pc_comm_debug.mrlink_last_error_crc_received = err.crc_received;
+  g_pc_comm_debug.mrlink_last_error_crc_calculated = err.crc_calculated;
+  MarkLastRxFrame(err.cmd, err.payload_len, MRLINK_ERR, err.crc_received,
+                  err.crc_calculated);
+}
+
 bool RegisterHandlers() {
-  return s_link.On(PC_CMD_HEARTBEAT, OnHeartbeat) == MRLINK_OK &&
-         s_link.On<PC_ChassisCMD_t>(PC_CMD_CHASSIS, OnChassis) == MRLINK_OK &&
-         s_link.On<PoleCmdWire>(PC_CMD_POLE, OnPole) == MRLINK_OK &&
-         s_link.On<ArmSimpleCmdWire>(PC_CMD_ARM_SIMPLE, OnArmSimple) ==
+  return s_bus.Subscribe(wire::kCmdHeartbeat, OnHeartbeat) == MRLINK_OK &&
+         s_bus.SubscribeLatest<PC_ChassisCMD_t>(OnChassis) == MRLINK_OK &&
+         s_bus.SubscribeLatest<wire::PoleCmd>(OnPole) == MRLINK_OK &&
+         s_bus.SubscribeLatest<wire::ArmSimpleCmd>(OnArmSimple) ==
              MRLINK_OK &&
-         s_link.On<RodNewCmdWire>(PC_CMD_ROD_NEW, OnRodNew) == MRLINK_OK &&
-         s_link.On<OreStoreCmdWire>(PC_CMD_ORE_STORE, OnOreStore) ==
+         s_bus.SubscribeLatest<wire::RodNewCmd>(OnRodNew) == MRLINK_OK &&
+         s_bus.SubscribeLatest<wire::OreStoreCmd>(OnOreStore) ==
              MRLINK_OK &&
-         s_link.On<StepCmdWire>(PC_CMD_STEP, OnStep) == MRLINK_OK &&
-         s_link.On<PC_ImuCMD_t>(PC_CMD_IMU, OnImu) == MRLINK_OK;
+         s_bus.Subscribe<wire::AutoActionCmd>(OnAutoAction) == MRLINK_OK &&
+         s_bus.SubscribeLatest<wire::StepCmd>(OnStep) == MRLINK_OK &&
+         s_bus.SubscribeLatest<PC_ImuCMD_t>(OnImu) == MRLINK_OK;
 }
 
-bool StartRecv() {
-  const uint8_t idx = s_rx_dma_write_idx;
-  if (s_rx_dma_len[idx] != 0u) {
-    g_pc_comm_debug.rx_queue_overflow_count++;
-    s_rx_dma_len[idx] = 0u;
-    if (s_rx_dma_read_idx == idx) {
-      s_rx_dma_read_idx = static_cast<uint8_t>((idx + 1u) % kRxDmaSlotCount);
-    }
-  }
-
-  int8_t ret = BSP_UART_ReceiveToIdle(BSP_UART_PC, s_rx_dma_buf[idx],
-                                      sizeof(s_rx_dma_buf[idx]), true);
-  if (ret == BSP_OK) {
-    s_rx_active = true;
-    return true;
-  }
-
-  UART_HandleTypeDef *huart = BSP_UART_GetHandle(BSP_UART_PC);
-  if (huart != nullptr) {
-    (void)HAL_UART_AbortReceive(huart);
-    ret = BSP_UART_ReceiveToIdle(BSP_UART_PC, s_rx_dma_buf[idx],
-                                 sizeof(s_rx_dma_buf[idx]), true);
-  }
-  s_rx_active = (ret == BSP_OK);
-  return s_rx_active;
-}
-
-void RxEventCallback(uint16_t size) {
-  s_rx_active = false;
-  const uint8_t ready_idx = s_rx_dma_write_idx;
-
-  if (size > sizeof(s_rx_dma_buf[ready_idx])) {
-    g_pc_comm_debug.rx_dma_start_fail_count++;
-    (void)StartRecv();
-    return;
-  }
-
-  if (size > 0u) {
-    s_rx_dma_len[ready_idx] = size;
-    g_pc_comm_debug.rx_irq_count++;
-    g_pc_comm_debug.rx_irq_byte_count += size;
-
-    const uint8_t next_idx =
-        static_cast<uint8_t>((ready_idx + 1u) % kRxDmaSlotCount);
-    if (s_rx_dma_len[next_idx] != 0u) {
-      g_pc_comm_debug.rx_queue_overflow_count++;
-      s_rx_dma_len[next_idx] = 0u;
-      if (s_rx_dma_read_idx == next_idx) {
-        s_rx_dma_read_idx =
-            static_cast<uint8_t>((next_idx + 1u) % kRxDmaSlotCount);
-      }
-    }
-    s_rx_dma_write_idx = next_idx;
-  }
-
-  if (!StartRecv()) {
-    g_pc_comm_debug.rx_dma_start_fail_count++;
-  }
-
-  if (size > 0u && s_thread_id != nullptr) {
+void RxReadyCallback(void *ctx) {
+  (void)ctx;
+  if (s_thread_id != nullptr) {
     (void)osThreadFlagsSet(s_thread_id, kRxCompleteFlag);
   }
 }
 
-uint16_t PopRxChunk(uint8_t *dst, uint16_t dst_size) {
-  if (dst == nullptr || dst_size == 0u) {
-    return 0u;
+void TxDoneBridge(void *ctx) {
+  (void)ctx;
+  if (s_tx_done_callback != nullptr) {
+    s_tx_done_callback();
   }
+}
 
-  uint16_t len = 0u;
-  uint32_t primask = __get_PRIMASK();
-  __disable_irq();
-  const uint8_t idx = s_rx_dma_read_idx;
-  len = s_rx_dma_len[idx];
-  if (len > 0u) {
-    if (len > dst_size) {
-      len = dst_size;
-    }
-    std::memcpy(dst, s_rx_dma_buf[idx], len);
-    s_rx_dma_len[idx] = 0u;
-    s_rx_dma_read_idx = static_cast<uint8_t>((idx + 1u) % kRxDmaSlotCount);
+void TxErrorBridge(void *ctx) {
+  (void)ctx;
+  if (s_tx_error_callback != nullptr) {
+    s_tx_error_callback();
   }
-  if (primask == 0u) {
-    __enable_irq();
-  }
-  return len;
 }
 
 bool WaitRecvComplete(uint32_t timeout_ms) {
@@ -426,24 +305,91 @@ auto_ctrl_travel_dir_e MapTravelDir(PC_StepDir_t pc_dir) {
              : AUTO_CTRL_TRAVEL_DIR_HEAD_FORWARD;
 }
 
-void CopyFrame(uint8_t *dst, uint16_t buf_size, uint16_t frame_len) {
-  if (dst != nullptr && frame_len <= buf_size && frame_len <= kMrlinkTxBufSize) {
-    std::memcpy(dst, s_mrlink_tx_buf, frame_len);
+template <typename T>
+uint16_t BuildLatestOrFallback(const T &fallback,
+                               uint8_t *tx_buf,
+                               uint16_t buf_size) {
+  T latest{};
+  if (s_bus.CopyLatest(&latest)) {
+    return s_bus.Publish(latest, tx_buf, buf_size);
   }
+  return s_bus.Publish(fallback, tx_buf, buf_size);
 }
 
-template <typename T>
-uint16_t BuildWire(uint8_t cmd, const T &wire, uint8_t *tx_buf,
-                   uint16_t buf_size) {
-  const uint16_t frame_len =
-      s_link.Build(cmd, reinterpret_cast<const uint8_t *>(&wire), sizeof(T));
-  CopyFrame(tx_buf, buf_size, frame_len);
-  return (frame_len <= buf_size) ? frame_len : 0u;
+wire::ArmSimpleFeedback MakeArmSimpleFeedbackWire(
+    const PC_ArmSimpleFeedback_t &feedback) {
+  wire::ArmSimpleFeedback wire_feedback = {};
+  wire_feedback.mode = feedback.mode;
+  wire_feedback.point_mode = feedback.point_mode;
+  wire_feedback.suction = feedback.suction;
+  wire_feedback.joint1_angle_rad = feedback.joint1_angle_rad;
+  wire_feedback.joint1_velocity_rad_s = feedback.joint1_velocity_rad_s;
+  wire_feedback.joint2_angle_rad = feedback.joint2_angle_rad;
+  return wire_feedback;
+}
+
+wire::RodNewFeedback MakeRodNewFeedbackWire(
+    const PC_RodNewFeedback_t &feedback) {
+  wire::RodNewFeedback wire_feedback = {};
+  wire_feedback.mode = feedback.mode;
+  wire_feedback.pose = feedback.pose;
+  wire_feedback.grip = feedback.grip;
+  wire_feedback.at_target = feedback.at_target;
+  wire_feedback.target_angle_rad = feedback.target_angle_rad;
+  wire_feedback.tracked_angle_rad = feedback.tracked_angle_rad;
+  wire_feedback.tracked_velocity_rad_s = feedback.tracked_velocity_rad_s;
+  wire_feedback.feedback_angle_rad = feedback.feedback_angle_rad;
+  return wire_feedback;
+}
+
+wire::OreStoreFeedback MakeOreStoreFeedbackWire(
+    const PC_OreStoreFeedback_t &feedback) {
+  wire::OreStoreFeedback wire_feedback = {};
+  wire_feedback.mode = feedback.mode;
+  wire_feedback.all_homed = feedback.all_homed;
+  wire_feedback.online_mask = feedback.online_mask;
+  wire_feedback.homed_mask = feedback.homed_mask;
+  wire_feedback.platform_position_rad = feedback.platform_position_rad;
+  return wire_feedback;
+}
+
+wire::StepFeedback MakeStepFeedbackWire(const PC_StepFeedback_t &feedback) {
+  wire::StepFeedback wire_feedback = {};
+  wire_feedback.state = static_cast<uint8_t>(feedback.state);
+  wire_feedback.result = static_cast<uint8_t>(feedback.result);
+  wire_feedback.fault = static_cast<uint8_t>(feedback.fault);
+  wire_feedback.template_id = static_cast<uint8_t>(feedback.template_id);
+  wire_feedback.step_index = feedback.step_index;
+  wire_feedback.reserved = 0u;
+  wire_feedback.progress = feedback.progress;
+  return wire_feedback;
+}
+
+wire::StatusFeedback MakeStatusFeedbackWire(
+    const PC_StatusFeedback_t &feedback) {
+  wire::StatusFeedback wire_feedback = {};
+  wire_feedback.online = feedback.online;
+  wire_feedback.recv_count = feedback.recv_count;
+  wire_feedback.cpu_temp = feedback.cpu_temp;
+  wire_feedback.command_source = static_cast<uint8_t>(feedback.command_source);
+  return wire_feedback;
 }
 
 }  // namespace
 
 volatile PC_CommDebug_t g_pc_comm_debug;
+
+mr::link::Instance &MrlinkPc_Bus(void) {
+  return s_bus;
+}
+
+extern "C" bool MrlinkPc_SelectUart(BSP_UART_t uart) {
+  if (s_comm_initialized || uart >= BSP_UART_NUM) {
+    return false;
+  }
+  s_channel_uart = uart;
+  return true;
+}
 
 extern "C" bool MrlinkPc_CommInit(void) {
   s_thread_id = osThreadGetId();
@@ -459,12 +405,15 @@ extern "C" bool MrlinkPc_CommInit(void) {
   MrLink_Config_t cfg = {};
   cfg.max_payload_size = MRLINK_PC_MAX_PAYLOAD_SIZE;
   cfg.use_crc16 = true;
-  const int8_t init_ret = s_link.Init(&cfg, s_mrlink_rx_buf,
-                                      sizeof(s_mrlink_rx_buf),
-                                      s_mrlink_tx_buf,
-                                      sizeof(s_mrlink_tx_buf));
-  if (init_ret != MRLINK_OK) {
-    g_pc_comm_debug.last_init_error = init_ret;
+  const int8_t begin_ret =
+      s_bus.BeginUart(s_channel_uart, &cfg, RxReadyCallback, nullptr);
+  if (begin_ret != MRLINK_OK) {
+    g_pc_comm_debug.last_init_error = begin_ret;
+    return false;
+  }
+
+  if (s_bus.OnError(OnMrlinkError) != MRLINK_OK) {
+    g_pc_comm_debug.last_init_error = -25;
     return false;
   }
 
@@ -473,18 +422,8 @@ extern "C" bool MrlinkPc_CommInit(void) {
     return false;
   }
 
-  if (BSP_UART_RegisterRxEventCallback(BSP_UART_PC, RxEventCallback) !=
-      BSP_OK) {
-    g_pc_comm_debug.last_init_error = -22;
-    return false;
-  }
-
-  if (!StartRecv()) {
-    g_pc_comm_debug.last_init_error = -23;
-    return false;
-  }
-
   g_pc_comm_debug.last_init_error = 0;
+  s_comm_initialized = true;
   return true;
 }
 
@@ -497,12 +436,14 @@ extern "C" void MrlinkPc_CommProcess(uint32_t now_ms) {
   }
 
   (void)WaitRecvComplete(0u);
-  if (!s_rx_active && !StartRecv()) {
+  if (!MrLink_Channel_IsRxActive(s_bus.Channel()) &&
+      s_bus.StartChannelRx() != MRLINK_CHANNEL_OK) {
     g_pc_comm_debug.rx_restart_fail_count++;
   }
 
   while (true) {
-    const uint16_t rx_len = PopRxChunk(s_rx_parse_buf, sizeof(s_rx_parse_buf));
+    const uint16_t rx_len =
+        s_bus.PollChannelRx(s_rx_parse_buf, sizeof(s_rx_parse_buf), false);
     if (rx_len == 0u) {
       break;
     }
@@ -517,10 +458,10 @@ extern "C" void MrlinkPc_CommProcess(uint32_t now_ms) {
         g_pc_comm_debug.last_rx_raw, MRLINK_PC_MAX_FRAME_SIZE,
         s_rx_parse_buf, rx_len);
 
-    const uint32_t prev_ok = s_link.GetStats()->frame_rx_ok;
-    (void)s_link.FeedBytes(s_rx_parse_buf, rx_len);
-    const MrLink_Stats_t *stats = s_link.GetStats();
-    if (stats->frame_rx_ok == prev_ok) {
+    const uint32_t prev_ok = s_bus.GetStats()->frame_rx_ok;
+    const int8_t dispatch_ret = s_bus.Dispatch();
+    const MrLink_Stats_t *stats = s_bus.GetStats();
+    if (dispatch_ret != MRLINK_OK && stats->frame_rx_ok == prev_ok) {
       s_state.error_count++;
       g_pc_comm_debug.last_rx_result = MRLINK_ERR;
     }
@@ -546,14 +487,23 @@ extern "C" void MrlinkPc_DebugUpdate(void) {
   g_pc_comm_debug.last_recv_time = s_state.last_recv_time;
   g_pc_comm_debug.recv_count = s_state.recv_count;
   g_pc_comm_debug.error_count = s_state.error_count;
+  g_pc_comm_debug.rx_irq_count = MrLink_Channel_GetRxIrqCount(s_bus.Channel());
+  g_pc_comm_debug.rx_irq_byte_count =
+      MrLink_Channel_GetRxIrqByteCount(s_bus.Channel());
+  g_pc_comm_debug.rx_queue_overflow_count =
+      MrLink_Channel_GetRxOverflowCount(s_bus.Channel());
+  g_pc_comm_debug.rx_dma_start_fail_count =
+      MrLink_Channel_GetRxStartFailCount(s_bus.Channel());
   CopyPlainToVolatile(&g_pc_comm_debug.rx_chassis, &s_state.cmd.chassis);
   CopyPlainToVolatile(&g_pc_comm_debug.rx_pole, &s_state.cmd.pole);
   CopyPlainToVolatile(&g_pc_comm_debug.rx_arm_simple, &s_state.cmd.arm_simple);
   CopyPlainToVolatile(&g_pc_comm_debug.rx_rod_new, &s_state.cmd.rod_new);
   CopyPlainToVolatile(&g_pc_comm_debug.rx_ore_store, &s_state.cmd.ore_store);
+  CopyPlainToVolatile(&g_pc_comm_debug.rx_auto_action,
+                      &s_state.cmd.auto_action);
   CopyPlainToVolatile(&g_pc_comm_debug.rx_step, &s_state.cmd.step);
   CopyPlainToVolatile(&g_pc_comm_debug.rx_imu, &s_state.cmd.imu);
-  const MrLink_Stats_t *stats = s_link.GetStats();
+  const MrLink_Stats_t *stats = s_bus.GetStats();
   if (stats != nullptr) {
     CopyPlainToVolatile(&g_pc_comm_debug.mrlink_stats, stats);
     g_pc_comm_debug.rx_header_skip_count = stats->frame_rx_header_skip;
@@ -592,6 +542,12 @@ extern "C" const PC_OreStoreCMD_t *MrlinkPc_GetOreStoreCMD(void) {
   return &s_state.cmd.ore_store;
 }
 
+extern "C" const PC_AutoActionCMD_t *MrlinkPc_GetAutoActionCMD(void) {
+  return (s_state.cmd.auto_action.action != PC_AUTO_ACTION_NONE)
+             ? &s_state.cmd.auto_action
+             : nullptr;
+}
+
 extern "C" const PC_StepCMD_t *MrlinkPc_GetStepCMD(void) {
   return &s_state.cmd.step;
 }
@@ -600,55 +556,68 @@ extern "C" const PC_ImuCMD_t *MrlinkPc_GetImuCMD(void) {
   return &s_state.cmd.imu;
 }
 
-extern "C" void MrlinkPc_SetChassisFeedback(
-    const PC_ChassisFeedback_t *fb) {
-  if (fb != nullptr) {
-    s_state.feedback.chassis = *fb;
+extern "C" bool MrlinkPc_PublishFeedback(uint8_t topic,
+                                           const void *feedback) {
+  if (feedback == nullptr) {
+    return false;
   }
-}
 
-extern "C" void MrlinkPc_SetPoleFeedback(const PC_PoleFeedback_t *fb) {
-  if (fb != nullptr) {
-    s_state.feedback.pole = *fb;
-  }
-}
-
-extern "C" void MrlinkPc_SetArmFeedback(const PC_ArmFeedback_t *fb) {
-  if (fb != nullptr) {
-    s_state.feedback.arm = *fb;
-  }
-}
-
-extern "C" void MrlinkPc_SetArmSimpleFeedback(
-    const PC_ArmSimpleFeedback_t *fb) {
-  if (fb != nullptr) {
-    s_state.feedback.arm_simple = *fb;
-  }
-}
-
-extern "C" void MrlinkPc_SetRodNewFeedback(
-    const PC_RodNewFeedback_t *fb) {
-  if (fb != nullptr) {
-    s_state.feedback.rod_new = *fb;
-  }
-}
-
-extern "C" void MrlinkPc_SetOreStoreFeedback(
-    const PC_OreStoreFeedback_t *fb) {
-  if (fb != nullptr) {
-    s_state.feedback.ore_store = *fb;
-  }
-}
-
-extern "C" void MrlinkPc_SetStepFeedback(const PC_StepFeedback_t *fb) {
-  if (fb != nullptr) {
-    s_state.feedback.step = *fb;
-  }
-}
-
-extern "C" void MrlinkPc_SetStatusFeedback(const PC_StatusFeedback_t *fb) {
-  if (fb != nullptr) {
-    s_state.feedback.status = *fb;
+  switch (topic) {
+    case PC_FEEDBACK_CHASSIS: {
+      const auto *typed = static_cast<const PC_ChassisFeedback_t *>(feedback);
+      s_state.feedback.chassis = *typed;
+      return s_bus.StoreLatest(*typed);
+    }
+    case PC_FEEDBACK_POLE: {
+      const auto *typed = static_cast<const PC_PoleFeedback_t *>(feedback);
+      s_state.feedback.pole = *typed;
+      return s_bus.StoreLatest(*typed);
+    }
+    case PC_FEEDBACK_ARM_SIMPLE: {
+      const auto *typed = static_cast<const PC_ArmSimpleFeedback_t *>(feedback);
+      s_state.feedback.arm_simple = *typed;
+      const wire::ArmSimpleFeedback wire_feedback =
+          MakeArmSimpleFeedbackWire(*typed);
+      return s_bus.StoreLatest(wire_feedback);
+    }
+    case PC_FEEDBACK_ROD_NEW: {
+      const auto *typed = static_cast<const PC_RodNewFeedback_t *>(feedback);
+      s_state.feedback.rod_new = *typed;
+      const wire::RodNewFeedback wire_feedback = MakeRodNewFeedbackWire(*typed);
+      return s_bus.StoreLatest(wire_feedback);
+    }
+    case PC_FEEDBACK_ORE_STORE: {
+      const auto *typed = static_cast<const PC_OreStoreFeedback_t *>(feedback);
+      s_state.feedback.ore_store = *typed;
+      const wire::OreStoreFeedback wire_feedback =
+          MakeOreStoreFeedbackWire(*typed);
+      return s_bus.StoreLatest(wire_feedback);
+    }
+    case PC_FEEDBACK_AUTO_ACTION: {
+      const auto *typed =
+          static_cast<const PC_AutoActionFeedback_t *>(feedback);
+      s_auto_action_feedback = *typed;
+      return s_bus.StoreLatest(*typed);
+    }
+    case PC_FEEDBACK_IR_ORE: {
+      const auto *typed = static_cast<const PC_IrOreFeedback_t *>(feedback);
+      s_ir_ore_feedback = *typed;
+      return s_bus.StoreLatest(*typed);
+    }
+    case PC_FEEDBACK_STEP: {
+      const auto *typed = static_cast<const PC_StepFeedback_t *>(feedback);
+      s_state.feedback.step = *typed;
+      const wire::StepFeedback wire_feedback = MakeStepFeedbackWire(*typed);
+      return s_bus.StoreLatest(wire_feedback);
+    }
+    case PC_FEEDBACK_STATUS: {
+      const auto *typed = static_cast<const PC_StatusFeedback_t *>(feedback);
+      s_state.feedback.status = *typed;
+      const wire::StatusFeedback wire_feedback = MakeStatusFeedbackWire(*typed);
+      return s_bus.StoreLatest(wire_feedback);
+    }
+    default:
+      return false;
   }
 }
 
@@ -673,92 +642,69 @@ extern "C" void MrlinkPc_ClearStepCommand(void) {
   s_state.cmd.step.template_id = PC_STEP_TEMPLATE_NONE;
 }
 
+extern "C" void MrlinkPc_ClearAutoActionCommand(void) {
+  s_state.cmd.auto_action.action = PC_AUTO_ACTION_NONE;
+}
+
 extern "C" uint16_t MrlinkPc_BuildFeedbackFrame(uint8_t cmd, uint8_t *tx_buf,
                                                  uint16_t buf_size) {
   switch (cmd) {
     case PC_FEEDBACK_HEARTBEAT:
     {
-      const uint16_t frame_len = s_link.Build(cmd, nullptr, 0u);
-      CopyFrame(tx_buf, buf_size, frame_len);
-      return (frame_len <= buf_size) ? frame_len : 0u;
+      return s_bus.PublishEmpty(cmd, tx_buf, buf_size);
     }
     case PC_FEEDBACK_CHASSIS:
-      return BuildWire(cmd, s_state.feedback.chassis, tx_buf, buf_size);
+    {
+      return BuildLatestOrFallback(s_state.feedback.chassis, tx_buf, buf_size);
+    }
     case PC_FEEDBACK_POLE:
-      return BuildWire(cmd, s_state.feedback.pole, tx_buf, buf_size);
+    {
+      return BuildLatestOrFallback(s_state.feedback.pole, tx_buf, buf_size);
+    }
     case PC_FEEDBACK_ARM_SIMPLE: {
-      ArmSimpleFeedbackWire wire = {};
-      wire.mode = s_state.feedback.arm_simple.mode;
-      wire.point_mode = s_state.feedback.arm_simple.point_mode;
-      wire.suction = s_state.feedback.arm_simple.suction;
-      wire.joint1_temperature_warning =
-        s_state.feedback.arm_simple.joint1_temperature_warning;
-      wire.joint1_temperature_over_limit =
-        s_state.feedback.arm_simple.joint1_temperature_over_limit;
-      wire.joint1_temperature_limit_latched =
-        s_state.feedback.arm_simple.joint1_temperature_limit_latched;
-      wire.joint1_angle_rad = s_state.feedback.arm_simple.joint1_angle_rad;
-      wire.joint1_velocity_rad_s =
-        s_state.feedback.arm_simple.joint1_velocity_rad_s;
-      wire.joint1_temperature_c =
-        s_state.feedback.arm_simple.joint1_temperature_c;
-      wire.joint2_angle_rad = s_state.feedback.arm_simple.joint2_angle_rad;
-      wire.target_joint1_rad =
-        s_state.feedback.arm_simple.target_joint1_rad;
-      wire.target_joint2_rad =
-        s_state.feedback.arm_simple.target_joint2_rad;
-      return BuildWire(cmd, wire, tx_buf, buf_size);
+      const wire::ArmSimpleFeedback fallback =
+          MakeArmSimpleFeedbackWire(s_state.feedback.arm_simple);
+      return BuildLatestOrFallback(fallback, tx_buf, buf_size);
     }
     case PC_FEEDBACK_ROD_NEW: {
-      RodNewFeedbackWire wire = {};
-      wire.mode = s_state.feedback.rod_new.mode;
-      wire.pose = s_state.feedback.rod_new.pose;
-      wire.grip = s_state.feedback.rod_new.grip;
-      wire.at_target = s_state.feedback.rod_new.at_target;
-      wire.target_angle_rad = s_state.feedback.rod_new.target_angle_rad;
-      wire.tracked_angle_rad = s_state.feedback.rod_new.tracked_angle_rad;
-      wire.tracked_velocity_rad_s =
-        s_state.feedback.rod_new.tracked_velocity_rad_s;
-      wire.feedback_angle_rad = s_state.feedback.rod_new.feedback_angle_rad;
-      return BuildWire(cmd, wire, tx_buf, buf_size);
+      const wire::RodNewFeedback fallback =
+          MakeRodNewFeedbackWire(s_state.feedback.rod_new);
+      return BuildLatestOrFallback(fallback, tx_buf, buf_size);
     }
     case PC_FEEDBACK_ORE_STORE: {
-      OreStoreFeedbackWire wire = {};
-      wire.mode = s_state.feedback.ore_store.mode;
-      wire.all_homed = s_state.feedback.ore_store.all_homed;
-      wire.online_mask = s_state.feedback.ore_store.online_mask;
-      wire.homed_mask = s_state.feedback.ore_store.homed_mask;
-      wire.platform_position_rad =
-        s_state.feedback.ore_store.platform_position_rad;
-      wire.gate_position_rad0 = s_state.feedback.ore_store.gate_position_rad[0];
-      wire.gate_position_rad1 = s_state.feedback.ore_store.gate_position_rad[1];
-      wire.track_position_rad0 =
-        s_state.feedback.ore_store.track_position_rad[0];
-      wire.track_position_rad1 =
-        s_state.feedback.ore_store.track_position_rad[1];
-      return BuildWire(cmd, wire, tx_buf, buf_size);
+      const wire::OreStoreFeedback fallback =
+          MakeOreStoreFeedbackWire(s_state.feedback.ore_store);
+      return BuildLatestOrFallback(fallback, tx_buf, buf_size);
+    }
+    case PC_FEEDBACK_AUTO_ACTION: {
+      return BuildLatestOrFallback(s_auto_action_feedback, tx_buf, buf_size);
+    }
+    case PC_FEEDBACK_IR_ORE: {
+      return BuildLatestOrFallback(s_ir_ore_feedback, tx_buf, buf_size);
     }
     case PC_FEEDBACK_STEP: {
-      StepFeedbackWire wire = {};
-      wire.state = static_cast<uint8_t>(s_state.feedback.step.state);
-      wire.result = static_cast<uint8_t>(s_state.feedback.step.result);
-      wire.fault = static_cast<uint8_t>(s_state.feedback.step.fault);
-      wire.template_id = static_cast<uint8_t>(s_state.feedback.step.template_id);
-      wire.step_index = s_state.feedback.step.step_index;
-      wire.reserved = 0u;
-      wire.progress = s_state.feedback.step.progress;
-      return BuildWire(cmd, wire, tx_buf, buf_size);
+      const wire::StepFeedback fallback =
+          MakeStepFeedbackWire(s_state.feedback.step);
+      return BuildLatestOrFallback(fallback, tx_buf, buf_size);
     }
     case PC_FEEDBACK_STATUS: {
-      StatusFeedbackWire wire = {};
-      wire.online = s_state.feedback.status.online;
-      wire.recv_count = s_state.feedback.status.recv_count;
-      wire.cpu_temp = s_state.feedback.status.cpu_temp;
-      wire.command_source =
-        static_cast<uint8_t>(s_state.feedback.status.command_source);
-      return BuildWire(cmd, wire, tx_buf, buf_size);
+      const wire::StatusFeedback fallback =
+          MakeStatusFeedbackWire(s_state.feedback.status);
+      return BuildLatestOrFallback(fallback, tx_buf, buf_size);
     }
     default:
       return 0u;
   }
+}
+
+extern "C" int8_t MrlinkPc_SendFrame(uint8_t *data, uint16_t len) {
+  return MrLink_Channel_Send(s_bus.Channel(), data, len);
+}
+
+extern "C" int8_t MrlinkPc_RegisterTxCallbacks(
+    MrlinkPc_TxCallback_t tx_done, MrlinkPc_TxCallback_t tx_error) {
+  s_tx_done_callback = tx_done;
+  s_tx_error_callback = tx_error;
+  return MrLink_Channel_RegisterTxCallbacks(s_bus.Channel(), TxDoneBridge,
+                                            TxErrorBridge, nullptr);
 }

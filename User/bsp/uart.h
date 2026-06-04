@@ -29,6 +29,7 @@ extern "C" {
 typedef enum {
   BSP_UART_RC,
   BSP_UART_PC,
+  BSP_UART_IR,
   BSP_UART_NUM,
   BSP_UART_ERR,
 } BSP_UART_t;

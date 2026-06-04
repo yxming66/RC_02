@@ -1,3 +1,5 @@
+#include "module/mrlink_pc_comm/pc_messages.hpp"
+
 #include "task/user_task.h"
 
 #include "module/chassis/mecanum.hpp"
@@ -133,21 +135,20 @@ extern "C" void Task_chassis_main(void *argument) {
       Pole_Output(&pole);
     }
 
-    /* 上位机反馈数据设置 */
-    if (MrlinkPc_GetState() != nullptr) {
-      PC_ChassisFeedback_t chassis_fb = {0};
-      chassis_fb.vx = fb.chassis_vel.vx;
-      chassis_fb.vy = fb.chassis_vel.vy;
-      chassis_fb.wz = fb.chassis_vel.wz;
-      MrlinkPc_SetChassisFeedback(&chassis_fb);
+    PC_ChassisFeedback_t chassis_fb = {0};
+    chassis_fb.vx = fb.chassis_vel.vx;
+    chassis_fb.vy = fb.chassis_vel.vy;
+    chassis_fb.wz = fb.chassis_vel.wz;
+    (void)MrlinkPc_Bus().StoreLatest(chassis_fb);
 
+    if (run_pole_update) {
       PC_PoleFeedback_t pole_fb = {0};
       pole_fb.lift[0] = pole.feedback.support_angle_avg;
       pole_fb.lift[1] = pole.feedback.support_angle_avg;
       for (uint8_t i = 0u; i < POLE_MOTOR_NUM; i++) {
         pole_fb.motor_total_angle[i] = pole.feedback.motor[i].rotor_total_angle;
       }
-      MrlinkPc_SetPoleFeedback(&pole_fb);
+      (void)MrlinkPc_Bus().StoreLatest(pole_fb);
     }
 
     task_runtime.stack_water_mark.chassis_main =

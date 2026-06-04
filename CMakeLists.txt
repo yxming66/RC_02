@@ -87,8 +87,13 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     User/device/motor/packages/controller/motor_controller.cpp
     User/device/motor/packages/soft_limit_learning/soft_limit_learning.cpp
     User/device/wheel/wheel.cpp
-    User/device/mrlink/mrlink_ringbuf.c
-    User/device/mrlink/mrlink.c
+    User/component/container/spsc_ringbuf.c
+    User/device/mrlink/src/mrlink.c
+    User/device/mrlink/src/mrlink_channel.c
+    User/device/mrlink/internal/mrlink_channel_uart.c
+    User/device/mrlink/internal/mrlink_channel_fdcan.c
+    User/device/mrlink/internal/mrlink_channel_usb.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/User/device/ir_dock/ir_dock.c
     User/component/toolbox/matrix.cpp
     User/component/toolbox/robotics.cpp
     User/component/toolbox/utils.cpp
@@ -151,6 +156,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     User/task/arm_simple_main.c
     User/task/rod_main.c
     User/task/ore_store_main.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/User/task/ir_dock_task.c
     User/task/atti_esti.c
     User/task/pc_comm_task.c
 )

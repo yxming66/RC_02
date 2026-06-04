@@ -33,6 +33,7 @@ void Task_Init(void *argument) {
   task_runtime.thread.pc_comm = osThreadNew(Task_pc_comm, NULL, &attr_pc_comm);
     task_runtime.thread.rod = osThreadNew(Task_rod, NULL, &attr_rod);
     task_runtime.thread.ore_store = osThreadNew(Task_ore_store, NULL, &attr_ore_store);
+    task_runtime.thread.ir_dock = osThreadNew(Task_ir_dock, NULL, &attr_ir_dock);
 
   task_runtime.msgq.chassis.imu =
       osMessageQueueNew(1u, sizeof(Chassis_IMU_t), NULL);
