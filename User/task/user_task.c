@@ -32,7 +32,7 @@ const osThreadAttr_t attr_rc_main = {
 };
 const osThreadAttr_t attr_sick = {
     .name = "sick",
-    .priority = osPriorityNormal,
+    .priority = osPriorityAboveNormal,
     .stack_size = 256 * 4,
 };
 const osThreadAttr_t attr_auto_ctrl = {

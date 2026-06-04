@@ -7,6 +7,9 @@
 extern "C" {
 #endif
 
+/* 红外收发最小间隔：250ms。
+ * 既约束 RX (IrDock_TryStartReceive) 也约束 TX (IrDock_SendStatus/OreInfo)，
+ * 避免链路饱和、防止自发自收。 */
 #ifndef IR_DOCK_MIN_INTERVAL_MS
 #define IR_DOCK_MIN_INTERVAL_MS (250u)
 #endif

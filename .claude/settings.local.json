@@ -54,7 +54,9 @@
       "Bash(mingw32-make -j4)",
       "Bash(arm-none-eabi-g++ -c -std=c++17 -fsyntax-only -I. -IUser -ICore/Inc -IDrivers/CMSIS/Include -IDrivers/CMSIS/Device/ST/STM32H7xx/Include User/device/motor/packages/controller/motor_controller.cpp)",
       "Bash(arm-none-eabi-g++ -c -mcpu=cortex-m7 -mthumb -mfloat-abi=hard -mfpu=fpv5-d16 -DUSE_HAL_DRIVER -DSTM32H723xx -I\"Core/Inc\" -I\"User\" -I\"cmake/stm32cubemx\" -fsyntax-only User/module/ore_store.cpp)",
-      "Bash(ta)"
+      "Bash(ta)",
+      "Bash(git -C D:/STM32Projects_HAL/board-H7/RC_02 log --oneline -5)",
+      "Bash(xargs grep -l \"rotor_total_angle\\\\|rotor_abs_angle\\\\|rotor_single_angle\\\\|angle_lost_count\")"
     ]
   }
 }

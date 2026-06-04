@@ -2,6 +2,7 @@
  * PC_COMM Task - 上位机通信任务
  */
 #include <stddef.h>
+#include <string.h>
 
 #include "task/user_task.h"
 #include "module/mrlink_pc_comm/mrlink_pc_comm.h"
@@ -13,6 +14,9 @@
 #define PC_COMM_TX_PERIOD_MS (20u)  /* 50Hz */
 #define PC_COMM_LOOP_PERIOD_MS (1u)
 #define PC_COMM_TX_DMA_TIMEOUT_MS (100u)
+/* IR_ORE 12 位置矿种类只在对端发来时变一次，正常状态几乎不变。
+ * 仅在数据变化或距上次发送超过心跳周期时才发，避免 50Hz 重复刷屏。 */
+#define PC_COMM_IR_ORE_HEARTBEAT_MS (500u)
 
 extern volatile PC_CommandSource_t g_pc_command_source;
 
@@ -27,9 +31,10 @@ static const uint8_t s_feedback_cmds[] = {
     PC_FEEDBACK_ROD_NEW,
     PC_FEEDBACK_ORE_STORE,
     PC_FEEDBACK_AUTO_ACTION,
-    PC_FEEDBACK_IR_ORE,
     PC_FEEDBACK_STEP,
     PC_FEEDBACK_STATUS,
+    /* PC_FEEDBACK_IR_ORE 不在自动循环里：由 PcComm_TryUpdateIrOreFeedback
+     * 判定变更或心跳到期后单独追加，避免 50Hz 重复发送。 */
 };
 
 static uint16_t PcComm_DebugCopyRaw(volatile uint8_t *dst, uint16_t dst_size,
@@ -181,7 +186,11 @@ static void PcComm_UpdateModuleFeedback(void) {
     }
 }
 
-static void PcComm_UpdateIrOreFeedback(uint32_t now_ms) {
+static PC_IrOreFeedback_t s_last_published_ir_ore = {0};
+static bool s_last_published_ir_ore_inited = false;
+static uint32_t s_last_ir_ore_publish_ms = 0u;
+
+static bool PcComm_TryUpdateIrOreFeedback(uint32_t now_ms) {
     IrDock_OreInfo_t ir_info = {0};
     PC_IrOreFeedback_t pc_ir_ore = {0};
 
@@ -195,7 +204,22 @@ static void PcComm_UpdateIrOreFeedback(uint32_t now_ms) {
     }
     pc_ir_ore.age_ms = ir_info.age_ms;
     pc_ir_ore.rx_count = ir_info.rx_count;
+
+    const bool first_send = !s_last_published_ir_ore_inited;
+    const bool changed = first_send ||
+        memcmp(&pc_ir_ore, &s_last_published_ir_ore, sizeof(pc_ir_ore)) != 0;
+    const bool heartbeat_due =
+        (now_ms - s_last_ir_ore_publish_ms) >= PC_COMM_IR_ORE_HEARTBEAT_MS;
+
+    if (!changed && !heartbeat_due) {
+        return false;
+    }
+
+    s_last_published_ir_ore = pc_ir_ore;
+    s_last_published_ir_ore_inited = true;
+    s_last_ir_ore_publish_ms = now_ms;
     (void)MrlinkPc_PublishFeedback(PC_FEEDBACK_IR_ORE, &pc_ir_ore);
+    return true;
 }
 
 static void PcComm_UpdateStatusFeedback(void) {
@@ -226,10 +250,17 @@ static bool PcComm_TransmitFeedback(void) {
 
     PcComm_UpdateStatusFeedback();
     PcComm_UpdateModuleFeedback();
-    PcComm_UpdateIrOreFeedback(now);
+    const bool ir_ore_pending = PcComm_TryUpdateIrOreFeedback(now);
 
     for (uint8_t i = 0; i < (uint8_t)(sizeof(s_feedback_cmds) / sizeof(s_feedback_cmds[0])); ++i) {
         if (PcComm_AppendFeedbackFrame(s_feedback_cmds[i], &tx_len)) {
+            frame_count++;
+        }
+    }
+
+    /* IR_ORE 仅在数据变更或心跳到期时才追加帧，避免 50Hz 重复刷屏。 */
+    if (ir_ore_pending) {
+        if (PcComm_AppendFeedbackFrame(PC_FEEDBACK_IR_ORE, &tx_len)) {
             frame_count++;
         }
     }

@@ -130,7 +130,7 @@ Config_RobotParam_t robot_config = {
             .max_current = 1.0f,
             .support_total_travel = 26.7f,
             .support_lift_speed = 70.0f,//70
-            .support_lift_accel = 0.0f,//180
+            .support_lift_accel = 180.0f,//180
         },
     },
     .ore_store_param = {
@@ -249,7 +249,7 @@ Config_RobotParam_t robot_config = {
             .master_id = 0x12,
             .can_id = 0x02,
             .module = MOTOR_DM_J4340,
-            .reverse = false,
+            .reverse = true,
         },
         .servo_param = {
             .pwm_channel = BSP_PWM_ARM_SERVO,
@@ -269,7 +269,7 @@ Config_RobotParam_t robot_config = {
             .joint1_gravity_ff_limit_nm = 5.0f,
         },
         .soft_limit = {
-            .joint1_min = -0.269599289f,
+            .joint1_min = -0.239599289f,
             .joint1_max = 1.82628715f,
             .joint2_min = -2.356194f,   /* 舵机中心0点向负方向最大约-135° */
             .joint2_max = 2.356194f,    /* 舵机中心0点向正方向最大约+135° */
