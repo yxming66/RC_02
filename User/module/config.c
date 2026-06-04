@@ -130,7 +130,7 @@ Config_RobotParam_t robot_config = {
             .max_current = 1.0f,
             .support_total_travel = 26.7f,
             .support_lift_speed = 70.0f,//70
-            .support_lift_accel = 180.0f,//180
+            .support_lift_accel = 100.0f,//180
         },
     },
     .ore_store_param = {
