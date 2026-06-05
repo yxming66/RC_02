@@ -28,29 +28,27 @@ extern "C" {
 #define BLINK_FREQ (50.0)
 #define ATTI_ESTI_FREQ (400.0)
 #define CHASSIS_MAIN_FREQ (500.0)
+#define POLE_FREQ (250.0)
 #define RC_MAIN_FREQ (1000.0)
 #define CMD_CENTER_FREQ (1000.0)
-#define SICK_FREQ (100.0)
 #define AUTO_CTRL_FREQ (100.0)
 #define ARM_SIMPLE_FREQ (500.0)
 #define ROD_FREQ (400.0)
 #define PC_COMM_FREQ (100.0)
 #define ORE_STORE_FREQ (500.0)
-#define IR_DOCK_FREQ (4.0)
 /* 任务初始化延时ms */
 #define TASK_INIT_DELAY (100u)
 #define BLINK_INIT_DELAY (0)
 #define ATTI_ESTI_INIT_DELAY (0)
 #define CHASSIS_MAIN_INIT_DELAY (0) 
+#define POLE_INIT_DELAY (0)
 #define RC_MAIN_INIT_DELAY (0)
 #define CMD_CENTER_INIT_DELAY (0)
-#define SICK_INIT_DELAY (0)
 #define AUTO_CTRL_INIT_DELAY (0)
 #define ARM_SIMPLE_INIT_DELAY (100u)
 #define ROD_INIT_DELAY (0)
 #define PC_COMM_INIT_DELAY (500u)
 #define ORE_STORE_INIT_DELAY (100u)
-#define IR_DOCK_INIT_DELAY (0)
 /* Exported defines --------------------------------------------------------- */
 /* Exported macro ----------------------------------------------------------- */
 /* Exported types ----------------------------------------------------------- */
@@ -154,16 +152,14 @@ typedef struct {
         osThreadId_t blink;
         osThreadId_t atti_esti;
         osThreadId_t chassis_main;
+        osThreadId_t pole;
         osThreadId_t rc_main;
         osThreadId_t cmd_center;
-        osThreadId_t sick;
         osThreadId_t auto_ctrl;
         osThreadId_t arm_simple;
         osThreadId_t rod;
         osThreadId_t pc_comm;
         osThreadId_t ore_store;
-        osThreadId_t ir_dock;
-
     } thread;
 
     /* USER MESSAGE BEGIN */
@@ -216,15 +212,13 @@ typedef struct {
         UBaseType_t blink;
         UBaseType_t atti_esti;
         UBaseType_t chassis_main;
+        UBaseType_t pole;
         UBaseType_t rc_main;
         UBaseType_t cmd_center;
-        UBaseType_t sick;
         UBaseType_t auto_ctrl;
         UBaseType_t rod;
         UBaseType_t pc_comm;
         UBaseType_t ore_store;
-        UBaseType_t ir_dock;
-
     } stack_water_mark;
 
 } Task_Runtime_t;
@@ -251,29 +245,27 @@ extern const osThreadAttr_t attr_init;
 extern const osThreadAttr_t attr_blink;
 extern const osThreadAttr_t attr_atti_esti;
 extern const osThreadAttr_t attr_chassis_main;
+extern const osThreadAttr_t attr_pole;
 extern const osThreadAttr_t attr_rc_main;
 extern const osThreadAttr_t attr_cmd_center;
-extern const osThreadAttr_t attr_sick;
 extern const osThreadAttr_t attr_auto_ctrl;
 extern const osThreadAttr_t attr_arm_simple;
 extern const osThreadAttr_t attr_rod;
 extern const osThreadAttr_t attr_pc_comm;
 extern const osThreadAttr_t attr_ore_store;
-extern const osThreadAttr_t attr_ir_dock;
 /* 任务函数声明 */
 void Task_Init(void *argument);
 void Task_blink(void *argument);
 void Task_atti_esti(void *argument);
 void Task_chassis_main(void *argument);
+void Task_pole(void *argument);
 void Task_rc_main(void *argument);
 void Task_cmd_center(void *argument);
-void Task_sick(void *argument);
 void Task_auto_ctrl(void *argument);
 void Task_arm_simple(void *argument);
 void Task_rod(void *argument);
 void Task_pc_comm(void *argument);
 void Task_ore_store(void *argument);
-void Task_ir_dock(void *argument);
 
 bool Task_ChassisMainPoleGroupAtTarget(uint8_t group, float threshold_rad);
 bool Task_ChassisMainPoleAllAtTarget(float threshold_rad);
@@ -301,7 +293,6 @@ bool Task_OreStorePowerOnHomeAttemptDone(void);
 bool Task_OreStorePowerOnHomeFailed(void);
 bool Task_OreStoreIsAxisAtTarget(uint8_t axis, float threshold_rad);
 bool Task_OreStoreIsAllAtTarget(float threshold_rad);
-bool Task_SickGetLatestOutput(Sick_Output_t *output);
 const ArmSimple_Feedback_t *Task_ArmSimpleGetFeedback(void);
 const RodNew_Feedback_t *Task_RodNewGetFeedback(void);
 const OreStore_Feedback_t *Task_OreStoreGetFeedback(void);

@@ -152,14 +152,13 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     User/task/chassis_main.cpp
     User/task/cmd_center_task.cpp
     User/task/init.c
+    User/task/pole_main.cpp
     User/task/rc_main.c
     User/task/auto_ctrl_feed.c
     User/task/user_task.c
-    User/task/sick.c
     User/task/arm_simple_main.c
     User/task/rod_main.c
     User/task/ore_store_main.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/User/task/ir_dock_task.c
     User/task/atti_esti.c
     User/task/pc_comm_task.c
 )

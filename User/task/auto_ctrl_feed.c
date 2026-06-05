@@ -46,6 +46,9 @@ static PC_AutoAction_t auto_action_last_action = PC_AUTO_ACTION_NONE;
 static PC_AutoActionSubsystem_t auto_action_last_subsystem =
     PC_AUTO_ACTION_SUBSYSTEM_NONE;
 static AutoOre_Action_t auto_ore_last_action = AUTO_ORE_ACTION_NONE;
+static bool auto_ctrl_sick_inited = false;
+static bool auto_ctrl_ir_dock_inited = false;
+static uint32_t auto_ctrl_ir_dock_next_tick = 0U;
 static const GPIO_PinState photo1_active_state = GPIO_PIN_RESET;
 static const GPIO_PinState photo2_active_state = GPIO_PIN_RESET;
 static const GPIO_PinState photo3_active_state = GPIO_PIN_RESET;
@@ -62,6 +65,10 @@ static const GPIO_PinState checkphoto_ore_has_ore_state = GPIO_PIN_RESET;
 
 #ifndef AUTO_ORE_PHOTO_STABLE_MS
 #define AUTO_ORE_PHOTO_STABLE_MS (500u)
+#endif
+
+#ifndef AUTO_CTRL_IR_DOCK_PROCESS_FREQ
+#define AUTO_CTRL_IR_DOCK_PROCESS_FREQ (4.0f)
 #endif
 
 #ifndef AUTO_ROD_SPEARHEAD_PHOTO_GPIO_PORT
@@ -143,6 +150,29 @@ static bool AutoCtrlFeed_ReadRodSpearheadPhoto(void) {
 #else
   return false;
 #endif
+}
+
+static bool AutoCtrlFeed_TickReached(uint32_t now_tick, uint32_t target_tick) {
+  return (int32_t)(now_tick - target_tick) >= 0;
+}
+
+static void AutoCtrlFeed_UpdateIrDockProcess(uint32_t now_tick) {
+  if (!auto_ctrl_ir_dock_inited) {
+    return;
+  }
+
+  const uint32_t period_tick =
+      (uint32_t)((float)osKernelGetTickFreq() /
+                 (float)AUTO_CTRL_IR_DOCK_PROCESS_FREQ);
+  const uint32_t safe_period_tick = period_tick > 0U ? period_tick : 1U;
+  if (!AutoCtrlFeed_TickReached(now_tick, auto_ctrl_ir_dock_next_tick)) {
+    return;
+  }
+
+  IrDock_Process(now_tick);
+  do {
+    auto_ctrl_ir_dock_next_tick += safe_period_tick;
+  } while (AutoCtrlFeed_TickReached(now_tick, auto_ctrl_ir_dock_next_tick));
 }
 
 static bool AutoCtrlFeed_DebounceOrePhoto(GPIO_PinState raw_state,
@@ -851,6 +881,10 @@ void Task_auto_ctrl(void *argument) {
 
   AutoCtrl_Init(&auto_ctrl);
   auto_ctrl_inited = true;
+  auto_ctrl_sick_inited = (SICK_Init() == DEVICE_OK);
+  IrDock_Init(tick);
+  auto_ctrl_ir_dock_inited = true;
+  auto_ctrl_ir_dock_next_tick = tick;
   AutoCtrlFeed_InitAutoOre();
   AutoCtrlFeed_InitAutoRodSpearhead();
 
@@ -862,11 +896,16 @@ void Task_auto_ctrl(void *argument) {
     if (auto_ctrl_inited) {
       now_ms = osKernelGetTickCount();
 
+      if (auto_ctrl_sick_inited) {
+        SICK_Update(now_ms);
+      }
+      AutoCtrlFeed_UpdateIrDockProcess(now_ms);
+
       AutoCtrlFeed_CacheLocalYawZero();
 
       feedback.yaw_auto_rad = AutoCtrlFeed_SelectYawRad();
       /* 当前 AutoCtrl API 只消费前向两路 SICK。 */
-      (void)Task_SickGetLatestOutput(&auto_ctrl_sick_output);
+      (void)SICK_GetLatestOutput(&auto_ctrl_sick_output);
       feedback.sick_front_left_cm = auto_ctrl_sick_output.valid[2]
                     ? auto_ctrl_sick_output.distance_m[2] * 100.0f
                     : -1.0f;

@@ -26,15 +26,14 @@ void Task_Init(void *argument) {
   task_runtime.thread.blink = osThreadNew(Task_blink, NULL, &attr_blink);
   task_runtime.thread.atti_esti = osThreadNew(Task_atti_esti, NULL, &attr_atti_esti);
   task_runtime.thread.chassis_main = osThreadNew(Task_chassis_main, NULL, &attr_chassis_main);
+  task_runtime.thread.pole = osThreadNew(Task_pole, NULL, &attr_pole);
   task_runtime.thread.rc_main = osThreadNew(Task_rc_main, NULL, &attr_rc_main);
   task_runtime.thread.cmd_center = osThreadNew(Task_cmd_center, NULL, &attr_cmd_center);
-  task_runtime.thread.sick = osThreadNew(Task_sick, NULL, &attr_sick);
   task_runtime.thread.auto_ctrl =osThreadNew(Task_auto_ctrl, NULL, &attr_auto_ctrl);
     task_runtime.thread.arm_simple = osThreadNew(Task_arm_simple, NULL, &attr_arm_simple);
   task_runtime.thread.pc_comm = osThreadNew(Task_pc_comm, NULL, &attr_pc_comm);
     task_runtime.thread.rod = osThreadNew(Task_rod, NULL, &attr_rod);
     task_runtime.thread.ore_store = osThreadNew(Task_ore_store, NULL, &attr_ore_store);
-    task_runtime.thread.ir_dock = osThreadNew(Task_ir_dock, NULL, &attr_ir_dock);
 
   task_runtime.msgq.chassis.imu =
       osMessageQueueNew(1u, sizeof(Chassis_IMU_t), NULL);
