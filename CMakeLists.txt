@@ -145,11 +145,12 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     User/module/rod_new.cpp
     User/module/mrlink_pc_comm/mrlink_pc_comm.cpp
     User/module/cmd_center/cmd_center_compile_check.cpp
+    User/module/cmd_center/rc_cmd_center_app.cpp
 
     # User/task sources
     User/task/blink.c
     User/task/chassis_main.cpp
-    User/task/cmd_center_bridge.cpp
+    User/task/cmd_center_task.cpp
     User/task/init.c
     User/task/rc_main.c
     User/task/auto_ctrl_feed.c
@@ -163,7 +164,10 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     User/task/pc_comm_task.c
 )
 
-set_source_files_properties(User/module/arm_simple.c PROPERTIES LANGUAGE CXX)
+set_source_files_properties(
+    User/module/arm_simple.c
+    PROPERTIES LANGUAGE CXX
+)
 
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE

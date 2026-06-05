@@ -22,7 +22,7 @@ extern "C" {
 #define ROD_NEW_ERR_NULL (-2)
 
 /* 舵机PWM参数 ----------------------------------------------------------- */
-#define ROD_NEW_SERVO_PULSE_MIN_US 776U    /* 对接位脉宽 */
+#define ROD_NEW_SERVO_PULSE_MIN_US 776U    /* 水平位脉宽 */
 #define ROD_NEW_SERVO_PULSE_MAX_US 1504U   /* 等待位脉宽 */
 #define ROD_NEW_SERVO_PULSE_NEUTRAL_US ROD_NEW_SERVO_PULSE_MIN_US
 #define ROD_NEW_SERVO_DEADBAND_US 1U        /* 死区 */

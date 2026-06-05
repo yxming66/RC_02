@@ -6,10 +6,17 @@
 #include "device/mrlink/mrlink.hpp"
 #include "module/mrlink_pc_comm/mrlink_pc_comm.h"
 
+/*
+ * PC 通信实际 wire payload 定义。
+ * 这些结构体全部 packed，字段顺序和大小就是串口 payload 字节布局。
+ * PC 端如果按结构体打包，必须使用 1 字节对齐，float 为 IEEE754 little-endian 32-bit。
+ */
+
 namespace pc_comm::wire {
 
 using Topic = uint8_t;
 
+/* PC 下发 cmd topic。 */
 inline constexpr Topic kCmdHeartbeat = PC_CMD_HEARTBEAT;
 inline constexpr Topic kCmdChassis = PC_CMD_CHASSIS;
 inline constexpr Topic kCmdPole = PC_CMD_POLE;
@@ -20,6 +27,7 @@ inline constexpr Topic kCmdOreStore = PC_CMD_ORE_STORE;
 inline constexpr Topic kCmdAutoAction = PC_CMD_AUTO_ACTION;
 inline constexpr Topic kCmdImu = PC_CMD_IMU;
 
+/* STM32 回传 feedback topic。 */
 inline constexpr Topic kFeedbackHeartbeat = PC_FEEDBACK_HEARTBEAT;
 inline constexpr Topic kFeedbackChassis = PC_FEEDBACK_CHASSIS;
 inline constexpr Topic kFeedbackPole = PC_FEEDBACK_POLE;
@@ -31,87 +39,98 @@ inline constexpr Topic kFeedbackAutoAction = PC_FEEDBACK_AUTO_ACTION;
 inline constexpr Topic kFeedbackIrOre = PC_FEEDBACK_IR_ORE;
 inline constexpr Topic kFeedbackStatus = PC_FEEDBACK_STATUS;
 
+/* PC_CMD_POLE payload，长度 9 字节。 */
 struct __attribute__((packed)) PoleCmd {
-  uint8_t mode;    /* 撑杆模式，0=放松，其它=主动控制 */
-  float lift0;     /* 前组撑杆目标高度/角度，单位 rad */
-  float lift1;     /* 后组撑杆目标高度/角度，单位 rad */
+  uint8_t mode;    /* 撑杆模式，见 Pole_Mode_t：0=RELAX，1=ACTIVE。 */
+  float lift0;     /* 前组撑杆控制量，单位/含义由 Pole 模块决定，通常为 rad 或归一化速度。 */
+  float lift1;     /* 后组撑杆控制量，单位/含义由 Pole 模块决定，通常为 rad 或归一化速度。 */
 };
 
+/* PC_CMD_ARM_SIMPLE payload，长度 11 字节。 */
 struct __attribute__((packed)) ArmSimpleCmd {
-  uint8_t mode;                /* 简易机械臂模式，见 ArmSimple_Mode_t */
-  uint8_t point_mode;          /* 点位模式，见 ArmSimple_PointMode_t */
-  uint8_t suction;             /* 吸盘控制，0=关闭，1=开启 */
-  float target_joint1_rad;     /* 关节 1 目标角度，单位 rad */
-  float target_joint2_rad;     /* 关节 2 目标角度，单位 rad */
+  uint8_t mode;                /* 简易机械臂模式，见 ArmSimple_Mode_t：0=RELAX，1=JOINT，2=POS_VEL 兼容模式。 */
+  uint8_t point_mode;          /* 点位模式，见 ArmSimple_PointMode_t；NONE 表示使用 target_joint*_rad。 */
+  uint8_t suction;             /* 吸盘控制，见 Suction_State_t：0=关闭，1=开启。 */
+  float target_joint1_rad;     /* 关节 1 目标角度，单位 rad。 */
+  float target_joint2_rad;     /* 关节 2 目标角度，单位 rad。 */
 };
 
+/* PC_CMD_ROD_NEW payload，长度 7 字节。 */
 struct __attribute__((packed)) RodNewCmd {
-  uint8_t mode;              /* 取矛头机构模式，见 RodNew_Mode_t */
-  uint8_t pose;              /* 取矛头机构姿态，见 RodNew_Pose_t */
-  uint8_t grip;              /* 夹爪控制，0=松开，1=夹紧 */
-  float target_angle_rad;    /* 舵机目标角度，单位 rad */
+  uint8_t mode;              /* 取矛头机构模式，见 RodNew_Mode_t：0=RELAX，1=ACTIVE。 */
+  uint8_t pose;              /* 取矛头机构姿态，见 RodNew_Pose_t：0=STANDBY，1=GRAB_HIGH，2=DOCK_WAIT，3=MANUAL。 */
+  uint8_t grip;              /* 夹爪控制，见 RodNew_GripState_t：0=松开，1=夹紧。 */
+  float target_angle_rad;    /* MANUAL 姿态下的舵机目标角度，单位 rad。 */
 };
 
+/* PC_CMD_ORE_STORE payload，长度 6 字节。 */
 struct __attribute__((packed)) OreStoreCmd {
-  uint8_t mode;                 /* 矿仓模式，见 OreStore_Mode_t */
-  uint8_t force_rehome;         /* 强制重新回零，0=不触发，1=触发一次 */
-  float platform_target_rad;    /* 平台轴目标位置，单位 rad */
+  uint8_t mode;                 /* 矿仓模式，见 OreStore_Mode_t：0=RELAX，1=HOME，2=ACTIVE。 */
+  uint8_t force_rehome;         /* 强制重新回零触发，0=不触发，1=触发一次。 */
+  float platform_target_rad;    /* 平台轴目标位置，单位 rad。 */
 };
 
+/* PC_CMD_AUTO_ACTION payload，长度 1 字节。 */
 struct __attribute__((packed)) AutoActionCmd {
-  uint8_t action;    /* 一键动作类型，见 PC_AutoAction_t */
+  uint8_t action;    /* 一键动作类型，见 PC_AutoAction_t。 */
 };
 
+/* PC_CMD_STEP payload，长度 10 字节。 */
 struct __attribute__((packed)) StepCmd {
-  uint8_t template_id;          /* 自动台阶模板，见 PC_StepTemplate_t */
-  uint8_t travel_dir;           /* 行进方向，见 PC_StepDir_t */
-  float target_yaw_rad;         /* 目标航向角，单位 rad */
-  float yaw_tolerance_rad;      /* 航向允许误差，单位 rad */
+  uint8_t template_id;          /* 自动台阶模板，见 PC_StepTemplate_t。 */
+  uint8_t travel_dir;           /* 行进方向，见 PC_StepDir_t。 */
+  float target_yaw_rad;         /* 目标航向角，单位 rad。 */
+  float yaw_tolerance_rad;      /* 航向允许误差，单位 rad。 */
 };
 
+/* PC_FEEDBACK_ARM_SIMPLE payload，长度 15 字节。 */
 struct __attribute__((packed)) ArmSimpleFeedback {
-  uint8_t mode;                   /* 简易机械臂当前模式，见 ArmSimple_Mode_t */
-  uint8_t point_mode;             /* 简易机械臂点位模式，见 ArmSimple_PointMode_t */
-  uint8_t suction;                /* 吸盘状态，0=关闭，1=开启 */
-  float joint1_angle_rad;         /* 关节 1 当前角度，单位 rad */
-  float joint1_velocity_rad_s;    /* 关节 1 当前速度，单位 rad/s */
-  float joint2_angle_rad;         /* 关节 2 当前角度，单位 rad */
+  uint8_t mode;                   /* 当前简易机械臂模式，见 ArmSimple_Mode_t。 */
+  uint8_t point_mode;             /* 当前点位模式，见 ArmSimple_PointMode_t。 */
+  uint8_t suction;                /* 吸盘状态，见 Suction_State_t：0=关闭，1=开启。 */
+  float joint1_angle_rad;         /* 关节 1 当前角度，单位 rad。 */
+  float joint1_velocity_rad_s;    /* 关节 1 当前速度，单位 rad/s。 */
+  float joint2_angle_rad;         /* 关节 2 当前角度，单位 rad。 */
 };
 
+/* PC_FEEDBACK_ROD_NEW payload，长度 20 字节。 */
 struct __attribute__((packed)) RodNewFeedback {
-  uint8_t mode;                    /* 取矛头机构当前模式，见 RodNew_Mode_t */
-  uint8_t pose;                    /* 取矛头机构目标姿态，见 RodNew_Pose_t */
-  uint8_t grip;                    /* 夹爪状态，0=松开，1=夹紧 */
-  uint8_t at_target;               /* 到位标志，0=未到位，1=已到位 */
-  float target_angle_rad;          /* 舵机目标角度，单位 rad */
-  float tracked_angle_rad;         /* 轨迹规划后的跟踪角度，单位 rad */
-  float tracked_velocity_rad_s;    /* 轨迹规划后的跟踪速度，单位 rad/s */
-  float feedback_angle_rad;        /* 舵机反馈角度，单位 rad */
+  uint8_t mode;                    /* 当前取矛头机构模式，见 RodNew_Mode_t。 */
+  uint8_t pose;                    /* 当前目标姿态，见 RodNew_Pose_t。 */
+  uint8_t grip;                    /* 当前夹爪状态，见 RodNew_GripState_t。 */
+  uint8_t at_target;               /* 舵机到位标志，0=未到位，1=已到位。 */
+  float target_angle_rad;          /* 舵机目标角度，单位 rad。 */
+  float tracked_angle_rad;         /* 速度/加速度限幅后的跟踪目标角度，单位 rad。 */
+  float tracked_velocity_rad_s;    /* 限幅后的跟踪目标速度，单位 rad/s。 */
+  float feedback_angle_rad;        /* 舵机反馈角度，单位 rad。 */
 };
 
+/* PC_FEEDBACK_ORE_STORE payload，长度 8 字节。 */
 struct __attribute__((packed)) OreStoreFeedback {
-  uint8_t mode;                    /* 矿仓当前模式，见 OreStore_Mode_t */
-  uint8_t all_homed;               /* 全部轴回零标志，0=未全部回零，1=全部已回零 */
-  uint8_t online_mask;             /* 轴在线 bitmask，bit0=平台轴在线，1 表示在线 */
-  uint8_t homed_mask;              /* 轴回零 bitmask，bit0=平台轴已回零，1 表示已回零 */
-  float platform_position_rad;     /* 平台轴当前位置，单位 rad */
+  uint8_t mode;                    /* 当前矿仓模式，见 OreStore_Mode_t。 */
+  uint8_t all_homed;               /* 全部轴回零标志，0=未全部回零，1=全部已回零。 */
+  uint8_t online_mask;             /* 轴在线 bitmask，bit0=平台轴在线，1 表示在线。 */
+  uint8_t homed_mask;              /* 轴回零 bitmask，bit0=平台轴已回零，1 表示已回零。 */
+  float platform_position_rad;     /* 平台轴当前位置，单位 rad。 */
 };
 
+/* PC_FEEDBACK_STEP payload，长度 10 字节。 */
 struct __attribute__((packed)) StepFeedback {
-  uint8_t state;          /* 当前状态，见 PC_StepState_t */
-  uint8_t result;         /* 当前结果，见 PC_StepResult_t */
-  uint8_t fault;          /* 当前故障，见 PC_StepFault_t */
-  uint8_t template_id;    /* 当前执行的台阶模板，见 PC_StepTemplate_t */
-  uint8_t step_index;     /* 当前模板内部步骤索引 */
-  uint8_t reserved;       /* 保留字段，发送端固定为 0 */
-  float progress;         /* 流程进度，0.0~1.0，当前未完整使用时为 0 */
+  uint8_t state;          /* 当前状态，见 PC_StepState_t。 */
+  uint8_t result;         /* 当前结果，见 PC_StepResult_t。 */
+  uint8_t fault;          /* 当前故障，见 PC_StepFault_t。 */
+  uint8_t template_id;    /* 当前执行的台阶模板，见 PC_StepTemplate_t。 */
+  uint8_t step_index;     /* 当前模板内部步骤索引。 */
+  uint8_t reserved;       /* 保留字段，发送端固定为 0，PC 端应忽略。 */
+  float progress;         /* 流程进度，0.0 到 1.0；当前未完整使用时为 0。 */
 };
 
+/* PC_FEEDBACK_STATUS payload，长度 10 字节。 */
 struct __attribute__((packed)) StatusFeedback {
-  uint8_t online;             /* PC 通信在线标志，0=离线，1=在线 */
-  uint32_t recv_count;        /* 已成功接收的 PC 帧计数 */
-  float cpu_temp;             /* STM32 CPU 温度，单位 degC */
-  uint8_t command_source;     /* 当前命令来源，见 PC_CommandSource_t */
+  uint8_t online;             /* PC 通信在线标志，0=离线，1=在线。 */
+  uint32_t recv_count;        /* STM32 已成功接收的 PC 帧计数。 */
+  float cpu_temp;             /* STM32 CPU 温度，单位 degC。 */
+  uint8_t command_source;     /* 当前命令来源，见 PC_CommandSource_t。 */
 };
 
 template <typename T>

@@ -8,6 +8,11 @@
 #include "bsp/pwm.h"
 #include "device/buzzer.h"
 #include "device/dr16.h"
+
+#ifndef BLINK_AUDIO_FEATURES
+#define BLINK_AUDIO_FEATURES (1U << 0)  /* startup music only */
+#endif
+
 #include "module/cloudmusic/cloudmusic.h"
 /* USER INCLUDE END */
 
@@ -275,6 +280,8 @@ void Task_blink(void *argument) {
 
   CloudMusic_Config_t cloudmusic_config;
   CloudMusic_GetDefaultConfig(&cloudmusic_config);
+  cloudmusic_config.enable_startup_music = true;
+  cloudmusic_config.enable_music_loop = false;
   if (CloudMusic_Init(&cloudmusic, &buzzer, &cloudmusic_config) != DEVICE_OK) {
     osThreadTerminate(osThreadGetId());
     return;

@@ -606,7 +606,7 @@ class Center {
     using Slot = detail::InputSlot<Input>;
     static_assert(sizeof(Slot) <= InputBytes,
                   "input slot too large; increase Center InputBytes");
-    static_assert(alignof(Slot) <= alignof(Storage),
+    static_assert(alignof(Slot) <= alignof(InputStorage),
                   "input slot alignment too large");
     if (input_count_ >= MaxInputs) {
       overflow_ = true;
@@ -675,7 +675,7 @@ class Center {
     using Slot = detail::OutputSlot<Cmd, Sink, MaxRoutesPerOutput>;
     static_assert(sizeof(Slot) <= OutputBytes,
                   "output slot too large; increase Center OutputBytes");
-    static_assert(alignof(Slot) <= alignof(Storage),
+    static_assert(alignof(Slot) <= alignof(OutputStorage),
                   "output slot alignment too large");
     if (output_count_ >= MaxOutputs) {
       overflow_ = true;
@@ -746,14 +746,16 @@ class Center {
   const Context& context() const { return context_; }
 
  private:
-  struct Storage {
-    alignas(std::max_align_t) uint8_t bytes[OutputBytes > RouteBytes
-                                                ? (OutputBytes > InputBytes
-                                                       ? OutputBytes
-                                                       : InputBytes)
-                                                : (RouteBytes > InputBytes
-                                                       ? RouteBytes
-                                                       : InputBytes)];
+  struct InputStorage {
+    alignas(std::max_align_t) uint8_t bytes[InputBytes];
+  };
+
+  struct OutputStorage {
+    alignas(std::max_align_t) uint8_t bytes[OutputBytes];
+  };
+
+  struct RouteStorage {
+    alignas(std::max_align_t) uint8_t bytes[RouteBytes];
   };
 
   template <typename Cmd, typename RouteSpec>
@@ -761,7 +763,7 @@ class Center {
     using Route = detail::RouteModel<Cmd, RouteSpec>;
     static_assert(sizeof(Route) <= RouteBytes,
                   "route slot too large; increase Center RouteBytes");
-    static_assert(alignof(Route) <= alignof(Storage),
+    static_assert(alignof(Route) <= alignof(RouteStorage),
                   "route slot alignment too large");
     if (route_count_ >= MaxRoutes) {
       overflow_ = true;
@@ -776,7 +778,7 @@ class Center {
     using Model = detail::SafeModel<Cmd, Builder>;
     static_assert(sizeof(Model) <= RouteBytes,
                   "safe/hold slot too large; increase Center RouteBytes");
-    static_assert(alignof(Model) <= alignof(Storage),
+    static_assert(alignof(Model) <= alignof(RouteStorage),
                   "safe/hold slot alignment too large");
     if (route_count_ >= MaxRoutes) {
       overflow_ = true;
@@ -791,7 +793,7 @@ class Center {
     using Model = detail::SafetyRuleModel<SafetyRule>;
     static_assert(sizeof(Model) <= RouteBytes,
                   "safety rule too large; increase Center RouteBytes");
-    static_assert(alignof(Model) <= alignof(Storage),
+    static_assert(alignof(Model) <= alignof(RouteStorage),
                   "safety rule alignment too large");
     if (safety_count_ >= MaxRoutes || route_count_ >= MaxRoutes) {
       overflow_ = true;
@@ -817,9 +819,9 @@ class Center {
   detail::IInputSlot* inputs_[MaxInputs]{};
   detail::IOutputSlot* outputs_[MaxOutputs]{};
   detail::ISafetyRule* safeties_[MaxRoutes]{};
-  Storage input_storage_[MaxInputs]{};
-  Storage output_storage_[MaxOutputs]{};
-  Storage route_storage_[MaxRoutes]{};
+  InputStorage input_storage_[MaxInputs]{};
+  OutputStorage output_storage_[MaxOutputs]{};
+  RouteStorage route_storage_[MaxRoutes]{};
   size_t input_count_ = 0;
   size_t output_count_ = 0;
   size_t route_count_ = 0;

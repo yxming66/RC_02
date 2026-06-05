@@ -12,7 +12,7 @@ const osThreadAttr_t attr_init = {
 /* User_task */
 const osThreadAttr_t attr_blink = {
     .name = "blink",
-    .priority = osPriorityNormal,
+    .priority = osPriorityAboveNormal,
     .stack_size = 256 * 4,
 };
 const osThreadAttr_t attr_atti_esti = {
@@ -28,7 +28,12 @@ const osThreadAttr_t attr_chassis_main = {
 const osThreadAttr_t attr_rc_main = {
     .name = "rc_main",
     .priority = osPriorityAboveNormal,
-    .stack_size = 512 * 4,
+    .stack_size = 256 * 4,
+};
+const osThreadAttr_t attr_cmd_center = {
+    .name = "cmd_center",
+    .priority = osPriorityAboveNormal,
+    .stack_size = 768 * 4,
 };
 const osThreadAttr_t attr_sick = {
     .name = "sick",

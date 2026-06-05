@@ -64,14 +64,6 @@ static const GPIO_PinState checkphoto_ore_has_ore_state = GPIO_PIN_RESET;
 #define AUTO_ORE_PHOTO_STABLE_MS (500u)
 #endif
 
-#ifndef AUTO_ROD_SPEARHEAD_PHOTO_CHECK_MS
-#define AUTO_ROD_SPEARHEAD_PHOTO_CHECK_MS (1000u)
-#endif
-
-#ifndef AUTO_ROD_SPEARHEAD_USE_PHOTO_CHECK
-#define AUTO_ROD_SPEARHEAD_USE_PHOTO_CHECK (0u)//一键取矛头是否用光电检测
-#endif
-
 #ifndef AUTO_ROD_SPEARHEAD_PHOTO_GPIO_PORT
 #define AUTO_ROD_SPEARHEAD_PHOTO_GPIO_PORT checkphoto_spear_GPIO_Port
 #endif
@@ -664,14 +656,8 @@ static void AutoCtrlFeed_InitAutoRodSpearhead(void) {
     return;
   }
 
-  AutoRodSpearhead_Params_t params = {
-      .rod_param = &cfg->rod_new_param,
-      .open_delay_ms = 20u,
-      .grab_high_delay_ms = 500u,
-      .dock_wait_delay_ms = 30000u,
-      .use_photo_check = AUTO_ROD_SPEARHEAD_USE_PHOTO_CHECK != 0u,
-      .photo_check_ms = AUTO_ROD_SPEARHEAD_PHOTO_CHECK_MS,
-  };
+  AutoRodSpearhead_Params_t params = cfg->auto_rod_spearhead_param;
+  params.rod_param = &cfg->rod_new_param;
   AutoRodSpearhead_Init(&auto_rod_spearhead_ctrl, &params);
   auto_rod_spearhead_inited = true;
 }
@@ -811,6 +797,12 @@ static void AutoCtrlFeed_HandleAutoOreDebugRequest(void) {
 }
 
 bool Task_AutoRodSpearheadStart(void) {
+  if (auto_rod_spearhead_inited &&
+      AutoRodSpearhead_IsBusy(&auto_rod_spearhead_ctrl)) {
+    AutoCtrlFeed_RememberRodSpearheadAction();
+    return true;
+  }
+
   const bool result =
       auto_rod_spearhead_inited &&
       AutoRodSpearhead_Start(&auto_rod_spearhead_ctrl,

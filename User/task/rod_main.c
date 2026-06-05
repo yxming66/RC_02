@@ -44,7 +44,7 @@ void Task_rod(void *argument) {
   }
 
   rod_new_cmd.mode = ROD_NEW_MODE_RELAX;
-  rod_new_cmd.pose = ROD_NEW_POSE_STANDBY;
+  rod_new_cmd.pose = ROD_NEW_POSE_DOCK_WAIT;
   rod_new_cmd.grip = ROD_NEW_GRIP_RELEASE;
 
   while (1) {  
