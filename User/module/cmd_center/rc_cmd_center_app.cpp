@@ -67,6 +67,9 @@
 #endif
 
 #define RC_POLE_CH_RES_DEADBAND (1.0e-4f)
+#ifndef RC_POLE_CH_RES_ENABLE
+#define RC_POLE_CH_RES_ENABLE (0u)
+#endif
 
 /* USER STRUCT BEGIN */
 extern DR16_t dr16;
@@ -282,6 +285,7 @@ static float Rc_ApplyDeadband(float value, float deadband) {
   return (fabsf(value) < deadband) ? 0.0f : value;
 }
 
+#if RC_POLE_CH_RES_ENABLE
 static float Rc_ClampFloat(float value, float min_value, float max_value) {
   if (!isfinite(value)) {
     return 0.0f;
@@ -302,6 +306,7 @@ static float Rc_ClampPoleManualLift(float lift) {
 static float Rc_GetPoleChResManualLift(void) {
   return Rc_ClampPoleManualLift(dr16.data.ch_res);
 }
+#endif
 
 static float Rc_ClampRodNewTarget(float target_rad) {
   if (!isfinite(target_rad)) {
@@ -558,6 +563,7 @@ static void Rc_SetPoleHold(void) {
   Rc_SetPoleManual(0.0f, 0.0f);
 }
 
+#if RC_POLE_CH_RES_ENABLE
 static bool Rc_PoleCommandIsManual(void) {
   return pole_cmd.mode == POLE_MODE_ACTIVE &&
          !pole_cmd.auto_target_enable[0] &&
@@ -583,6 +589,7 @@ static void Rc_ApplyPoleChResControl(RcBehavior_t behavior) {
 
   Rc_SetPoleManual(lift, lift);
 }
+#endif
 
 static void Rc_SetArmSimpleRelax(void) {
   memset(&arm_simple_cmd, 0, sizeof(arm_simple_cmd));
@@ -1055,6 +1062,7 @@ struct RcPlanSafe {
   }
 };
 
+#if RC_POLE_CH_RES_ENABLE
 static bool Rc_CommandPlanUsesMappedPoleControl(void) {
   switch (rc_current_plan) {
     case RC_CMD_PLAN_DRIVE:
@@ -1068,11 +1076,15 @@ static bool Rc_CommandPlanUsesMappedPoleControl(void) {
       return false;
   }
 }
+#endif
 
 static void Rc_ApplyPoleChResControlForCurrentPlan(void) {
+#if RC_POLE_CH_RES_ENABLE
   if (Rc_CommandPlanUsesMappedPoleControl()) {
     Rc_ApplyPoleChResControl(rc_current_behavior);
   }
+#else
+#endif
 }
 
 static void Rc_PrepareSafePlanSideEffects(void) {

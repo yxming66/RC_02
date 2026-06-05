@@ -27,8 +27,7 @@ extern "C" {
 /* 任务运行频率 */
 #define BLINK_FREQ (50.0)
 #define ATTI_ESTI_FREQ (400.0)
-#define CHASSIS_MAIN_FREQ (500.0)
-#define POLE_FREQ (250.0)
+#define CHASSIS_MAIN_FREQ (1000.0)
 #define RC_MAIN_FREQ (1000.0)
 #define CMD_CENTER_FREQ (1000.0)
 #define AUTO_CTRL_FREQ (100.0)
@@ -41,7 +40,6 @@ extern "C" {
 #define BLINK_INIT_DELAY (0)
 #define ATTI_ESTI_INIT_DELAY (0)
 #define CHASSIS_MAIN_INIT_DELAY (0) 
-#define POLE_INIT_DELAY (0)
 #define RC_MAIN_INIT_DELAY (0)
 #define CMD_CENTER_INIT_DELAY (0)
 #define AUTO_CTRL_INIT_DELAY (0)
@@ -152,7 +150,6 @@ typedef struct {
         osThreadId_t blink;
         osThreadId_t atti_esti;
         osThreadId_t chassis_main;
-        osThreadId_t pole;
         osThreadId_t rc_main;
         osThreadId_t cmd_center;
         osThreadId_t auto_ctrl;
@@ -212,7 +209,6 @@ typedef struct {
         UBaseType_t blink;
         UBaseType_t atti_esti;
         UBaseType_t chassis_main;
-        UBaseType_t pole;
         UBaseType_t rc_main;
         UBaseType_t cmd_center;
         UBaseType_t auto_ctrl;
@@ -245,7 +241,6 @@ extern const osThreadAttr_t attr_init;
 extern const osThreadAttr_t attr_blink;
 extern const osThreadAttr_t attr_atti_esti;
 extern const osThreadAttr_t attr_chassis_main;
-extern const osThreadAttr_t attr_pole;
 extern const osThreadAttr_t attr_rc_main;
 extern const osThreadAttr_t attr_cmd_center;
 extern const osThreadAttr_t attr_auto_ctrl;
@@ -258,7 +253,6 @@ void Task_Init(void *argument);
 void Task_blink(void *argument);
 void Task_atti_esti(void *argument);
 void Task_chassis_main(void *argument);
-void Task_pole(void *argument);
 void Task_rc_main(void *argument);
 void Task_cmd_center(void *argument);
 void Task_auto_ctrl(void *argument);

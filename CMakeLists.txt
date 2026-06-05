@@ -152,7 +152,6 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     User/task/chassis_main.cpp
     User/task/cmd_center_task.cpp
     User/task/init.c
-    User/task/pole_main.cpp
     User/task/rc_main.c
     User/task/auto_ctrl_feed.c
     User/task/user_task.c
