@@ -27,7 +27,7 @@ extern "C" {
 /* 任务运行频率 */
 #define BLINK_FREQ (50.0)
 #define ATTI_ESTI_FREQ (400.0)
-#define CHASSIS_MAIN_FREQ (1000.0)
+#define CHASSIS_MAIN_FREQ (500.0)
 #define RC_MAIN_FREQ (1000.0)
 #define CMD_CENTER_FREQ (1000.0)
 #define AUTO_CTRL_FREQ (100.0)
