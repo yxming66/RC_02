@@ -1186,6 +1186,8 @@ static void Rc_ApplyMappedBehavior(RcBehavior_t behavior) {
       Rc_ApplySafeBehavior();
       break;
   }
+
+  Rc_ApplyPoleChResControl(behavior);
 }
 
 static void Rc_PublishCommandsAndDebug(void) {
@@ -1333,8 +1335,6 @@ void Task_rc_main(void *argument) {
     } else {
       Rc_ApplyMappedBehavior(behavior);
     }
-
-    Rc_ApplyPoleChResControl(behavior);
     Rc_PublishCommandsAndDebug();
   Rc_UpdateAutoBusyHistory();
     last_sw_l = dr16.data.sw_l;

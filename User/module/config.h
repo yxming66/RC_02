@@ -24,7 +24,7 @@ extern "C" {
 typedef struct {
   float prealign_kp;          /* yaw error to wz gain */
   float prealign_wz_limit;    /* yaw correction limit, rad/s */
-
+ 
   float sick_valid_min_cm;       /* valid SICK distance lower bound, cm */
   float sick_valid_max_cm;       /* valid SICK distance upper bound, cm */
   float sick_norm_err_deadband;  /* SICK normalized left-right deadband */
