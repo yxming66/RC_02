@@ -70,7 +70,7 @@ static void PcComm_DebugRecordTx(const uint8_t *data, uint16_t len,
 
 static void PcComm_TxDoneCallback(void) {
     s_tx_dma_busy = false;
-    g_pc_comm_debug.tx_dma_busy = 0u;
+    g_pc_comm_debug.tx_dma_busy = 0u; 
 }
 
 static void PcComm_TxErrorCallback(void) {

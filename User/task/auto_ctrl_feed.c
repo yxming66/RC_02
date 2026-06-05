@@ -69,7 +69,7 @@ static const GPIO_PinState checkphoto_ore_has_ore_state = GPIO_PIN_RESET;
 #endif
 
 #ifndef AUTO_ROD_SPEARHEAD_USE_PHOTO_CHECK
-#define AUTO_ROD_SPEARHEAD_USE_PHOTO_CHECK (1u)//一键取矛头是否用光电检测
+#define AUTO_ROD_SPEARHEAD_USE_PHOTO_CHECK (0u)//一键取矛头是否用光电检测
 #endif
 
 #ifndef AUTO_ROD_SPEARHEAD_PHOTO_GPIO_PORT

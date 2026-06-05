@@ -89,19 +89,37 @@ static int8_t MOTOR_DM_ParseFeedbackFrame(MOTOR_DM_t *motor, const uint8_t *data
     uint16_t v_int=(data[3]<<4)|(data[4]>>4);
     uint16_t t_int=((data[4]&0xF)<<8)|data[5];
 
+    /* MOTOR_CPP_ADAPTER_DATA: preserve raw feedback for dm_protocol.cpp. */
     motor->motor.raw_feedback.raw_angle = p_int;
     motor->motor.raw_feedback.raw_speed = (int16_t)v_int;
     motor->motor.raw_feedback.raw_current = (int16_t)t_int;
     motor->motor.raw_feedback.raw_temp = data[6];
-    motor->motor.feedback.rotor_abs_angle = UINT_TO_FLOAT(p_int, DM_P_MIN, DM_P_MAX, 16);
-    motor->motor.feedback.rotor_speed = UINT_TO_FLOAT(v_int, DM_V_MIN, DM_V_MAX, 12);
-    motor->motor.feedback.torque_current = UINT_TO_FLOAT(t_int, DM_T_MIN, DM_T_MAX, 12);
-    if (motor->param.reverse) {
-        motor->motor.feedback.rotor_abs_angle = -motor->motor.feedback.rotor_abs_angle;
-        motor->motor.feedback.rotor_speed = -motor->motor.feedback.rotor_speed;
-        motor->motor.feedback.torque_current = -motor->motor.feedback.torque_current;
+    float rotor_angle = UINT_TO_FLOAT(p_int, DM_P_MIN, DM_P_MAX, 16);
+    float rotor_speed = UINT_TO_FLOAT(v_int, DM_V_MIN, DM_V_MAX, 12);
+    float torque_current = UINT_TO_FLOAT(t_int, DM_T_MIN, DM_T_MAX, 12);
+    const float rotor_total_angle = motor->param.reverse ? -rotor_angle : rotor_angle;
+    while (rotor_angle < 0.0f) {
+        rotor_angle += M_2PI;
     }
+    while (rotor_angle >= M_2PI) {
+        rotor_angle -= M_2PI;
+    }
+    if (motor->param.reverse) {
+        rotor_angle = M_2PI - rotor_angle;
+        if (rotor_angle >= M_2PI) {
+            rotor_angle -= M_2PI;
+        }
+        rotor_speed = -rotor_speed;
+        torque_current = -torque_current;
+    }
+    motor->motor.feedback.rotor_abs_angle = rotor_angle;
+    motor->motor.feedback.rotor_single_angle = rotor_angle;
+    motor->motor.feedback.rotor_total_angle = rotor_total_angle;
+    motor->motor.feedback.rotor_speed = rotor_speed;
+    motor->motor.feedback.torque_current = torque_current;
+    motor->motor.feedback.angle_valid = true;
     motor->motor.feedback.temp = (float)data[7];
+    motor->motor.feedback.last_update_time = (uint32_t)BSP_TIME_Get();
     motor->mos_temp = data[6];
     motor->rotor_temp = data[7];
     return DEVICE_OK;
@@ -721,6 +739,7 @@ int8_t MOTOR_DM_Offine(MOTOR_DM_Param_t *param) {
 /* -------------------------------------------------------------------------- */
 
 /* C++ 驱动层将外部持有的 vendor instance 绑定到 C 管理器。 */
+/* MOTOR_CPP_ADAPTER_IMPL_BEGIN: used by User/device/motor/protocol/dm_protocol.cpp. */
 int8_t MOTOR_DM_AttachExternal(MOTOR_DM_Param_t *param, MOTOR_DM_t *external_motor) {
     if (param == NULL || external_motor == NULL) {
         return DEVICE_ERR_NULL;
@@ -743,3 +762,4 @@ const MOTOR_DM_RawFeedback_t* MOTOR_DM_GetRawFeedback(MOTOR_DM_Param_t *param) {
     }
     return &motor->motor.raw_feedback;
 }
+/* MOTOR_CPP_ADAPTER_IMPL_END */

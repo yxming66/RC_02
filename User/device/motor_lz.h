@@ -57,6 +57,15 @@ typedef enum {
     MOTOR_LZ_FAULT_STALL = (1u << 5),
 } MOTOR_LZ_FaultBits_t;
 
+typedef struct {
+    bool uncalibrated;
+    bool stall_overload;
+    bool encoder_fault;
+    bool over_temp;
+    bool driver_fault;
+    bool under_voltage;
+} MOTOR_LZ_Fault_t;
+
 /* 灵足电机运控参数 */
 typedef struct {
     float target_angle;     /* 目标角度 (-12.57f~12.57f rad) */
@@ -78,11 +87,20 @@ typedef struct {
 
 /*电机反馈信息扩展：仅保留协议原始状态位，不承载高层语义量*/
 typedef struct {
+    float current_angle;
+    float current_velocity;
+    float current_torque;
+    float temperature;
+    MOTOR_LZ_State_t state;
+    MOTOR_LZ_Fault_t fault;
     uint8_t motor_can_id;       /* 当前电机CAN ID */
+    /* MOTOR_CPP_ADAPTER_STATE_BEGIN: raw protocol state consumed by lz_protocol.cpp. */
     uint8_t state_bits;         /* 原始运行状态位 */
     uint8_t fault_bits;         /* 原始故障位 bit0~5 */
+    /* MOTOR_CPP_ADAPTER_STATE_END */
 } MOTOR_LZ_Feedback_t;
 
+/* MOTOR_CPP_ADAPTER_DATA: raw protocol feedback alias used by C++ LZ wrapper. */
 typedef MOTOR_RawFeedback_t MOTOR_LZ_RawFeedback_t;
 
 /*电机实例*/
@@ -99,8 +117,10 @@ typedef struct {
     MOTOR_LZ_t *motors[MOTOR_LZ_MAX_MOTORS];
     uint8_t motor_count;
     /* C++ motor 适配层：由 C++ 对象持有生命周期的外部实例。 */
+    /* MOTOR_CPP_ADAPTER_STATE_BEGIN: external instances owned by C++ wrappers. */
     MOTOR_LZ_t *external_motors[MOTOR_LZ_MAX_MOTORS];
     uint8_t external_motor_count;
+    /* MOTOR_CPP_ADAPTER_STATE_END */
 } MOTOR_LZ_CANManager_t;
 
 /* Exported functions prototypes -------------------------------------------- */
@@ -222,9 +242,11 @@ int8_t MOTOR_LZ_Offline(MOTOR_LZ_Param_t *param);
  * @return 设备状态码
  * @note C++ motor 框架专用；外部实例由 C++ 对象持有，不由 C 驱动分配/释放。
  */
+/* MOTOR_CPP_ADAPTER_API_BEGIN: used by User/device/motor/protocol/lz_protocol.cpp. */
 int8_t MOTOR_LZ_AttachExternal(MOTOR_LZ_Param_t *param, MOTOR_LZ_t *external_motor);
 
 const MOTOR_LZ_RawFeedback_t* MOTOR_LZ_GetRawFeedback(MOTOR_LZ_Param_t *param);
+/* MOTOR_CPP_ADAPTER_API_END */
 
 #ifdef __cplusplus
 }

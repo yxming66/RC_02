@@ -150,7 +150,7 @@ int8_t DR16_ParseData(DR16_t *dr16){
   dr16->data.keyboard.key[DR16_R_CLICK] = dr16->data.mouse.r_click;
 
   // 解析第五通道
-  dr16->data.ch_res = 2.0f * ((float)dr16->raw_data.res - DR16_CH_VALUE_MID) / full_range;
+  dr16->data.ch_res = -2.0f * ((float)dr16->raw_data.res - DR16_CH_VALUE_MID) / full_range;
   
   return DEVICE_OK;
 }

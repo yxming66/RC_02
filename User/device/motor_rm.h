@@ -59,6 +59,7 @@ typedef struct {
 
 typedef MOTOR_Feedback_t MOTOR_RM_Feedback_t;
 
+/* MOTOR_CPP_ADAPTER_DATA: raw protocol feedback alias used by C++ RM wrapper. */
 typedef MOTOR_RawFeedback_t MOTOR_RM_RawFeedback_t;
 
 typedef struct {
@@ -84,10 +85,13 @@ typedef struct {
     MOTOR_RM_t *motors[MOTOR_RM_MAX_MOTORS];
     uint8_t motor_count;
   /* C++ motor 适配层：由 C++ 对象持有生命周期的外部实例。 */
-  MOTOR_RM_t *external_motors[MOTOR_RM_MAX_MOTORS];
-  uint8_t external_motor_count;
+    /* MOTOR_CPP_ADAPTER_STATE_BEGIN: external instances owned by C++ wrappers. */
+    MOTOR_RM_t *external_motors[MOTOR_RM_MAX_MOTORS];
+    uint8_t external_motor_count;
+    /* MOTOR_CPP_ADAPTER_STATE_END */
 } MOTOR_RM_CANManager_t;
 
+/* MOTOR_CPP_ADAPTER_DEBUG_BEGIN: transmit snapshots consumed by C++ tests/tools. */
 typedef struct {
     uint8_t valid;
     BSP_CAN_t can;
@@ -111,6 +115,7 @@ typedef struct {
   } MOTOR_RM_SlotTxDebug_t;
 
   extern MOTOR_RM_SlotTxDebug_t g_motor_rm_slot_tx_debug[MOTOR_RM_MAX_MOTORS];
+/* MOTOR_CPP_ADAPTER_DEBUG_END */
 
 /* Exported functions prototypes -------------------------------------------- */
 
@@ -211,6 +216,7 @@ int8_t MOTOR_RM_UpdateAll(void);
  * @return 设备状态码
  * @note C++ motor 框架专用；外部实例由 C++ 对象持有，不由 C 驱动分配/释放。
  */
+/* MOTOR_CPP_ADAPTER_API_BEGIN: used by User/device/motor/protocol/rm_protocol.cpp. */
 int8_t MOTOR_RM_AttachExternal(MOTOR_RM_Param_t *param, MOTOR_RM_t *external_motor);
 
 /**
@@ -228,6 +234,7 @@ const MOTOR_RM_RawFeedback_t* MOTOR_RM_GetRawFeedback(MOTOR_RM_Param_t *param);
 const MOTOR_RM_TxDebug_t* MOTOR_RM_GetTxDebug(void);
 
 const MOTOR_RM_SlotTxDebug_t* MOTOR_RM_GetSlotTxDebug(uint8_t logical_index);
+/* MOTOR_CPP_ADAPTER_API_END */
 
 #ifdef __cplusplus
 }

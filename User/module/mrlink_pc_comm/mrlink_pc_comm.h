@@ -263,14 +263,17 @@ typedef enum {
 
 #define PC_IR_ORE_POSITION_COUNT (12u)
 
+/* 红外对接反馈帧：把 UART7 收到的 IR 命令（1 字节状态 + 12 字节矿种）
+ * 透传给 PC 上位机，由 pc_comm_task 通过 MrlinkPc_PublishFeedback(PC_FEEDBACK_IR_ORE, …) 周期上报。
+ * 与 IrDock_OreInfo_t / IrDock_Debug_t 的对应关系见各字段注释。 */
 typedef struct {
-    uint8_t valid;
-    uint8_t fresh;
-    uint8_t status;
-    uint8_t count;
-    uint8_t ore_type[PC_IR_ORE_POSITION_COUNT];
-    uint32_t age_ms;
-    uint32_t rx_count;
+    uint8_t valid;                                           /* 矿种信息是否曾成功解析过一帧，0=未收到过 12 字节矿种包，1=有效 */
+    uint8_t fresh;                                           /* 矿种信息是否新鲜，0=过期/未收到，1=在 IR_DOCK_ORE_INFO_FRESH_MS (1000ms) 内。注意：仅描述矿种包，不代表 status 状态命令 */
+    uint8_t status;                                          /* 最近一次 1 字节状态命令，见 IrDock_Status_t (IDLE=0/DOCKING=1/DOCK_COMPLETE=2)，状态命令单独到达也会刷新此字段 */
+    uint8_t count;                                           /* 矿位个数，固定等于 PC_IR_ORE_POSITION_COUNT (12) */
+    uint8_t ore_type[PC_IR_ORE_POSITION_COUNT];              /* 12 个矿位种类，见 PC_OreType_t (UNKNOWN=0/R1=1/R2=2/FAKE=3)，下标为矿位编号 */
+    uint32_t age_ms;                                         /* 距最近一次成功接收 12 字节矿种包的时间，单位 ms；未收到过为 0 */
+    uint32_t rx_count;                                       /* 12 字节矿种包累计成功接收次数，CRC/格式错误不会计入；可用于观察对接链路健康度 */
 } PC_IrOreFeedback_t;
 
 typedef enum {

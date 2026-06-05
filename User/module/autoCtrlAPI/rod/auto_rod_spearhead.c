@@ -73,22 +73,44 @@ static bool AutoRodSpearhead_CommandRod(AutoRodSpearhead_t *ctrl,
   return true;
 }
 
+static void AutoRodSpearhead_ClearRodCommand(AutoRodSpearhead_t *ctrl) {
+  ctrl->rod_cmd_valid = false;
+}
+
+static bool AutoRodSpearhead_PhotoStateStable(AutoRodSpearhead_t *ctrl,
+                                              bool state,
+                                              uint32_t now_ms) {
+  if (!ctrl->photo_stable_started ||
+      ctrl->photo_stable_state != state) {
+    ctrl->photo_stable_started = true;
+    ctrl->photo_stable_state = state;
+    ctrl->photo_stable_start_time_ms = now_ms;
+    return false;
+  }
+
+  return (now_ms - ctrl->photo_stable_start_time_ms) >=
+         AutoRodSpearhead_PhotoCheckMs(ctrl);
+}
+
 static void AutoRodSpearhead_FinishSuccess(AutoRodSpearhead_t *ctrl) {
   ctrl->state = AUTO_ROD_SPEARHEAD_STATE_SUCCESS;
   ctrl->result = AUTO_ROD_SPEARHEAD_RESULT_SUCCESS;
   ctrl->fault = AUTO_ROD_SPEARHEAD_FAULT_NONE;
+  AutoRodSpearhead_ClearRodCommand(ctrl);
 }
 
 static void AutoRodSpearhead_FinishNoSpearhead(AutoRodSpearhead_t *ctrl) {
   ctrl->state = AUTO_ROD_SPEARHEAD_STATE_FAIL;
   ctrl->result = AUTO_ROD_SPEARHEAD_RESULT_FAIL;
   ctrl->fault = AUTO_ROD_SPEARHEAD_FAULT_NO_SPEARHEAD;
+  AutoRodSpearhead_ClearRodCommand(ctrl);
 }
 
 static void AutoRodSpearhead_FinishTimeout(AutoRodSpearhead_t *ctrl) {
   ctrl->state = AUTO_ROD_SPEARHEAD_STATE_FAIL;
   ctrl->result = AUTO_ROD_SPEARHEAD_RESULT_FAIL;
   ctrl->fault = AUTO_ROD_SPEARHEAD_FAULT_TIMEOUT;
+  AutoRodSpearhead_ClearRodCommand(ctrl);
 }
 
 void AutoRodSpearhead_Init(AutoRodSpearhead_t *ctrl,
@@ -183,22 +205,14 @@ void AutoRodSpearhead_Update(AutoRodSpearhead_t *ctrl,
         ctrl->photo_stable_state = false;
         return;
       }
-      if (!ctrl->photo_stable_started) {
-        ctrl->photo_stable_started = true;
-        ctrl->photo_stable_state = rod_photo_triggered;
-        ctrl->photo_stable_start_time_ms = now_ms;
+      if (!AutoRodSpearhead_PhotoStateStable(ctrl, rod_photo_triggered,
+                                             now_ms)) {
         return;
       }
-      if (!rod_photo_triggered) {
-        ctrl->photo_stable_state = false;
-      }
-      if ((now_ms - ctrl->photo_stable_start_time_ms) >=
-          AutoRodSpearhead_PhotoCheckMs(ctrl)) {
-        if (ctrl->photo_stable_state) {
-          AutoRodSpearhead_NextStep(ctrl);
-        } else {
-          AutoRodSpearhead_FinishNoSpearhead(ctrl);
-        }
+      if (rod_photo_triggered) {
+        AutoRodSpearhead_NextStep(ctrl);
+      } else {
+        AutoRodSpearhead_FinishNoSpearhead(ctrl);
       }
       return;
     }

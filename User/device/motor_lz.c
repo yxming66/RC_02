@@ -53,6 +53,7 @@ static int8_t MOTOR_LZ_CreateCANManager(BSP_CAN_t can);
 static void MOTOR_LZ_Decode(MOTOR_LZ_t *motor, BSP_CAN_Message_t *msg);
 static uint32_t MOTOR_LZ_BuildExtID(MOTOR_LZ_CmdType_t cmd_type, uint16_t data2, uint8_t target_id);
 static uint16_t MOTOR_LZ_FloatToRaw(float value, float max_value);
+static float MOTOR_LZ_RawToFloat(uint16_t raw_value, float max_value);
 static float MOTOR_LZ_GetTorqueRangeNm(MOTOR_LZ_Module_t module);
 static int8_t MOTOR_LZ_SendExtFrame(BSP_CAN_t can, uint32_t ext_id, uint8_t *data, uint8_t dlc);
 static uint32_t MOTOR_LZ_IdParser(uint32_t original_id, BSP_CAN_FrameType_t frame_type);
@@ -174,6 +175,10 @@ static uint16_t MOTOR_LZ_FloatToRawPositive(float value, float max_value) {
     return (uint16_t)(value / max_value * (float)LZ_RAW_VALUE_MAX);
 }
 
+static float MOTOR_LZ_RawToFloat(uint16_t raw_value, float max_value) {
+    return ((float)raw_value / (float)LZ_RAW_VALUE_MAX) * (2.0f * max_value) - max_value;
+}
+
 static float MOTOR_LZ_GetTorqueRangeNm(MOTOR_LZ_Module_t module) {
     switch (module) {
         case MOTOR_LZ_RSO0:
@@ -262,18 +267,62 @@ static void MOTOR_LZ_Decode(MOTOR_LZ_t *motor, BSP_CAN_Message_t *msg) {
     motor->lz_feedback.motor_can_id = motor_can_id;
     motor->lz_feedback.fault_bits = fault_info;
     motor->lz_feedback.state_bits = mode_state;
+    motor->lz_feedback.fault.under_voltage = (fault_info & 0x01) != 0;
+    motor->lz_feedback.fault.driver_fault = (fault_info & 0x02) != 0;
+    motor->lz_feedback.fault.over_temp = (fault_info & 0x04) != 0;
+    motor->lz_feedback.fault.encoder_fault = (fault_info & 0x08) != 0;
+    motor->lz_feedback.fault.stall_overload = (fault_info & 0x10) != 0;
+    motor->lz_feedback.fault.uncalibrated = (fault_info & 0x20) != 0;
+    motor->lz_feedback.state = (MOTOR_LZ_State_t)mode_state;
 
     uint16_t raw_angle = (uint16_t)((msg->data[0] << 8) | msg->data[1]);
     uint16_t raw_velocity = (uint16_t)((msg->data[2] << 8) | msg->data[3]);
     uint16_t raw_torque = (uint16_t)((msg->data[4] << 8) | msg->data[5]);
     uint16_t raw_temp = (uint16_t)((msg->data[6] << 8) | msg->data[7]);
 
+    float angle = MOTOR_LZ_RawToFloat(raw_angle, LZ_ANGLE_RANGE_RAD);
+    float velocity = MOTOR_LZ_RawToFloat(raw_velocity, LZ_VELOCITY_RANGE_RAD_S);
+    float torque = MOTOR_LZ_RawToFloat(raw_torque,
+                                       MOTOR_LZ_GetTorqueRangeNm(motor->param.module));
+    while (angle < 0.0f) {
+        angle += M_2PI;
+    }
+    while (angle >= M_2PI) {
+        angle -= M_2PI;
+    }
+    if (motor->param.reverse) {
+        angle = M_2PI - angle;
+        if (angle >= M_2PI) {
+            angle -= M_2PI;
+        }
+        velocity = -velocity;
+        torque = -torque;
+    }
+    const float temperature = (float)raw_temp / LZ_TEMP_SCALE;
+
+    /* MOTOR_CPP_ADAPTER_DATA: preserve raw feedback for lz_protocol.cpp. */
     motor->motor.raw_feedback.raw_angle = raw_angle;
     motor->motor.raw_feedback.raw_speed = (int16_t)raw_velocity;
     motor->motor.raw_feedback.raw_current = (int16_t)raw_torque;
     motor->motor.raw_feedback.raw_temp = (uint8_t)(raw_temp / LZ_TEMP_SCALE);
+    motor->motor.raw_feedback.raw_error_code = fault_info;
+
+    motor->lz_feedback.current_angle = angle;
+    motor->lz_feedback.current_velocity = velocity;
+    motor->lz_feedback.current_torque = torque;
+    motor->lz_feedback.temperature = temperature;
+
+    motor->motor.feedback.rotor_abs_angle = angle;
+    motor->motor.feedback.rotor_single_angle = angle;
+    motor->motor.feedback.rotor_total_angle = angle;
+    motor->motor.feedback.rotor_speed = velocity;
+    motor->motor.feedback.torque_current = torque;
+    motor->motor.feedback.temp = temperature;
+    motor->motor.feedback.angle_valid = true;
+    const uint64_t now_time = BSP_TIME_Get();
+    motor->motor.feedback.last_update_time = (uint32_t)now_time;
     motor->motor.header.online = true;
-    motor->motor.header.last_online_time = BSP_TIME_Get();
+    motor->motor.header.last_online_time = now_time;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -494,6 +543,7 @@ int8_t MOTOR_LZ_Offline(MOTOR_LZ_Param_t *param) {
 /* -------------------------------------------------------------------------- */
 
 /* C++ 驱动层将外部持有的 vendor instance 绑定到 C 管理器。 */
+/* MOTOR_CPP_ADAPTER_IMPL_BEGIN: used by User/device/motor/protocol/lz_protocol.cpp. */
 int8_t MOTOR_LZ_AttachExternal(MOTOR_LZ_Param_t *param, MOTOR_LZ_t *external_motor) {
     if (param == NULL || external_motor == NULL) return DEVICE_ERR_NULL;
     if (MOTOR_LZ_CreateCANManager(param->can) != DEVICE_OK) return DEVICE_ERR;
@@ -510,3 +560,4 @@ const MOTOR_LZ_RawFeedback_t* MOTOR_LZ_GetRawFeedback(MOTOR_LZ_Param_t *param) {
     }
     return &motor->motor.raw_feedback;
 }
+/* MOTOR_CPP_ADAPTER_IMPL_END */

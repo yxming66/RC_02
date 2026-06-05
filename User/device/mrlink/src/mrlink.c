@@ -24,6 +24,7 @@ static int8_t Proto_ProcessRx(MrLink_t *p, bool want_one_frame,
                               const uint8_t **out_payload,
                               uint16_t *out_payload_len);
 static void Proto_ReportError(MrLink_t *p, const MrLink_ErrorInfo_t *info);
+static MrLink_Config_t Proto_ApplyConfig(const MrLink_Config_t *cfg);
 
 /* Private functions -------------------------------------------------------- */
 
@@ -32,6 +33,23 @@ static void Proto_ReportError(MrLink_t *p, const MrLink_ErrorInfo_t *info) {
     return;
   }
   p->error_handler(info, p->error_ctx);
+}
+
+static MrLink_Config_t Proto_ApplyConfig(const MrLink_Config_t *cfg) {
+  MrLink_Config_t applied = {
+      .max_payload_size = MRLINK_MAX_PAYLOAD_DEFAULT,
+      .use_crc16 = true,
+      .header_0 = MRLINK_DEFAULT_HEADER_0,
+      .header_1 = MRLINK_DEFAULT_HEADER_1,
+  };
+  if (cfg != NULL) {
+    applied = *cfg;
+    if (applied.header_0 == 0u && applied.header_1 == 0u) {
+      applied.header_0 = MRLINK_DEFAULT_HEADER_0;
+      applied.header_1 = MRLINK_DEFAULT_HEADER_1;
+    }
+  }
+  return applied;
 }
 
 /**
@@ -80,8 +98,8 @@ static int8_t Proto_ProcessRx(MrLink_t *p, bool want_one_frame,
     if ((uint16_t)(n - offset) < MRLINK_HEADER_LEN) {
       break;
     }
-    if (buf[offset] != MRLINK_HEADER_0 ||
-        buf[offset + 1u] != MRLINK_HEADER_1) {
+    if (buf[offset] != p->cfg.header_0 ||
+        buf[offset + 1u] != p->cfg.header_1) {
       offset = (uint16_t)(offset + 1u);
       p->stats.frame_rx_header_skip++;
       const MrLink_ErrorInfo_t info = {
@@ -243,13 +261,7 @@ int8_t MrLink_Init(MrLink_t *p, const MrLink_Config_t *cfg,
   }
 
   /* 应用配置 (默认 + 覆盖) */
-  MrLink_Config_t applied = {
-      .max_payload_size = MRLINK_MAX_PAYLOAD_DEFAULT,
-      .use_crc16 = true,
-  };
-  if (cfg != NULL) {
-    applied = *cfg;
-  }
+  const MrLink_Config_t applied = Proto_ApplyConfig(cfg);
 
   /* 计算当前配置下的最大帧长, 验证 rx/tx 缓冲足够装下完整一帧。
    * 否则 parser 会永久 truncated (rx_buf) 或 Build 永远失败 (tx_buf). */
@@ -283,13 +295,7 @@ int8_t MrLink_Init(MrLink_t *p, const MrLink_Config_t *cfg,
 }
 
 uint16_t MrLink_MaxFrameSizeForConfig(const MrLink_Config_t *cfg) {
-  MrLink_Config_t applied = {
-      .max_payload_size = MRLINK_MAX_PAYLOAD_DEFAULT,
-      .use_crc16 = true,
-  };
-  if (cfg != NULL) {
-    applied = *cfg;
-  }
+  const MrLink_Config_t applied = Proto_ApplyConfig(cfg);
 
   if (applied.max_payload_size == 0u ||
       applied.max_payload_size > MRLINK_MAX_PAYLOAD_DEFAULT) {
@@ -409,7 +415,7 @@ int8_t MrLink_Parse(MrLink_t *p, uint8_t *out_cmd,
  *      payload_len>0 时 payload 非空
  *   2. 计算 total = 2 (header) + 1 (len) + 1 (cmd) + payload_len + [2 (CRC)]
  *   3. 验证 tx_buf_size >= total
- *   4. 写入: header(0x4D,0x52) → len → cmd → payload
+ *   4. 写入: configured header → len → cmd → payload
  *   5. (use_crc16) 算 CRC16-CCITT-FALSE (init=0xFFFF, poly=0x1021) → 写 2B 小端
  * 返回: 实际写入字节数 (含 header/CRC); 失败返回 0
  */
@@ -436,8 +442,8 @@ uint16_t MrLink_Build(MrLink_t *p, uint8_t cmd,
   uint8_t *b = p->tx_buf;
   uint16_t idx = 0u;
 
-  b[idx++] = MRLINK_HEADER_0;
-  b[idx++] = MRLINK_HEADER_1;
+  b[idx++] = p->cfg.header_0;
+  b[idx++] = p->cfg.header_1;
   b[idx++] = (uint8_t)payload_len;
   b[idx++] = cmd;
   if (payload_len > 0u) {

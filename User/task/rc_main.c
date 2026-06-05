@@ -46,8 +46,8 @@
 #define RC_ARM_SIMPLE_POINT_RELEASE_J2 (1.57f)
 #define RC_ROD_NEW_DEADBAND (0.05f)
 #define RC_ROD_NEW_MANUAL_SPEED_RAD_S (1.0f)
-#define RC_ROD_NEW_TARGET_MIN_RAD (-2.356f)
-#define RC_ROD_NEW_TARGET_MAX_RAD (2.356f)
+#define RC_ROD_NEW_TARGET_MIN_RAD (0.0f)
+#define RC_ROD_NEW_TARGET_MAX_RAD (1.0f)
 #define RC_MAPPING_PRESET_DEFAULT (0u)
 #define RC_MAPPING_PRESET_PC_FIRST (1u)
 #ifndef RC_MAPPING_ACTIVE_PRESET
@@ -62,8 +62,9 @@
 #define RC_CHASSIS_VX_SCALE (2.0f)
 #define RC_CHASSIS_VY_SCALE (2.0f)
 #define RC_CHASSIS_WZ_SCALE (3.0f)
-
 #endif
+
+#define RC_POLE_CH_RES_DEADBAND (1.0e-4f)
 
 /* USER STRUCT BEGIN */
 DR16_t dr16;
@@ -173,6 +174,8 @@ typedef struct {
 
 #if RC_MAPPING_ACTIVE_PRESET == RC_MAPPING_PRESET_PC_FIRST
 static const RcSwitchBehaviorMap_t rc_behavior_map_active[] = {
+  {DR16_SW_UP, DR16_SW_UP, DR16_SW_ERR, DR16_SW_ERR,
+   RC_BEHAVIOR_PC},
   {DR16_SW_MID, DR16_SW_UP, DR16_SW_ERR, DR16_SW_ERR,
    RC_BEHAVIOR_AUTO_200_UP_STANDBY},
   {DR16_SW_MID, DR16_SW_DOWN, DR16_SW_ERR, DR16_SW_ERR,
@@ -181,14 +184,14 @@ static const RcSwitchBehaviorMap_t rc_behavior_map_active[] = {
    RC_BEHAVIOR_DRIVE},
 #if RC_LEFT_DOWN_MAPPING_AUTO_ORE
   {DR16_SW_DOWN, DR16_SW_UP, DR16_SW_ERR, DR16_SW_ERR,
-   RC_BEHAVIOR_AUTO_ORE},
+   RC_BEHAVIOR_ARM_SIMPLE},
   {DR16_SW_DOWN, DR16_SW_MID, DR16_SW_ERR, DR16_SW_ERR,
    RC_BEHAVIOR_ARM_SIMPLE},
   {DR16_SW_DOWN, DR16_SW_DOWN, DR16_SW_ERR, DR16_SW_ERR,
    RC_BEHAVIOR_AUTO_ORE},
 #else
   {DR16_SW_DOWN, DR16_SW_UP, DR16_SW_ERR, DR16_SW_ERR,
-   RC_BEHAVIOR_PC},
+   RC_BEHAVIOR_ARM_SIMPLE},
   {DR16_SW_DOWN, DR16_SW_MID, DR16_SW_ERR, DR16_SW_ERR,
    RC_BEHAVIOR_ARM_SIMPLE},
   {DR16_SW_DOWN, DR16_SW_DOWN, DR16_SW_ERR, DR16_SW_ERR,
@@ -197,6 +200,8 @@ static const RcSwitchBehaviorMap_t rc_behavior_map_active[] = {
 };
 #else
 static const RcSwitchBehaviorMap_t rc_behavior_map_active[] = {
+  {DR16_SW_UP, DR16_SW_UP, DR16_SW_ERR, DR16_SW_ERR,
+   RC_BEHAVIOR_PC},
   {DR16_SW_MID, DR16_SW_UP, DR16_SW_ERR, DR16_SW_ERR,
    RC_BEHAVIOR_AUTO_200_UP_STANDBY},
   {DR16_SW_MID, DR16_SW_DOWN, DR16_SW_ERR, DR16_SW_ERR,
@@ -205,7 +210,7 @@ static const RcSwitchBehaviorMap_t rc_behavior_map_active[] = {
    RC_BEHAVIOR_DRIVE},
 #if RC_LEFT_DOWN_MAPPING_AUTO_ORE
   {DR16_SW_DOWN, DR16_SW_UP, DR16_SW_ERR, DR16_SW_ERR,
-   RC_BEHAVIOR_AUTO_ORE},
+   RC_BEHAVIOR_ARM_SIMPLE},
   {DR16_SW_DOWN, DR16_SW_MID, DR16_SW_ERR, DR16_SW_ERR,
    RC_BEHAVIOR_ARM_SIMPLE},
   {DR16_SW_DOWN, DR16_SW_DOWN, DR16_SW_ERR, DR16_SW_ERR,
@@ -251,6 +256,27 @@ static bool Rc_KeyDown(DR16_Key_t key) {
 
 static float Rc_ApplyDeadband(float value, float deadband) {
   return (fabsf(value) < deadband) ? 0.0f : value;
+}
+
+static float Rc_ClampFloat(float value, float min_value, float max_value) {
+  if (!isfinite(value)) {
+    return 0.0f;
+  }
+  if (value < min_value) {
+    return min_value;
+  }
+  if (value > max_value) {
+    return max_value;
+  }
+  return value;
+}
+
+static float Rc_ClampPoleManualLift(float lift) {
+  return Rc_ClampFloat(lift, -1.0f, 1.0f);
+}
+
+static float Rc_GetPoleChResManualLift(void) {
+  return Rc_ClampPoleManualLift(dr16.data.ch_res);
 }
 
 static float Rc_ClampRodNewTarget(float target_rad) {
@@ -508,6 +534,32 @@ static void Rc_SetPoleHold(void) {
   Rc_SetPoleManual(0.0f, 0.0f);
 }
 
+static bool Rc_PoleCommandIsManual(void) {
+  return pole_cmd.mode == POLE_MODE_ACTIVE &&
+         !pole_cmd.auto_target_enable[0] &&
+         !pole_cmd.auto_target_enable[1];
+}
+
+static void Rc_ApplyPoleChResControl(RcBehavior_t behavior) {
+  if (!dr16.header.online || behavior == RC_BEHAVIOR_SAFE ||
+      behavior == RC_BEHAVIOR_PC) {
+    return;
+  }
+
+  const float lift = Rc_GetPoleChResManualLift();
+  if (fabsf(lift) <= RC_POLE_CH_RES_DEADBAND) {
+    return;
+  }
+
+  if (Rc_PoleCommandIsManual()) {
+    pole_cmd.lift[0] = Rc_ClampPoleManualLift(pole_cmd.lift[0] + lift);
+    pole_cmd.lift[1] = Rc_ClampPoleManualLift(pole_cmd.lift[1] + lift);
+    return;
+  }
+
+  Rc_SetPoleManual(lift, lift);
+}
+
 static void Rc_SetArmSimpleRelax(void) {
   memset(&arm_simple_cmd, 0, sizeof(arm_simple_cmd));
   arm_simple_cmd.mode = ARM_SIMPLE_MODE_RELAX;
@@ -726,7 +778,8 @@ static bool Rc_ShouldExitAutoCtrlBySwitch(void) {
 
 static bool Rc_ShouldUsePcCommand(void) {
   return MrlinkPc_IsPCControlMode() &&
-         dr16.data.sw_l != DR16_SW_UP;
+         dr16.data.sw_l == DR16_SW_UP &&
+         dr16.data.sw_r == DR16_SW_UP;
 }
 
 static RcControlPage_t Rc_PageForBehavior(RcBehavior_t behavior) {
@@ -757,7 +810,7 @@ static RcBehavior_t Rc_SelectMappedBehavior(void) {
   size_t map_count = 0u;
   const RcSwitchBehaviorMap_t *map = Rc_GetBehaviorMap(&map_count);
 
-  if (!dr16.header.online || dr16.data.sw_l == DR16_SW_UP) {
+  if (!dr16.header.online) {
     return RC_BEHAVIOR_SAFE;
   }
 
@@ -827,9 +880,7 @@ static void Rc_ApplySafeBehavior(void) {
   if (auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl)) {
     Task_AutoOreAbort();
   }
-  if (Task_AutoRodSpearheadIsBusy()) {
-    Task_AutoRodSpearheadAbort();
-  }
+  /* 一键取矛头不在这里 abort，由主循环里 Task_AutoRodSpearheadIsBusy 分支处理 */
   Rc_SetChassisRelax();
   Rc_SetPoleAuto(0.0f, 0.0f);
   Rc_SetArmSimpleRelax();
@@ -1266,6 +1317,14 @@ void Task_rc_main(void *argument) {
     behavior = Rc_SelectMappedBehavior();
     if (Rc_TryApplyAutoOreDebugOutputs()) {
       /* Commands were filled by AutoOre debug output. */
+    } else if (Task_AutoRodSpearheadIsBusy()) {
+      /* 一键取矛头：SAFE 模式也允许跑（方便测试），其他子系统 relax */
+      g_rc_control_debug.page = RC_CONTROL_PAGE_AUTO_ORE;
+      Rc_ApplyAutoRodSpearheadOutputs();
+      Rc_SetChassisRelax();
+      Rc_SetPoleAuto(0.0f, 0.0f);
+      Rc_SetArmSimpleRelax();
+      Rc_SetOreStoreRelax();
     } else if (behavior == RC_BEHAVIOR_SAFE) {
       Rc_ApplySafeBehavior();
     } else if (auto_ctrl_inited && AutoCtrl_IsBusy(&auto_ctrl) &&
@@ -1275,6 +1334,7 @@ void Task_rc_main(void *argument) {
       Rc_ApplyMappedBehavior(behavior);
     }
 
+    Rc_ApplyPoleChResControl(behavior);
     Rc_PublishCommandsAndDebug();
   Rc_UpdateAutoBusyHistory();
     last_sw_l = dr16.data.sw_l;

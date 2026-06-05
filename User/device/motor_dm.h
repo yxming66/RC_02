@@ -47,8 +47,8 @@ typedef enum {
 /*每个电机需要的参数*/
 typedef struct {
     BSP_CAN_t can;
-    uint16_t master_id;    /* 主站ID，用于发送控制命令 */
-    uint16_t can_id;       /* 反馈ID，用于接收电机反馈 */
+    uint16_t master_id;    /* 反馈ID，用于接收电机反馈 */
+    uint16_t can_id;       /* 主站ID，用于发送控制命令 */
     MOTOR_DM_Module_t module;
     bool reverse;
 } MOTOR_DM_Param_t;
@@ -57,13 +57,16 @@ typedef struct {
 typedef struct{
     MOTOR_DM_Param_t param;
     MOTOR_t motor;
+    /* MOTOR_CPP_ADAPTER_STATE_BEGIN: protocol status consumed by dm_protocol.cpp. */
     uint8_t feedback_id;
     MOTOR_DM_Status_t status;
     uint8_t status_raw;
     uint8_t mos_temp;
     uint8_t rotor_temp;
+    /* MOTOR_CPP_ADAPTER_STATE_END */
 } MOTOR_DM_t;
 
+/* MOTOR_CPP_ADAPTER_DATA: raw protocol feedback alias used by C++ DM wrapper. */
 typedef MOTOR_RawFeedback_t MOTOR_DM_RawFeedback_t;
 
 /*CAN管理器，管理一个CAN总线上所有的电机*/
@@ -72,8 +75,10 @@ typedef struct {
     MOTOR_DM_t *motors[MOTOR_DM_MAX_MOTORS];
     uint8_t motor_count;
     /* C++ motor 适配层：由 C++ 对象持有生命周期的外部实例。 */
+    /* MOTOR_CPP_ADAPTER_STATE_BEGIN: external instances owned by C++ wrappers. */
     MOTOR_DM_t *external_motors[MOTOR_DM_MAX_MOTORS];
     uint8_t external_motor_count;
+    /* MOTOR_CPP_ADAPTER_STATE_END */
 } MOTOR_DM_CANManager_t;
 
 /* Exported functions prototypes -------------------------------------------- */
@@ -160,9 +165,11 @@ int8_t MOTOR_DM_ClearFault(MOTOR_DM_Param_t *param);
  * @return 设备状态码
  * @note C++ motor 框架专用；外部实例由 C++ 对象持有，不由 C 驱动分配/释放。
  */
+/* MOTOR_CPP_ADAPTER_API_BEGIN: used by User/device/motor/protocol/dm_protocol.cpp. */
 int8_t MOTOR_DM_AttachExternal(MOTOR_DM_Param_t *param, MOTOR_DM_t *external_motor);
 
 const MOTOR_DM_RawFeedback_t* MOTOR_DM_GetRawFeedback(MOTOR_DM_Param_t *param);
+/* MOTOR_CPP_ADAPTER_API_END */
 
 
 

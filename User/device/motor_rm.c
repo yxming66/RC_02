@@ -54,8 +54,10 @@
 /* Private variables -------------------------------------------------------- */
 static MOTOR_RM_CANManager_t *can_managers[BSP_CAN_NUM] = {NULL};
 /* C++ motor 适配层调试快照：记录最近一次 RM 组帧发送。 */
+/* MOTOR_CPP_ADAPTER_DEBUG_BEGIN: snapshots read by C++ tests/tools. */
 static MOTOR_RM_TxDebug_t motor_rm_tx_debug = {0};
 MOTOR_RM_SlotTxDebug_t g_motor_rm_slot_tx_debug[MOTOR_RM_MAX_MOTORS] = {0};
+/* MOTOR_CPP_ADAPTER_DEBUG_END */
 
 /* Private function  -------------------------------------------------------- */
 /* USER FUNCTION BEGIN */
@@ -282,6 +284,7 @@ static void Motor_RM_Decode(MOTOR_RM_t *motor, BSP_CAN_Message_t *msg) {
     float rotor_speed = raw_speed;
     float torque_current = raw_current * lsb / (float)MOTOR_CUR_RES;
 
+    /* MOTOR_CPP_ADAPTER_DATA: preserve raw feedback for rm_protocol.cpp. */
     motor->motor.raw_feedback.raw_angle = raw_angle;
     motor->motor.raw_feedback.raw_speed = raw_speed;
     motor->motor.raw_feedback.raw_current = raw_current;
@@ -301,9 +304,9 @@ static void Motor_RM_Decode(MOTOR_RM_t *motor, BSP_CAN_Message_t *msg) {
         motor->last_raw_angle = raw_angle;
         motor->gearbox_total_angle = ((float)motor->gearbox_total_raw_count / (float)MOTOR_ENC_RES) * M_2PI / ratio;
         // 输出轴多圈绝对值
-        motor->feedback.rotor_abs_angle = motor->gearbox_total_angle;
         motor->feedback.rotor_total_angle = motor->gearbox_total_angle;
         motor->feedback.rotor_single_angle = MOTOR_RM_WrapAnglePositive(motor->gearbox_total_angle);
+        motor->feedback.rotor_abs_angle = motor->feedback.rotor_single_angle;
         motor->feedback.rotor_speed = rotor_speed / ratio;
         motor->feedback.torque_current = torque_current * ratio;
     } else {
@@ -319,9 +322,7 @@ static void Motor_RM_Decode(MOTOR_RM_t *motor, BSP_CAN_Message_t *msg) {
     if (motor->motor.reverse) {
         motor->feedback.rotor_total_angle = -motor->feedback.rotor_total_angle;
         motor->feedback.rotor_single_angle = MOTOR_RM_WrapAnglePositive(-motor->feedback.rotor_single_angle);
-        motor->feedback.rotor_abs_angle = motor->param.gear
-            ? motor->feedback.rotor_total_angle
-            : motor->feedback.rotor_single_angle;
+        motor->feedback.rotor_abs_angle = motor->feedback.rotor_single_angle;
         motor->feedback.rotor_speed = -motor->feedback.rotor_speed;
         motor->feedback.torque_current = -motor->feedback.torque_current;
     }
@@ -567,6 +568,7 @@ int8_t MOTOR_RM_Offine(MOTOR_RM_Param_t *param) {
 /* -------------------------------------------------------------------------- */
 
 /* C++ 驱动层将外部持有的 vendor instance 绑定到 C 管理器。 */
+/* MOTOR_CPP_ADAPTER_IMPL_BEGIN: used by User/device/motor/protocol/rm_protocol.cpp. */
 int8_t MOTOR_RM_AttachExternal(MOTOR_RM_Param_t *param, MOTOR_RM_t *external_motor) {
     if (param == NULL || external_motor == NULL) return DEVICE_ERR_NULL;
     if (MOTOR_RM_CreateCANManager(param->can) != DEVICE_OK) return DEVICE_ERR;
@@ -605,3 +607,4 @@ const MOTOR_RM_SlotTxDebug_t* MOTOR_RM_GetSlotTxDebug(uint8_t logical_index) {
     }
     return &g_motor_rm_slot_tx_debug[logical_index];
 }
+/* MOTOR_CPP_ADAPTER_IMPL_END */

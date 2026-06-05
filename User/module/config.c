@@ -599,17 +599,12 @@ Config_RobotParam_t robot_config = {
             .pwm_channel = BSP_PWM_ROD_SERVO,
             .freq_hz = 50.0f,
             .zero_pulse_us = ROD_NEW_SERVO_PULSE_NEUTRAL_US,
-            /* TODO: 根据实际机构调整角度参数 */
-            /* Rod 舵机待机位：机构放平/收回。 */
+            /* Rod 舵机软件行程：0.0 -> 776us 对接位，1.0 -> 最大脉宽等待位。 */
             .angle_standby_rad = 0.0f,
-            /* Rod 舵机高位夹取位。 */
-            .angle_grab_high_rad = 0.8f,
-            /* Rod 舵机等待对接位。 */
-            .angle_dock_wait_rad = 1.2f,
-            /* Rod 舵机行程下限：约 -135°，对应 270° 舵机 500μs。 */
-            .angle_min_rad = -2.356f,
-            /* Rod 舵机行程上限：约 +135°，对应 270° 舵机 2500μs。 */
-            .angle_max_rad = 2.356f,
+            .angle_grab_high_rad = 0.65f,
+            .angle_dock_wait_rad = 1.0f,
+            .angle_min_rad = 0.0f,
+            .angle_max_rad = 1.0f,
             .arrive_threshold_rad = 0.05f,  /* 到位判定阈值 */
             .max_vel_rad_s = 2.0f,           /* 最大角速度 */
             .max_acc_rad_s = 5.0f,          /* 最大角加速度 */

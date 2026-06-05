@@ -222,30 +222,17 @@ float RodNew_AngleToPulseUs(float angle_rad,
     return ROD_NEW_SERVO_PULSE_NEUTRAL_US;
   }
 
-  float clamped = Clamp(-angle_rad, param->angle_min_rad, param->angle_max_rad);
-
-  uint32_t zero_pulse_us = param->zero_pulse_us;
-  if (zero_pulse_us < ROD_NEW_SERVO_PULSE_MIN_US ||
-      zero_pulse_us > ROD_NEW_SERVO_PULSE_MAX_US) {
-    zero_pulse_us = ROD_NEW_SERVO_PULSE_NEUTRAL_US;
+  const float clamped = Clamp(angle_rad, param->angle_min_rad,
+                              param->angle_max_rad);
+  const float angle_range = param->angle_max_rad - param->angle_min_rad;
+  if (fabsf(angle_range) <= 1e-6f) {
+    return ROD_NEW_SERVO_PULSE_MIN_US;
   }
 
-  float pulse_us = (float)zero_pulse_us;
-  if (clamped >= 0.0f) {
-    const float pos_range = param->angle_max_rad;
-    if (fabsf(pos_range) > 1e-6f) {
-      pulse_us += (clamped / pos_range) *
-                  ((float)ROD_NEW_SERVO_PULSE_MAX_US - (float)zero_pulse_us);
-    }
-  } else {
-    const float neg_range = -param->angle_min_rad;
-    if (fabsf(neg_range) > 1e-6f) {
-      pulse_us -= ((-clamped) / neg_range) *
-                  ((float)zero_pulse_us - (float)ROD_NEW_SERVO_PULSE_MIN_US);
-    }
-  }
-
-  return pulse_us;
+  const float ratio = (clamped - param->angle_min_rad) / angle_range;
+  return (float)ROD_NEW_SERVO_PULSE_MIN_US +
+         ratio * ((float)ROD_NEW_SERVO_PULSE_MAX_US -
+                  (float)ROD_NEW_SERVO_PULSE_MIN_US);
 }
 
 bool RodNew_IsAtTarget(const RodNew_t *r) {
