@@ -2,7 +2,7 @@
 
 #include <math.h>
 
-#include "cmsis_os2.h"
+#include "bsp/time.h"
 #include "component/math/scalar.hpp"
 #include "component/user_math.h"
 #include "device/device.h"
@@ -20,7 +20,7 @@ constexpr float kVelocityCorrectionThresholdRad = kPi;
 constexpr float kVelocityMismatchWarnRad = 0.75f * kPi;
 constexpr float kMotorEncoderResolution = 8192.0f;
 constexpr float kSecondsPerMinute = 60.0f;
-constexpr uint32_t kFeedbackLostTicks = 100u;
+constexpr uint32_t kFeedbackLostUs = 100000u;
 
 constexpr uint32_t kRmPositionFaultNone = 0u;
 constexpr uint32_t kRmPositionFaultLargeDelta = (1u << 0);
@@ -70,16 +70,15 @@ uint32_t EncodeRmC610Fault(uint8_t error_code) {
     return (1u << 31);
 }
 
-uint32_t CurrentTick() {
-    return osKernelGetTickCount();
+uint32_t CurrentTimeUs() {
+    return static_cast<uint32_t>(BSP_TIME_Get_us());
 }
 
-float TickDeltaSeconds(uint32_t newer_tick, uint32_t older_tick) {
-    const uint32_t tick_freq = osKernelGetTickFreq();
-    if (older_tick == 0u || tick_freq == 0u) {
+float TimeDeltaSeconds(uint32_t newer_us, uint32_t older_us) {
+    if (older_us == 0u) {
         return 0.0f;
     }
-    return static_cast<float>((uint32_t)(newer_tick - older_tick)) / static_cast<float>(tick_freq);
+    return static_cast<float>((uint32_t)(newer_us - older_us)) * 1.0e-6f;
 }
 
 } // namespace
@@ -297,9 +296,10 @@ void MotorProtocol<MotorKind::RM, Model>::RefreshStateCache() {
         return;
     }
 
-    const uint32_t now_tick = CurrentTick();
-    const float dt_s = TickDeltaSeconds(now_tick, last_feedback_tick_);
-    if (last_feedback_tick_ != 0u && (uint32_t)(now_tick - last_feedback_tick_) > kFeedbackLostTicks) {
+    const uint32_t now_us = CurrentTimeUs();
+    const float dt_s = TimeDeltaSeconds(now_us, last_feedback_tick_);
+    if (last_feedback_tick_ != 0u &&
+        (uint32_t)(now_us - last_feedback_tick_) > kFeedbackLostUs) {
         ++feedback_lost_count_;
         position_fault_ |= kRmPositionFaultFeedbackLost;
     }
@@ -328,7 +328,7 @@ void MotorProtocol<MotorKind::RM, Model>::RefreshStateCache() {
 
     next.position_rad = ToOutputPosition(ApplyRotorPositionOffset(
         AccumulateRotorPosition(rotor_position_rad, rotor_velocity_rad_s, dt_s)));
-    last_feedback_tick_ = now_tick;
+    last_feedback_tick_ = now_us;
     next.position_single_turn_rad = WrapToPi(next.position_rad);
     next.velocity_rad_s = ToOutputVelocity(rotor_velocity_rad_s);
     next.torque_nm = ToOutputTorque(torque_current);

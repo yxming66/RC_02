@@ -68,7 +68,7 @@ Config_RobotParam_t robot_config = {
             .max_wz = 6.28f,
         },
         .controller = {
-            .sample_freq = 500.0f,
+            .sample_freq = 1000.0f,
         },
         .front_omni_rear_mecanum = {
             .lateral_vy_to_wz_feedforward = 0.10f,//1.1f不会偏航会有-vx

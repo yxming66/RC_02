@@ -75,10 +75,10 @@ int8_t RmM3508Wheel::Update() {
 }
 
 int8_t RmM3508Wheel::UpdateFeedback() {
-  if (motor_ == nullptr) {
+  if (controller_ == nullptr) {
     return DEVICE_ERR_NULL;
   }
-  const int8_t ret = motor_->Update();
+  const int8_t ret = controller_->UpdateFeedback();
   if (ret == DEVICE_OK) {
     RefreshState();
   }
