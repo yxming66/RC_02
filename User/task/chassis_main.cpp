@@ -104,6 +104,7 @@ extern "C" void Task_chassis_main(void *argument) {
 
   while (1) {
     tick += delay_tick;
+    const uint32_t loop_tick = osKernelGetTickCount();
 
     osMessageQueueGet(task_runtime.msgq.chassis.imu, &chassis_imu, nullptr, 0);
     osMessageQueueGet(task_runtime.msgq.chassis.cmd, &chassis_cmd, nullptr, 0);
@@ -118,7 +119,7 @@ extern "C" void Task_chassis_main(void *argument) {
           fb.motor[i].velocity_rad_s * 60.0f / (2.0f * 3.14159265358979f);
     }
 
-    (void)chassis.Control(chassis_cmd, osKernelGetTickCount());
+    (void)chassis.Control(chassis_cmd, loop_tick);
     chassis.Output();
 
     const bool run_pole_update = (pole_update_phase == 0u);

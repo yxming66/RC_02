@@ -763,14 +763,13 @@ void FrontOmniRearMecanumController::StoreWheelDebug(uint8_t idx) {
 }
 
 float FrontOmniRearMecanumController::CalcDt(uint32_t now_ms) {
-  (void)now_ms;
-
-  const uint64_t now_us = BSP_TIME_Get_us();
   float dt = kDefaultDtS;
   if (last_wakeup_us_ != 0U) {
-    dt = static_cast<float>(now_us - last_wakeup_us_) * 1.0e-6f;
+    dt = static_cast<float>(
+             (uint32_t)(now_ms - static_cast<uint32_t>(last_wakeup_us_))) *
+         1.0e-3f;
   }
-  last_wakeup_us_ = now_us;
+  last_wakeup_us_ = now_ms;
   return scalar::sanitize_dt(dt, kDefaultDtS, kMinDtS, kMaxDtS);
 }
 

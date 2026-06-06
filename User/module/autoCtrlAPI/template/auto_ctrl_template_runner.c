@@ -629,13 +629,19 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
     case 0:
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
       AutoCtrlPrimitive_CommandFlatMove(ctrl, param->mid_move_speed);
+      // AutoCtrlTemplate_CommandPole(ctrl,
+      //                              use_400mm ? pole.all_retract[0]
+      //                                        : pole.small[0],
+      //                              use_400mm ? pole.all_retract[1]
+      //                                        : pole.small[1],
+      //                              param->pole_front_retract_speed,
+      //                              param->pole_rear_retract_speed);
       AutoCtrlTemplate_CommandPole(ctrl,
-                                   use_400mm ? pole.all_retract[0]
-                                             : pole.small[0],
-                                   use_400mm ? pole.all_retract[1]
-                                             : pole.small[1],
+                                  pole.small[0],
+                                  pole.small[1],
                                    param->pole_front_retract_speed,
                                    param->pole_rear_retract_speed);
+      
       if (AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >= param->mid_move_ms) {
         AutoCtrlTemplate_NextStep(ctrl);
       }
@@ -678,7 +684,7 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
       AutoCtrlTemplate_CommandPole(ctrl,
                                    use_400mm ? pole.all_extend[0]
                                              : pole.all_extend[0] + pole.small[0],
-                                   use_400mm ? pole.all_retract[1]
+                                   use_400mm ? pole.all_retract[1] + 1.0f
                                              : pole.all_retract[1] + pole.small[1],
                                    param->pole_front_extend_speed,
                                    param->pole_rear_retract_speed);
