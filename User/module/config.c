@@ -370,6 +370,7 @@ Config_RobotParam_t robot_config = {
             .sick_norm_err_to_rad = 0.50f,   /* SICK 归一化误差到 yaw 辅助角的映射系数，单位 rad。 */
             .sick_assist_max_rad = 0.35f,    /* SICK yaw 辅助角限幅，单位 rad。 */
             .sick_assist_gain = 1.0f,        /* SICK yaw 辅助量融合增益。 */
+            .descend_pole_lift_accel = 140.0f, /* 下台阶 Pole 目标加速度限幅，单位 rad/s^2；<0 表示禁用。 */
         },
         /* 头向 / 上台阶 / 200mm 模板参数。 */
         .head_ascend_200 = {
@@ -433,7 +434,6 @@ Config_RobotParam_t robot_config = {
         },
         /* 头向 / 下台阶 / 200mm 模板参数。 */
         .head_descend_200 = {
-            .pole_lift_accel = 60.0f,           /* 下台阶 pole 目标加速度限幅，单位 rad/s^2；<0 表示禁用。 */
             /*
              * Head-descend 200 optimized flow:
              * - step0: fast approach for mid_move_ms using mid_move_speed.
@@ -466,7 +466,6 @@ Config_RobotParam_t robot_config = {
         },
         /* 头向 / 下台阶 / 400mm 模板参数。 */
         .head_descend_400 = {
-            .pole_lift_accel = 60.0f,           /* 下台阶 pole 目标加速度限幅，单位 rad/s^2；<0 表示禁用。 */
             /*
              * Optimized fixed-start flow:
              * - mid_move_speed/mid_move_ms: first fixed fast approach.
@@ -546,7 +545,6 @@ Config_RobotParam_t robot_config = {
         },
         /* 尾向 / 下台阶 / 200mm 模板参数。 */
         .tail_descend_200 = {
-            .pole_lift_accel = 60.0f,           /* 下台阶 pole 目标加速度限幅，单位 rad/s^2；<0 表示禁用。 */
             /*
              * Optimized fixed-start flow:
              * - mid_move_speed/mid_move_ms: first fixed fast approach.
@@ -577,7 +575,6 @@ Config_RobotParam_t robot_config = {
         },
         /* 尾向 / 下台阶 / 400mm 模板参数。 */
         .tail_descend_400 = {
-            .pole_lift_accel = 60.0f,           /* 下台阶 pole 目标加速度限幅，单位 rad/s^2；<0 表示禁用。 */
             /*
              * Optimized fixed-start flow:
              * - mid_move_speed/mid_move_ms: first fixed fast approach.

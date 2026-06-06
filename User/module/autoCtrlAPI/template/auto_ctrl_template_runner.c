@@ -71,6 +71,39 @@ static const AutoCtrl_TemplateParam_t *AutoCtrlTemplate_GetTemplateParam(
   }
 }
 
+static bool AutoCtrlTemplate_IsDescendTemplate(
+    auto_ctrl_template_e template_id) {
+  switch (template_id) {
+    case AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD:
+    case AUTO_CTRL_TEMPLATE_DESCEND_400_HEAD:
+    case AUTO_CTRL_TEMPLATE_DESCEND_200_TAIL:
+    case AUTO_CTRL_TEMPLATE_DESCEND_400_TAIL:
+      return true;
+    case AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD:
+    case AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD:
+    case AUTO_CTRL_TEMPLATE_ASCEND_200_TAIL:
+    case AUTO_CTRL_TEMPLATE_ASCEND_400_TAIL:
+    case AUTO_CTRL_TEMPLATE_NONE:
+    default:
+      return false;
+  }
+}
+
+static float AutoCtrlTemplate_ResolvePoleLiftAccel(
+    const Config_RobotParam_t *robot_param,
+    const AutoCtrl_TemplateParam_t *template_param,
+    auto_ctrl_template_e template_id) {
+  if (template_param != 0 && template_param->pole_lift_accel != 0.0f) {
+    return template_param->pole_lift_accel;
+  }
+
+  if (robot_param != 0 && AutoCtrlTemplate_IsDescendTemplate(template_id)) {
+    return robot_param->auto_ctrl_param.common.descend_pole_lift_accel;
+  }
+
+  return 0.0f;
+}
+
 static bool AutoCtrlTemplate_PoleReadyAfterNewTarget(auto_ctrl_t *ctrl,
                                                      bool pole_ready) {
   if (!pole_ready) {
@@ -87,12 +120,12 @@ static void AutoCtrlTemplate_CommandPole(auto_ctrl_t *ctrl, float front_target,
   const Config_RobotParam_t *robot_param = Config_GetRobotParam();
   const AutoCtrl_TemplateParam_t *template_param =
       AutoCtrlTemplate_GetTemplateParam(robot_param, ctrl->template_id);
-  const float lift_accel =
-      (template_param == 0) ? 0.0f : template_param->pole_lift_accel;
+  const float lift_accel = AutoCtrlTemplate_ResolvePoleLiftAccel(
+      robot_param, template_param, ctrl->template_id);
 
   AutoCtrlPrimitive_CommandPoleTargetWithSpeed(ctrl, front_target, rear_target,
                                                front_speed, rear_speed);
-  /* descend 模板：不对 lift 加速度限幅（保留速度限） */
+  /* 0 lets Pole use the global default; a negative value disables accel. */
   ctrl->pole_cmd.auto_lift_accel[0] = lift_accel;
   ctrl->pole_cmd.auto_lift_accel[1] = lift_accel;
   ctrl->pole_cmd.disable_lift_accel = lift_accel < 0.0f;
