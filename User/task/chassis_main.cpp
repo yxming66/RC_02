@@ -46,6 +46,8 @@ bool Task_ChassisMainGetPoleHoldCommand(Pole_CMD_t *cmd) {
   cmd->auto_target_lift[1] = pole.debug.tracked_target_lift[1];
   cmd->auto_lift_speed[0] = 0.0f;
   cmd->auto_lift_speed[1] = 0.0f;
+  cmd->auto_lift_accel[0] = 0.0f;
+  cmd->auto_lift_accel[1] = 0.0f;
   return true;
 }
 }
@@ -144,8 +146,8 @@ extern "C" void Task_chassis_main(void *argument) {
 
     if (run_pole_update) {
       PC_PoleFeedback_t pole_fb = {0};
-      pole_fb.lift[0] = pole.feedback.support_angle_avg;
-      pole_fb.lift[1] = pole.feedback.support_angle_avg;
+      pole_fb.lift[0] = pole.feedback.support_lift[0];
+      pole_fb.lift[1] = pole.feedback.support_lift[1];
       for (uint8_t i = 0u; i < POLE_MOTOR_NUM; i++) {
         pole_fb.motor_total_angle[i] = pole.feedback.motor[i].rotor_total_angle;
       }

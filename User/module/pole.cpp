@@ -42,7 +42,7 @@ float Pole_UpdateTrackedLift(Pole_t *c, uint8_t side, float speed_limit) {
   const float max_velocity = Pole_PositiveOrZero(speed_limit);
   const float max_acceleration = c->setpoint.disable_lift_accel
       ? 0.0f
-      : Pole_PositiveOrZero(c->param->limit.support_lift_accel);
+      : Pole_PositiveOrZero(c->setpoint.lift_accel[side]);
 
   if (max_velocity <= 0.0f || max_acceleration <= 0.0f) {
     c->support_angle.tracked_target_velocity[side] = 0.0f;
@@ -176,6 +176,8 @@ static int8_t Pole_SetMode(Pole_t *c, Pole_Mode_t mode) {
 
   if (mode == POLE_MODE_ACTIVE) {
     Pole_SyncTargetsToFeedback(c);
+    c->support_angle.manual_target_was_moving[0] = false;
+    c->support_angle.manual_target_was_moving[1] = false;
   }
   Pole_ResetControllers(c);
   c->mode = mode;
@@ -223,6 +225,8 @@ int8_t Pole_UpdateFeedback(Pole_t *c) {
   }
 
   c->feedback.support_angle_avg = sum / (float)POLE_SUPPORT_MOTOR_NUM;
+  c->feedback.support_lift[0] = Pole_GetCurrentSideLift(c, 0u);
+  c->feedback.support_lift[1] = Pole_GetCurrentSideLift(c, 1u);
   return POLE_OK;
 }
 
@@ -261,6 +265,8 @@ int8_t Pole_Control(Pole_t *c, const Pole_CMD_t *c_cmd, uint32_t now) {
     }
     c->support_angle.auto_target_was_enabled[0] = false;
     c->support_angle.auto_target_was_enabled[1] = false;
+    c->support_angle.manual_target_was_moving[0] = false;
+    c->support_angle.manual_target_was_moving[1] = false;
     c->support_angle.calibrated = true;
     Pole_ResetControllers(c);
   }
@@ -268,23 +274,35 @@ int8_t Pole_Control(Pole_t *c, const Pole_CMD_t *c_cmd, uint32_t now) {
   for (uint8_t side = 0; side < 2u; side++) {
     float default_speed = c->param->limit.support_lift_speed;
     float auto_speed = c_cmd->auto_lift_speed[side];
+    float default_accel = c->param->limit.support_lift_accel;
+    float auto_accel = c_cmd->auto_lift_accel[side];
     float speed_limit = (auto_speed > 0.0f) ? auto_speed : default_speed;
+    c->setpoint.lift_accel[side] =
+        (auto_accel > 0.0f) ? auto_accel : default_accel;
     const bool auto_target_enabled = c_cmd->auto_target_enable[side];
 
     if (auto_target_enabled) {
       Pole_ClearSideTargetOffset(c, side);
       c->support_angle.final_target_lift[side] = c_cmd->auto_target_lift[side];
+      c->support_angle.manual_target_was_moving[side] = false;
     } else {
       if (c->support_angle.auto_target_was_enabled[side]) {
         Pole_SyncSideTargetToFeedback(c, side);
       }
-      if (fabsf(c_cmd->lift[side]) <= kPoleManualLiftDeadband) {
+      const bool manual_target_moving =
+          fabsf(c_cmd->lift[side]) > kPoleManualLiftDeadband;
+      if (!manual_target_moving) {
+        if (c->support_angle.manual_target_was_moving[side]) {
+          Pole_SyncSideTargetToFeedback(c, side);
+          Pole_ResetControllers(c);
+        }
         c->support_angle.final_target_lift[side] =
             c->support_angle.tracked_target_lift[side];
       } else {
         c->support_angle.final_target_lift[side] +=
             c_cmd->lift[side] * default_speed * c->dt;
       }
+      c->support_angle.manual_target_was_moving[side] = manual_target_moving;
     }
     c->support_angle.auto_target_was_enabled[side] = auto_target_enabled;
 

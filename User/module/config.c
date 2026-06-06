@@ -123,7 +123,7 @@ Config_RobotParam_t robot_config = {
             .step_400_all_extend = {27.3f, 27.3f},
             /* 400mm 台阶前杆收回、后杆保持支撑位。 */
             .step_400_front_retract = {0.0f, 27.3f},
-            /* 400mm 台阶四杆全收位。 */
+               /* 400mm 台阶四杆全收位。 */
             .step_400_all_retract = {0.0f, 0.0f},
         },
         .limit = {
@@ -385,14 +385,14 @@ Config_RobotParam_t robot_config = {
             .pole_extend_move_speed = 0.50f,    /* 撑杆伸出阶段 vx，单位 m/s。 */
             .front_retract_move_speed = 0.50f,  /* 前杆动作阶段 vx，单位 m/s。 */
             .front_retract_timeout_ms = 5000u,  /* 前光电触发后，等待前杆收回到位超时，单位 ms。 */
-            .mid_move_speed = 2.5f,             /* 前杆收回到位后的中段平移 vx，单位 m/s。 */
-            .mid_move_ms = 300u,                  /* 中段平移持续时间，单位 ms。 */
+            .mid_move_speed = 1.5f,             /* 前杆收回到位后的中段平移 vx，单位 m/s。 */
+            .mid_move_ms = 250u,                  /* 中段平移持续时间，单位 ms。 */
             .rear_retract_move_speed = 0.40f,   /* 等待后光电触发的低速 vx，单位 m/s。 */
             .rear_retract_timeout_ms = 5000u,   /* 后光电触发后，全收腿动作超时，单位 ms。 */
             .rear_retract_move_ms = 300u,       /* 后光电触发后，全收腿移动持续时间，单位 ms。 */
             .second_photo_retract_move_speed = 0.50f, /* 后一个光电触发收腿时向头向移动 vx，单位 m/s。 */
-            .final_move_speed = 3.5f,          /* 收尾离开台阶 vx，单位 m/s。 */
-            .final_move_ms = 400u,                /* 收尾离开台阶持续时间，单位 ms。 */
+            .final_move_speed = 4.0f,          /* 收尾离开台阶 vx，单位 m/s。 */
+            .final_move_ms = 500u,                /* 收尾离开台阶持续时间，单位 ms。 */
             .pole_all_extend_speed = 50.0f,     /* 四杆全伸目标跟随速度，单位 rad/s。 */
             .pole_front_extend_speed = 20.0f,   /* 前杆伸出目标跟随速度，单位 rad/s。 */
             .pole_front_retract_speed = 65.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
@@ -415,14 +415,14 @@ Config_RobotParam_t robot_config = {
             .pole_extend_move_speed = 0.50f,    /* 撑杆伸出阶段 vx，单位 m/s。 */
             .front_retract_move_speed = 0.50f,  /* 前杆动作阶段 vx，单位 m/s。 */
             .front_retract_timeout_ms = 5000u,  /* 前光电触发后，等待前杆收回到位超时，单位 ms。 */
-            .mid_move_speed = 2.5f,             /* 前杆收回到位后的中段平移 vx，单位 m/s。 */
-            .mid_move_ms = 300u,                /* 中段平移持续时间，单位 ms。 */
+            .mid_move_speed = 1.5f,             /* 前杆收回到位后的中段平移 vx，单位 m/s。 */
+            .mid_move_ms = 250u,                /* 中段平移持续时间，单位 ms。 */
             .rear_retract_move_speed = 0.40f,   /* 等待后光电触发的低速 vx，单位 m/s。 */
             .rear_retract_timeout_ms = 5000u,   /* 后光电触发后，全收腿动作超时，单位 ms。 */
             .rear_retract_move_ms = 300u,       /* 后光电触发后，全收腿移动持续时间，单位 ms。 */
             .second_photo_retract_move_speed = 0.50f, /* 后一个光电触发收腿时向头向移动 vx，单位 m/s。 */
-            .final_move_speed = 2.5f,           /* 收尾离开台阶 vx，单位 m/s。 */
-            .final_move_ms = 400u,              /* 收尾离开台阶持续时间，单位 ms。 */
+            .final_move_speed = 4.0f,           /* 收尾离开台阶 vx，单位 m/s。 */
+            .final_move_ms = 500u,              /* 收尾离开台阶持续时间，单位 ms。 */
             .pole_all_extend_speed = 50.0f,     /* 四杆全伸目标跟随速度，单位 rad/s。 */
             .pole_front_extend_speed = 20.0f,   /* 前杆伸出目标跟随速度，单位 rad/s。 */
             .pole_front_retract_speed = 65.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
@@ -433,6 +433,7 @@ Config_RobotParam_t robot_config = {
         },
         /* 头向 / 下台阶 / 200mm 模板参数。 */
         .head_descend_200 = {
+            .pole_lift_accel = 60.0f,           /* 下台阶 pole 目标加速度限幅，单位 rad/s^2；<0 表示禁用。 */
             /*
              * Head-descend 200 optimized flow:
              * - step0: fast approach for mid_move_ms using mid_move_speed.
@@ -465,6 +466,7 @@ Config_RobotParam_t robot_config = {
         },
         /* 头向 / 下台阶 / 400mm 模板参数。 */
         .head_descend_400 = {
+            .pole_lift_accel = 60.0f,           /* 下台阶 pole 目标加速度限幅，单位 rad/s^2；<0 表示禁用。 */
             /*
              * Optimized fixed-start flow:
              * - mid_move_speed/mid_move_ms: first fixed fast approach.
@@ -544,6 +546,7 @@ Config_RobotParam_t robot_config = {
         },
         /* 尾向 / 下台阶 / 200mm 模板参数。 */
         .tail_descend_200 = {
+            .pole_lift_accel = 60.0f,           /* 下台阶 pole 目标加速度限幅，单位 rad/s^2；<0 表示禁用。 */
             /*
              * Optimized fixed-start flow:
              * - mid_move_speed/mid_move_ms: first fixed fast approach.
@@ -574,6 +577,7 @@ Config_RobotParam_t robot_config = {
         },
         /* 尾向 / 下台阶 / 400mm 模板参数。 */
         .tail_descend_400 = {
+            .pole_lift_accel = 60.0f,           /* 下台阶 pole 目标加速度限幅，单位 rad/s^2；<0 表示禁用。 */
             /*
              * Optimized fixed-start flow:
              * - mid_move_speed/mid_move_ms: first fixed fast approach.

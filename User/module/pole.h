@@ -41,6 +41,7 @@ typedef struct {
   bool auto_target_enable[2];
   float auto_target_lift[2];   /* rad, relative to calibrated lower limit */
   float auto_lift_speed[2];    /* rad/s, <=0 means use default support_lift_speed */
+  float auto_lift_accel[2];    /* rad/s^2, <=0 means use default support_lift_accel */
   bool disable_lift_accel;     /* true: 该 cmd 不对 lift 加速度限幅（仅限速） */
 } Pole_CMD_t;
 
@@ -108,6 +109,7 @@ typedef struct {
   bool temperature_warning[POLE_MOTOR_NUM];
   bool temperature_over_limit[POLE_MOTOR_NUM];
   float support_vel_filtered[POLE_SUPPORT_MOTOR_NUM];
+  float support_lift[2];
   float support_angle_avg;
 } Pole_Feedback_t;
 
@@ -149,6 +151,7 @@ typedef struct {
     float tracked_target_lift[2];
     float tracked_target_velocity[2];
     bool auto_target_was_enabled[2];
+    bool manual_target_was_moving[2];
     bool lower_hold_latched[POLE_SUPPORT_MOTOR_NUM];
   } support_angle;
 
@@ -164,6 +167,7 @@ typedef struct {
   struct {
     float support_target_angle[POLE_SUPPORT_MOTOR_NUM];
     bool disable_lift_accel;   /* 保存最近一次 cmd 的标志 */
+    float lift_accel[2];
   } setpoint;
 
   struct {

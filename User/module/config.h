@@ -60,6 +60,7 @@ typedef struct {
   float pole_front_retract_speed; /* front poles retract speed, rad/s */
   float pole_rear_extend_speed;   /* rear poles extend speed, rad/s */
   float pole_rear_retract_speed;  /* rear poles retract speed, rad/s */
+  float pole_lift_accel;          /* rad/s^2; >0 template accel, 0 global default, <0 disables accel */
 
   uint32_t front_photo_timeout_ms; /* current forward photo timeout, ms */
   uint32_t rear_photo_timeout_ms;  /* current rear photo timeout, ms */

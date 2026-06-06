@@ -99,6 +99,8 @@ struct PoleSafe {
     out.auto_target_lift[1] = 0.0f;
     out.auto_lift_speed[0] = 0.0f;
     out.auto_lift_speed[1] = 0.0f;
+    out.auto_lift_accel[0] = 0.0f;
+    out.auto_lift_accel[1] = 0.0f;
     out.disable_lift_accel = false;
     return true;
   }
@@ -176,6 +178,8 @@ struct RcPole {
     out.auto_target_lift[1] = 0.0f;
     out.auto_lift_speed[0] = 0.0f;
     out.auto_lift_speed[1] = 0.0f;
+    out.auto_lift_accel[0] = 0.0f;
+    out.auto_lift_accel[1] = 0.0f;
     out.disable_lift_accel = false;
     return true;
   }
