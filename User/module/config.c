@@ -352,6 +352,14 @@ Config_RobotParam_t robot_config = {
         /* 取 -200 矿时底盘前进速度，单位 m/s；可设为 0 禁止底盘前进。 */
         .fetch_neg_200_chassis_vx_mps = 0.20f,
     },
+    .auto_rod_spearhead_param = {
+        /* One-key spearhead action timing; rod_param is filled during init. */
+        .open_delay_ms = 1200u,
+        .grab_high_delay_ms = 200u,
+        .dock_wait_delay_ms = 5000u,
+        .use_photo_check = true,
+        .photo_check_ms = 1000u,
+    },
     .auto_ctrl_param = {
         .common = {
             .prealign_kp = 13.0f,             /* yaw 误差到 wz 指令的比例系数。 */
@@ -599,10 +607,10 @@ Config_RobotParam_t robot_config = {
             .pwm_channel = BSP_PWM_ROD_SERVO,
             .freq_hz = 50.0f,
             .zero_pulse_us = ROD_NEW_SERVO_PULSE_NEUTRAL_US,
-            /* Rod 舵机软件行程：0.0 -> 776us 对接位，1.0 -> 最大脉宽等待位。 */
-            .angle_standby_rad = 0.0f,
-            .angle_grab_high_rad = 0.65f,
-            .angle_dock_wait_rad = 1.0f,
+            /* Rod 舵机软件行程：0.0 -> 776us 等待位，1.0 -> 1504us 水平位。 */
+            .angle_standby_rad = 1.0f,
+            .angle_grab_high_rad = 0.35f,
+            .angle_dock_wait_rad = 0.0f,
             .angle_min_rad = 0.0f,
             .angle_max_rad = 1.0f,
             .arrive_threshold_rad = 0.05f,  /* 到位判定阈值 */

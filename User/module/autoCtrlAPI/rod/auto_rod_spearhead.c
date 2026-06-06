@@ -40,6 +40,26 @@ static uint32_t AutoRodSpearhead_StepElapsed(
   return now_ms - ctrl->step_enter_time_ms;
 }
 
+static float AutoRodSpearhead_RodPoseTargetRad(
+    const AutoRodSpearhead_t *ctrl,
+    RodNew_Pose_t pose) {
+  if (ctrl == 0 || ctrl->param.rod_param == 0) {
+    return 0.0f;
+  }
+
+  switch (pose) {
+    case ROD_NEW_POSE_STANDBY:
+      return ctrl->param.rod_param->servo.angle_standby_rad;
+    case ROD_NEW_POSE_GRAB_HIGH:
+      return ctrl->param.rod_param->servo.angle_grab_high_rad;
+    case ROD_NEW_POSE_DOCK_WAIT:
+      return ctrl->param.rod_param->servo.angle_dock_wait_rad;
+    case ROD_NEW_POSE_MANUAL:
+    default:
+      return 0.0f;
+  }
+}
+
 static void AutoRodSpearhead_EnterStep(AutoRodSpearhead_t *ctrl,
                                        uint32_t now_ms) {
   if (!ctrl->step_entered) {
@@ -68,7 +88,8 @@ static bool AutoRodSpearhead_CommandRod(AutoRodSpearhead_t *ctrl,
   ctrl->rod_cmd.mode = ROD_NEW_MODE_ACTIVE;
   ctrl->rod_cmd.pose = pose;
   ctrl->rod_cmd.grip = grip;
-  ctrl->rod_cmd.target_angle_rad = 0.0f;
+  ctrl->rod_cmd.target_angle_rad =
+      AutoRodSpearhead_RodPoseTargetRad(ctrl, pose);
   ctrl->rod_cmd_valid = true;
   return true;
 }
@@ -163,7 +184,6 @@ void AutoRodSpearhead_Update(AutoRodSpearhead_t *ctrl,
   const bool dock_complete_received =
       feedback != 0 && feedback->dock_complete_received;
 
-  ctrl->rod_cmd_valid = false;
   switch (ctrl->step_index) {
     case 0:
       AutoRodSpearhead_EnterStep(ctrl, now_ms);
@@ -194,6 +214,9 @@ void AutoRodSpearhead_Update(AutoRodSpearhead_t *ctrl,
                                        ROD_NEW_GRIP_GRAB)) {
         return;
       }
+      if (AutoRodSpearhead_StepElapsed(ctrl, now_ms) == 0u) {
+        return;
+      }
       if (!ctrl->param.use_photo_check) {
         if (rod_at_target) {
           AutoRodSpearhead_NextStep(ctrl);
@@ -203,17 +226,26 @@ void AutoRodSpearhead_Update(AutoRodSpearhead_t *ctrl,
       if (!rod_at_target) {
         ctrl->photo_stable_started = false;
         ctrl->photo_stable_state = false;
+        if (AutoRodSpearhead_StepElapsed(ctrl, now_ms) >=
+            AutoRodSpearhead_DockWaitDelayMs(ctrl)) {
+          AutoRodSpearhead_FinishTimeout(ctrl);
+        }
+        return;
+      }
+      if (!rod_photo_triggered) {
+        ctrl->photo_stable_started = false;
+        ctrl->photo_stable_state = false;
+        if (AutoRodSpearhead_StepElapsed(ctrl, now_ms) >=
+            AutoRodSpearhead_DockWaitDelayMs(ctrl)) {
+          AutoRodSpearhead_FinishNoSpearhead(ctrl);
+        }
         return;
       }
       if (!AutoRodSpearhead_PhotoStateStable(ctrl, rod_photo_triggered,
                                              now_ms)) {
         return;
       }
-      if (rod_photo_triggered) {
-        AutoRodSpearhead_NextStep(ctrl);
-      } else {
-        AutoRodSpearhead_FinishNoSpearhead(ctrl);
-      }
+      AutoRodSpearhead_FinishSuccess(ctrl);
       return;
     }
     case 3:

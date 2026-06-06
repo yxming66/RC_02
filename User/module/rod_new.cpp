@@ -29,8 +29,14 @@ float MoveTowards(float current, float target, float max_delta) {
 bool RodNew_ParamsValid(const RodNew_Params_t *param) {
   return param != nullptr && param->servo.angle_max_rad > param->servo.angle_min_rad &&
          isfinite(param->servo.angle_min_rad) && isfinite(param->servo.angle_max_rad) &&
-         isfinite(param->servo.angle_standby_rad) && isfinite(param->servo.max_vel_rad_s) &&
+         isfinite(param->servo.angle_standby_rad) &&
+         isfinite(param->servo.angle_dock_wait_rad) &&
+         isfinite(param->servo.max_vel_rad_s) &&
          param->servo.pwm_channel < BSP_PWM_NUM;
+}
+
+float RodNew_DefaultAngleRad(const RodNew_Params_t *param) {
+  return param != nullptr ? param->servo.angle_dock_wait_rad : 0.0f;
 }
 
 }  // namespace
@@ -48,10 +54,10 @@ int8_t RodNew_Init(RodNew_t *r, const RodNew_Params_t *param) {
   memset(r, 0, sizeof(RodNew_t));
   r->param = param;
   r->mode = ROD_NEW_MODE_RELAX;
-  r->servo.target_angle_rad = param->servo.angle_standby_rad;
-  r->servo.tracked_angle_rad = param->servo.angle_standby_rad;
+  r->servo.target_angle_rad = RodNew_DefaultAngleRad(param);
+  r->servo.tracked_angle_rad = RodNew_DefaultAngleRad(param);
   r->servo.tracked_vel_rad_s = 0.0f;
-  r->servo.feedback_angle_rad = param->servo.angle_standby_rad;
+  r->servo.feedback_angle_rad = RodNew_DefaultAngleRad(param);
   r->servo.at_target = true;
   r->gripper.state = ROD_NEW_GRIP_RELEASE;
   r->gripper.grip_done = false;
@@ -89,8 +95,8 @@ int8_t RodNew_Control(RodNew_t *r, RodNew_Mode_t mode, RodNew_Pose_t pose,
   r->mode = mode;
 
   if (r->mode == ROD_NEW_MODE_RELAX) {
-    r->servo.target_angle_rad = r->param->servo.angle_standby_rad;
-    r->servo.tracked_angle_rad = r->param->servo.angle_standby_rad;
+    r->servo.target_angle_rad = RodNew_DefaultAngleRad(r->param);
+    r->servo.tracked_angle_rad = RodNew_DefaultAngleRad(r->param);
     r->servo.tracked_vel_rad_s = 0.0f;
     r->servo.feedback_angle_rad = r->servo.tracked_angle_rad;
     r->servo.at_target = true;
@@ -255,9 +261,7 @@ void RodNew_Reset(RodNew_t *r) {
     return;
   }
   r->mode = ROD_NEW_MODE_RELAX;
-  r->servo.target_angle_rad = r->param != nullptr
-                                  ? r->param->servo.angle_standby_rad
-                                  : 0.0f;
+  r->servo.target_angle_rad = RodNew_DefaultAngleRad(r->param);
   r->servo.tracked_angle_rad = r->servo.target_angle_rad;
   r->servo.tracked_vel_rad_s = 0.0f;
   r->servo.feedback_angle_rad = r->servo.tracked_angle_rad;
