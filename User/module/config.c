@@ -120,17 +120,17 @@ Config_RobotParam_t robot_config = {
             /* 200mm 小抬升位；一键取矿 PICK_NEG_200 使用该撑杆高度。 */
             .step_200_small = {3.0f, 3.0f},
             /* 400mm 台阶四杆全伸位；一键取矿 PICK_POS_400 也使用该撑杆高度。 */
-            .step_400_all_extend = {26.7f, 26.7f},
+            .step_400_all_extend = {27.3f, 27.3f},
             /* 400mm 台阶前杆收回、后杆保持支撑位。 */
-            .step_400_front_retract = {0.0f, 26.7f},
+            .step_400_front_retract = {0.0f, 27.3f},
             /* 400mm 台阶四杆全收位。 */
             .step_400_all_retract = {0.0f, 0.0f},
         },
         .limit = {
             .max_current = 1.0f,
-            .support_total_travel = 26.7f,
+            .support_total_travel = 27.3f,//26.7
             .support_lift_speed = 70.0f,//70
-            .support_lift_accel = 140.0f,//180
+            .support_lift_accel = 140.0f,
         },
     },
     .ore_store_param = {
