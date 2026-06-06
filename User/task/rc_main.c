@@ -363,9 +363,9 @@ static RcAutoCtrlStartConfig_t Rc_SelectAutoCtrlStartConfig(void) {
   }
 
   if (dr16.data.sw_r == DR16_SW_UP) {
-    config.template_id = AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD;
+    config.template_id = AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD;
   } else if (dr16.data.sw_r == DR16_SW_DOWN) {
-    config.template_id = AUTO_CTRL_TEMPLATE_DESCEND_400_HEAD;
+    config.template_id = AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD;
   } 
 
   return config;

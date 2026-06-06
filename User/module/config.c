@@ -128,8 +128,8 @@ Config_RobotParam_t robot_config = {
         },
         .limit = {
             .max_current = 1.0f,
-            .support_total_travel = 27.3f,//26.7
-            .support_lift_speed = 70.0f,//70
+            .support_total_travel = 26.7f,//26.7//27.3
+            .support_lift_speed = 70.0f,
             .support_lift_accel = 140.0f,
         },
     },
@@ -385,8 +385,8 @@ Config_RobotParam_t robot_config = {
             .pole_extend_move_speed = 0.50f,    /* 撑杆伸出阶段 vx，单位 m/s。 */
             .front_retract_move_speed = 0.50f,  /* 前杆动作阶段 vx，单位 m/s。 */
             .front_retract_timeout_ms = 5000u,  /* 前光电触发后，等待前杆收回到位超时，单位 ms。 */
-            .mid_move_speed = 1.5f,             /* 前杆收回到位后的中段平移 vx，单位 m/s。 */
-            .mid_move_ms = 250u,                  /* 中段平移持续时间，单位 ms。 */
+            .mid_move_speed = 2.5f,             /* 前杆收回到位后的中段平移 vx，单位 m/s。 */
+            .mid_move_ms = 300u,                  /* 中段平移持续时间，单位 ms。 */
             .rear_retract_move_speed = 0.40f,   /* 等待后光电触发的低速 vx，单位 m/s。 */
             .rear_retract_timeout_ms = 5000u,   /* 后光电触发后，全收腿动作超时，单位 ms。 */
             .rear_retract_move_ms = 300u,       /* 后光电触发后，全收腿移动持续时间，单位 ms。 */
@@ -415,8 +415,8 @@ Config_RobotParam_t robot_config = {
             .pole_extend_move_speed = 0.50f,    /* 撑杆伸出阶段 vx，单位 m/s。 */
             .front_retract_move_speed = 0.50f,  /* 前杆动作阶段 vx，单位 m/s。 */
             .front_retract_timeout_ms = 5000u,  /* 前光电触发后，等待前杆收回到位超时，单位 ms。 */
-            .mid_move_speed = 1.5f,             /* 前杆收回到位后的中段平移 vx，单位 m/s。 */
-            .mid_move_ms = 250u,               /* 中段平移持续时间，单位 ms。 */
+            .mid_move_speed = 2.5f,             /* 前杆收回到位后的中段平移 vx，单位 m/s。 */
+            .mid_move_ms = 300u,                /* 中段平移持续时间，单位 ms。 */
             .rear_retract_move_speed = 0.40f,   /* 等待后光电触发的低速 vx，单位 m/s。 */
             .rear_retract_timeout_ms = 5000u,   /* 后光电触发后，全收腿动作超时，单位 ms。 */
             .rear_retract_move_ms = 300u,       /* 后光电触发后，全收腿移动持续时间，单位 ms。 */
