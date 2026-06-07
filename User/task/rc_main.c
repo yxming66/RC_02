@@ -139,6 +139,11 @@ typedef struct {
   volatile AutoRodSpearhead_Result_t auto_rod_spearhead_result;
   volatile AutoRodSpearhead_Fault_t auto_rod_spearhead_fault;
   volatile uint8_t auto_rod_spearhead_step_index;
+  volatile AutoSickCorrect_State_t auto_sick_correct_state;
+  volatile AutoSickCorrect_Result_t auto_sick_correct_result;
+  volatile AutoSickCorrect_Fault_t auto_sick_correct_fault;
+  volatile AutoSickCorrect_Action_t auto_sick_correct_action;
+  volatile uint8_t auto_sick_correct_step_index;
 } RcControlDebug_t;
 
 volatile RcControlDebug_t g_rc_control_debug = {0};
@@ -164,6 +169,7 @@ static bool arm_simple_target_initialized = false;
 static bool auto_ctrl_was_busy = false;
 static bool auto_ore_was_busy = false;
 static bool auto_rod_spearhead_was_busy = false;
+static bool auto_sick_correct_was_busy = false;
 static bool auto_rod_spearhead_hold_after_finish = false;
 static RodNew_GripState_t rod_grip_latched = ROD_NEW_GRIP_RELEASE;
 static float rod_target_angle_latched_rad = 1.0f;
@@ -643,6 +649,11 @@ static void Rc_LatchAutoOreCurrentTargets(void) {
   Rc_SetRodHold();
 }
 
+static void Rc_LatchAutoSickCorrectCurrentTargets(void) {
+  Rc_SetChassisRelax();
+  Rc_LatchPoleCurrentTarget();
+}
+
 static void Rc_LatchRodCurrentTarget(void) {
   const RodNew_Feedback_t *feedback = Task_RodNewGetFeedback();
   if (feedback == NULL) {
@@ -672,6 +683,7 @@ static void Rc_LatchFinishedAutoTargets(void) {
   const bool auto_ore_busy_now =
       auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl);
   const bool auto_rod_busy_now = Task_AutoRodSpearheadIsBusy();
+  const bool auto_sick_correct_busy_now = Task_AutoSickCorrectIsBusy();
 
   if (auto_ctrl_was_busy && !auto_ctrl_busy_now) {
     Rc_LatchAutoCtrlCurrentTargets();
@@ -688,12 +700,16 @@ static void Rc_LatchFinishedAutoTargets(void) {
       auto_rod_spearhead_hold_after_finish = true;
     }
   }
+  if (auto_sick_correct_was_busy && !auto_sick_correct_busy_now) {
+    Rc_LatchAutoSickCorrectCurrentTargets();
+  }
 }
 
 static void Rc_UpdateAutoBusyHistory(void) {
   auto_ctrl_was_busy = auto_ctrl_inited && AutoCtrl_IsBusy(&auto_ctrl);
   auto_ore_was_busy = auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl);
   auto_rod_spearhead_was_busy = Task_AutoRodSpearheadIsBusy();
+  auto_sick_correct_was_busy = Task_AutoSickCorrectIsBusy();
 }
 
 static const ArmSimple_Params_t* Rc_GetArmSimpleParam(void) {
@@ -904,6 +920,16 @@ static void Rc_ResetFrameDebug(void) {
       AutoRodSpearhead_GetFault(&auto_rod_spearhead_ctrl);
     g_rc_control_debug.auto_rod_spearhead_step_index =
       AutoRodSpearhead_GetStepIndex(&auto_rod_spearhead_ctrl);
+    g_rc_control_debug.auto_sick_correct_state =
+      AutoSickCorrect_GetState(&auto_sick_correct_ctrl);
+    g_rc_control_debug.auto_sick_correct_result =
+      AutoSickCorrect_GetResult(&auto_sick_correct_ctrl);
+    g_rc_control_debug.auto_sick_correct_fault =
+      AutoSickCorrect_GetFault(&auto_sick_correct_ctrl);
+    g_rc_control_debug.auto_sick_correct_action =
+      AutoSickCorrect_GetAction(&auto_sick_correct_ctrl);
+    g_rc_control_debug.auto_sick_correct_step_index =
+      AutoSickCorrect_GetStepIndex(&auto_sick_correct_ctrl);
   g_rc_ore_store_debug.assume_home_event = false;
 }
 
@@ -977,6 +1003,28 @@ static void Rc_ApplyAutoOreOutputs(void) {
 
   g_rc_control_debug.ore_store_active = true;
   g_rc_control_debug.arm_simple_active = true;
+}
+
+static void Rc_ApplyAutoSickCorrectOutputs(void) {
+  Rc_SetChassisHold();
+  Rc_SetArmSimpleHold();
+  Rc_SetRodHold();
+  Rc_SetOreStoreHold();
+
+  const Chassis_CMD_t *auto_chassis_cmd =
+      Task_AutoSickCorrectGetChassisCommand();
+  if (auto_chassis_cmd != NULL) {
+    chassis_cmd = *auto_chassis_cmd;
+  }
+
+  const Pole_CMD_t *auto_pole_cmd = Task_AutoSickCorrectGetPoleCommand();
+  if (auto_pole_cmd != NULL) {
+    pole_cmd = *auto_pole_cmd;
+  } else {
+    Rc_SetPoleHold();
+  }
+
+  g_rc_control_debug.page = RC_CONTROL_PAGE_AUTO_ORE;
 }
 
 static bool Rc_TryApplyAutoOreDebugOutputs(void) {
@@ -1310,7 +1358,9 @@ static float Rc_SelectLocalAutoTargetYawRad(float head_yaw_rad,
 }
 
 static void Rc_TryStartAutoCtrlBySwitch(uint32_t now_ms) {
-  if (!dr16.header.online || !auto_ctrl_inited || AutoCtrl_IsBusy(&auto_ctrl)) {
+  if (!dr16.header.online || !auto_ctrl_inited || AutoCtrl_IsBusy(&auto_ctrl) ||
+      (auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl)) ||
+      Task_AutoRodSpearheadIsBusy() || Task_AutoSickCorrectIsBusy()) {
     return;
   }
 
@@ -1383,6 +1433,8 @@ void Task_rc_main(void *argument) {
     behavior = Rc_SelectMappedBehavior();
     if (Rc_TryApplyAutoOreDebugOutputs()) {
       /* Commands were filled by AutoOre debug output. */
+    } else if (Task_AutoSickCorrectIsBusy()) {
+      Rc_ApplyAutoSickCorrectOutputs();
     } else if (Task_AutoRodSpearheadIsBusy()) {
       /* Auto rod spearhead can run from SAFE; unrelated subsystems hold. */
       g_rc_control_debug.page = RC_CONTROL_PAGE_AUTO_ORE;

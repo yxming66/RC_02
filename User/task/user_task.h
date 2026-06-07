@@ -11,6 +11,7 @@
 #include "module/autoCtrlAPI/api/auto_ctrl_api.h"
 #include "module/autoCtrlAPI/ore_store/auto_ore_store.h"
 #include "module/autoCtrlAPI/rod/auto_rod_spearhead.h"
+#include "module/autoCtrlAPI/sick/auto_sick_correct.h"
 #include "device/ir_dock/ir_dock.h"
 #include "module/arm_simple.h"
 #include "module/rod_new.h"
@@ -75,6 +76,8 @@ typedef enum {
     AUTO_ORE_DEBUG_REQUEST_PICK_POS_200 = 6,
     AUTO_ORE_DEBUG_REQUEST_PICK_NEG_200 = 7,
     AUTO_ORE_DEBUG_REQUEST_ROD_SPEARHEAD = 8,
+    AUTO_ORE_DEBUG_REQUEST_SICK_CORRECT_ROD_SPEARHEAD = 9,
+    AUTO_ORE_DEBUG_REQUEST_SICK_CORRECT_ORE_RELEASE = 10,
 } AutoOre_DebugRequest_t;
 
 typedef struct {
@@ -139,6 +142,22 @@ typedef struct {
     volatile RodNew_Pose_t auto_rod_spearhead_rod_cmd_pose;
     volatile RodNew_GripState_t auto_rod_spearhead_rod_cmd_grip;
     volatile float auto_rod_spearhead_rod_cmd_target_angle_rad;
+    volatile bool auto_sick_correct_busy;
+    volatile AutoSickCorrect_State_t auto_sick_correct_state;
+    volatile AutoSickCorrect_Result_t auto_sick_correct_result;
+    volatile AutoSickCorrect_Fault_t auto_sick_correct_fault;
+    volatile AutoSickCorrect_Action_t auto_sick_correct_action;
+    volatile uint8_t auto_sick_correct_step_index;
+    volatile float auto_sick_correct_x_sample_adc;
+    volatile float auto_sick_correct_y_sample_adc;
+    volatile float auto_sick_correct_yaw_sample_diff_adc;
+    volatile float auto_sick_correct_x_error_adc;
+    volatile float auto_sick_correct_y_error_adc;
+    volatile float auto_sick_correct_yaw_error_adc;
+    volatile float auto_sick_correct_vx_mps;
+    volatile float auto_sick_correct_vy_mps;
+    volatile float auto_sick_correct_wz_rad_s;
+    volatile float auto_sick_correct_pole_target_lift;
     volatile bool ir_dock_complete_fresh;
     volatile uint8_t ir_dock_last_rx_status;
     volatile uint32_t ir_dock_last_rx_age_ms;
@@ -240,6 +259,8 @@ extern volatile AutoOre_DebugControl_t g_auto_ore_debug;
 extern volatile IrDock_Debug_t g_ir_dock_debug;
 extern AutoRodSpearhead_t auto_rod_spearhead_ctrl;
 extern bool auto_rod_spearhead_inited;
+extern AutoSickCorrect_t auto_sick_correct_ctrl;
+extern bool auto_sick_correct_inited;
 extern bool auto_ctrl_local_yaw_zero_initialized;
 extern float auto_ctrl_local_yaw_zero_rad;
 extern BUZZER_t buzzer;
@@ -287,6 +308,12 @@ bool Task_AutoRodSpearheadStart(void);
 void Task_AutoRodSpearheadAbort(void);
 bool Task_AutoRodSpearheadIsBusy(void);
 const RodNew_CMD_t *Task_AutoRodSpearheadGetCommand(void);
+bool Task_AutoSickCorrectStartRodSpearhead(void);
+bool Task_AutoSickCorrectStartOreRelease(void);
+void Task_AutoSickCorrectAbort(void);
+bool Task_AutoSickCorrectIsBusy(void);
+const Chassis_CMD_t *Task_AutoSickCorrectGetChassisCommand(void);
+const Pole_CMD_t *Task_AutoSickCorrectGetPoleCommand(void);
 bool Task_IrDockIsDockCompleteFresh(void);
 int8_t Task_OreStorePostCommand(const OreStore_CMD_t *cmd);
 void Task_OreStoreRequestRehome(void);

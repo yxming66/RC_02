@@ -38,6 +38,8 @@ volatile AutoOre_DebugControl_t g_auto_ore_debug = {0};//手动调用一键函�
 
 AutoRodSpearhead_t auto_rod_spearhead_ctrl;
 bool auto_rod_spearhead_inited = false;
+AutoSickCorrect_t auto_sick_correct_ctrl;
+bool auto_sick_correct_inited = false;
 bool auto_ctrl_local_yaw_zero_initialized = false;
 float auto_ctrl_local_yaw_zero_rad = 0.0f;
 auto_ctrl_feedback_t feedback = {0};
@@ -312,6 +314,72 @@ static PC_AutoActionFault_t AutoCtrlFeed_MapRodFault(
   }
 }
 
+static PC_AutoAction_t AutoCtrlFeed_MapSickCorrectAction(
+    AutoSickCorrect_Action_t action) {
+  switch (action) {
+    case AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD:
+      return PC_AUTO_ACTION_SICK_CORRECT_ROD_SPEARHEAD;
+    case AUTO_SICK_CORRECT_ACTION_ORE_RELEASE:
+      return PC_AUTO_ACTION_SICK_CORRECT_ORE_RELEASE;
+    case AUTO_SICK_CORRECT_ACTION_NONE:
+    default:
+      return PC_AUTO_ACTION_NONE;
+  }
+}
+
+static PC_AutoActionState_t AutoCtrlFeed_MapSickCorrectState(
+    AutoSickCorrect_State_t state) {
+  switch (state) {
+    case AUTO_SICK_CORRECT_STATE_RUNNING:
+      return PC_AUTO_ACTION_STATE_RUNNING;
+    case AUTO_SICK_CORRECT_STATE_SUCCESS:
+      return PC_AUTO_ACTION_STATE_SUCCESS;
+    case AUTO_SICK_CORRECT_STATE_FAIL:
+      return PC_AUTO_ACTION_STATE_FAIL;
+    case AUTO_SICK_CORRECT_STATE_ABORT:
+      return PC_AUTO_ACTION_STATE_ABORT;
+    case AUTO_SICK_CORRECT_STATE_IDLE:
+    default:
+      return PC_AUTO_ACTION_STATE_IDLE;
+  }
+}
+
+static PC_AutoActionResult_t AutoCtrlFeed_MapSickCorrectResult(
+    AutoSickCorrect_Result_t result) {
+  switch (result) {
+    case AUTO_SICK_CORRECT_RESULT_RUNNING:
+      return PC_AUTO_ACTION_RESULT_RUNNING;
+    case AUTO_SICK_CORRECT_RESULT_SUCCESS:
+      return PC_AUTO_ACTION_RESULT_SUCCESS;
+    case AUTO_SICK_CORRECT_RESULT_FAIL:
+      return PC_AUTO_ACTION_RESULT_FAIL;
+    case AUTO_SICK_CORRECT_RESULT_ABORTED:
+      return PC_AUTO_ACTION_RESULT_ABORTED;
+    case AUTO_SICK_CORRECT_RESULT_NONE:
+    default:
+      return PC_AUTO_ACTION_RESULT_NONE;
+  }
+}
+
+static PC_AutoActionFault_t AutoCtrlFeed_MapSickCorrectFault(
+    AutoSickCorrect_Fault_t fault) {
+  switch (fault) {
+    case AUTO_SICK_CORRECT_FAULT_TIMEOUT:
+      return PC_AUTO_ACTION_FAULT_TIMEOUT;
+    case AUTO_SICK_CORRECT_FAULT_INVALID_PARAM:
+      return PC_AUTO_ACTION_FAULT_INVALID_PARAM;
+    case AUTO_SICK_CORRECT_FAULT_SENSOR_INVALID:
+      return PC_AUTO_ACTION_FAULT_SENSOR_INVALID;
+    case AUTO_SICK_CORRECT_FAULT_UNSUPPORTED:
+      return PC_AUTO_ACTION_FAULT_UNSUPPORTED;
+    case AUTO_SICK_CORRECT_FAULT_ABORTED:
+      return PC_AUTO_ACTION_FAULT_ABORTED;
+    case AUTO_SICK_CORRECT_FAULT_NONE:
+    default:
+      return PC_AUTO_ACTION_FAULT_NONE;
+  }
+}
+
 static void AutoCtrlFeed_RememberOreAction(AutoOre_Action_t action) {
   const PC_AutoAction_t pc_action = AutoCtrlFeed_MapOreAction(action);
   if (pc_action == PC_AUTO_ACTION_NONE) {
@@ -328,6 +396,17 @@ static void AutoCtrlFeed_RememberRodSpearheadAction(void) {
   auto_action_last_subsystem = PC_AUTO_ACTION_SUBSYSTEM_ROD_SPEARHEAD;
 }
 
+static void AutoCtrlFeed_RememberSickCorrectAction(
+    AutoSickCorrect_Action_t action) {
+  const PC_AutoAction_t pc_action = AutoCtrlFeed_MapSickCorrectAction(action);
+  if (pc_action == PC_AUTO_ACTION_NONE) {
+    return;
+  }
+
+  auto_action_last_action = pc_action;
+  auto_action_last_subsystem = PC_AUTO_ACTION_SUBSYSTEM_SICK_CORRECT;
+}
+
 static PC_AutoAction_t AutoCtrlFeed_GetOreFeedbackAction(void) {
   PC_AutoAction_t action = AutoCtrlFeed_MapOreAction(auto_ore_ctrl.action);
   if (action == PC_AUTO_ACTION_NONE) {
@@ -341,6 +420,9 @@ static bool AutoCtrlFeed_StartOreAction(AutoOre_Action_t action) {
     return false;
   }
   if (AutoOre_IsBusy(&auto_ore_ctrl)) {
+    return false;
+  }
+  if (Task_AutoSickCorrectIsBusy()) {
     return false;
   }
 
@@ -377,11 +459,54 @@ static bool AutoCtrlFeed_StartOreAction(AutoOre_Action_t action) {
   return result;
 }
 
+static bool AutoCtrlFeed_StartSickCorrectAction(
+    AutoSickCorrect_Action_t action) {
+  if (!auto_sick_correct_inited) {
+    return false;
+  }
+  if (AutoSickCorrect_IsBusy(&auto_sick_correct_ctrl)) {
+    AutoCtrlFeed_RememberSickCorrectAction(
+        AutoSickCorrect_GetAction(&auto_sick_correct_ctrl));
+    return true;
+  }
+  if ((auto_ctrl_inited && AutoCtrl_IsBusy(&auto_ctrl)) ||
+      (auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl)) ||
+      Task_AutoRodSpearheadIsBusy()) {
+    return false;
+  }
+
+  bool result = false;
+  const uint32_t now_ms = osKernelGetTickCount();
+  switch (action) {
+    case AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD:
+      result = AutoSickCorrect_StartRodSpearhead(&auto_sick_correct_ctrl,
+                                                 now_ms);
+      break;
+    case AUTO_SICK_CORRECT_ACTION_ORE_RELEASE:
+      result = AutoSickCorrect_StartOreRelease(&auto_sick_correct_ctrl,
+                                               now_ms);
+      break;
+    case AUTO_SICK_CORRECT_ACTION_NONE:
+    default:
+      result = false;
+      break;
+  }
+
+  if (result ||
+      AutoSickCorrect_GetState(&auto_sick_correct_ctrl) ==
+          AUTO_SICK_CORRECT_STATE_FAIL) {
+    AutoCtrlFeed_RememberSickCorrectAction(action);
+  }
+  return result;
+}
+
 static void AutoCtrlFeed_PublishAutoActionFeedback(void) {
   PC_AutoActionFeedback_t pc_feedback = {0};
   const bool ore_busy = auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl);
   const bool rod_busy = auto_rod_spearhead_inited &&
                         AutoRodSpearhead_IsBusy(&auto_rod_spearhead_ctrl);
+  const bool sick_busy = auto_sick_correct_inited &&
+                         AutoSickCorrect_IsBusy(&auto_sick_correct_ctrl);
 
   if (auto_ore_inited) {
     pc_feedback.flags |= PC_AUTO_ACTION_FLAG_ORE_INITED;
@@ -422,8 +547,18 @@ static void AutoCtrlFeed_PublishAutoActionFeedback(void) {
         AutoRodSpearhead_GetStepIndex(&auto_rod_spearhead_ctrl);
   }
 
+  if (auto_sick_correct_inited) {
+    pc_feedback.flags |= PC_AUTO_ACTION_FLAG_SICK_CORRECT_INITED;
+    if (sick_busy) {
+      pc_feedback.flags |= PC_AUTO_ACTION_FLAG_SICK_CORRECT_BUSY;
+      AutoCtrlFeed_RememberSickCorrectAction(
+          AutoSickCorrect_GetAction(&auto_sick_correct_ctrl));
+    }
+  }
+
   PC_AutoActionSubsystem_t active_subsystem = PC_AUTO_ACTION_SUBSYSTEM_NONE;
-  if (ore_busy && rod_busy) {
+  if ((ore_busy && rod_busy) || (ore_busy && sick_busy) ||
+      (rod_busy && sick_busy)) {
     active_subsystem =
         (auto_action_last_subsystem != PC_AUTO_ACTION_SUBSYSTEM_NONE)
             ? auto_action_last_subsystem
@@ -432,11 +567,13 @@ static void AutoCtrlFeed_PublishAutoActionFeedback(void) {
     active_subsystem = PC_AUTO_ACTION_SUBSYSTEM_ORE;
   } else if (rod_busy) {
     active_subsystem = PC_AUTO_ACTION_SUBSYSTEM_ROD_SPEARHEAD;
+  } else if (sick_busy) {
+    active_subsystem = PC_AUTO_ACTION_SUBSYSTEM_SICK_CORRECT;
   } else {
     active_subsystem = auto_action_last_subsystem;
   }
 
-  pc_feedback.busy = (ore_busy || rod_busy) ? 1u : 0u;
+  pc_feedback.busy = (ore_busy || rod_busy || sick_busy) ? 1u : 0u;
   pc_feedback.subsystem = (uint8_t)active_subsystem;
   pc_feedback.action = (uint8_t)auto_action_last_action;
 
@@ -457,6 +594,21 @@ static void AutoCtrlFeed_PublishAutoActionFeedback(void) {
     pc_feedback.result = pc_feedback.rod_result;
     pc_feedback.fault = pc_feedback.rod_fault;
     pc_feedback.step_index = pc_feedback.rod_step_index;
+    pc_feedback.step_phase = 0u;
+    pc_feedback.active_position = 0u;
+    pc_feedback.occupancy_mask = 0u;
+  } else if (active_subsystem == PC_AUTO_ACTION_SUBSYSTEM_SICK_CORRECT &&
+             auto_sick_correct_inited) {
+    pc_feedback.action = (uint8_t)AutoCtrlFeed_MapSickCorrectAction(
+        AutoSickCorrect_GetAction(&auto_sick_correct_ctrl));
+    pc_feedback.state = (uint8_t)AutoCtrlFeed_MapSickCorrectState(
+        AutoSickCorrect_GetState(&auto_sick_correct_ctrl));
+    pc_feedback.result = (uint8_t)AutoCtrlFeed_MapSickCorrectResult(
+        AutoSickCorrect_GetResult(&auto_sick_correct_ctrl));
+    pc_feedback.fault = (uint8_t)AutoCtrlFeed_MapSickCorrectFault(
+        AutoSickCorrect_GetFault(&auto_sick_correct_ctrl));
+    pc_feedback.step_index =
+        AutoSickCorrect_GetStepIndex(&auto_sick_correct_ctrl);
     pc_feedback.step_phase = 0u;
     pc_feedback.active_position = 0u;
     pc_feedback.occupancy_mask = 0u;
@@ -706,6 +858,64 @@ static void AutoCtrlFeed_UpdateAutoRodSpearhead(uint32_t now_ms) {
   g_auto_ore_debug.ir_dock_error_count = g_ir_dock_debug.error_count;
 }
 
+static void AutoCtrlFeed_InitAutoSickCorrect(void) {
+  Config_RobotParam_t *cfg = Config_GetRobotParam();
+  if (cfg == NULL) {
+    return;
+  }
+
+  AutoSickCorrect_Init(&auto_sick_correct_ctrl,
+                       &cfg->auto_ctrl_param.sick_correct);
+  auto_sick_correct_inited = true;
+}
+
+static void AutoCtrlFeed_UpdateAutoSickCorrect(uint32_t now_ms) {
+  if (!auto_sick_correct_inited) {
+    return;
+  }
+
+  AutoSickCorrect_Feedback_t sick_feedback = {0};
+  for (uint8_t i = 0u; i < AUTO_SICK_CORRECT_SENSOR_COUNT; i++) {
+    sick_feedback.adc_raw[i] = auto_ctrl_sick_output.adc_raw[i];
+    sick_feedback.valid[i] = auto_ctrl_sick_output.valid[i];
+  }
+
+  AutoSickCorrect_Update(&auto_sick_correct_ctrl, &sick_feedback, now_ms);
+
+  g_auto_ore_debug.auto_sick_correct_busy =
+      AutoSickCorrect_IsBusy(&auto_sick_correct_ctrl);
+  g_auto_ore_debug.auto_sick_correct_state =
+      AutoSickCorrect_GetState(&auto_sick_correct_ctrl);
+  g_auto_ore_debug.auto_sick_correct_result =
+      AutoSickCorrect_GetResult(&auto_sick_correct_ctrl);
+  g_auto_ore_debug.auto_sick_correct_fault =
+      AutoSickCorrect_GetFault(&auto_sick_correct_ctrl);
+  g_auto_ore_debug.auto_sick_correct_action =
+      AutoSickCorrect_GetAction(&auto_sick_correct_ctrl);
+  g_auto_ore_debug.auto_sick_correct_step_index =
+      AutoSickCorrect_GetStepIndex(&auto_sick_correct_ctrl);
+  g_auto_ore_debug.auto_sick_correct_x_sample_adc =
+      auto_sick_correct_ctrl.x_sample_adc;
+  g_auto_ore_debug.auto_sick_correct_y_sample_adc =
+      auto_sick_correct_ctrl.y_sample_adc;
+  g_auto_ore_debug.auto_sick_correct_yaw_sample_diff_adc =
+      auto_sick_correct_ctrl.yaw_sample_diff_adc;
+  g_auto_ore_debug.auto_sick_correct_x_error_adc =
+      auto_sick_correct_ctrl.x_error_adc;
+  g_auto_ore_debug.auto_sick_correct_y_error_adc =
+      auto_sick_correct_ctrl.y_error_adc;
+  g_auto_ore_debug.auto_sick_correct_yaw_error_adc =
+      auto_sick_correct_ctrl.yaw_error_adc;
+  g_auto_ore_debug.auto_sick_correct_vx_mps =
+      auto_sick_correct_ctrl.chassis_cmd.ctrl_vec.vx;
+  g_auto_ore_debug.auto_sick_correct_vy_mps =
+      auto_sick_correct_ctrl.chassis_cmd.ctrl_vec.vy;
+  g_auto_ore_debug.auto_sick_correct_wz_rad_s =
+      auto_sick_correct_ctrl.chassis_cmd.ctrl_vec.wz;
+  g_auto_ore_debug.auto_sick_correct_pole_target_lift =
+      auto_sick_correct_ctrl.pole_cmd.auto_target_lift[0];
+}
+
 bool Task_AutoOreStartStore(void) {
   return AutoCtrlFeed_StartOreAction(AUTO_ORE_ACTION_STORE);
 }
@@ -773,9 +983,16 @@ static void AutoCtrlFeed_HandleAutoOreDebugRequest(void) {
     case AUTO_ORE_DEBUG_REQUEST_ROD_SPEARHEAD:
       result = Task_AutoRodSpearheadStart();
       break;
+    case AUTO_ORE_DEBUG_REQUEST_SICK_CORRECT_ROD_SPEARHEAD:
+      result = Task_AutoSickCorrectStartRodSpearhead();
+      break;
+    case AUTO_ORE_DEBUG_REQUEST_SICK_CORRECT_ORE_RELEASE:
+      result = Task_AutoSickCorrectStartOreRelease();
+      break;
     case AUTO_ORE_DEBUG_REQUEST_ABORT:
       Task_AutoOreAbort();
       Task_AutoRodSpearheadAbort();
+      Task_AutoSickCorrectAbort();
       result = true;
       break;
     case AUTO_ORE_DEBUG_REQUEST_NONE:
@@ -789,7 +1006,9 @@ static void AutoCtrlFeed_HandleAutoOreDebugRequest(void) {
     g_auto_ore_debug.accept_count++;
     g_auto_ore_debug.force_output_enable =
         request != AUTO_ORE_DEBUG_REQUEST_ABORT &&
-        request != AUTO_ORE_DEBUG_REQUEST_ROD_SPEARHEAD;
+        request != AUTO_ORE_DEBUG_REQUEST_ROD_SPEARHEAD &&
+        request != AUTO_ORE_DEBUG_REQUEST_SICK_CORRECT_ROD_SPEARHEAD &&
+        request != AUTO_ORE_DEBUG_REQUEST_SICK_CORRECT_ORE_RELEASE;
   }
   if (request == AUTO_ORE_DEBUG_REQUEST_ABORT) {
     g_auto_ore_debug.force_output_enable = false;
@@ -797,6 +1016,10 @@ static void AutoCtrlFeed_HandleAutoOreDebugRequest(void) {
 }
 
 bool Task_AutoRodSpearheadStart(void) {
+  if (Task_AutoSickCorrectIsBusy()) {
+    return false;
+  }
+
   if (auto_rod_spearhead_inited &&
       AutoRodSpearhead_IsBusy(&auto_rod_spearhead_ctrl)) {
     AutoCtrlFeed_RememberRodSpearheadAction();
@@ -835,6 +1058,43 @@ const RodNew_CMD_t *Task_AutoRodSpearheadGetCommand(void) {
              : NULL;
 }
 
+bool Task_AutoSickCorrectStartRodSpearhead(void) {
+  return AutoCtrlFeed_StartSickCorrectAction(
+      AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD);
+}
+
+bool Task_AutoSickCorrectStartOreRelease(void) {
+  return AutoCtrlFeed_StartSickCorrectAction(
+      AUTO_SICK_CORRECT_ACTION_ORE_RELEASE);
+}
+
+void Task_AutoSickCorrectAbort(void) {
+  if (auto_sick_correct_inited) {
+    if (AutoSickCorrect_IsBusy(&auto_sick_correct_ctrl)) {
+      AutoCtrlFeed_RememberSickCorrectAction(
+          AutoSickCorrect_GetAction(&auto_sick_correct_ctrl));
+    }
+    AutoSickCorrect_Abort(&auto_sick_correct_ctrl);
+  }
+}
+
+bool Task_AutoSickCorrectIsBusy(void) {
+  return auto_sick_correct_inited &&
+         AutoSickCorrect_IsBusy(&auto_sick_correct_ctrl);
+}
+
+const Chassis_CMD_t *Task_AutoSickCorrectGetChassisCommand(void) {
+  return auto_sick_correct_inited
+             ? AutoSickCorrect_GetChassisCommand(&auto_sick_correct_ctrl)
+             : NULL;
+}
+
+const Pole_CMD_t *Task_AutoSickCorrectGetPoleCommand(void) {
+  return auto_sick_correct_inited
+             ? AutoSickCorrect_GetPoleCommand(&auto_sick_correct_ctrl)
+             : NULL;
+}
+
 bool Task_IrDockIsDockCompleteFresh(void) {
   return IrDock_IsDockCompleteFresh(osKernelGetTickCount());
 }
@@ -853,6 +1113,7 @@ void Task_auto_ctrl(void *argument) {
   auto_ctrl_inited = true;
   AutoCtrlFeed_InitAutoOre();
   AutoCtrlFeed_InitAutoRodSpearhead();
+  AutoCtrlFeed_InitAutoSickCorrect();
 
   while (1) {
     uint32_t now_ms;
@@ -867,11 +1128,15 @@ void Task_auto_ctrl(void *argument) {
       feedback.yaw_auto_rad = AutoCtrlFeed_SelectYawRad();
       /* 当前 AutoCtrl API 只消费前向两路 SICK。 */
       (void)Task_SickGetLatestOutput(&auto_ctrl_sick_output);
-      feedback.sick_front_left_cm = auto_ctrl_sick_output.valid[2]
-                    ? auto_ctrl_sick_output.distance_m[2] * 100.0f
+      feedback.sick_front_left_cm =
+          auto_ctrl_sick_output.valid[SICK_FRONT_S1_INDEX]
+                    ? auto_ctrl_sick_output.distance_m[SICK_FRONT_S1_INDEX] *
+                          100.0f
                     : -1.0f;
-      feedback.sick_front_right_cm = auto_ctrl_sick_output.valid[3]
-                     ? auto_ctrl_sick_output.distance_m[3] * 100.0f
+      feedback.sick_front_right_cm =
+          auto_ctrl_sick_output.valid[SICK_FRONT_S2_INDEX]
+                     ? auto_ctrl_sick_output.distance_m[SICK_FRONT_S2_INDEX] *
+                           100.0f
                      : -1.0f;
 
       GPIO_PinState photo1_state = HAL_GPIO_ReadPin(GPIOE, GPIO_PIN_13);
@@ -905,6 +1170,7 @@ void Task_auto_ctrl(void *argument) {
       AutoCtrlFeed_HandleAutoOreDebugRequest();
       AutoCtrlFeed_UpdateAutoOre(now_ms);
       AutoCtrlFeed_UpdateAutoRodSpearhead(now_ms);
+      AutoCtrlFeed_UpdateAutoSickCorrect(now_ms);
       AutoCtrlFeed_PublishAutoActionFeedback();
 
       if (MrlinkPc_GetState() != NULL) {

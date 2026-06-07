@@ -10,6 +10,7 @@
 #include "device/motor_dm.h"
 #include "device/motor_lz.h"
 #include "device/motor_rm.h"
+#include "device/sick.h"
 
 Config_RobotParam_t robot_config = {
     .chassis_param = {
@@ -371,6 +372,57 @@ Config_RobotParam_t robot_config = {
             .sick_norm_err_to_rad = 0.50f,   /* SICK 归一化误差到 yaw 辅助角的映射系数，单位 rad。 */
             .sick_assist_max_rad = 0.35f,    /* SICK yaw 辅助角限幅，单位 rad。 */
             .sick_assist_gain = 1.0f,        /* SICK yaw 辅助量融合增益。 */
+        },
+        /* Tune x/y target ADC before enabling; 0 rejects start as invalid. */
+        .sick_correct = {
+            .rod_spearhead = {
+                .left_index = 0u,
+                .front_left_index = SICK_FRONT_S1_INDEX,
+                .front_right_index = SICK_FRONT_S2_INDEX,
+                .right_index = 1u,
+                .valid_adc_min = 700u,
+                .valid_adc_max = 32100u,
+                .x_target_adc = 0.0f,
+                .y_target_adc = 0.0f,
+                .yaw_target_diff_adc = 0.0f,
+                .x_tolerance_adc = 30.0f,
+                .y_tolerance_adc = 30.0f,
+                .yaw_tolerance_adc = 30.0f,
+                .x_kp_mps_per_adc = 0.0010f,
+                .y_kp_mps_per_adc = 0.0010f,
+                .yaw_kp_rad_s_per_adc = 0.0020f,
+                .vx_limit_mps = 0.30f,
+                .vy_limit_mps = 0.30f,
+                .wz_limit_rad_s = 0.80f,
+                .pole_target_lift = 2.0f,
+                .pole_speed = 50.0f,
+                .finish_stable_ms = 120u,
+                .timeout_ms = 5000u,
+            },
+            .ore_release = {
+                .left_index = 0u,
+                .front_left_index = SICK_FRONT_S1_INDEX,
+                .front_right_index = SICK_FRONT_S2_INDEX,
+                .right_index = 1u,
+                .valid_adc_min = 700u,
+                .valid_adc_max = 32100u,
+                .x_target_adc = 0.0f,
+                .y_target_adc = 0.0f,
+                .yaw_target_diff_adc = 0.0f,
+                .x_tolerance_adc = 30.0f,
+                .y_tolerance_adc = 30.0f,
+                .yaw_tolerance_adc = 30.0f,
+                .x_kp_mps_per_adc = 0.0010f,
+                .y_kp_mps_per_adc = 0.0010f,
+                .yaw_kp_rad_s_per_adc = 0.0020f,
+                .vx_limit_mps = 0.30f,
+                .vy_limit_mps = 0.30f,
+                .wz_limit_rad_s = 0.80f,
+                .pole_target_lift = 2.0f,
+                .pole_speed = 50.0f,
+                .finish_stable_ms = 120u,
+                .timeout_ms = 5000u,
+            },
         },
         /* 头向 / 上台阶 / 200mm 模板参数。 */
         .head_ascend_200 = {

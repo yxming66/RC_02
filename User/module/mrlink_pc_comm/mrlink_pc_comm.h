@@ -119,12 +119,15 @@ typedef enum {
     PC_AUTO_ACTION_PICK_NEG_200 = 6,     /* 一键取反 200mm 矿 */
     PC_AUTO_ACTION_ROD_SPEARHEAD = 7,    /* 一键取矛头 */
     PC_AUTO_ACTION_ABORT = 8,            /* 中止一键动作 */
+    PC_AUTO_ACTION_SICK_CORRECT_ROD_SPEARHEAD = 9,
+    PC_AUTO_ACTION_SICK_CORRECT_ORE_RELEASE = 10,
 } PC_AutoAction_t;
 
 typedef enum {
     PC_AUTO_ACTION_SUBSYSTEM_NONE = 0,
     PC_AUTO_ACTION_SUBSYSTEM_ORE = 1,
     PC_AUTO_ACTION_SUBSYSTEM_ROD_SPEARHEAD = 2,
+    PC_AUTO_ACTION_SUBSYSTEM_SICK_CORRECT = 3,
 } PC_AutoActionSubsystem_t;
 
 typedef enum {
@@ -151,12 +154,16 @@ typedef enum {
     PC_AUTO_ACTION_FAULT_TIMEOUT = 4,
     PC_AUTO_ACTION_FAULT_ABORTED = 5,
     PC_AUTO_ACTION_FAULT_NO_SPEARHEAD = 6,
+    PC_AUTO_ACTION_FAULT_UNSUPPORTED = 7,
+    PC_AUTO_ACTION_FAULT_SENSOR_INVALID = 8,
 } PC_AutoActionFault_t;
 
 #define PC_AUTO_ACTION_FLAG_ORE_INITED (1u << 0)
 #define PC_AUTO_ACTION_FLAG_ORE_BUSY (1u << 1)
 #define PC_AUTO_ACTION_FLAG_ROD_INITED (1u << 2)
 #define PC_AUTO_ACTION_FLAG_ROD_BUSY (1u << 3)
+#define PC_AUTO_ACTION_FLAG_SICK_CORRECT_INITED (1u << 4)
+#define PC_AUTO_ACTION_FLAG_SICK_CORRECT_BUSY (1u << 5)
 
 typedef struct {
     uint8_t action;    /* 一键动作类型，见 PC_AutoAction_t */

@@ -18,6 +18,7 @@
 #include "module/arm_simple.h"
 #include "module/autoCtrlAPI/ore_store/auto_ore_store.h"
 #include "module/autoCtrlAPI/rod/auto_rod_spearhead.h"
+#include "module/autoCtrlAPI/sick/auto_sick_correct.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -70,6 +71,7 @@ typedef struct {
 
 typedef struct {
   AutoCtrl_CommonParam_t common;
+  AutoSickCorrect_Params_t sick_correct;
 
   AutoCtrl_TemplateParam_t head_ascend_200;
   AutoCtrl_TemplateParam_t head_ascend_400;

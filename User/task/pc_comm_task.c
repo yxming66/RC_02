@@ -97,6 +97,10 @@ static AutoOre_DebugRequest_t PcComm_MapAutoAction(uint8_t action) {
             return AUTO_ORE_DEBUG_REQUEST_PICK_NEG_200;
         case PC_AUTO_ACTION_ROD_SPEARHEAD:
             return AUTO_ORE_DEBUG_REQUEST_ROD_SPEARHEAD;
+        case PC_AUTO_ACTION_SICK_CORRECT_ROD_SPEARHEAD:
+            return AUTO_ORE_DEBUG_REQUEST_SICK_CORRECT_ROD_SPEARHEAD;
+        case PC_AUTO_ACTION_SICK_CORRECT_ORE_RELEASE:
+            return AUTO_ORE_DEBUG_REQUEST_SICK_CORRECT_ORE_RELEASE;
         case PC_AUTO_ACTION_ABORT:
             return AUTO_ORE_DEBUG_REQUEST_ABORT;
         case PC_AUTO_ACTION_NONE:
@@ -359,7 +363,10 @@ void Task_pc_comm(void *argument) {
             const bool auto_action_pending = PcComm_ProcessAutoActionCommand();
             const PC_AutoStepParams_t *step_params =
                 auto_action_pending ? NULL : MrlinkPc_GetAutoStepParams();
-            if (step_params != NULL && !AutoCtrl_IsBusy(&auto_ctrl)) {
+            if (step_params != NULL && !AutoCtrl_IsBusy(&auto_ctrl) &&
+                !(auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl)) &&
+                !Task_AutoRodSpearheadIsBusy() &&
+                !Task_AutoSickCorrectIsBusy()) {
                 AutoCtrl_SetYawSource(&auto_ctrl, AUTO_CTRL_YAW_SOURCE_PC);
                 AutoCtrl_SetYawZeroOffset(&auto_ctrl, 0.0f);
                 if (AutoCtrl_StartTemplate(
