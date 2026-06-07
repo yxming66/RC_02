@@ -15,11 +15,28 @@
 namespace {
 
 constexpr float kPoleManualLiftDeadband = 1.0e-4f;
+constexpr float kPoleLiftLimitEpsilon = 1.0e-4f;
 
 float Pole_PositiveOrZero(float value) {
   return mr::component::math::is_finite_scalar(value) && value > 0.0f
              ? value
              : 0.0f;
+}
+
+float Pole_ClampTrackedLiftAtLimit(Pole_t *c, uint8_t side, float lift) {
+  if (c == NULL || c->param == NULL || side >= 2u) return lift;
+
+  const float travel = Pole_PositiveOrZero(c->param->limit.support_total_travel);
+  const float clamped_lift =
+      mr::component::math::clamp_scalar(lift, 0.0f, travel);
+  float *velocity = &c->support_angle.tracked_target_velocity[side];
+
+  if ((clamped_lift <= kPoleLiftLimitEpsilon && *velocity < 0.0f) ||
+      (clamped_lift >= travel - kPoleLiftLimitEpsilon && *velocity > 0.0f)) {
+    *velocity = 0.0f;
+  }
+
+  return clamped_lift;
 }
 
 void Pole_ResetSideTargetVelocity(Pole_t *c, uint8_t side) {
@@ -54,9 +71,10 @@ float Pole_UpdateTrackedLift(Pole_t *c, uint8_t side, float speed_limit) {
 
   if (max_velocity <= 0.0f || max_acceleration <= 0.0f) {
     c->support_angle.tracked_target_velocity[side] = 0.0f;
-    return mr::component::math::move_towards(
+    const float next_lift = mr::component::math::move_towards(
         c->support_angle.tracked_target_lift[side],
         c->support_angle.final_target_lift[side], max_velocity * c->dt);
+    return Pole_ClampTrackedLiftAtLimit(c, side, next_lift);
   }
 
   const mr::comp::traj::OnlineTrapezoidAxisSample sample =
@@ -66,8 +84,9 @@ float Pole_UpdateTrackedLift(Pole_t *c, uint8_t side, float speed_limit) {
           &c->support_angle.tracked_target_velocity[side], max_velocity,
           max_acceleration, c->dt);
 
-  return sample.valid ? sample.position
-                      : c->support_angle.tracked_target_lift[side];
+  const float next_lift =
+      sample.valid ? sample.position : c->support_angle.tracked_target_lift[side];
+  return Pole_ClampTrackedLiftAtLimit(c, side, next_lift);
 }
 
 }  // namespace
