@@ -71,34 +71,15 @@ static const AutoCtrl_TemplateParam_t *AutoCtrlTemplate_GetTemplateParam(
   }
 }
 
-static bool AutoCtrlTemplate_IsDescendTemplate(
-    auto_ctrl_template_e template_id) {
-  switch (template_id) {
-    case AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD:
-    case AUTO_CTRL_TEMPLATE_DESCEND_400_HEAD:
-    case AUTO_CTRL_TEMPLATE_DESCEND_200_TAIL:
-    case AUTO_CTRL_TEMPLATE_DESCEND_400_TAIL:
-      return true;
-    case AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD:
-    case AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD:
-    case AUTO_CTRL_TEMPLATE_ASCEND_200_TAIL:
-    case AUTO_CTRL_TEMPLATE_ASCEND_400_TAIL:
-    case AUTO_CTRL_TEMPLATE_NONE:
-    default:
-      return false;
-  }
-}
-
 static float AutoCtrlTemplate_ResolvePoleLiftAccel(
     const Config_RobotParam_t *robot_param,
     const AutoCtrl_TemplateParam_t *template_param,
     auto_ctrl_template_e template_id) {
-  if (template_param != 0 && template_param->pole_lift_accel != 0.0f) {
-    return template_param->pole_lift_accel;
-  }
+  (void)robot_param;
+  (void)template_id;
 
-  if (robot_param != 0 && AutoCtrlTemplate_IsDescendTemplate(template_id)) {
-    return robot_param->auto_ctrl_param.common.descend_pole_lift_accel;
+  if (template_param != 0) {
+    return template_param->pole_lift_accel;
   }
 
   return 0.0f;
@@ -832,9 +813,9 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
       AutoCtrlPrimitive_CommandFlatMove(ctrl, param->mid_move_speed);
       AutoCtrlTemplate_CommandPole(ctrl,
                                    use_400mm ? pole.all_extend[0]
-                                             : pole.all_extend[0] + 1.5f,
+                                             : pole.all_extend[0] + 1.0f,
                                    use_400mm ? pole.all_retract[1] + 1.0f
-                                             : pole.all_retract[1] + 1.5f,
+                                             : pole.all_retract[1] + 1.0f,
                                    param->pole_front_extend_speed,
                                    param->pole_rear_retract_speed);
       if (AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
@@ -850,8 +831,8 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
         return false;
       }
       AutoCtrlPrimitive_CommandFlatMove(ctrl, param->front_retract_move_speed);
-      AutoCtrlTemplate_CommandPole(ctrl, pole.all_extend[0],
-                                   pole.all_retract[1],
+      AutoCtrlTemplate_CommandPole(ctrl, pole.all_extend[0] + 1.0f,
+                                   pole.all_retract[1] + 1.0f,
                                    param->pole_front_extend_speed,
                                    param->pole_rear_retract_speed);
       if (param->front_photo_timeout_ms > 0u &&

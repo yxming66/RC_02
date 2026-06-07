@@ -95,6 +95,7 @@ typedef struct {
   } limit;
   struct {
     float sample_freq;
+    float wheel_start_accel_mps2; /* Wheel ref accel limit for soft start; <=0 disables. */
   } controller;
   struct {
     float lateral_vy_to_wz_feedforward; /* wz_ff = gain * vy, rad/m. */

@@ -32,8 +32,6 @@ typedef struct {
   float sick_norm_err_to_rad;    /* SICK normalized error to yaw assist, rad */
   float sick_assist_max_rad;     /* SICK assist clamp, rad */
   float sick_assist_gain;        /* SICK assist gain */
-
-  float descend_pole_lift_accel; /* rad/s^2; >0 descend accel, 0 global default, <0 disable */
 } AutoCtrl_CommonParam_t;
 
 typedef struct {
@@ -62,7 +60,7 @@ typedef struct {
   float pole_front_retract_speed; /* front poles retract speed, rad/s */
   float pole_rear_extend_speed;   /* rear poles extend speed, rad/s */
   float pole_rear_retract_speed;  /* rear poles retract speed, rad/s */
-  float pole_lift_accel;          /* rad/s^2; >0 template override, 0 common/default, <0 disable */
+  float pole_lift_accel;          /* rad/s^2; >0 limit, 0 Pole default, <0 disable */
 
   uint32_t front_photo_timeout_ms; /* current forward photo timeout, ms */
   uint32_t rear_photo_timeout_ms;  /* current rear photo timeout, ms */

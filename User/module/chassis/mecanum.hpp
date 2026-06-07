@@ -38,10 +38,12 @@ class MecanumController final {
   void ResetControlStateOnModeChange();
   void ResetWheelVelocityControlState();
   void ResetWheelHoldControlState();
+  void ResetWheelSpeedPlanner();
   int8_t SetMode(Chassis_Mode_t mode, uint32_t now);
   void LimitMoveVector();
   void UpdateBodyVelocityFeedback();
   int8_t ComputeWheelSpeeds();
+  float PlanWheelStartSpeed(uint8_t idx, float target_speed_mps);
   bool ShouldHoldZeroCommand() const;
   void EnterWheelHold();
   void ExitWheelHold();
@@ -65,6 +67,7 @@ class MecanumController final {
   Chassis_Output_t out_{};
   std::array<KPID_t, kWheelCount> wheel_pid_{};
   std::array<KPID_t, kWheelCount> wheel_hold_pid_{};
+  std::array<float, kWheelCount> wheel_speed_ref_planned_{};
   KPID_t follow_pid_{};
   std::array<LowPassFilter2p_t, kWheelCount> wheel_speed_filter_{};
   std::array<LowPassFilter2p_t, kWheelCount> output_filter_{};
