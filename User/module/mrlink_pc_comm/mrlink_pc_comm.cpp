@@ -142,6 +142,9 @@ void TouchOnline(uint8_t cmd) {
     case PC_CMD_AUTO_ACTION:
       g_pc_comm_debug.rx_auto_action_count++;
       break;
+    case PC_CMD_CAMERA_YAW:
+      g_pc_comm_debug.rx_camera_yaw_count++;
+      break;
     case PC_CMD_STEP:
       g_pc_comm_debug.rx_step_count++;
       break;
@@ -205,6 +208,15 @@ void OnAutoAction(const wire::AutoActionCmd &cmd) {
   TouchOnline(PC_CMD_AUTO_ACTION);
 }
 
+void OnCameraYaw(const wire::CameraYawCmd &cmd) {
+  s_state.cmd.camera_yaw.mode = cmd.mode;
+  s_state.cmd.camera_yaw.target_yaw_rad = cmd.target_yaw_rad;
+  s_state.cmd.camera_yaw.feedback_yaw_rad = cmd.feedback_yaw_rad;
+  MarkRxFrame(PC_CMD_CAMERA_YAW, sizeof(cmd), MRLINK_OK);
+  TouchOnline(PC_CMD_CAMERA_YAW);
+  s_state.camera_yaw_cmd_tick = BSP_TIME_Get_ms();
+}
+
 void OnStep(const wire::StepCmd &cmd) {
   s_state.cmd.step.template_id =
       static_cast<PC_StepTemplate_t>(cmd.template_id);
@@ -245,6 +257,7 @@ bool RegisterHandlers() {
          s_bus.SubscribeLatest<wire::OreStoreCmd>(OnOreStore) ==
              MRLINK_OK &&
          s_bus.Subscribe<wire::AutoActionCmd>(OnAutoAction) == MRLINK_OK &&
+         s_bus.SubscribeLatest<wire::CameraYawCmd>(OnCameraYaw) == MRLINK_OK &&
          s_bus.SubscribeLatest<wire::StepCmd>(OnStep) == MRLINK_OK &&
          s_bus.SubscribeLatest<PC_ImuCMD_t>(OnImu) == MRLINK_OK;
 }
@@ -499,6 +512,8 @@ extern "C" void MrlinkPc_DebugUpdate(void) {
   CopyPlainToVolatile(&g_pc_comm_debug.rx_arm_simple, &s_state.cmd.arm_simple);
   CopyPlainToVolatile(&g_pc_comm_debug.rx_rod_new, &s_state.cmd.rod_new);
   CopyPlainToVolatile(&g_pc_comm_debug.rx_ore_store, &s_state.cmd.ore_store);
+  CopyPlainToVolatile(&g_pc_comm_debug.rx_camera_yaw,
+                      &s_state.cmd.camera_yaw);
   CopyPlainToVolatile(&g_pc_comm_debug.rx_auto_action,
                       &s_state.cmd.auto_action);
   CopyPlainToVolatile(&g_pc_comm_debug.rx_step, &s_state.cmd.step);
@@ -540,6 +555,10 @@ extern "C" const PC_RodNewCMD_t *MrlinkPc_GetRodNewCMD(void) {
 
 extern "C" const PC_OreStoreCMD_t *MrlinkPc_GetOreStoreCMD(void) {
   return &s_state.cmd.ore_store;
+}
+
+extern "C" const PC_CameraYawCMD_t *MrlinkPc_GetCameraYawCMD(void) {
+  return &s_state.cmd.camera_yaw;
 }
 
 extern "C" const PC_AutoActionCMD_t *MrlinkPc_GetAutoActionCMD(void) {
@@ -597,6 +616,12 @@ extern "C" bool MrlinkPc_PublishFeedback(uint8_t topic,
       const auto *typed =
           static_cast<const PC_AutoActionFeedback_t *>(feedback);
       s_auto_action_feedback = *typed;
+      return s_bus.StoreLatest(*typed);
+    }
+    case PC_FEEDBACK_CAMERA_YAW: {
+      const auto *typed =
+          static_cast<const PC_CameraYawFeedback_t *>(feedback);
+      s_state.feedback.camera_yaw = *typed;
       return s_bus.StoreLatest(*typed);
     }
     case PC_FEEDBACK_IR_ORE: {
@@ -678,6 +703,10 @@ extern "C" uint16_t MrlinkPc_BuildFeedbackFrame(uint8_t cmd, uint8_t *tx_buf,
     }
     case PC_FEEDBACK_AUTO_ACTION: {
       return BuildLatestOrFallback(s_auto_action_feedback, tx_buf, buf_size);
+    }
+    case PC_FEEDBACK_CAMERA_YAW: {
+      return BuildLatestOrFallback(s_state.feedback.camera_yaw, tx_buf,
+                                   buf_size);
     }
     case PC_FEEDBACK_IR_ORE: {
       return BuildLatestOrFallback(s_ir_ore_feedback, tx_buf, buf_size);

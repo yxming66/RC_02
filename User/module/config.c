@@ -631,6 +631,32 @@ Config_RobotParam_t robot_config = {
             .grip_timeout_ms = 2000u,        /* 夹取超时 */
         },
     },
+    .camera_yaw_param = {
+        .motor_param = {
+            .can = BSP_CAN_2,
+            .id = 0x205,
+            .module = MOTOR_GM6020,
+            .reverse = false,
+            .gear = false,
+        },
+        .pid = {
+            .yaw_pid = {
+                .k = 1.0f,
+                .p = 0.40f,
+                .i = 0.0f,
+                .d = 0.0f,
+                .i_limit = 0.0f,
+                .out_limit = 0.30f,
+                .d_cutoff_freq = -1.0f,
+                .range = M_2PI,
+            },
+        },
+        .limit = {
+            .max_output = 0.30f,
+            .arrive_threshold_rad = 0.02f,
+            .feedback_timeout_ms = 200u,
+        },
+    },
 };
 
 Config_RobotParam_t *Config_GetRobotParam(void) {

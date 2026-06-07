@@ -9,15 +9,23 @@
 #include <string.h>
 
 #include "module/config.h"
+#include "module/camera_yaw.h"
 #include "module/ore_store.h"
 
 static OreStore_t ore_store;
 static OreStore_CMD_t ore_store_cmd;
+static CameraYaw_t camera_yaw;
+static CameraYaw_CMD_t camera_yaw_cmd;
+static CameraYaw_Feedback_t camera_yaw_feedback;
 static volatile bool ore_store_inited = false;
+static volatile bool camera_yaw_inited = false;
 static volatile bool ore_store_rehome_requested = false;
 volatile int8_t g_ore_store_init_ret = ORE_STORE_ERR_NULL;
 volatile int8_t g_ore_store_update_ret = ORE_STORE_ERR_NULL;
 volatile int8_t g_ore_store_control_ret = ORE_STORE_ERR_NULL;
+volatile int8_t g_camera_yaw_init_ret = CAMERA_YAW_ERR_NULL;
+volatile int8_t g_camera_yaw_update_ret = CAMERA_YAW_ERR_NULL;
+volatile int8_t g_camera_yaw_control_ret = CAMERA_YAW_ERR_NULL;
 
 typedef struct {
   volatile bool inited;
@@ -54,6 +62,15 @@ volatile OreStore_DebugCommand_t g_ore_store_debug_command = {
   .assume_homed_ret = ORE_STORE_ERR_NULL,
 };
 
+volatile CameraYaw_DebugControl_t g_camera_yaw_debug = {
+    .enable = false,
+    .direct_output_enable = false,
+    .mode = CAMERA_YAW_MODE_RELAX,
+    .target_yaw_rad = 0.0f,
+    .feedback_yaw_rad = 0.0f,
+    .direct_output = 0.0f,
+};
+
 #define ORE_STORE_TEMP_WARNING_ALARM_MS (3000u)
 #define ORE_STORE_TEMP_OVER_LIMIT_ALARM_MS (5000u)
 
@@ -64,6 +81,16 @@ static void OreStoreTask_SetDefaultCommand(OreStore_CMD_t *cmd) {
 
   memset(cmd, 0, sizeof(*cmd));
   cmd->mode = ORE_STORE_MODE_RELAX;
+}
+
+static void OreStoreTask_SetDefaultCameraYawCommand(CameraYaw_CMD_t *cmd) {
+  if (cmd == NULL) {
+    return;
+  }
+
+  memset(cmd, 0, sizeof(*cmd));
+  cmd->mode = CAMERA_YAW_MODE_RELAX;
+  cmd->feedback_valid = false;
 }
 
 static bool OreStoreTask_ModeIsValid(OreStore_Mode_t mode) {
@@ -91,6 +118,20 @@ static void OreStoreTask_SanitizeCommand(OreStore_CMD_t *cmd) {
   }
 }
 
+static void OreStoreTask_SanitizeCameraYawCommand(CameraYaw_CMD_t *cmd) {
+  if (cmd == NULL) {
+    return;
+  }
+
+  const bool mode_valid =
+      cmd->mode == CAMERA_YAW_MODE_RELAX ||
+      cmd->mode == CAMERA_YAW_MODE_ACTIVE;
+  if (!mode_valid || !isfinite(cmd->target_yaw_rad) ||
+      !isfinite(cmd->feedback_yaw_rad)) {
+    OreStoreTask_SetDefaultCameraYawCommand(cmd);
+  }
+}
+
 static bool OreStoreTask_TryApplyDebugCommand(OreStore_CMD_t *cmd) {
   if (cmd == NULL || !g_ore_store_debug_command.enable) {
     return false;
@@ -102,6 +143,22 @@ static bool OreStoreTask_TryApplyDebugCommand(OreStore_CMD_t *cmd) {
 
   OreStoreTask_SanitizeCommand(cmd);
   ++g_ore_store_debug_command.applied_count;
+  return true;
+}
+
+static bool OreStoreTask_TryApplyCameraYawDebugCommand(CameraYaw_CMD_t *cmd,
+                                                       uint32_t now_ms) {
+  if (cmd == NULL || !g_camera_yaw_debug.enable ||
+      g_camera_yaw_debug.direct_output_enable) {
+    return false;
+  }
+
+  cmd->mode = g_camera_yaw_debug.mode;
+  cmd->target_yaw_rad = g_camera_yaw_debug.target_yaw_rad;
+  cmd->feedback_yaw_rad = g_camera_yaw_debug.feedback_yaw_rad;
+  cmd->feedback_tick_ms = now_ms;
+  cmd->feedback_valid = true;
+  OreStoreTask_SanitizeCameraYawCommand(cmd);
   return true;
 }
 
@@ -249,11 +306,15 @@ void Task_ore_store(void *argument) {
   Config_RobotParam_t *cfg = Config_GetRobotParam();
   if (cfg == NULL) {
     g_ore_store_init_ret = ORE_STORE_ERR_NULL;
+    g_camera_yaw_init_ret = CAMERA_YAW_ERR_NULL;
     osThreadTerminate(osThreadGetId());
     return;
   }
 
   OreStoreTask_SetDefaultCommand(&ore_store_cmd);
+  OreStoreTask_SetDefaultCameraYawCommand(&camera_yaw_cmd);
+  memset(&camera_yaw_feedback, 0, sizeof(camera_yaw_feedback));
+
   g_ore_store_init_ret =
       OreStore_Init(&ore_store, &cfg->ore_store_param, (float)ORE_STORE_FREQ);
   if (g_ore_store_init_ret != ORE_STORE_OK) {
@@ -261,6 +322,11 @@ void Task_ore_store(void *argument) {
     return;
   }
   ore_store_inited = true;
+
+  g_camera_yaw_init_ret =
+      CameraYaw_Init(&camera_yaw, &cfg->camera_yaw_param,
+                     (float)ORE_STORE_FREQ);
+  camera_yaw_inited = (g_camera_yaw_init_ret == CAMERA_YAW_OK);
 
   while (1) {
     tick += delay_tick;
@@ -282,6 +348,24 @@ void Task_ore_store(void *argument) {
     g_ore_store_update_ret = OreStore_UpdateFeedback(&ore_store);
     OreStoreTask_ApplyAssumeHomedDebug();
     const uint32_t now_tick = osKernelGetTickCount();
+
+    if (camera_yaw_inited) {
+      CameraYaw_CMD_t next_camera_yaw_cmd;
+      if (osMessageQueueGet(task_runtime.msgq.camera_yaw.cmd,
+                            &next_camera_yaw_cmd, NULL, 0) == osOK) {
+        OreStoreTask_SanitizeCameraYawCommand(&next_camera_yaw_cmd);
+        camera_yaw_cmd = next_camera_yaw_cmd;
+      }
+      (void)OreStoreTask_TryApplyCameraYawDebugCommand(&camera_yaw_cmd,
+                                                       now_tick);
+
+      g_camera_yaw_update_ret = CameraYaw_UpdateFeedback(&camera_yaw);
+      g_camera_yaw_control_ret =
+          CameraYaw_Control(&camera_yaw, &camera_yaw_cmd, now_tick);
+      CameraYaw_Output(&camera_yaw);
+      camera_yaw_feedback = camera_yaw.feedback;
+    }
+
     OreStoreTask_UpdateTemperatureAlarm(now_tick);
     g_ore_store_control_ret =
         OreStore_Control(&ore_store, &ore_store_cmd, now_tick);
@@ -358,4 +442,22 @@ const OreStore_Feedback_t *Task_OreStoreGetFeedback(void) {
 
 const OreStore_Debug_t *Task_OreStoreGetDebug(void) {
   return ore_store_inited ? OreStore_GetDebug(&ore_store) : NULL;
+}
+
+const CameraYaw_Feedback_t *Task_CameraYawGetFeedback(void) {
+  return camera_yaw_inited ? &camera_yaw_feedback : NULL;
+}
+
+int8_t Task_CameraYawPostCommand(const CameraYaw_CMD_t *cmd) {
+  if (cmd == NULL || task_runtime.msgq.camera_yaw.cmd == NULL) {
+    return CAMERA_YAW_ERR_NULL;
+  }
+
+  CameraYaw_CMD_t safe_cmd = *cmd;
+  OreStoreTask_SanitizeCameraYawCommand(&safe_cmd);
+  (void)osMessageQueueReset(task_runtime.msgq.camera_yaw.cmd);
+  return (osMessageQueuePut(task_runtime.msgq.camera_yaw.cmd, &safe_cmd, 0,
+                            0) == osOK)
+             ? CAMERA_YAW_OK
+             : CAMERA_YAW_ERR;
 }

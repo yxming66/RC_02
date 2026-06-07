@@ -8,6 +8,7 @@
 #include "module/mrlink_pc_comm/mrlink_pc_comm.h"
 #include "module/autoCtrlAPI/api/auto_ctrl_api.h"
 #include "module/arm_simple.h"
+#include "module/camera_yaw.h"
 #include "module/rod_new.h"
 #include "main.h"
 
@@ -30,6 +31,7 @@ static const uint8_t s_feedback_cmds[] = {
     PC_FEEDBACK_ARM_SIMPLE,
     PC_FEEDBACK_ROD_NEW,
     PC_FEEDBACK_ORE_STORE,
+    PC_FEEDBACK_CAMERA_YAW,
     PC_FEEDBACK_AUTO_ACTION,
     PC_FEEDBACK_STEP,
     PC_FEEDBACK_STATUS,
@@ -184,6 +186,46 @@ static void PcComm_UpdateModuleFeedback(void) {
         pc_ore.platform_position_rad = ore_fb->position_rad[ORE_STORE_AXIS_PLATFORM];
         (void)MrlinkPc_PublishFeedback(PC_FEEDBACK_ORE_STORE, &pc_ore);
     }
+
+    const CameraYaw_Feedback_t *camera_fb = Task_CameraYawGetFeedback();
+    if (camera_fb != NULL) {
+        PC_CameraYawFeedback_t pc_camera = {0};
+        pc_camera.mode = (uint8_t)camera_fb->mode;
+        pc_camera.motor_online = camera_fb->motor_online ? 1u : 0u;
+        pc_camera.feedback_valid = camera_fb->feedback_valid ? 1u : 0u;
+        pc_camera.at_target = camera_fb->at_target ? 1u : 0u;
+        pc_camera.target_yaw_rad = camera_fb->target_yaw_rad;
+        pc_camera.feedback_yaw_rad = camera_fb->feedback_yaw_rad;
+        pc_camera.error_yaw_rad = camera_fb->error_yaw_rad;
+        pc_camera.motor_angle_rad = camera_fb->motor_angle_rad;
+        pc_camera.motor_velocity_rad_s = camera_fb->motor_velocity_rad_s;
+        pc_camera.output = camera_fb->output;
+        pc_camera.feedback_age_ms = camera_fb->feedback_age_ms;
+        (void)MrlinkPc_PublishFeedback(PC_FEEDBACK_CAMERA_YAW, &pc_camera);
+    }
+}
+
+static void PcComm_UpdateCameraYawCommand(uint32_t now_ms) {
+    CameraYaw_CMD_t cmd = {0};
+    cmd.mode = CAMERA_YAW_MODE_RELAX;
+    cmd.feedback_tick_ms = now_ms;
+    cmd.feedback_valid = false;
+
+    if (g_pc_command_source == PC_COMMAND_SOURCE_PC &&
+        MrlinkPc_IsPCControlMode()) {
+        const PC_CameraYawCMD_t *pc_cmd = MrlinkPc_GetCameraYawCMD();
+        const MrlinkPc_State_t *state = MrlinkPc_GetState();
+        if (pc_cmd != NULL && state != NULL) {
+            cmd.mode = (pc_cmd->mode == 0u) ? CAMERA_YAW_MODE_RELAX
+                                            : CAMERA_YAW_MODE_ACTIVE;
+            cmd.target_yaw_rad = pc_cmd->target_yaw_rad;
+            cmd.feedback_yaw_rad = pc_cmd->feedback_yaw_rad;
+            cmd.feedback_tick_ms = state->camera_yaw_cmd_tick;
+            cmd.feedback_valid = (state->camera_yaw_cmd_tick != 0u);
+        }
+    }
+
+    (void)Task_CameraYawPostCommand(&cmd);
 }
 
 static PC_IrOreFeedback_t s_last_published_ir_ore = {0};
@@ -304,6 +346,7 @@ void Task_pc_comm(void *argument) {
         uint32_t now = osKernelGetTickCount();
 
         MrlinkPc_CommProcess(now);
+        PcComm_UpdateCameraYawCommand(now);
 
         if ((now - last_tx_tick) >= PC_COMM_TX_PERIOD_MS) {
             (void)PcComm_TransmitFeedback();

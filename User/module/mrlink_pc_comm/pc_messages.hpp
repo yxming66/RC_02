@@ -18,6 +18,7 @@ inline constexpr Topic kCmdArmSimple = PC_CMD_ARM_SIMPLE;
 inline constexpr Topic kCmdRodNew = PC_CMD_ROD_NEW;
 inline constexpr Topic kCmdOreStore = PC_CMD_ORE_STORE;
 inline constexpr Topic kCmdAutoAction = PC_CMD_AUTO_ACTION;
+inline constexpr Topic kCmdCameraYaw = PC_CMD_CAMERA_YAW;
 inline constexpr Topic kCmdImu = PC_CMD_IMU;
 
 inline constexpr Topic kFeedbackHeartbeat = PC_FEEDBACK_HEARTBEAT;
@@ -29,6 +30,7 @@ inline constexpr Topic kFeedbackRodNew = PC_FEEDBACK_ROD_NEW;
 inline constexpr Topic kFeedbackOreStore = PC_FEEDBACK_ORE_STORE;
 inline constexpr Topic kFeedbackAutoAction = PC_FEEDBACK_AUTO_ACTION;
 inline constexpr Topic kFeedbackIrOre = PC_FEEDBACK_IR_ORE;
+inline constexpr Topic kFeedbackCameraYaw = PC_FEEDBACK_CAMERA_YAW;
 inline constexpr Topic kFeedbackStatus = PC_FEEDBACK_STATUS;
 
 struct __attribute__((packed)) PoleCmd {
@@ -56,6 +58,12 @@ struct __attribute__((packed)) OreStoreCmd {
   uint8_t mode;                 /* 矿仓模式，见 OreStore_Mode_t */
   uint8_t force_rehome;         /* 强制重新回零，0=不触发，1=触发一次 */
   float platform_target_rad;    /* 平台轴目标位置，单位 rad */
+};
+
+struct __attribute__((packed)) CameraYawCmd {
+  uint8_t mode;
+  float target_yaw_rad;
+  float feedback_yaw_rad;
 };
 
 struct __attribute__((packed)) AutoActionCmd {
@@ -127,11 +135,13 @@ static_assert(IsValidWirePayload<ArmSimpleCmd>(), "ArmSimpleCmd payload is inval
 static_assert(IsValidWirePayload<RodNewCmd>(), "RodNewCmd payload is invalid");
 static_assert(IsValidWirePayload<OreStoreCmd>(), "OreStoreCmd payload is invalid");
 static_assert(IsValidWirePayload<AutoActionCmd>(), "AutoActionCmd payload is invalid");
+static_assert(IsValidWirePayload<CameraYawCmd>(), "CameraYawCmd payload is invalid");
 static_assert(IsValidWirePayload<StepCmd>(), "StepCmd payload is invalid");
 static_assert(IsValidWirePayload<PC_ChassisFeedback_t>(), "PC_ChassisFeedback_t payload is invalid");
 static_assert(IsValidWirePayload<PC_PoleFeedback_t>(), "PC_PoleFeedback_t payload is invalid");
 static_assert(IsValidWirePayload<PC_AutoActionFeedback_t>(), "PC_AutoActionFeedback_t payload is invalid");
 static_assert(IsValidWirePayload<PC_IrOreFeedback_t>(), "PC_IrOreFeedback_t payload is invalid");
+static_assert(IsValidWirePayload<PC_CameraYawFeedback_t>(), "PC_CameraYawFeedback_t payload is invalid");
 static_assert(IsValidWirePayload<ArmSimpleFeedback>(), "ArmSimpleFeedback payload is invalid");
 static_assert(IsValidWirePayload<RodNewFeedback>(), "RodNewFeedback payload is invalid");
 static_assert(IsValidWirePayload<OreStoreFeedback>(), "OreStoreFeedback payload is invalid");
@@ -155,11 +165,13 @@ MRLINK_PC_MESSAGE_TRAIT(pc_comm::wire::ArmSimpleCmd, PC_CMD_ARM_SIMPLE);
 MRLINK_PC_MESSAGE_TRAIT(pc_comm::wire::RodNewCmd, PC_CMD_ROD_NEW);
 MRLINK_PC_MESSAGE_TRAIT(pc_comm::wire::OreStoreCmd, PC_CMD_ORE_STORE);
 MRLINK_PC_MESSAGE_TRAIT(pc_comm::wire::AutoActionCmd, PC_CMD_AUTO_ACTION);
+MRLINK_PC_MESSAGE_TRAIT(pc_comm::wire::CameraYawCmd, PC_CMD_CAMERA_YAW);
 MRLINK_PC_MESSAGE_TRAIT(pc_comm::wire::StepCmd, PC_CMD_STEP);
 MRLINK_PC_MESSAGE_TRAIT(PC_ChassisFeedback_t, PC_FEEDBACK_CHASSIS);
 MRLINK_PC_MESSAGE_TRAIT(PC_PoleFeedback_t, PC_FEEDBACK_POLE);
 MRLINK_PC_MESSAGE_TRAIT(PC_AutoActionFeedback_t, PC_FEEDBACK_AUTO_ACTION);
 MRLINK_PC_MESSAGE_TRAIT(PC_IrOreFeedback_t, PC_FEEDBACK_IR_ORE);
+MRLINK_PC_MESSAGE_TRAIT(PC_CameraYawFeedback_t, PC_FEEDBACK_CAMERA_YAW);
 MRLINK_PC_MESSAGE_TRAIT(pc_comm::wire::ArmSimpleFeedback, PC_FEEDBACK_ARM_SIMPLE);
 MRLINK_PC_MESSAGE_TRAIT(pc_comm::wire::RodNewFeedback, PC_FEEDBACK_ROD_NEW);
 MRLINK_PC_MESSAGE_TRAIT(pc_comm::wire::OreStoreFeedback, PC_FEEDBACK_ORE_STORE);

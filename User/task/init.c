@@ -13,6 +13,7 @@
 #include "module/pole.h"
 #include "module/arm_simple.h"
 #include "module/rod_new.h"
+#include "module/camera_yaw.h"
 #include "module/shared_valve.h"
 #include "bsp/gpio.h"
 /* USER INCLUDE END */
@@ -45,6 +46,8 @@ void Task_Init(void *argument) {
       osMessageQueueNew(1u, sizeof(ArmSimple_CMD_t), NULL);
   task_runtime.msgq.rod.cmd =
       osMessageQueueNew(1u, sizeof(RodNew_CMD_t), NULL);
+  task_runtime.msgq.camera_yaw.cmd =
+      osMessageQueueNew(1u, sizeof(CameraYaw_CMD_t), NULL);
   task_runtime.msgq.ore_store.cmd =
       osMessageQueueNew(1u, sizeof(OreStore_CMD_t), NULL);
 

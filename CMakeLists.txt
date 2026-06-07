@@ -143,6 +143,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     User/module/cloudmusic/cloudmusic.c
     User/module/config.c
     User/module/rod_new.cpp
+    User/module/camera_yaw.c
     User/module/mrlink_pc_comm/mrlink_pc_comm.cpp
     User/module/cmd_center/cmd_center_compile_check.cpp
 

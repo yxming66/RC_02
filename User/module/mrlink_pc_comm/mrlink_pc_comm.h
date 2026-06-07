@@ -30,6 +30,7 @@ typedef enum {
     PC_CMD_ROD_NEW = 0x14,       /* 取矛头机构舵机/夹爪控制命令 */
     PC_CMD_ORE_STORE = 0x15,     /* 矿仓平台控制命令 */
     PC_CMD_AUTO_ACTION = 0x16,   /* 一键取矿/存矿/上膛/放矿/取矛头命令 */
+    PC_CMD_CAMERA_YAW = 0x17,    /* Camera yaw hold command */
     PC_CMD_IMU = 0x20,           /* PC 下发姿态数据命令 */
 } PC_CMD_t;
 
@@ -44,6 +45,7 @@ typedef enum {
     PC_FEEDBACK_STATUS = 0xA0,       /* 通信在线、接收计数、CPU 温度等状态反馈 */
     PC_FEEDBACK_AUTO_ACTION = 0x96,
     PC_FEEDBACK_IR_ORE = 0x97,
+    PC_FEEDBACK_CAMERA_YAW = 0x98,
 } PC_FeedbackCMD_t;
 
 #define MRLINK_PC_MAX_PAYLOAD_SIZE (64u)
@@ -100,6 +102,12 @@ typedef struct {
     uint8_t force_rehome;          /* 强制重新回零，0=不触发，1=触发一次 */
     float platform_target_rad;     /* 平台轴目标位置，单位 rad */
 } PC_OreStoreCMD_t;
+
+typedef struct {
+    uint8_t mode;              /* 0=relax, 1=active */
+    float target_yaw_rad;      /* Target camera yaw in world frame, rad */
+    float feedback_yaw_rad;    /* Real-time camera yaw feedback in world frame, rad */
+} PC_CameraYawCMD_t;
 
 typedef enum {
     PC_AUTO_ACTION_NONE = 0,             /* 无一键动作 */
@@ -228,6 +236,20 @@ typedef struct {
 } PC_OreStoreFeedback_t;
 
 typedef struct {
+    uint8_t mode;
+    uint8_t motor_online;
+    uint8_t feedback_valid;
+    uint8_t at_target;
+    float target_yaw_rad;
+    float feedback_yaw_rad;
+    float error_yaw_rad;
+    float motor_angle_rad;
+    float motor_velocity_rad_s;
+    float output;
+    uint32_t feedback_age_ms;
+} PC_CameraYawFeedback_t;
+
+typedef struct {
     uint8_t action;
     uint8_t busy;
     uint8_t subsystem;
@@ -326,6 +348,7 @@ typedef struct {
     PC_ArmSimpleCMD_t arm_simple;        /* 最近一次简易机械臂命令 */
     PC_RodNewCMD_t rod_new;              /* 最近一次取矛头机构命令 */
     PC_OreStoreCMD_t ore_store;          /* 最近一次矿仓命令 */
+    PC_CameraYawCMD_t camera_yaw;        /* Latest camera yaw command */
     PC_AutoActionCMD_t auto_action;      /* 待消费的一键动作命令，消费后清零 */
     PC_StepCMD_t step;                   /* 待执行/最近一次自动台阶命令 */
     PC_ImuCMD_t imu;                     /* 最近一次 PC 姿态数据 */
@@ -337,6 +360,7 @@ typedef struct {
     PC_ArmSimpleFeedback_t arm_simple;     /* 简易机械臂反馈缓存 */
     PC_RodNewFeedback_t rod_new;           /* 取矛头机构反馈缓存 */
     PC_OreStoreFeedback_t ore_store;       /* 矿仓反馈缓存 */
+    PC_CameraYawFeedback_t camera_yaw;      /* Camera yaw feedback cache */
     PC_StepFeedback_t step;                /* 自动台阶反馈缓存 */
     PC_StatusFeedback_t status;            /* 通信/系统状态反馈缓存 */
 } MrlinkPc_FeedbackData_t;
@@ -348,6 +372,7 @@ typedef struct {
     uint32_t last_recv_time;             /* 最近一次收到任意 PC 帧的 tick，单位 ms */
     uint32_t recv_count;                 /* 成功接收帧计数 */
     uint32_t error_count;                /* 通信解析错误计数 */
+    uint32_t camera_yaw_cmd_tick;        /* Last camera yaw command tick, ms */
     bool online;                         /* PC 在线标志，false=离线，true=在线 */
     MrlinkPc_CMD_Data_t cmd;             /* PC 命令缓存 */
     MrlinkPc_FeedbackData_t feedback;    /* 反馈缓存 */
@@ -376,6 +401,7 @@ typedef struct {
     uint32_t rx_rod_new_count;         /* 收到取矛头机构命令次数 */
     uint32_t rx_ore_store_count;       /* 收到矿仓命令次数 */
     uint32_t rx_auto_action_count;     /* 收到一键动作命令次数 */
+    uint32_t rx_camera_yaw_count;      /* Camera yaw command count */
     uint32_t rx_step_count;            /* 收到自动台阶命令次数 */
     uint32_t rx_imu_count;             /* 收到 PC 姿态数据次数 */
     uint32_t init_fail_count;          /* PC 通信初始化失败次数 */
@@ -416,6 +442,7 @@ typedef struct {
     PC_ArmSimpleCMD_t rx_arm_simple;        /* 调试用：最近一次简易机械臂命令 */
     PC_RodNewCMD_t rx_rod_new;              /* 调试用：最近一次取矛头机构命令 */
     PC_OreStoreCMD_t rx_ore_store;          /* 调试用：最近一次矿仓命令 */
+    PC_CameraYawCMD_t rx_camera_yaw;        /* Latest camera yaw command debug */
     PC_AutoActionCMD_t rx_auto_action;      /* 调试用：最近一次一键动作命令 */
     PC_StepCMD_t rx_step;                   /* 调试用：最近一次自动台阶命令 */
     PC_ImuCMD_t rx_imu;                     /* 调试用：最近一次 PC 姿态数据 */
@@ -459,6 +486,7 @@ const PC_ArmCMD_t *MrlinkPc_GetArmCMD(void);
 const PC_ArmSimpleCMD_t *MrlinkPc_GetArmSimpleCMD(void);
 const PC_RodNewCMD_t *MrlinkPc_GetRodNewCMD(void);
 const PC_OreStoreCMD_t *MrlinkPc_GetOreStoreCMD(void);
+const PC_CameraYawCMD_t *MrlinkPc_GetCameraYawCMD(void);
 const PC_AutoActionCMD_t *MrlinkPc_GetAutoActionCMD(void);
 const PC_StepCMD_t *MrlinkPc_GetStepCMD(void);
 const PC_ImuCMD_t *MrlinkPc_GetImuCMD(void);

@@ -15,6 +15,7 @@
 #include "module/arm_simple.h"
 #include "module/rod_new.h"
 #include "module/ore_store.h"
+#include "module/camera_yaw.h"
 #include "device/buzzer.h"
 #include "device/sick.h"
 
@@ -181,6 +182,9 @@ typedef struct {
         } rod;
         struct {
             osMessageQueueId_t cmd;
+        } camera_yaw;
+        struct {
+            osMessageQueueId_t cmd;
         } ore_store;
     } msgq;
     /* USER MESSAGE END */
@@ -298,6 +302,8 @@ bool Task_OreStoreIsAllAtTarget(float threshold_rad);
 bool Task_SickGetLatestOutput(Sick_Output_t *output);
 const ArmSimple_Feedback_t *Task_ArmSimpleGetFeedback(void);
 const RodNew_Feedback_t *Task_RodNewGetFeedback(void);
+const CameraYaw_Feedback_t *Task_CameraYawGetFeedback(void);
+int8_t Task_CameraYawPostCommand(const CameraYaw_CMD_t *cmd);
 const OreStore_Feedback_t *Task_OreStoreGetFeedback(void);
 const OreStore_Debug_t *Task_OreStoreGetDebug(void);
 #ifdef __cplusplus

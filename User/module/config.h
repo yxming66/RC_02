@@ -14,6 +14,7 @@
 #include "module/ore_store.h"
 #include "module/pole.h"
 #include "module/rod_new.h"
+#include "module/camera_yaw.h"
 #include "module/arm_simple.h"
 #include "module/autoCtrlAPI/ore_store/auto_ore_store.h"
 #include "module/autoCtrlAPI/rod/auto_rod_spearhead.h"
@@ -91,6 +92,7 @@ typedef struct {
   AutoRodSpearhead_Params_t auto_rod_spearhead_param;
   AutoCtrl_Params_t auto_ctrl_param;
   RodNew_Params_t rod_new_param;
+  CameraYaw_Params_t camera_yaw_param;
 } Config_RobotParam_t;
 
 Config_RobotParam_t *Config_GetRobotParam(void);
