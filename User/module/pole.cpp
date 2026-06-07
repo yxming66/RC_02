@@ -36,6 +36,14 @@ static void Pole_ClearSideTargetOffset(Pole_t *c, uint8_t side) {
   }
 }
 
+static void Pole_ClearAllTargetOffsets(Pole_t *c) {
+  if (c == NULL) return;
+
+  for (uint8_t i = 0u; i < POLE_SUPPORT_MOTOR_NUM; i++) {
+    c->support_angle.target_offset[i] = 0.0f;
+  }
+}
+
 float Pole_UpdateTrackedLift(Pole_t *c, uint8_t side, float speed_limit) {
   if (c == NULL || c->param == NULL || side >= 2u) return 0.0f;
 
@@ -170,6 +178,25 @@ static void Pole_SyncTargetsToFeedback(Pole_t *c) {
   Pole_SyncSideTargetToFeedback(c, 1u);
 }
 
+static void Pole_SyncSharedTargetToFeedback(Pole_t *c) {
+  if (c == NULL || c->param == NULL || !c->support_angle.calibrated) {
+    return;
+  }
+
+  const float front_lift = Pole_GetCurrentSideLift(c, 0u);
+  const float rear_lift = Pole_GetCurrentSideLift(c, 1u);
+  const float shared_lift = mr::component::math::clamp_scalar(
+      0.5f * (front_lift + rear_lift), 0.0f,
+      c->param->limit.support_total_travel);
+
+  for (uint8_t side = 0u; side < 2u; side++) {
+    c->support_angle.final_target_lift[side] = shared_lift;
+    c->support_angle.tracked_target_lift[side] = shared_lift;
+    Pole_ResetSideTargetVelocity(c, side);
+  }
+  Pole_ClearAllTargetOffsets(c);
+}
+
 static int8_t Pole_SetMode(Pole_t *c, Pole_Mode_t mode) {
   if (c == NULL) return POLE_ERR_NULL;
   if (c->mode == mode) return POLE_OK;
@@ -268,6 +295,27 @@ int8_t Pole_Control(Pole_t *c, const Pole_CMD_t *c_cmd, uint32_t now) {
     c->support_angle.manual_target_was_moving[0] = false;
     c->support_angle.manual_target_was_moving[1] = false;
     c->support_angle.calibrated = true;
+    Pole_ResetControllers(c);
+  }
+
+  const bool synchronized_manual_cmd =
+      !c_cmd->auto_target_enable[0] && !c_cmd->auto_target_enable[1] &&
+      fabsf(c_cmd->lift[0] - c_cmd->lift[1]) <= kPoleManualLiftDeadband;
+  const bool synchronized_manual_stop =
+      synchronized_manual_cmd &&
+      fabsf(c_cmd->lift[0]) <= kPoleManualLiftDeadband &&
+      (c->support_angle.manual_target_was_moving[0] ||
+       c->support_angle.manual_target_was_moving[1]);
+  const bool synchronized_manual_from_auto =
+      synchronized_manual_cmd &&
+      (c->support_angle.auto_target_was_enabled[0] ||
+       c->support_angle.auto_target_was_enabled[1]);
+  if (synchronized_manual_stop || synchronized_manual_from_auto) {
+    Pole_SyncSharedTargetToFeedback(c);
+    c->support_angle.auto_target_was_enabled[0] = false;
+    c->support_angle.auto_target_was_enabled[1] = false;
+    c->support_angle.manual_target_was_moving[0] = false;
+    c->support_angle.manual_target_was_moving[1] = false;
     Pole_ResetControllers(c);
   }
 
