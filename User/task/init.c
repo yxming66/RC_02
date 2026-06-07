@@ -22,6 +22,10 @@
 void Task_Init(void *argument) {
   (void)argument;
 
+            BSP_GPIO_WritePin(BSP_GPIO_POWER_24V_1, 1);
+  BSP_GPIO_WritePin(BSP_GPIO_POWER_24V_2, 1);
+  BSP_GPIO_WritePin(BSP_GPIO_POWER_5V, 1);
+
   osKernelLock();
 
   task_runtime.thread.blink = osThreadNew(Task_blink, NULL, &attr_blink);
@@ -55,9 +59,7 @@ void Task_Init(void *argument) {
 
     SharedValve_Init(BSP_GPIO_ROD_SOLENOID);
 
-  BSP_GPIO_WritePin(BSP_GPIO_POWER_24V_1, 1);
-  BSP_GPIO_WritePin(BSP_GPIO_POWER_24V_2, 1);
-  BSP_GPIO_WritePin(BSP_GPIO_POWER_5V, 1);
+
 
   osKernelUnlock();
   osThreadTerminate(osThreadGetId());

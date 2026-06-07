@@ -364,7 +364,7 @@ Config_RobotParam_t robot_config = {
     },
     .auto_ctrl_param = {
         .common = {
-            .prealign_kp = 13.0f,             /* yaw 误差到 wz 指令的比例系数。 */
+            .prealign_kp = 5.0f,             /* yaw 误差到 wz 指令的比例系数。 */
             .prealign_wz_limit = 5.0f,       /* yaw 对正最大角速度，单位 rad/s。 */
             .sick_valid_min_cm = 1.0f,       /* SICK 测距有效下限，单位 cm。 */
             .sick_valid_max_cm = 650.0f,     /* SICK 测距有效上限，单位 cm。 */
