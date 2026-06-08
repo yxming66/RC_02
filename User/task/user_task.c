@@ -12,12 +12,12 @@ const osThreadAttr_t attr_init = {
 /* User_task */
 const osThreadAttr_t attr_blink = {
     .name = "blink",
-    .priority = osPriorityNormal,
+    .priority = osPriorityAboveNormal,
     .stack_size = 256 * 4,
 };
 const osThreadAttr_t attr_atti_esti = {
     .name = "atti_esti",
-    .priority = osPriorityNormal,
+    .priority = osPriorityAboveNormal,
     .stack_size = 512 * 4,
 };
 const osThreadAttr_t attr_chassis_main = {
