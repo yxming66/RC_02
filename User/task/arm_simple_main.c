@@ -135,6 +135,8 @@ void Task_arm_simple(void *argument)
 
         ArmSimple_Output(&arm_simple);
 
+        task_runtime.heartbeat.arm_simple++;
+
         osDelayUntil(tick);
     }
 }

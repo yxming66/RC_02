@@ -14,9 +14,11 @@
 #include "module/ore_store.h"
 #include "module/pole.h"
 #include "module/rod_new.h"
+#include "module/camera_yaw.h"
 #include "module/arm_simple.h"
 #include "module/autoCtrlAPI/ore_store/auto_ore_store.h"
 #include "module/autoCtrlAPI/rod/auto_rod_spearhead.h"
+#include "module/autoCtrlAPI/sick/auto_sick_correct.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -60,6 +62,7 @@ typedef struct {
   float pole_front_retract_speed; /* front poles retract speed, rad/s */
   float pole_rear_extend_speed;   /* rear poles extend speed, rad/s */
   float pole_rear_retract_speed;  /* rear poles retract speed, rad/s */
+  float pole_lift_accel;          /* rad/s^2; >0 limit, 0 Pole default, <0 disable */
 
   uint32_t front_photo_timeout_ms; /* current forward photo timeout, ms */
   uint32_t rear_photo_timeout_ms;  /* current rear photo timeout, ms */
@@ -68,6 +71,7 @@ typedef struct {
 
 typedef struct {
   AutoCtrl_CommonParam_t common;
+  AutoSickCorrect_Params_t sick_correct;
 
   AutoCtrl_TemplateParam_t head_ascend_200;
   AutoCtrl_TemplateParam_t head_ascend_400;
@@ -90,6 +94,7 @@ typedef struct {
   AutoRodSpearhead_Params_t auto_rod_spearhead_param;
   AutoCtrl_Params_t auto_ctrl_param;
   RodNew_Params_t rod_new_param;
+  CameraYaw_Params_t camera_yaw_param;
 } Config_RobotParam_t;
 
 Config_RobotParam_t *Config_GetRobotParam(void);

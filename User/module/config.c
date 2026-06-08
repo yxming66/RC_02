@@ -10,6 +10,7 @@
 #include "device/motor_dm.h"
 #include "device/motor_lz.h"
 #include "device/motor_rm.h"
+#include "device/sick.h"
 
 Config_RobotParam_t robot_config = {
     .chassis_param = {
@@ -68,7 +69,8 @@ Config_RobotParam_t robot_config = {
             .max_wz = 6.28f,
         },
         .controller = {
-            .sample_freq = 500.0f,
+            .sample_freq = 1000.0f,
+            .wheel_start_accel_mps2 = 0.0f,
         },
         .front_omni_rear_mecanum = {
             .lateral_vy_to_wz_feedforward = 0.10f,//1.1f不会偏航会有-vx
@@ -120,17 +122,17 @@ Config_RobotParam_t robot_config = {
             /* 200mm 小抬升位；一键取矿 PICK_NEG_200 使用该撑杆高度。 */
             .step_200_small = {3.0f, 3.0f},
             /* 400mm 台阶四杆全伸位；一键取矿 PICK_POS_400 也使用该撑杆高度。 */
-            .step_400_all_extend = {26.7f, 26.7f},
+            .step_400_all_extend = {27.3f, 27.3f},
             /* 400mm 台阶前杆收回、后杆保持支撑位。 */
-            .step_400_front_retract = {0.0f, 26.7f},
-            /* 400mm 台阶四杆全收位。 */
+            .step_400_front_retract = {0.0f, 27.3f},
+               /* 400mm 台阶四杆全收位。 */
             .step_400_all_retract = {0.0f, 0.0f},
         },
         .limit = {
             .max_current = 1.0f,
-            .support_total_travel = 26.7f,
-            .support_lift_speed = 70.0f,//70
-            .support_lift_accel = 140.0f,//180
+            .support_total_travel = 26.7f,//26.7//27.3
+            .support_lift_speed = 40.0f,
+            .support_lift_accel = 100.0f,
         },
     },
     .ore_store_param = {
@@ -362,7 +364,7 @@ Config_RobotParam_t robot_config = {
     },
     .auto_ctrl_param = {
         .common = {
-            .prealign_kp = 13.0f,             /* yaw 误差到 wz 指令的比例系数。 */
+            .prealign_kp = 5.0f,             /* yaw 误差到 wz 指令的比例系数。 */
             .prealign_wz_limit = 5.0f,       /* yaw 对正最大角速度，单位 rad/s。 */
             .sick_valid_min_cm = 1.0f,       /* SICK 测距有效下限，单位 cm。 */
             .sick_valid_max_cm = 650.0f,     /* SICK 测距有效上限，单位 cm。 */
@@ -370,6 +372,57 @@ Config_RobotParam_t robot_config = {
             .sick_norm_err_to_rad = 0.50f,   /* SICK 归一化误差到 yaw 辅助角的映射系数，单位 rad。 */
             .sick_assist_max_rad = 0.35f,    /* SICK yaw 辅助角限幅，单位 rad。 */
             .sick_assist_gain = 1.0f,        /* SICK yaw 辅助量融合增益。 */
+        },
+        /* Tune x/y target ADC before enabling; 0 rejects start as invalid. */
+        .sick_correct = {
+            .rod_spearhead = {
+                .left_index = 0u,
+                .front_left_index = SICK_FRONT_S1_INDEX,
+                .front_right_index = SICK_FRONT_S2_INDEX,
+                .right_index = 1u,
+                .valid_adc_min = 700u,
+                .valid_adc_max = 32100u,
+                .x_target_adc = 0.0f,
+                .y_target_adc = 0.0f,
+                .yaw_target_diff_adc = 0.0f,
+                .x_tolerance_adc = 30.0f,
+                .y_tolerance_adc = 30.0f,
+                .yaw_tolerance_adc = 30.0f,
+                .x_kp_mps_per_adc = 0.0010f,
+                .y_kp_mps_per_adc = 0.0010f,
+                .yaw_kp_rad_s_per_adc = 0.0020f,
+                .vx_limit_mps = 0.30f,
+                .vy_limit_mps = 0.30f,
+                .wz_limit_rad_s = 0.80f,
+                .pole_target_lift = 2.0f,
+                .pole_speed = 50.0f,
+                .finish_stable_ms = 120u,
+                .timeout_ms = 5000u,
+            },
+            .ore_release = {
+                .left_index = 0u,
+                .front_left_index = SICK_FRONT_S1_INDEX,
+                .front_right_index = SICK_FRONT_S2_INDEX,
+                .right_index = 1u,
+                .valid_adc_min = 700u,
+                .valid_adc_max = 32100u,
+                .x_target_adc = 0.0f,
+                .y_target_adc = 0.0f,
+                .yaw_target_diff_adc = 0.0f,
+                .x_tolerance_adc = 30.0f,
+                .y_tolerance_adc = 30.0f,
+                .yaw_tolerance_adc = 30.0f,
+                .x_kp_mps_per_adc = 0.0010f,
+                .y_kp_mps_per_adc = 0.0010f,
+                .yaw_kp_rad_s_per_adc = 0.0020f,
+                .vx_limit_mps = 0.30f,
+                .vy_limit_mps = 0.30f,
+                .wz_limit_rad_s = 0.80f,
+                .pole_target_lift = 2.0f,
+                .pole_speed = 50.0f,
+                .finish_stable_ms = 120u,
+                .timeout_ms = 5000u,
+            },
         },
         /* 头向 / 上台阶 / 200mm 模板参数。 */
         .head_ascend_200 = {
@@ -391,13 +444,14 @@ Config_RobotParam_t robot_config = {
             .rear_retract_timeout_ms = 5000u,   /* 后光电触发后，全收腿动作超时，单位 ms。 */
             .rear_retract_move_ms = 300u,       /* 后光电触发后，全收腿移动持续时间，单位 ms。 */
             .second_photo_retract_move_speed = 0.50f, /* 后一个光电触发收腿时向头向移动 vx，单位 m/s。 */
-            .final_move_speed = 3.5f,          /* 收尾离开台阶 vx，单位 m/s。 */
-            .final_move_ms = 400u,                /* 收尾离开台阶持续时间，单位 ms。 */
+            .final_move_speed = 4.0f,          /* 收尾离开台阶 vx，单位 m/s。 */
+            .final_move_ms = 500u,                /* 收尾离开台阶持续时间，单位 ms。 */
             .pole_all_extend_speed = 50.0f,     /* 四杆全伸目标跟随速度，单位 rad/s。 */
             .pole_front_extend_speed = 20.0f,   /* 前杆伸出目标跟随速度，单位 rad/s。 */
             .pole_front_retract_speed = 65.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
             .pole_rear_extend_speed = 18.0f,    /* 后杆伸出目标跟随速度，单位 rad/s。 */
             .pole_rear_retract_speed = 30.0f,   /* 后杆回收目标跟随速度，单位 rad/s。 */
+            .pole_lift_accel = 140.0f,          /* Per-template pole accel limit, rad/s^2. */
             .front_photo_timeout_ms = 5000u,    /* 等待前光电触发/下降沿超时，单位 ms。 */
             .rear_photo_timeout_ms = 10000u,    /* 等待后光电触发/下降沿超时，单位 ms。 */
         },
@@ -416,18 +470,19 @@ Config_RobotParam_t robot_config = {
             .front_retract_move_speed = 0.50f,  /* 前杆动作阶段 vx，单位 m/s。 */
             .front_retract_timeout_ms = 5000u,  /* 前光电触发后，等待前杆收回到位超时，单位 ms。 */
             .mid_move_speed = 1.5f,             /* 前杆收回到位后的中段平移 vx，单位 m/s。 */
-            .mid_move_ms = 250u,               /* 中段平移持续时间，单位 ms。 */
+            .mid_move_ms = 250u,                /* 中段平移持续时间，单位 ms。 */
             .rear_retract_move_speed = 0.40f,   /* 等待后光电触发的低速 vx，单位 m/s。 */
             .rear_retract_timeout_ms = 5000u,   /* 后光电触发后，全收腿动作超时，单位 ms。 */
             .rear_retract_move_ms = 300u,       /* 后光电触发后，全收腿移动持续时间，单位 ms。 */
             .second_photo_retract_move_speed = 0.50f, /* 后一个光电触发收腿时向头向移动 vx，单位 m/s。 */
-            .final_move_speed = 2.5f,           /* 收尾离开台阶 vx，单位 m/s。 */
-            .final_move_ms = 400u,              /* 收尾离开台阶持续时间，单位 ms。 */
+            .final_move_speed = 4.0f,           /* 收尾离开台阶 vx，单位 m/s。 */
+            .final_move_ms = 500u,              /* 收尾离开台阶持续时间，单位 ms。 */
             .pole_all_extend_speed = 50.0f,     /* 四杆全伸目标跟随速度，单位 rad/s。 */
             .pole_front_extend_speed = 20.0f,   /* 前杆伸出目标跟随速度，单位 rad/s。 */
             .pole_front_retract_speed = 65.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
             .pole_rear_extend_speed = 18.0f,    /* 后杆伸出目标跟随速度，单位 rad/s。 */
             .pole_rear_retract_speed = 30.0f,   /* 后杆回收目标跟随速度，单位 rad/s。 */
+            .pole_lift_accel = 140.0f,          /* Per-template pole accel limit, rad/s^2. */
             .front_photo_timeout_ms = 5000u,    /* 等待前光电触发/下降沿超时，单位 ms。 */
             .rear_photo_timeout_ms = 10000u,     /* 等待后光电触发/下降沿超时，单位 ms。 */
         },
@@ -447,17 +502,18 @@ Config_RobotParam_t robot_config = {
             /* Active fields used by AutoCtrlTemplate_RunHeadDescend200Optimized. */
             .prealign_move_speed = 0.20f,       /* PREALIGN yaw 对正时叠加的前进 vx，单位 m/s。 */
             .front_retract_move_speed = 0.3f,  /* step4 等待 PE13/photo1 下降沿的慢速 vx，单位 m/s。 */
-            .mid_move_speed = 1.50f,            /* step0/step3 两段固定快跑 vx，单位 m/s。 */
-            .mid_move_ms = 200u,                /* step0 第一次固定快跑持续时间，单位 ms。 */ 
-            .rear_retract_move_speed = 0.3f,   /* step1 等待 PA2/photo3 下降沿的慢速 vx，单位 m/s。 */
-            .rear_retract_move_ms = 280u,       /* step3 第二次固定快跑持续时间，单位 ms。 */
-            .second_photo_retract_move_speed = 0.20f, /* step7 第二个下降沿后全收杆离开 vx，单位 m/s。 */
+            .mid_move_speed = 1.20f,            /* step0/step3 两段固定快跑 vx，单位 m/s。 */
+            .mid_move_ms = 240u,                /* step0 第一次固定快跑持续时间，单位 ms。 */ 
+            .rear_retract_move_speed = 0.25f,   /* step1 等待 PA2/photo3 下降沿的慢速 vx，单位 m/s。 */
+            .rear_retract_move_ms = 180u,       /* step3 第二次固定快跑持续时间，单位 ms。 */
+            .second_photo_retract_move_speed = 0.50f, /* step7 第二个下降沿后全收杆离开 vx，单位 m/s。 */
             .final_move_speed = 0.05f,          /* step7 离开 vx 的备用值；second_photo_retract_move_speed <= 0 时使用。 */
             .final_move_ms = 100u,              /* step7 全收杆离开持续时间，单位 ms。 */
             .pole_front_extend_speed = 65.0f,   /* step2 前杆伸出、step5/6 四杆全伸时的前杆速度，单位 rad/s。 */
             .pole_front_retract_speed = 25.0f,  /* step0/1/7 前杆保持或回收到全收目标的速度，单位 rad/s。 */
-            .pole_rear_extend_speed = 65.0f,    /* step5/6 四杆全伸时的后杆速度，单位 rad/s。 */
+            .pole_rear_extend_speed = 50.0f,    /* step5/6 四杆全伸时的后杆速度，单位 rad/s。 */
             .pole_rear_retract_speed = 25.0f,   /* step0-4/7 后杆保持或回收到全收目标的速度，单位 rad/s。 */
+            .pole_lift_accel = 180.0f,          /* Per-template pole accel limit, rad/s^2. */
             .front_photo_timeout_ms = 5000u,    /* step4 等待 PE13/photo1 下降沿超时，单位 ms。 */
             .rear_photo_timeout_ms = 5000u,     /* step1 等待 PA2/photo3 下降沿超时，单位 ms。 */
             .pole_extend_move_speed = 1.5f,    /* step6 四杆全伸行走 vx，单位 m/s。 */
@@ -478,16 +534,17 @@ Config_RobotParam_t robot_config = {
             .prealign_move_speed = 0.20f,       /* PREALIGN 对正阶段叠加 vx，单位 m/s。 */
             .front_retract_move_speed = 0.3f,  /* 前杆动作阶段 vx，单位 m/s。 */
             .mid_move_speed = 1.50f,            /* 中段平移 vx，单位 m/s。 */
-            .mid_move_ms = 280u,                /* 中段平移持续时间，单位 ms。 */
-            .rear_retract_move_speed = 0.3f,   /* 后杆动作阶段 vx，单位 m/s。 */
-            .rear_retract_move_ms = 250u,       /* 后杆动作后继续移动时间，单位 ms。 */
+            .mid_move_ms = 200u,                /* 中段平移持续时间，单位 ms。 */
+            .rear_retract_move_speed = 0.35f,   /* 后杆动作阶段 vx，单位 m/s。 */ 
+            .rear_retract_move_ms = 280u,       /* 后杆动作后继续移动时间，单位 ms。 */
             .second_photo_retract_move_speed = 0.20f, /* step7 第二个下降沿后全收杆离开 vx，单位 m/s。 */
             .final_move_speed = 0.1f,          /* 收尾离开台阶 vx，单位 m/s。 */
-            .final_move_ms = 100u,              /* 收尾离开台阶持续时间，单位 ms。 */
+            .final_move_ms = 100u,             /* 收尾离开台阶持续时间，单位 ms。 */
             .pole_front_extend_speed = 65.0f,   /* 前杆伸出目标跟随速度，单位 rad/s。 */
             .pole_front_retract_speed = 25.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
             .pole_rear_extend_speed = 65.0f,    /* 后杆伸出目标跟随速度，单位 rad/s。 */
             .pole_rear_retract_speed = 25.0f,   /* 后杆回收目标跟随速度，单位 rad/s。 */
+            .pole_lift_accel = 180.0f,          /* Per-template pole accel limit, rad/s^2. */
             .front_photo_timeout_ms = 5000u,    /* 等待前光电触发/下降沿超时，单位 ms。 */
             .rear_photo_timeout_ms = 5000u,     /* 等待后光电触发/下降沿超时，单位 ms。 */
             .pole_extend_move_speed = 1.5f,    /* step6 四杆全伸行走 vx，单位 m/s。 */
@@ -515,6 +572,7 @@ Config_RobotParam_t robot_config = {
             .pole_front_retract_speed = 18.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
             .pole_rear_extend_speed = 50.0f,    /* 后杆伸出目标跟随速度，单位 rad/s。 */
             .pole_rear_retract_speed = 30.0f,   /* 后杆回收目标跟随速度，单位 rad/s。 */
+            .pole_lift_accel = 0.0f,            /* Per-template pole accel; 0 uses Pole default. */
             .front_photo_timeout_ms = 5000u,    /* 等待前光电触发/下降沿超时，单位 ms。 */
             .rear_photo_timeout_ms = 10000u,    /* 等待后光电触发/下降沿超时，单位 ms。 */
         },
@@ -539,6 +597,7 @@ Config_RobotParam_t robot_config = {
             .pole_front_retract_speed = 18.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
             .pole_rear_extend_speed = 50.0f,    /* 后杆伸出目标跟随速度，单位 rad/s。 */
             .pole_rear_retract_speed = 30.0f,   /* 后杆回收目标跟随速度，单位 rad/s。 */
+            .pole_lift_accel = 0.0f,            /* Per-template pole accel; 0 uses Pole default. */
             .front_photo_timeout_ms = 5000u,    /* 等待前光电触发/下降沿超时，单位 ms。 */
             .rear_photo_timeout_ms = 10000u,     /* 等待后光电触发/下降沿超时，单位 ms。 */
         },
@@ -568,6 +627,7 @@ Config_RobotParam_t robot_config = {
             .pole_front_retract_speed = 25.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
             .pole_rear_extend_speed = 50.0f,    /* 后杆伸出目标跟随速度，单位 rad/s。 */
             .pole_rear_retract_speed = 25.0f,   /* 后杆回收目标跟随速度，单位 rad/s。 */
+            .pole_lift_accel = 140.0f,          /* Per-template pole accel limit, rad/s^2. */
             .front_photo_timeout_ms = 5000u,    /* 等待 photo1 下降沿超时，单位 ms。 */
             .rear_photo_timeout_ms = 5000u,     /* 等待 photo3 下降沿超时，单位 ms。 */
             .hold_ms = 1200u,                   /* 四杆全伸支撑通过时间，单位 ms。 */
@@ -597,6 +657,7 @@ Config_RobotParam_t robot_config = {
             .pole_front_retract_speed = 25.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
             .pole_rear_extend_speed = 60.0f,    /* 后杆伸出目标跟随速度，单位 rad/s。 */
             .pole_rear_retract_speed = 25.0f,   /* 后杆回收目标跟随速度，单位 rad/s。 */
+            .pole_lift_accel = 140.0f,          /* Per-template pole accel limit, rad/s^2. */
             .front_photo_timeout_ms = 5000u,    /* 等待前光电触发/下降沿超时，单位 ms。 */
             .rear_photo_timeout_ms = 5000u,     /* 等待后光电触发/下降沿超时，单位 ms。 */
             .hold_ms = 1200u,                   /* 四杆全伸支撑通过时间，单位 ms。 */
@@ -620,6 +681,32 @@ Config_RobotParam_t robot_config = {
         .gripper = {
             .gripper_gpio = BSP_GPIO_ROD_SOLENOID,
             .grip_timeout_ms = 2000u,        /* 夹取超时 */
+        },
+    },
+    .camera_yaw_param = {
+        .motor_param = {
+            .can = BSP_CAN_2,
+            .id = 0x205,
+            .module = MOTOR_GM6020,
+            .reverse = false,
+            .gear = false,
+        },
+        .pid = {
+            .yaw_pid = {
+                .k = 1.0f,
+                .p = 0.40f,
+                .i = 0.0f,
+                .d = 0.0f,
+                .i_limit = 0.0f,
+                .out_limit = 0.30f,
+                .d_cutoff_freq = -1.0f,
+                .range = M_2PI,
+            },
+        },
+        .limit = {
+            .max_output = 0.30f,
+            .arrive_threshold_rad = 0.02f,
+            .feedback_timeout_ms = 200u,
         },
     },
 };

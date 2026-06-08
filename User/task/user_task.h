@@ -11,10 +11,12 @@
 #include "module/autoCtrlAPI/api/auto_ctrl_api.h"
 #include "module/autoCtrlAPI/ore_store/auto_ore_store.h"
 #include "module/autoCtrlAPI/rod/auto_rod_spearhead.h"
+#include "module/autoCtrlAPI/sick/auto_sick_correct.h"
 #include "device/ir_dock/ir_dock.h"
 #include "module/arm_simple.h"
 #include "module/rod_new.h"
 #include "module/ore_store.h"
+#include "module/camera_yaw.h"
 #include "device/buzzer.h"
 #include "device/sick.h"
 
@@ -27,26 +29,28 @@ extern "C" {
 /* 任务运行频率 */
 #define BLINK_FREQ (50.0)
 #define ATTI_ESTI_FREQ (400.0)
-#define CHASSIS_MAIN_FREQ (500.0)
+#define CHASSIS_MAIN_FREQ (1000.0)
 #define RC_MAIN_FREQ (1000.0)
-#define CMD_CENTER_FREQ (1000.0)
+#define SICK_FREQ (100.0)
 #define AUTO_CTRL_FREQ (100.0)
 #define ARM_SIMPLE_FREQ (500.0)
 #define ROD_FREQ (400.0)
 #define PC_COMM_FREQ (100.0)
 #define ORE_STORE_FREQ (500.0)
+#define IR_DOCK_FREQ (4.0)
 /* 任务初始化延时ms */
 #define TASK_INIT_DELAY (100u)
 #define BLINK_INIT_DELAY (0)
 #define ATTI_ESTI_INIT_DELAY (0)
 #define CHASSIS_MAIN_INIT_DELAY (0) 
 #define RC_MAIN_INIT_DELAY (0)
-#define CMD_CENTER_INIT_DELAY (0)
+#define SICK_INIT_DELAY (0)
 #define AUTO_CTRL_INIT_DELAY (0)
 #define ARM_SIMPLE_INIT_DELAY (100u)
 #define ROD_INIT_DELAY (0)
 #define PC_COMM_INIT_DELAY (500u)
 #define ORE_STORE_INIT_DELAY (100u)
+#define IR_DOCK_INIT_DELAY (0)
 /* Exported defines --------------------------------------------------------- */
 /* Exported macro ----------------------------------------------------------- */
 /* Exported types ----------------------------------------------------------- */
@@ -72,6 +76,8 @@ typedef enum {
     AUTO_ORE_DEBUG_REQUEST_PICK_POS_200 = 6,
     AUTO_ORE_DEBUG_REQUEST_PICK_NEG_200 = 7,
     AUTO_ORE_DEBUG_REQUEST_ROD_SPEARHEAD = 8,
+    AUTO_ORE_DEBUG_REQUEST_SICK_CORRECT_ROD_SPEARHEAD = 9,
+    AUTO_ORE_DEBUG_REQUEST_SICK_CORRECT_ORE_RELEASE = 10,
 } AutoOre_DebugRequest_t;
 
 typedef struct {
@@ -136,6 +142,22 @@ typedef struct {
     volatile RodNew_Pose_t auto_rod_spearhead_rod_cmd_pose;
     volatile RodNew_GripState_t auto_rod_spearhead_rod_cmd_grip;
     volatile float auto_rod_spearhead_rod_cmd_target_angle_rad;
+    volatile bool auto_sick_correct_busy;
+    volatile AutoSickCorrect_State_t auto_sick_correct_state;
+    volatile AutoSickCorrect_Result_t auto_sick_correct_result;
+    volatile AutoSickCorrect_Fault_t auto_sick_correct_fault;
+    volatile AutoSickCorrect_Action_t auto_sick_correct_action;
+    volatile uint8_t auto_sick_correct_step_index;
+    volatile float auto_sick_correct_x_sample_adc;
+    volatile float auto_sick_correct_y_sample_adc;
+    volatile float auto_sick_correct_yaw_sample_diff_adc;
+    volatile float auto_sick_correct_x_error_adc;
+    volatile float auto_sick_correct_y_error_adc;
+    volatile float auto_sick_correct_yaw_error_adc;
+    volatile float auto_sick_correct_vx_mps;
+    volatile float auto_sick_correct_vy_mps;
+    volatile float auto_sick_correct_wz_rad_s;
+    volatile float auto_sick_correct_pole_target_lift;
     volatile bool ir_dock_complete_fresh;
     volatile uint8_t ir_dock_last_rx_status;
     volatile uint32_t ir_dock_last_rx_age_ms;
@@ -151,12 +173,14 @@ typedef struct {
         osThreadId_t atti_esti;
         osThreadId_t chassis_main;
         osThreadId_t rc_main;
-        osThreadId_t cmd_center;
+        osThreadId_t sick;
         osThreadId_t auto_ctrl;
         osThreadId_t arm_simple;
         osThreadId_t rod;
         osThreadId_t pc_comm;
         osThreadId_t ore_store;
+        osThreadId_t ir_dock;
+
     } thread;
 
     /* USER MESSAGE BEGIN */
@@ -175,6 +199,9 @@ typedef struct {
         struct {
             osMessageQueueId_t cmd;
         } rod;
+        struct {
+            osMessageQueueId_t cmd;
+        } camera_yaw;
         struct {
             osMessageQueueId_t cmd;
         } ore_store;
@@ -204,17 +231,35 @@ typedef struct {
 
     /* USER CONFIG END */
 
+    /* Heartbeat counters for debugger/watch-window task liveness checks. */
+    struct {
+        volatile uint32_t init;
+        volatile uint32_t blink;
+        volatile uint32_t atti_esti;
+        volatile uint32_t chassis_main;
+        volatile uint32_t rc_main;
+        volatile uint32_t sick;
+        volatile uint32_t auto_ctrl;
+        volatile uint32_t arm_simple;
+        volatile uint32_t rod;
+        volatile uint32_t pc_comm;
+        volatile uint32_t ore_store;
+        volatile uint32_t ir_dock;
+    } heartbeat;
+
     /* 各任务的stack使用 */
     struct {
         UBaseType_t blink;
         UBaseType_t atti_esti;
         UBaseType_t chassis_main;
         UBaseType_t rc_main;
-        UBaseType_t cmd_center;
+        UBaseType_t sick;
         UBaseType_t auto_ctrl;
         UBaseType_t rod;
         UBaseType_t pc_comm;
         UBaseType_t ore_store;
+        UBaseType_t ir_dock;
+
     } stack_water_mark;
 
 } Task_Runtime_t;
@@ -230,6 +275,8 @@ extern volatile AutoOre_DebugControl_t g_auto_ore_debug;
 extern volatile IrDock_Debug_t g_ir_dock_debug;
 extern AutoRodSpearhead_t auto_rod_spearhead_ctrl;
 extern bool auto_rod_spearhead_inited;
+extern AutoSickCorrect_t auto_sick_correct_ctrl;
+extern bool auto_sick_correct_inited;
 extern bool auto_ctrl_local_yaw_zero_initialized;
 extern float auto_ctrl_local_yaw_zero_rad;
 extern BUZZER_t buzzer;
@@ -242,24 +289,26 @@ extern const osThreadAttr_t attr_blink;
 extern const osThreadAttr_t attr_atti_esti;
 extern const osThreadAttr_t attr_chassis_main;
 extern const osThreadAttr_t attr_rc_main;
-extern const osThreadAttr_t attr_cmd_center;
+extern const osThreadAttr_t attr_sick;
 extern const osThreadAttr_t attr_auto_ctrl;
 extern const osThreadAttr_t attr_arm_simple;
 extern const osThreadAttr_t attr_rod;
 extern const osThreadAttr_t attr_pc_comm;
 extern const osThreadAttr_t attr_ore_store;
+extern const osThreadAttr_t attr_ir_dock;
 /* 任务函数声明 */
 void Task_Init(void *argument);
 void Task_blink(void *argument);
 void Task_atti_esti(void *argument);
 void Task_chassis_main(void *argument);
 void Task_rc_main(void *argument);
-void Task_cmd_center(void *argument);
+void Task_sick(void *argument);
 void Task_auto_ctrl(void *argument);
 void Task_arm_simple(void *argument);
 void Task_rod(void *argument);
 void Task_pc_comm(void *argument);
 void Task_ore_store(void *argument);
+void Task_ir_dock(void *argument);
 
 bool Task_ChassisMainPoleGroupAtTarget(uint8_t group, float threshold_rad);
 bool Task_ChassisMainPoleAllAtTarget(float threshold_rad);
@@ -275,6 +324,12 @@ bool Task_AutoRodSpearheadStart(void);
 void Task_AutoRodSpearheadAbort(void);
 bool Task_AutoRodSpearheadIsBusy(void);
 const RodNew_CMD_t *Task_AutoRodSpearheadGetCommand(void);
+bool Task_AutoSickCorrectStartRodSpearhead(void);
+bool Task_AutoSickCorrectStartOreRelease(void);
+void Task_AutoSickCorrectAbort(void);
+bool Task_AutoSickCorrectIsBusy(void);
+const Chassis_CMD_t *Task_AutoSickCorrectGetChassisCommand(void);
+const Pole_CMD_t *Task_AutoSickCorrectGetPoleCommand(void);
 bool Task_IrDockIsDockCompleteFresh(void);
 int8_t Task_OreStorePostCommand(const OreStore_CMD_t *cmd);
 void Task_OreStoreRequestRehome(void);
@@ -287,8 +342,11 @@ bool Task_OreStorePowerOnHomeAttemptDone(void);
 bool Task_OreStorePowerOnHomeFailed(void);
 bool Task_OreStoreIsAxisAtTarget(uint8_t axis, float threshold_rad);
 bool Task_OreStoreIsAllAtTarget(float threshold_rad);
+bool Task_SickGetLatestOutput(Sick_Output_t *output);
 const ArmSimple_Feedback_t *Task_ArmSimpleGetFeedback(void);
 const RodNew_Feedback_t *Task_RodNewGetFeedback(void);
+const CameraYaw_Feedback_t *Task_CameraYawGetFeedback(void);
+int8_t Task_CameraYawPostCommand(const CameraYaw_CMD_t *cmd);
 const OreStore_Feedback_t *Task_OreStoreGetFeedback(void);
 const OreStore_Debug_t *Task_OreStoreGetDebug(void);
 #ifdef __cplusplus

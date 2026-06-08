@@ -25,6 +25,10 @@ typedef struct {
   bool pe9_photo2_triggered_latched;  /* PE9/photo2 latched as triggered. */
   bool pa2_photo3_triggered_latched;  /* PA2/photo3 latched as triggered. */
   bool pa0_photo4_triggered_latched;  /* PA0/photo4 latched as triggered. */
+  uint32_t pe13_photo1_triggered_since_ms;
+  uint32_t pe9_photo2_triggered_since_ms;
+  uint32_t pa2_photo3_triggered_since_ms;
+  uint32_t pa0_photo4_triggered_since_ms;
   /* 边沿检测（用于下台阶：触发→不触发） */
   bool pe13_photo1_prev_triggered; /* PE13/photo1 previous state. */
   bool pe9_photo2_prev_triggered;  /* PE9/photo2 previous state. */

@@ -89,7 +89,17 @@ inline OnlineTrapezoidAxisSample update_trapezoid_axis(
     return out;
   }
 
-  out.position = current + (*velocity) * dt;
+  const Scalar next_position = current + (*velocity) * dt;
+  if ((target - current) * (target - next_position) <= 0.0f) {
+    *velocity = 0.0f;
+    out.position = target;
+    out.velocity = 0.0f;
+    out.valid = true;
+    out.reached = true;
+    return out;
+  }
+
+  out.position = next_position;
   out.velocity = *velocity;
   out.valid = is_finite_scalar(out.position) && is_finite_scalar(out.velocity);
   out.reached = false;

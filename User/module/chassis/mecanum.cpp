@@ -105,6 +105,10 @@ float RotorSign(float stored_sign, Chassis_RotorMode_t mode) {
   }
 }
 
+bool IsSameSign(float a, float b) {
+  return (a >= 0.0f && b >= 0.0f) || (a <= 0.0f && b <= 0.0f);
+}
+
 }  // namespace
 
 int8_t MecanumController::Init(const Chassis_Params_t *param,
@@ -365,6 +369,7 @@ void MecanumController::ResetRuntime() {
   mode_ = CHASSIS_MODE_RELAX;
   wheels_ = {};
   wheel_speed_ref_ = {};
+  wheel_speed_ref_planned_ = {};
   move_vec_ = {};
   feedback_ = {};
   debug_ = {};
@@ -419,6 +424,7 @@ void MecanumController::ResetControlStateOnModeChange() {
     LowPassFilter2p_Reset(&body_velocity_filter_[i], 0.0f);
   }
   wheel_hold_active_ = false;
+  ResetWheelSpeedPlanner();
 }
 
 void MecanumController::ResetWheelVelocityControlState() {
@@ -433,6 +439,10 @@ void MecanumController::ResetWheelHoldControlState() {
   for (uint8_t i = 0; i < kWheelCount; ++i) {
     PID_Reset(&wheel_hold_pid_[i]);
   }
+}
+
+void MecanumController::ResetWheelSpeedPlanner() {
+  wheel_speed_ref_planned_ = {};
 }
 
 int8_t MecanumController::SetMode(Chassis_Mode_t mode, uint32_t now) {
@@ -496,8 +506,52 @@ int8_t MecanumController::ComputeWheelSpeeds() {
 
   MecanumKinematics::ScaleWheelSpeedsToLimit(wheel_speeds,
                                              WheelSpeedLimit(param_));
+  for (uint8_t i = 0; i < kWheelCount; ++i) {
+    wheel_speeds[i] = PlanWheelStartSpeed(i, wheel_speeds[i]);
+  }
   wheel_speed_ref_ = wheel_speeds;
   return CHASSIS_OK;
+}
+
+float MecanumController::PlanWheelStartSpeed(uint8_t idx,
+                                             float target_speed_mps) {
+  if (idx >= kWheelCount || !scalar::is_finite_scalar(target_speed_mps)) {
+    return 0.0f;
+  }
+
+  const float accel_limit =
+      (param_ != nullptr) ? param_->controller.wheel_start_accel_mps2 : 0.0f;
+  if (!scalar::is_positive_scalar(accel_limit)) {
+    wheel_speed_ref_planned_[idx] = target_speed_mps;
+    return target_speed_mps;
+  }
+
+  float previous = wheel_speed_ref_planned_[idx];
+  if (!scalar::is_finite_scalar(previous)) {
+    previous = 0.0f;
+  }
+
+  const float abs_target = std::fabs(target_speed_mps);
+  const float abs_previous = std::fabs(previous);
+  if (abs_target <= kHoldCommandDeadband) {
+    wheel_speed_ref_planned_[idx] = 0.0f;
+    return 0.0f;
+  }
+
+  if (abs_previous > kHoldCommandDeadband &&
+      IsSameSign(previous, target_speed_mps) &&
+      abs_target <= abs_previous) {
+    wheel_speed_ref_planned_[idx] = target_speed_mps;
+    return target_speed_mps;
+  }
+
+  const float planner_start =
+      IsSameSign(previous, target_speed_mps) ? previous : 0.0f;
+  const float max_delta = accel_limit * dt_;
+  const float planned =
+      scalar::move_towards(planner_start, target_speed_mps, max_delta);
+  wheel_speed_ref_planned_[idx] = planned;
+  return planned;
 }
 
 bool MecanumController::ShouldHoldZeroCommand() const {
@@ -511,6 +565,7 @@ bool MecanumController::ShouldHoldZeroCommand() const {
 }
 
 void MecanumController::EnterWheelHold() {
+  ResetWheelSpeedPlanner();
   for (uint8_t i = 0; i < kWheelCount; ++i) {
     wheel_hold_position_rad_[i] =
         (wheels_[i] != nullptr) ? wheels_[i]->State().position_rad : 0.0f;
@@ -652,14 +707,13 @@ void MecanumController::StoreWheelDebug(uint8_t idx) {
 }
 
 float MecanumController::CalcDt(uint32_t now_ms) {
-  (void)now_ms;
-
-  const uint64_t now_us = BSP_TIME_Get_us();
   float dt = kDefaultDtS;
   if (last_wakeup_us_ != 0U) {
-    dt = static_cast<float>(now_us - last_wakeup_us_) * 1.0e-6f;
+    dt = static_cast<float>(
+             (uint32_t)(now_ms - static_cast<uint32_t>(last_wakeup_us_))) *
+         1.0e-3f;
   }
-  last_wakeup_us_ = now_us;
+  last_wakeup_us_ = now_ms;
   return scalar::sanitize_dt(dt, kDefaultDtS, kMinDtS, kMaxDtS);
 }
 

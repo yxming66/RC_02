@@ -134,6 +134,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     User/module/autoCtrlAPI/primitive/auto_ctrl_primitive.cpp
     User/module/autoCtrlAPI/ore_store/auto_ore_store.c
     User/module/autoCtrlAPI/rod/auto_rod_spearhead.c
+    User/module/autoCtrlAPI/sick/auto_sick_correct.c
     User/module/autoCtrlAPI/step/auto_ctrl_step.c
     User/module/autoCtrlAPI/template/auto_ctrl_template_runner.c
     User/module/arm_simple.c
@@ -143,29 +144,28 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     User/module/cloudmusic/cloudmusic.c
     User/module/config.c
     User/module/rod_new.cpp
+    User/module/camera_yaw.c
     User/module/mrlink_pc_comm/mrlink_pc_comm.cpp
     User/module/cmd_center/cmd_center_compile_check.cpp
-    User/module/cmd_center/rc_cmd_center_app.cpp
 
     # User/task sources
     User/task/blink.c
     User/task/chassis_main.cpp
-    User/task/cmd_center_task.cpp
+    User/task/cmd_center_bridge.cpp
     User/task/init.c
     User/task/rc_main.c
     User/task/auto_ctrl_feed.c
     User/task/user_task.c
+    User/task/sick.c
     User/task/arm_simple_main.c
     User/task/rod_main.c
     User/task/ore_store_main.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/User/task/ir_dock_task.c
     User/task/atti_esti.c
     User/task/pc_comm_task.c
 )
 
-set_source_files_properties(
-    User/module/arm_simple.c
-    PROPERTIES LANGUAGE CXX
-)
+set_source_files_properties(User/module/arm_simple.c PROPERTIES LANGUAGE CXX)
 
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE

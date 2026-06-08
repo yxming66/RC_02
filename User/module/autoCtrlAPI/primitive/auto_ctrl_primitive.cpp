@@ -147,6 +147,8 @@ void AutoCtrlPrimitive_CommandPoleTargetWithSpeed(auto_ctrl_t *ctrl,
   ctrl->pole_cmd.auto_target_lift[1] = rear_target;
   ctrl->pole_cmd.auto_lift_speed[0] = front_speed;
   ctrl->pole_cmd.auto_lift_speed[1] = rear_speed;
+  ctrl->pole_cmd.auto_lift_accel[0] = 0.0f;
+  ctrl->pole_cmd.auto_lift_accel[1] = 0.0f;
   ctrl->pole_cmd.disable_lift_accel = false;
 }
 
@@ -160,10 +162,12 @@ void AutoCtrlPrimitive_CommandPoleGroupWithSpeed(auto_ctrl_t *ctrl,
     ctrl->pole_cmd.auto_target_enable[0] = true;
     ctrl->pole_cmd.auto_target_lift[0] = target;
     ctrl->pole_cmd.auto_lift_speed[0] = speed;
+    ctrl->pole_cmd.auto_lift_accel[0] = 0.0f;
   } else {
     ctrl->pole_cmd.auto_target_enable[1] = true;
     ctrl->pole_cmd.auto_target_lift[1] = target;
     ctrl->pole_cmd.auto_lift_speed[1] = speed;
+    ctrl->pole_cmd.auto_lift_accel[1] = 0.0f;
   }
   ctrl->pole_cmd.disable_lift_accel = false;
 }

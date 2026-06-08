@@ -46,6 +46,8 @@ bool Task_ChassisMainGetPoleHoldCommand(Pole_CMD_t *cmd) {
   cmd->auto_target_lift[1] = pole.debug.tracked_target_lift[1];
   cmd->auto_lift_speed[0] = 0.0f;
   cmd->auto_lift_speed[1] = 0.0f;
+  cmd->auto_lift_accel[0] = 0.0f;
+  cmd->auto_lift_accel[1] = 0.0f;
   return true;
 }
 }
@@ -104,6 +106,7 @@ extern "C" void Task_chassis_main(void *argument) {
 
   while (1) {
     tick += delay_tick;
+    const uint32_t loop_tick = osKernelGetTickCount();
 
     osMessageQueueGet(task_runtime.msgq.chassis.imu, &chassis_imu, nullptr, 0);
     osMessageQueueGet(task_runtime.msgq.chassis.cmd, &chassis_cmd, nullptr, 0);
@@ -118,7 +121,7 @@ extern "C" void Task_chassis_main(void *argument) {
           fb.motor[i].velocity_rad_s * 60.0f / (2.0f * 3.14159265358979f);
     }
 
-    (void)chassis.Control(chassis_cmd, osKernelGetTickCount());
+    (void)chassis.Control(chassis_cmd, loop_tick);
     chassis.Output();
 
     const bool run_pole_update = (pole_update_phase == 0u);
@@ -143,8 +146,8 @@ extern "C" void Task_chassis_main(void *argument) {
 
     if (run_pole_update) {
       PC_PoleFeedback_t pole_fb = {0};
-      pole_fb.lift[0] = pole.feedback.support_angle_avg;
-      pole_fb.lift[1] = pole.feedback.support_angle_avg;
+      pole_fb.lift[0] = pole.feedback.support_lift[0];
+      pole_fb.lift[1] = pole.feedback.support_lift[1];
       for (uint8_t i = 0u; i < POLE_MOTOR_NUM; i++) {
         pole_fb.motor_total_angle[i] = pole.feedback.motor[i].rotor_total_angle;
       }
@@ -153,6 +156,7 @@ extern "C" void Task_chassis_main(void *argument) {
 
     task_runtime.stack_water_mark.chassis_main =
         uxTaskGetStackHighWaterMark(nullptr);
+    task_runtime.heartbeat.chassis_main++;
     osDelayUntil(tick);
   }
 }

@@ -350,6 +350,7 @@ void Task_atti_esti(void *argument) {
     
     /* USER CODE END */
     task_runtime.stack_water_mark.atti_esti = uxTaskGetStackHighWaterMark(NULL);
+    task_runtime.heartbeat.atti_esti++;
     osDelayUntil(tick); /* 运行结束，等待下一次唤醒 */
   }
   

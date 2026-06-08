@@ -302,6 +302,7 @@ void Task_blink(void *argument) {
     }
     /* USER CODE END */
     task_runtime.stack_water_mark.blink = uxTaskGetStackHighWaterMark(NULL);
+    task_runtime.heartbeat.blink++;
     osDelayUntil(tick);
   }
 }
