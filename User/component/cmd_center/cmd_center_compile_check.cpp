@@ -1,5 +1,5 @@
-#include "module/cmd_center/cmd_center.hpp"
-#include "module/cmd_center/cmd_center_cmsis.hpp"
+#include "component/cmd_center/cmd_center.hpp"
+#include "component/cmd_center/cmd_center_cmsis.hpp"
 #include "module/arm_simple.h"
 #include "module/chassis.h"
 #include "module/ore_store.h"

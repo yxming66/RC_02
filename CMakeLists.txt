@@ -146,12 +146,12 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     User/module/rod_new.cpp
     User/module/camera_yaw.c
     User/module/mrlink_pc_comm/mrlink_pc_comm.cpp
-    User/module/cmd_center/cmd_center_compile_check.cpp
+    User/module/rc_cmd_center/rc_cmd_center_app.cpp
+    User/component/cmd_center/cmd_center_compile_check.cpp
 
     # User/task sources
     User/task/blink.c
     User/task/chassis_main.cpp
-    User/task/cmd_center_bridge.cpp
     User/task/init.c
     User/task/rc_main.c
     User/task/auto_ctrl_feed.c
@@ -171,7 +171,8 @@ set_source_files_properties(User/module/arm_simple.c PROPERTIES LANGUAGE CXX)
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined include paths
     User
-    User/module/cmd_center
+    User/component/cmd_center
+    User/module/rc_cmd_center
     User/device
     Drivers/CMSIS/DSP/Include
 )
