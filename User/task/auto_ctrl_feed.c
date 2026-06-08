@@ -540,7 +540,7 @@ static bool AutoCtrlFeed_StartOreAction(AutoOre_Action_t action) {
   }
 
   bool result = false;
-  const uint32_t now_ms = osKernelGetTickCount();
+  const uint32_t now_ms = BSP_TIME_Get_ms();
   switch (action) {
     case AUTO_ORE_ACTION_STORE:
       result = AutoOre_StartStore(&auto_ore_ctrl, now_ms);
@@ -589,7 +589,7 @@ static bool AutoCtrlFeed_StartSickCorrectAction(
   }
 
   bool result = false;
-  const uint32_t now_ms = osKernelGetTickCount();
+  const uint32_t now_ms = BSP_TIME_Get_ms();
   AutoCtrlFeed_PrepareSickCorrectParams(action);
   switch (action) {
     case AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD:
@@ -1154,7 +1154,7 @@ bool Task_AutoRodSpearheadStart(void) {
   const bool result =
       auto_rod_spearhead_inited &&
       AutoRodSpearhead_Start(&auto_rod_spearhead_ctrl,
-                             osKernelGetTickCount());
+                             BSP_TIME_Get_ms());
   if (result ||
       AutoRodSpearhead_GetState(&auto_rod_spearhead_ctrl) ==
           AUTO_ROD_SPEARHEAD_STATE_FAIL) {
@@ -1221,7 +1221,7 @@ const Pole_CMD_t *Task_AutoSickCorrectGetPoleCommand(void) {
 }
 
 bool Task_IrDockIsDockCompleteFresh(void) {
-  return IrDock_IsDockCompleteFresh(osKernelGetTickCount());
+  return IrDock_IsDockCompleteFresh(BSP_TIME_Get_ms());
 }
 
 /* Exported functions ------------------------------------------------------- */
@@ -1246,7 +1246,7 @@ void Task_auto_ctrl(void *argument) {
     tick += delay_tick;
 
     if (auto_ctrl_inited) {
-      now_ms = osKernelGetTickCount();
+      now_ms = BSP_TIME_Get_ms();
 
       AutoCtrlFeed_CacheLocalYawZero();
 

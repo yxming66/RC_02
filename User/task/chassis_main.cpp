@@ -106,7 +106,7 @@ extern "C" void Task_chassis_main(void *argument) {
 
   while (1) {
     tick += delay_tick;
-    const uint32_t loop_tick = osKernelGetTickCount();
+    const uint32_t loop_tick = BSP_TIME_Get_ms();
 
     osMessageQueueGet(task_runtime.msgq.chassis.imu, &chassis_imu, nullptr, 0);
     osMessageQueueGet(task_runtime.msgq.chassis.cmd, &chassis_cmd, nullptr, 0);
@@ -133,8 +133,9 @@ extern "C" void Task_chassis_main(void *argument) {
     if (run_pole_update) {
       osMessageQueueGet(task_runtime.msgq.pole.cmd, &pole_cmd, nullptr, 0);
       Pole_UpdateFeedback(&pole);
-      Task_ChassisMainUpdatePoleTemperatureAlarm(osKernelGetTickCount());
-      Pole_Control(&pole, &pole_cmd, osKernelGetTickCount());
+      const uint32_t now_ms = BSP_TIME_Get_ms();
+      Task_ChassisMainUpdatePoleTemperatureAlarm(now_ms);
+      Pole_Control(&pole, &pole_cmd, now_ms);
       Pole_Output(&pole);
     }
 

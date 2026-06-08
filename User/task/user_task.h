@@ -8,6 +8,7 @@
 /* USER INCLUDE BEGIN */
 #include <stdbool.h>
 #include <stdint.h>
+#include "bsp/time.h"
 #include "module/autoCtrlAPI/api/auto_ctrl_api.h"
 #include "module/autoCtrlAPI/ore_store/auto_ore_store.h"
 #include "module/autoCtrlAPI/rod/auto_rod_spearhead.h"

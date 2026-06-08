@@ -6,6 +6,7 @@
 #include "FreeRTOS.h"
 #include "main.h"
 #include "task.h"
+#include "stm32h7xx_hal_tim.h"
 
 /* USER INCLUDE BEGIN */
 
@@ -22,22 +23,25 @@
 /* USER STRUCT END */
 
 /* Private variables -------------------------------------------------------- */
+extern TIM_HandleTypeDef htim2;
+
 /* Private function  -------------------------------------------------------- */
 /* Exported functions ------------------------------------------------------- */
 
-uint32_t BSP_TIME_Get_ms() { return xTaskGetTickCount(); }
+uint32_t BSP_TIME_Get_ms() {
+  return (uint32_t)(BSP_TIME_Get_us() / 1000ULL);
+}
 
 uint64_t BSP_TIME_Get_us() {
-  uint32_t tick_freq = osKernelGetTickFreq();
-  uint32_t ticks_old = xTaskGetTickCount()*(1000/tick_freq);
-  uint32_t tick_value_old = SysTick->VAL;
-  uint32_t ticks_new = xTaskGetTickCount()*(1000/tick_freq);
-  uint32_t tick_value_new = SysTick->VAL;
-  if (ticks_old == ticks_new) {
-    return ticks_new * 1000 + 1000 - tick_value_old * 1000 / (SysTick->LOAD + 1);
-  } else {
-    return ticks_new * 1000 + 1000 - tick_value_new * 1000 / (SysTick->LOAD + 1);
+  uint32_t ms = HAL_GetTick();
+  uint32_t us_in_ms = __HAL_TIM_GET_COUNTER(&htim2);
+
+  if (__HAL_TIM_GET_FLAG(&htim2, TIM_FLAG_UPDATE) != RESET &&
+      us_in_ms < 500U) {
+    ms++;
   }
+
+  return (uint64_t)ms * 1000ULL + (uint64_t)us_in_ms;
 }
 
 uint64_t BSP_TIME_Get() __attribute__((alias("BSP_TIME_Get_us")));

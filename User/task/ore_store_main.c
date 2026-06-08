@@ -347,7 +347,7 @@ void Task_ore_store(void *argument) {
 
     g_ore_store_update_ret = OreStore_UpdateFeedback(&ore_store);
     OreStoreTask_ApplyAssumeHomedDebug();
-    const uint32_t now_tick = osKernelGetTickCount();
+    const uint32_t now_tick = BSP_TIME_Get_ms();
 
     if (camera_yaw_inited) {
       CameraYaw_CMD_t next_camera_yaw_cmd;

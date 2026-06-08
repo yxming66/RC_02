@@ -157,7 +157,7 @@ static void request_gyro_calibration(void) {
     reset_calibration_buzzer_state();
     g_buzzer_calib_active = true;
     calib_delay_pending = true;
-    calib_delay_deadline = osKernelGetTickCount() + CALIB_START_DELAY_MS;
+    calib_delay_deadline = BSP_TIME_Get_ms() + CALIB_START_DELAY_MS;
     start_calibration_buzzer_now();
   }
 }
@@ -263,7 +263,7 @@ void Task_atti_esti(void *argument) {
     }
 
     if (calib_delay_pending) {
-      uint32_t now = osKernelGetTickCount();
+      uint32_t now = BSP_TIME_Get_ms();
       if ((int32_t)(now - calib_delay_deadline) >= 0) {
         calib_delay_pending = false;
         reset_gyro_calibration_accumulator();

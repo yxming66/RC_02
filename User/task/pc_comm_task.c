@@ -281,7 +281,7 @@ static void PcComm_UpdateStatusFeedback(void) {
 static bool PcComm_TransmitFeedback(void) {
     uint16_t tx_len = 0;
     uint8_t frame_count = 0;
-    uint32_t now = osKernelGetTickCount();
+    uint32_t now = BSP_TIME_Get_ms();
 
     if (s_tx_dma_busy) {
         if ((now - s_tx_dma_start_tick) < PC_COMM_TX_DMA_TIMEOUT_MS) {
@@ -342,12 +342,12 @@ void Task_pc_comm(void *argument) {
         osDelay(20u);
     }
 
-    uint32_t last_tx_tick = osKernelGetTickCount();
+    uint32_t last_tx_tick = BSP_TIME_Get_ms();
 
     while (1) {
         task_runtime.stack_water_mark.pc_comm = uxTaskGetStackHighWaterMark(NULL);
 
-        uint32_t now = osKernelGetTickCount();
+        uint32_t now = BSP_TIME_Get_ms();
 
         MrlinkPc_CommProcess(now);
         PcComm_UpdateCameraYawCommand(now);

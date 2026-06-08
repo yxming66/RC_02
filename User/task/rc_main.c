@@ -36,7 +36,7 @@ void Task_rc_main(void *argument) {
       DR16_Offline(&dr16);
     }
 
-    RcCmdCenterApp_Update(osKernelGetTickCount());
+    RcCmdCenterApp_Update(BSP_TIME_Get_ms());
 
     task_runtime.stack_water_mark.rc_main =
         uxTaskGetStackHighWaterMark(NULL);

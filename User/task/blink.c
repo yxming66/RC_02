@@ -286,14 +286,14 @@ void Task_blink(void *argument) {
     osThreadTerminate(osThreadGetId());
     return;
   }
-  (void)CloudMusic_Start(&cloudmusic, tick);
+  (void)CloudMusic_Start(&cloudmusic, BSP_TIME_Get_ms());
 
   /* USER CODE INIT END */
 
   while (1) {
     tick += delay_tick;
     /* USER CODE BEGIN */
-    const uint32_t now_tick = osKernelGetTickCount();
+    const uint32_t now_tick = BSP_TIME_Get_ms();
     Blink_UpdateAudio(now_tick);
 
     if (reset) {

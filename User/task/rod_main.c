@@ -35,7 +35,6 @@ void Task_rod(void *argument) {
   osDelay(ROD_INIT_DELAY);
 
   uint32_t tick = osKernelGetTickCount();
-  uint32_t last_control_tick = tick;
   Config_RobotParam_t *cfg = Config_GetRobotParam();
   if (cfg == NULL ||
       RodNew_Init(&rod_new, &cfg->rod_new_param) != ROD_NEW_OK) {
@@ -53,10 +52,10 @@ void Task_rod(void *argument) {
     osMessageQueueGet(task_runtime.msgq.rod.cmd, &rod_new_cmd, NULL, 0);
 
     if (!g_rod_new_debug.enable) {
+      const uint32_t now_ms = BSP_TIME_Get_ms();
       RodNew_Control(&rod_new, rod_new_cmd.mode, rod_new_cmd.pose,
                      rod_new_cmd.grip, rod_new_cmd.target_angle_rad,
-                     last_control_tick);
-      last_control_tick = tick;
+                     now_ms);
     }
     rod_new_feedback.mode = rod_new.mode;
     rod_new_feedback.pose = rod_new_cmd.pose;

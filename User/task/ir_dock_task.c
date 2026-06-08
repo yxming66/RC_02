@@ -13,12 +13,12 @@ void Task_ir_dock(void *argument) {
   osDelay(IR_DOCK_INIT_DELAY);
 
   uint32_t tick = osKernelGetTickCount();
-  IrDock_Init(tick);
+  IrDock_Init(BSP_TIME_Get_ms());
 
   while (1) {
     tick += delay_tick;
 
-    const uint32_t now_ms = osKernelGetTickCount();
+    const uint32_t now_ms = BSP_TIME_Get_ms();
     IrDock_Process(now_ms);
 
     task_runtime.stack_water_mark.ir_dock = uxTaskGetStackHighWaterMark(NULL);

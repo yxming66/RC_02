@@ -17,7 +17,7 @@ void Task_sick(void *argument) {
   while (1) {
     tick += delay_tick;
 
-    SICK_Update(osKernelGetTickCount());
+    SICK_Update(BSP_TIME_Get_ms());
     task_runtime.stack_water_mark.sick = uxTaskGetStackHighWaterMark(NULL);
     task_runtime.heartbeat.sick++;
     osDelayUntil(tick);
