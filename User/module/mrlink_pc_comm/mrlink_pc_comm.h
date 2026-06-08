@@ -119,8 +119,8 @@ typedef enum {
     PC_AUTO_ACTION_PICK_NEG_200 = 6,     /* 一键取反 200mm 矿 */
     PC_AUTO_ACTION_ROD_SPEARHEAD = 7,    /* 一键取矛头 */
     PC_AUTO_ACTION_ABORT = 8,            /* 中止一键动作 */
-    PC_AUTO_ACTION_SICK_CORRECT_ROD_SPEARHEAD = 9,
-    PC_AUTO_ACTION_SICK_CORRECT_ORE_RELEASE = 10,
+    PC_AUTO_ACTION_SICK_CORRECT_ROD_SPEARHEAD = 9, /* SICK correction before rod spearhead pickup */
+    PC_AUTO_ACTION_SICK_CORRECT_ORE_RELEASE = 10,  /* Reserved: SICK correction before ore release */
 } PC_AutoAction_t;
 
 typedef enum {

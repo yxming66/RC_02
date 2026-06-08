@@ -407,6 +407,119 @@ static void AutoCtrlFeed_RememberSickCorrectAction(
   auto_action_last_subsystem = PC_AUTO_ACTION_SUBSYSTEM_SICK_CORRECT;
 }
 
+static AutoSickCorrect_PointParams_t *AutoCtrlFeed_SickCorrectParamsForAction(
+    AutoSickCorrect_Action_t action) {
+  switch (action) {
+    case AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD:
+      return &auto_sick_correct_ctrl.param.rod_spearhead;
+    case AUTO_SICK_CORRECT_ACTION_ORE_RELEASE:
+      return &auto_sick_correct_ctrl.param.ore_release;
+    case AUTO_SICK_CORRECT_ACTION_NONE:
+    default:
+      return NULL;
+  }
+}
+
+static void AutoCtrlFeed_CopySickCorrectParamToDebug(
+    const AutoSickCorrect_PointParams_t *param) {
+  if (param == NULL) {
+    return;
+  }
+
+  g_auto_ore_debug.auto_sick_correct_x_target_adc = param->x_target_adc;
+  g_auto_ore_debug.auto_sick_correct_y_target_adc = param->y_target_adc;
+  g_auto_ore_debug.auto_sick_correct_z_target_diff_adc =
+      param->yaw_target_diff_adc;
+  g_auto_ore_debug.auto_sick_correct_x_kp_mps_per_adc =
+      param->x_kp_mps_per_adc;
+  g_auto_ore_debug.auto_sick_correct_y_kp_mps_per_adc =
+      param->y_kp_mps_per_adc;
+  g_auto_ore_debug.auto_sick_correct_z_kp_rad_s_per_adc =
+      param->yaw_kp_rad_s_per_adc;
+}
+
+static void AutoCtrlFeed_InitSickCorrectDebugOverride(
+    const AutoSickCorrect_PointParams_t *param) {
+  if (param == NULL) {
+    return;
+  }
+
+  g_auto_ore_debug.auto_sick_correct_override_x_target_adc =
+      param->x_target_adc;
+  g_auto_ore_debug.auto_sick_correct_override_y_target_adc =
+      param->y_target_adc;
+  g_auto_ore_debug.auto_sick_correct_override_z_target_diff_adc =
+      param->yaw_target_diff_adc;
+  g_auto_ore_debug.auto_sick_correct_override_x_kp_mps_per_adc =
+      param->x_kp_mps_per_adc;
+  g_auto_ore_debug.auto_sick_correct_override_y_kp_mps_per_adc =
+      param->y_kp_mps_per_adc;
+  g_auto_ore_debug.auto_sick_correct_override_z_kp_rad_s_per_adc =
+      param->yaw_kp_rad_s_per_adc;
+}
+
+static void AutoCtrlFeed_LoadSickCorrectConfigParams(void) {
+  Config_RobotParam_t *cfg = Config_GetRobotParam();
+  if (cfg == NULL) {
+    return;
+  }
+
+  auto_sick_correct_ctrl.param = cfg->auto_ctrl_param.sick_correct;
+}
+
+static void AutoCtrlFeed_ApplySickCorrectDebugOverride(
+    AutoSickCorrect_Action_t action) {
+  if (!g_auto_ore_debug.auto_sick_correct_param_override_enable) {
+    return;
+  }
+
+  AutoSickCorrect_PointParams_t *param =
+      AutoCtrlFeed_SickCorrectParamsForAction(action);
+  if (param == NULL) {
+    return;
+  }
+
+  const float x_target_adc =
+      g_auto_ore_debug.auto_sick_correct_override_x_target_adc;
+  const float y_target_adc =
+      g_auto_ore_debug.auto_sick_correct_override_y_target_adc;
+  const float z_target_diff_adc =
+      g_auto_ore_debug.auto_sick_correct_override_z_target_diff_adc;
+  const float x_kp_mps_per_adc =
+      g_auto_ore_debug.auto_sick_correct_override_x_kp_mps_per_adc;
+  const float y_kp_mps_per_adc =
+      g_auto_ore_debug.auto_sick_correct_override_y_kp_mps_per_adc;
+  const float z_kp_rad_s_per_adc =
+      g_auto_ore_debug.auto_sick_correct_override_z_kp_rad_s_per_adc;
+
+  if (isfinite(x_target_adc)) {
+    param->x_target_adc = x_target_adc;
+  }
+  if (isfinite(y_target_adc)) {
+    param->y_target_adc = y_target_adc;
+  }
+  if (isfinite(z_target_diff_adc)) {
+    param->yaw_target_diff_adc = z_target_diff_adc;
+  }
+  if (isfinite(x_kp_mps_per_adc)) {
+    param->x_kp_mps_per_adc = x_kp_mps_per_adc;
+  }
+  if (isfinite(y_kp_mps_per_adc)) {
+    param->y_kp_mps_per_adc = y_kp_mps_per_adc;
+  }
+  if (isfinite(z_kp_rad_s_per_adc)) {
+    param->yaw_kp_rad_s_per_adc = z_kp_rad_s_per_adc;
+  }
+}
+
+static void AutoCtrlFeed_PrepareSickCorrectParams(
+    AutoSickCorrect_Action_t action) {
+  AutoCtrlFeed_LoadSickCorrectConfigParams();
+  AutoCtrlFeed_ApplySickCorrectDebugOverride(action);
+  AutoCtrlFeed_CopySickCorrectParamToDebug(
+      AutoCtrlFeed_SickCorrectParamsForAction(action));
+}
+
 static PC_AutoAction_t AutoCtrlFeed_GetOreFeedbackAction(void) {
   PC_AutoAction_t action = AutoCtrlFeed_MapOreAction(auto_ore_ctrl.action);
   if (action == PC_AUTO_ACTION_NONE) {
@@ -477,6 +590,7 @@ static bool AutoCtrlFeed_StartSickCorrectAction(
 
   bool result = false;
   const uint32_t now_ms = osKernelGetTickCount();
+  AutoCtrlFeed_PrepareSickCorrectParams(action);
   switch (action) {
     case AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD:
       result = AutoSickCorrect_StartRodSpearhead(&auto_sick_correct_ctrl,
@@ -866,6 +980,10 @@ static void AutoCtrlFeed_InitAutoSickCorrect(void) {
 
   AutoSickCorrect_Init(&auto_sick_correct_ctrl,
                        &cfg->auto_ctrl_param.sick_correct);
+  AutoCtrlFeed_InitSickCorrectDebugOverride(
+      &auto_sick_correct_ctrl.param.rod_spearhead);
+  AutoCtrlFeed_CopySickCorrectParamToDebug(
+      &auto_sick_correct_ctrl.param.rod_spearhead);
   auto_sick_correct_inited = true;
 }
 
@@ -914,6 +1032,13 @@ static void AutoCtrlFeed_UpdateAutoSickCorrect(uint32_t now_ms) {
       auto_sick_correct_ctrl.chassis_cmd.ctrl_vec.wz;
   g_auto_ore_debug.auto_sick_correct_pole_target_lift =
       auto_sick_correct_ctrl.pole_cmd.auto_target_lift[0];
+  const AutoSickCorrect_PointParams_t *active_param =
+      AutoCtrlFeed_SickCorrectParamsForAction(
+          AutoSickCorrect_GetAction(&auto_sick_correct_ctrl));
+  if (active_param == NULL) {
+    active_param = &auto_sick_correct_ctrl.param.rod_spearhead;
+  }
+  AutoCtrlFeed_CopySickCorrectParamToDebug(active_param);
 }
 
 bool Task_AutoOreStartStore(void) {

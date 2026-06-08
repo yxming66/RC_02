@@ -52,15 +52,15 @@ typedef struct {
   uint8_t right_index;
   uint16_t valid_adc_min;
   uint16_t valid_adc_max;
-  float x_target_adc;
-  float y_target_adc;
-  float yaw_target_diff_adc;
+  float x_target_adc;           /* x correction standard ADC. */
+  float y_target_adc;           /* y correction standard ADC. */
+  float yaw_target_diff_adc;    /* z/yaw target: front-left - front-right ADC. */
   float x_tolerance_adc;
   float y_tolerance_adc;
   float yaw_tolerance_adc;
   float x_kp_mps_per_adc;
   float y_kp_mps_per_adc;
-  float yaw_kp_rad_s_per_adc;
+  float yaw_kp_rad_s_per_adc;   /* z/yaw correction gain to chassis wz. */
   float vx_limit_mps;
   float vy_limit_mps;
   float wz_limit_rad_s;

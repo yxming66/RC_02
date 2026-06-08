@@ -357,12 +357,13 @@ void Task_pc_comm(void *argument) {
             last_tx_tick = now;
         }
 
-        if (auto_ctrl_inited &&
-            g_pc_command_source == PC_COMMAND_SOURCE_PC &&
+        if (g_pc_command_source == PC_COMMAND_SOURCE_PC &&
             MrlinkPc_IsPCControlMode()) {
             const bool auto_action_pending = PcComm_ProcessAutoActionCommand();
             const PC_AutoStepParams_t *step_params =
-                auto_action_pending ? NULL : MrlinkPc_GetAutoStepParams();
+                (auto_ctrl_inited && !auto_action_pending)
+                    ? MrlinkPc_GetAutoStepParams()
+                    : NULL;
             if (step_params != NULL && !AutoCtrl_IsBusy(&auto_ctrl) &&
                 !(auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl)) &&
                 !Task_AutoRodSpearheadIsBusy() &&

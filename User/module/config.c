@@ -373,7 +373,9 @@ Config_RobotParam_t robot_config = {
             .sick_assist_max_rad = 0.35f,    /* SICK yaw 辅助角限幅，单位 rad。 */
             .sick_assist_gain = 1.0f,        /* SICK yaw 辅助量融合增益。 */
         },
-        /* Tune x/y target ADC before enabling; 0 rejects start as invalid. */
+        /* SICK spearhead correction. Tune x/y standard ADC before enabling;
+         * 0 keeps start rejected as invalid. z coefficient maps yaw ADC diff
+         * error to chassis wz. */
         .sick_correct = {
             .rod_spearhead = {
                 .left_index = 0u,
