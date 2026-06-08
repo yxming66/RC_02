@@ -376,6 +376,7 @@ void Task_ore_store(void *argument) {
 
     task_runtime.stack_water_mark.ore_store =
         uxTaskGetStackHighWaterMark(NULL);
+    task_runtime.heartbeat.ore_store++;
     osDelayUntil(tick);
   }
 }

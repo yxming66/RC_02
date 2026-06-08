@@ -1455,6 +1455,7 @@ void Task_rc_main(void *argument) {
     last_sw_l = dr16.data.sw_l;
     last_sw_r = dr16.data.sw_r;
     task_runtime.stack_water_mark.rc_main = uxTaskGetStackHighWaterMark(NULL);
+    task_runtime.heartbeat.rc_main++;
     osDelayUntil(tick);
   }
 }

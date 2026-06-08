@@ -383,6 +383,7 @@ void Task_pc_comm(void *argument) {
         }
 
         MrlinkPc_DebugUpdate();
+        task_runtime.heartbeat.pc_comm++;
         osDelay(PC_COMM_LOOP_PERIOD_MS);
     }
 }

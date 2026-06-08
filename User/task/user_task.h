@@ -231,6 +231,22 @@ typedef struct {
 
     /* USER CONFIG END */
 
+    /* Heartbeat counters for debugger/watch-window task liveness checks. */
+    struct {
+        volatile uint32_t init;
+        volatile uint32_t blink;
+        volatile uint32_t atti_esti;
+        volatile uint32_t chassis_main;
+        volatile uint32_t rc_main;
+        volatile uint32_t sick;
+        volatile uint32_t auto_ctrl;
+        volatile uint32_t arm_simple;
+        volatile uint32_t rod;
+        volatile uint32_t pc_comm;
+        volatile uint32_t ore_store;
+        volatile uint32_t ir_dock;
+    } heartbeat;
+
     /* 各任务的stack使用 */
     struct {
         UBaseType_t blink;

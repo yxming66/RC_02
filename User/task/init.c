@@ -22,6 +22,8 @@
 void Task_Init(void *argument) {
   (void)argument;
 
+  task_runtime.heartbeat.init++;
+
             BSP_GPIO_WritePin(BSP_GPIO_POWER_24V_1, 1);
   BSP_GPIO_WritePin(BSP_GPIO_POWER_24V_2, 1);
   BSP_GPIO_WritePin(BSP_GPIO_POWER_5V, 1);
@@ -39,6 +41,8 @@ void Task_Init(void *argument) {
     task_runtime.thread.rod = osThreadNew(Task_rod, NULL, &attr_rod);
     task_runtime.thread.ore_store = osThreadNew(Task_ore_store, NULL, &attr_ore_store);
     task_runtime.thread.ir_dock = osThreadNew(Task_ir_dock, NULL, &attr_ir_dock);
+
+  task_runtime.heartbeat.init++;
 
   task_runtime.msgq.chassis.imu =
       osMessageQueueNew(1u, sizeof(Chassis_IMU_t), NULL);
@@ -58,6 +62,8 @@ void Task_Init(void *argument) {
   BUZZER_Init(&buzzer, BSP_PWM_BUZZER);
 
     SharedValve_Init(BSP_GPIO_ROD_SOLENOID);
+
+  task_runtime.heartbeat.init++;
 
 
 

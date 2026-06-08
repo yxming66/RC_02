@@ -70,6 +70,7 @@ void Task_rod(void *argument) {
     SharedValve_Output();
 
     task_runtime.stack_water_mark.rod = uxTaskGetStackHighWaterMark(NULL);
+    task_runtime.heartbeat.rod++;
     osDelayUntil(tick);
   }
 }

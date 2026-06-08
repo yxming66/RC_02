@@ -22,6 +22,7 @@ void Task_ir_dock(void *argument) {
     IrDock_Process(now_ms);
 
     task_runtime.stack_water_mark.ir_dock = uxTaskGetStackHighWaterMark(NULL);
+    task_runtime.heartbeat.ir_dock++;
     osDelayUntil(tick);
   }
 }

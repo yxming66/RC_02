@@ -156,6 +156,7 @@ extern "C" void Task_chassis_main(void *argument) {
 
     task_runtime.stack_water_mark.chassis_main =
         uxTaskGetStackHighWaterMark(nullptr);
+    task_runtime.heartbeat.chassis_main++;
     osDelayUntil(tick);
   }
 }

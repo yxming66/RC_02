@@ -1186,6 +1186,7 @@ void Task_auto_ctrl(void *argument) {
     }
 
     task_runtime.stack_water_mark.auto_ctrl = uxTaskGetStackHighWaterMark(NULL);
+    task_runtime.heartbeat.auto_ctrl++;
     osDelayUntil(tick);
   }
 }
