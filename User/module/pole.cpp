@@ -371,12 +371,20 @@ int8_t Pole_Control(Pole_t *c, const Pole_CMD_t *c_cmd, uint32_t now) {
   float out[4];
   for (uint8_t i = 0; i < POLE_SUPPORT_MOTOR_NUM; i++) {
     float fb_angle = Pole_GetSupportAngle(c, i);
-     vel[i] = PID_Calc(&c->pid.support_pos[i], c->setpoint.support_target_angle[i],
-                         fb_angle, 0.0f, c->dt);
-     out[i] = PID_Calc(&c->pid.support_vel[i], vel[i], 
+    vel[i] = PID_Calc(&c->pid.support_pos[i],
+                      c->setpoint.support_target_angle[i], fb_angle, 0.0f,
+                      c->dt);
+    out[i] = PID_Calc(&c->pid.support_vel[i], vel[i], 
                         c->feedback.motor[i].rotor_speed, 0.0f, c->dt);
     c->out.motor[i] = mr::component::math::clamp_scalar(out[i], -c->param->limit.max_current,
                                  c->param->limit.max_current);
+    if ((fb_angle <= c->support_angle.lower[i] + kPoleLiftLimitEpsilon &&
+         c->out.motor[i] < 0.0f) ||
+        (fb_angle >= c->support_angle.upper[i] - kPoleLiftLimitEpsilon &&
+         c->out.motor[i] > 0.0f)) {
+      c->out.motor[i] = 0.0f;
+      PID_Reset(&c->pid.support_vel[i]);
+    }
     c->debug.target_angle_rad[i] = c->setpoint.support_target_angle[i];
     c->debug.feedback_angle_rad[i] = fb_angle;
     c->debug.feedback_speed_rad_s[i] = c->feedback.motor[i].rotor_speed;

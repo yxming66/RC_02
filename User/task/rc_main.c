@@ -1357,6 +1357,13 @@ static float Rc_SelectLocalAutoTargetYawRad(float head_yaw_rad,
   return AutoCtrlMath_NearestCardinalYawRad(head_yaw_rad);
 }
 
+static bool Rc_AutoCtrlTemplateIsAscend(auto_ctrl_template_e template_id) {
+  return template_id == AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD ||
+         template_id == AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD ||
+         template_id == AUTO_CTRL_TEMPLATE_ASCEND_200_TAIL ||
+         template_id == AUTO_CTRL_TEMPLATE_ASCEND_400_TAIL;
+}
+
 static void Rc_TryStartAutoCtrlBySwitch(uint32_t now_ms) {
   if (!dr16.header.online || !auto_ctrl_inited || AutoCtrl_IsBusy(&auto_ctrl) ||
       (auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl)) ||
@@ -1378,10 +1385,13 @@ static void Rc_TryStartAutoCtrlBySwitch(uint32_t now_ms) {
     target_yaw_rad =
         Rc_SelectLocalAutoTargetYawRad(auto_ctrl.feedback.yaw_auto_rad,
                                        config.travel_dir);
+    const auto_ctrl_sensor_mode_e sensor_mode =
+        Rc_AutoCtrlTemplateIsAscend(config.template_id)
+            ? AUTO_CTRL_SENSOR_MODE_YAW_ONLY
+            : AUTO_CTRL_SENSOR_MODE_SICK_FRONT_AND_BOTTOM;
     g_rc_control_debug.auto_200_start_ok = AutoCtrl_StartTemplate(
         &auto_ctrl, config.template_id, config.travel_dir,
-        target_yaw_rad, AUTO_CTRL_RC_YAW_TOLERANCE_RAD,
-        AUTO_CTRL_SENSOR_MODE_SICK_FRONT_AND_BOTTOM, now_ms);
+        target_yaw_rad, AUTO_CTRL_RC_YAW_TOLERANCE_RAD, sensor_mode, now_ms);
   }
 } 
 /* USER STRUCT END */

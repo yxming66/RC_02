@@ -92,12 +92,12 @@ Config_RobotParam_t robot_config = {
         },
         .pid = {
             .support_pos_pid = {
-                .k = 25.0f,
+                .k = 15.0f,
                 .p = 10.0f,
                 .i = 0.0f,
                 .d = 0.0f,
                 .i_limit = 0.15f,
-                .out_limit = 500.0f,
+                .out_limit = 300.0f,
                 .d_cutoff_freq = -1.0f,
                 .range = 0.0f,
             },
