@@ -27,6 +27,8 @@ constexpr float kMaxDtS = 0.050f;
 constexpr float kMinWheelSpeedMps = 1e-4f;
 constexpr float kMinWheelRadiusM = 1e-4f;
 constexpr float kHoldCommandDeadband = 1e-4f;
+constexpr bool kZeroCommandWheelPositionHoldEnabled = false;
+constexpr float kDefaultStaticFrictionDeadbandMps = 0.01f;
 
 mr::robotics::chassis::MecanumGeometry MakeMecanumGeometry(
     const Chassis_Params_t *param) {
@@ -107,6 +109,29 @@ float RotorSign(float stored_sign, Chassis_RotorMode_t mode) {
 
 bool IsSameSign(float a, float b) {
   return (a >= 0.0f && b >= 0.0f) || (a <= 0.0f && b <= 0.0f);
+}
+
+float StaticFrictionFeedforward(const Chassis_Params_t *param,
+                                float ref_speed_mps) {
+  if (param == nullptr || !scalar::is_finite_scalar(ref_speed_mps)) {
+    return 0.0f;
+  }
+
+  const float compensation_nm = param->controller.wheel_static_friction_nm;
+  if (!scalar::is_positive_scalar(compensation_nm)) {
+    return 0.0f;
+  }
+
+  float deadband_mps = param->controller.wheel_static_friction_deadband_mps;
+  if (!scalar::is_positive_scalar(deadband_mps)) {
+    deadband_mps = kDefaultStaticFrictionDeadbandMps;
+  }
+
+  if (std::fabs(ref_speed_mps) <= deadband_mps) {
+    return 0.0f;
+  }
+
+  return (ref_speed_mps > 0.0f) ? compensation_nm : -compensation_nm;
 }
 
 }  // namespace
@@ -263,6 +288,7 @@ int8_t MecanumController::Control(const Chassis_CMD_t &cmd, uint32_t now) {
     debug_.wheel_speed_ref_mps[i] = ref_speed;
     debug_.wheel_speed_fdb_mps[i] = raw_feedback;
     debug_.wheel_speed_fdb_filtered_mps[i] = feedback;
+    debug_.wheel_static_friction_ff_nm[i] = 0.0f;
 
     switch (mode_) {
       case CHASSIS_MODE_BREAK:
@@ -272,6 +298,9 @@ int8_t MecanumController::Control(const Chassis_CMD_t &cmd, uint32_t now) {
       case CHASSIS_MODE_INDEPENDENT:
         torque_cmd =
             PID_Calc(&wheel_pid_[i], ref_speed, feedback, 0.0f, dt_);
+        debug_.wheel_static_friction_ff_nm[i] =
+            StaticFrictionFeedforward(param_, ref_speed);
+        torque_cmd += debug_.wheel_static_friction_ff_nm[i];
         break;
       case CHASSIS_MODE_OPEN:
         torque_cmd = ref_speed /
@@ -555,6 +584,12 @@ float MecanumController::PlanWheelStartSpeed(uint8_t idx,
 }
 
 bool MecanumController::ShouldHoldZeroCommand() const {
+  // Keep idle active chassis in velocity-loop zero. Wheel position hold can
+  // saturate on encoder position jumps or normal chassis coast after stick release.
+  if (!kZeroCommandWheelPositionHoldEnabled) {
+    return false;
+  }
+
   if (mode_ == CHASSIS_MODE_RELAX || mode_ == CHASSIS_MODE_BREAK) {
     return false;
   }

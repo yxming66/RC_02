@@ -557,6 +557,26 @@ static PC_AutoAction_t AutoCtrlFeed_GetOreFeedbackAction(void) {
   return action;
 }
 
+static PC_AutoAction_t AutoCtrlFeed_GetRodSpearheadFeedbackAction(void) {
+  PC_AutoAction_t action = AutoCtrlFeed_MapRodAction(
+      AutoRodSpearhead_GetAction(&auto_rod_spearhead_ctrl));
+  if (action == PC_AUTO_ACTION_NONE &&
+      auto_action_last_subsystem == PC_AUTO_ACTION_SUBSYSTEM_ROD_SPEARHEAD) {
+    action = auto_action_last_action;
+  }
+  return action;
+}
+
+static PC_AutoAction_t AutoCtrlFeed_GetSickCorrectFeedbackAction(void) {
+  PC_AutoAction_t action = AutoCtrlFeed_MapSickCorrectAction(
+      AutoSickCorrect_GetAction(&auto_sick_correct_ctrl));
+  if (action == PC_AUTO_ACTION_NONE &&
+      auto_action_last_subsystem == PC_AUTO_ACTION_SUBSYSTEM_SICK_CORRECT) {
+    action = auto_action_last_action;
+  }
+  return action;
+}
+
 static bool AutoCtrlFeed_StartOreAction(AutoOre_Action_t action) {
   if (!auto_ore_inited) {
     return false;
@@ -681,6 +701,8 @@ static void AutoCtrlFeed_PublishAutoActionFeedback(void) {
           AutoRodSpearhead_GetAction(&auto_rod_spearhead_ctrl));
     }
 
+    pc_feedback.rod_action =
+        (uint8_t)AutoCtrlFeed_GetRodSpearheadFeedbackAction();
     pc_feedback.rod_state = (uint8_t)AutoCtrlFeed_MapRodState(
         AutoRodSpearhead_GetState(&auto_rod_spearhead_ctrl));
     pc_feedback.rod_result = (uint8_t)AutoCtrlFeed_MapRodResult(
@@ -698,6 +720,20 @@ static void AutoCtrlFeed_PublishAutoActionFeedback(void) {
       AutoCtrlFeed_RememberSickCorrectAction(
           AutoSickCorrect_GetAction(&auto_sick_correct_ctrl));
     }
+    if (g_auto_ore_debug.auto_sick_correct_pole_all_at_target) {
+      pc_feedback.flags |= PC_AUTO_ACTION_FLAG_SICK_CORRECT_POLE_AT_TARGET;
+    }
+
+    pc_feedback.sick_action =
+        (uint8_t)AutoCtrlFeed_GetSickCorrectFeedbackAction();
+    pc_feedback.sick_state = (uint8_t)AutoCtrlFeed_MapSickCorrectState(
+        AutoSickCorrect_GetState(&auto_sick_correct_ctrl));
+    pc_feedback.sick_result = (uint8_t)AutoCtrlFeed_MapSickCorrectResult(
+        AutoSickCorrect_GetResult(&auto_sick_correct_ctrl));
+    pc_feedback.sick_fault = (uint8_t)AutoCtrlFeed_MapSickCorrectFault(
+        AutoSickCorrect_GetFault(&auto_sick_correct_ctrl));
+    pc_feedback.sick_step_index =
+        AutoSickCorrect_GetStepIndex(&auto_sick_correct_ctrl);
   }
 
   PC_AutoActionSubsystem_t active_subsystem = PC_AUTO_ACTION_SUBSYSTEM_NONE;
@@ -733,12 +769,7 @@ static void AutoCtrlFeed_PublishAutoActionFeedback(void) {
   } else if (active_subsystem ==
              PC_AUTO_ACTION_SUBSYSTEM_ROD_SPEARHEAD &&
              auto_rod_spearhead_inited) {
-    const PC_AutoAction_t rod_action = AutoCtrlFeed_MapRodAction(
-        AutoRodSpearhead_GetAction(&auto_rod_spearhead_ctrl));
-    pc_feedback.action =
-        (uint8_t)((rod_action != PC_AUTO_ACTION_NONE)
-                      ? rod_action
-                      : auto_action_last_action);
+    pc_feedback.action = (uint8_t)pc_feedback.rod_action;
     pc_feedback.state = pc_feedback.rod_state;
     pc_feedback.result = pc_feedback.rod_result;
     pc_feedback.fault = pc_feedback.rod_fault;
@@ -748,16 +779,11 @@ static void AutoCtrlFeed_PublishAutoActionFeedback(void) {
     pc_feedback.occupancy_mask = 0u;
   } else if (active_subsystem == PC_AUTO_ACTION_SUBSYSTEM_SICK_CORRECT &&
              auto_sick_correct_inited) {
-    pc_feedback.action = (uint8_t)AutoCtrlFeed_MapSickCorrectAction(
-        AutoSickCorrect_GetAction(&auto_sick_correct_ctrl));
-    pc_feedback.state = (uint8_t)AutoCtrlFeed_MapSickCorrectState(
-        AutoSickCorrect_GetState(&auto_sick_correct_ctrl));
-    pc_feedback.result = (uint8_t)AutoCtrlFeed_MapSickCorrectResult(
-        AutoSickCorrect_GetResult(&auto_sick_correct_ctrl));
-    pc_feedback.fault = (uint8_t)AutoCtrlFeed_MapSickCorrectFault(
-        AutoSickCorrect_GetFault(&auto_sick_correct_ctrl));
-    pc_feedback.step_index =
-        AutoSickCorrect_GetStepIndex(&auto_sick_correct_ctrl);
+    pc_feedback.action = (uint8_t)pc_feedback.sick_action;
+    pc_feedback.state = pc_feedback.sick_state;
+    pc_feedback.result = pc_feedback.sick_result;
+    pc_feedback.fault = pc_feedback.sick_fault;
+    pc_feedback.step_index = pc_feedback.sick_step_index;
     pc_feedback.step_phase = 0u;
     pc_feedback.active_position = 0u;
     pc_feedback.occupancy_mask = 0u;
@@ -1049,6 +1075,7 @@ static void AutoCtrlFeed_UpdateAutoSickCorrect(uint32_t now_ms) {
     sick_feedback.adc_raw[i] = auto_ctrl_sick_output.adc_raw[i];
     sick_feedback.valid[i] = auto_ctrl_sick_output.valid[i];
   }
+  sick_feedback.pole_all_at_target = feedback.pole_all_at_target;
 
   AutoSickCorrect_Update(&auto_sick_correct_ctrl, &sick_feedback, now_ms);
 
@@ -1064,6 +1091,8 @@ static void AutoCtrlFeed_UpdateAutoSickCorrect(uint32_t now_ms) {
       AutoSickCorrect_GetAction(&auto_sick_correct_ctrl);
   g_auto_ore_debug.auto_sick_correct_step_index =
       AutoSickCorrect_GetStepIndex(&auto_sick_correct_ctrl);
+  g_auto_ore_debug.auto_sick_correct_pole_all_at_target =
+      sick_feedback.pole_all_at_target;
   g_auto_ore_debug.auto_sick_correct_x_sample_adc =
       auto_sick_correct_ctrl.x_sample_adc;
   g_auto_ore_debug.auto_sick_correct_y_sample_adc =

@@ -265,6 +265,20 @@ void AutoSickCorrect_Update(AutoSickCorrect_t *ctrl,
 
   AutoSickCorrect_CommandPole(ctrl, param);
 
+  if (feedback == 0 || !feedback->pole_all_at_target) {
+    ctrl->step_index = 0u;
+    AutoSickCorrect_CommandChassis(ctrl, 0.0f, 0.0f, 0.0f);
+    ctrl->stable_since_ms = 0u;
+    if ((now_ms - ctrl->start_time_ms) >= AutoSickCorrect_TimeoutMs(param)) {
+      AutoSickCorrect_Finish(ctrl, AUTO_SICK_CORRECT_RESULT_FAIL,
+                             AUTO_SICK_CORRECT_FAULT_TIMEOUT,
+                             AUTO_SICK_CORRECT_STATE_FAIL);
+    }
+    return;
+  }
+
+  ctrl->step_index = 1u;
+
   if (!AutoSickCorrect_FeedbackValid(feedback, param)) {
     AutoSickCorrect_CommandChassis(ctrl, 0.0f, 0.0f, 0.0f);
     ctrl->stable_since_ms = 0u;

@@ -154,6 +154,7 @@ typedef struct {
     volatile AutoSickCorrect_Fault_t auto_sick_correct_fault;
     volatile AutoSickCorrect_Action_t auto_sick_correct_action;
     volatile uint8_t auto_sick_correct_step_index;
+    volatile bool auto_sick_correct_pole_all_at_target;
     volatile float auto_sick_correct_x_sample_adc;
     volatile float auto_sick_correct_y_sample_adc;
     volatile float auto_sick_correct_yaw_sample_diff_adc;

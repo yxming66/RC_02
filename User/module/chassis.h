@@ -96,6 +96,8 @@ typedef struct {
   struct {
     float sample_freq;
     float wheel_start_accel_mps2; /* Wheel ref accel limit for soft start; <=0 disables. */
+    float wheel_static_friction_nm; /* Static friction torque feedforward per wheel; <=0 disables. */
+    float wheel_static_friction_deadband_mps; /* Ref wheel speed deadband for static friction FF. */
   } controller;
   struct {
     float lateral_vy_to_wz_feedforward; /* wz_ff = gain * vy, rad/m. */
@@ -149,6 +151,7 @@ typedef struct {
   float wheel_speed_fdb_mps[4];
   float wheel_speed_fdb_filtered_mps[4];
   float wheel_torque_pid_out[4];
+  float wheel_static_friction_ff_nm[4];
   float wheel_torque_cmd_nm[4];
   float wheel_motor_velocity_rad_s[4];
   float wheel_motor_torque_nm[4];

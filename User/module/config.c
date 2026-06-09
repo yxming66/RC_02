@@ -72,6 +72,8 @@ Config_RobotParam_t robot_config = {
         .controller = {
             .sample_freq = 1000.0f,
             .wheel_start_accel_mps2 = 0.0f,
+            .wheel_static_friction_nm = 0.5f,
+            .wheel_static_friction_deadband_mps = 0.01f,
         },
         .front_omni_rear_mecanum = {
             .lateral_vy_to_wz_feedforward = 0.10f,//1.1f不会偏航会有-vx
@@ -407,24 +409,24 @@ Config_RobotParam_t robot_config = {
                 .right_index = 3u,                   /* 右侧 SICK ADC 通道。 */
                 .valid_adc_min = 100u,               /* 有效 ADC 下限，低于认为传感器无效。 */
                 .valid_adc_max = 32100u,             /* 有效 ADC 上限，高于认为传感器无效。 */
-                .x_target_adc = 4724,    /* x 方向目标 ADC，前左/前右均值应收敛到这里。 */
-                .y_left_target_adc = 1055.0f,        /* 左侧 SICK 为近端时的 y 目标 ADC。 */
-                .y_right_target_adc = 1055.0f,       /* 右侧 SICK 为近端时的 y 目标 ADC。 */
+                .x_target_adc = 4778,    /* x 方向目标 ADC，前左/前右均值应收敛到这里。 */
+                .y_left_target_adc = 2048.0f,        /* 左侧 SICK 为近端时的 y 目标 ADC。 */
+                .y_right_target_adc = 1048.0f,       /* 右侧 SICK 为近端时的 y 目标 ADC。 */
                 .yaw_target_diff_adc = 0.0f,         /* yaw/z 目标差值 ADC：前左 - 前右。 */
                 .x_tolerance_adc = 5.0f,            /* x 误差小于该值认为 x 到位。 */
-                .y_tolerance_adc = 5.0f,            /* y 误差小于该值认为 y 到位。 */
-                .yaw_tolerance_adc = 30.0f,          /* yaw/z 误差小于该值认为姿态到位。 */
-                .x_kp_mps_per_adc = -0.001f,         /* x ADC 误差到 vx(m/s) 的比例系数。 */
-                .y_kp_mps_per_adc = 0.001f,         /* y ADC 误差到 vy(m/s) 的比例系数。 */
-                .yaw_kp_rad_s_per_adc = 0.0020f,     /* yaw/z ADC 误差到 wz(rad/s) 的比例系数。 */
+                .y_tolerance_adc = 10.0f,            /* y 误差小于该值认为 y 到位。 */
+                .yaw_tolerance_adc = 10.0f,          /* yaw/z 误差小于该值认为姿态到位。 */
+                .x_kp_mps_per_adc = -0.0005f,         /* x ADC 误差到 vx(m/s) 的比例系数。 */
+                .y_kp_mps_per_adc = 0.0019f,       /* y ADC 误差到 vy(m/s) 的比例系数。 */
+                .yaw_kp_rad_s_per_adc = 0.0017f,     /* yaw/z ADC 误差到 wz(rad/s) 的比例系数。 */
                 .vx_limit_mps = 0.30f,               /* vx 指令限幅，单位 m/s。 */
                 .vy_limit_mps = 0.30f,               /* vy 指令限幅，单位 m/s。 */
                 .wz_limit_rad_s = 0.80f,             /* wz 指令限幅，单位 rad/s。 */
                 .pole_target_lift = 2.0f,            /* 校正时撑杆目标高度/角度。 */
                 .pole_speed = 50.0f,                 /* 校正时撑杆运动速度。 */
-                .finish_stable_ms = 1000u,            /* 全部误差到位后保持多久才判成功。 */
+                .finish_stable_ms = 100u,            /* 全部误差到位后保持多久才判成功。 */
                 .timeout_ms = 10000u,                 /* 校正总超时，单位 ms。 */
-            },
+            }, 
             /* Reserved for SICK correction before ore release.
              * The current AutoSickCorrect_StartOreRelease path returns
              * unsupported, so these values are kept as placeholders. */

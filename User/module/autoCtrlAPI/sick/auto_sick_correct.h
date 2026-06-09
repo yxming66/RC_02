@@ -79,6 +79,7 @@ typedef struct {
 typedef struct {
   uint16_t adc_raw[AUTO_SICK_CORRECT_SENSOR_COUNT];
   bool valid[AUTO_SICK_CORRECT_SENSOR_COUNT];
+  bool pole_all_at_target;
 } AutoSickCorrect_Feedback_t;
 
 typedef struct {

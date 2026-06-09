@@ -27,6 +27,7 @@ constexpr float kMaxDtS = 0.050f;
 constexpr float kMinWheelSpeedMps = 1e-4f;
 constexpr float kMinWheelRadiusM = 1e-4f;
 constexpr float kHoldCommandDeadband = 1e-4f;
+constexpr bool kZeroCommandWheelPositionHoldEnabled = false;
 
 mr::robotics::chassis::FrontOmniRearMecanumGeometry
 MakeGeometry(const Chassis_Params_t *param) {
@@ -539,6 +540,12 @@ int8_t FrontOmniRearMecanumController::ComputeWheelSpeeds() {
 }
 
 bool FrontOmniRearMecanumController::ShouldHoldZeroCommand() const {
+  // Keep idle active chassis in velocity-loop zero. Wheel position hold can
+  // saturate on encoder position jumps or normal chassis coast after stick release.
+  if (!kZeroCommandWheelPositionHoldEnabled) {
+    return false;
+  }
+
   if (mode_ == CHASSIS_MODE_RELAX || mode_ == CHASSIS_MODE_BREAK) {
     return false;
   }

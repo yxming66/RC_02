@@ -165,6 +165,7 @@ typedef enum {
 #define PC_AUTO_ACTION_FLAG_ROD_BUSY (1u << 3)
 #define PC_AUTO_ACTION_FLAG_SICK_CORRECT_INITED (1u << 4)
 #define PC_AUTO_ACTION_FLAG_SICK_CORRECT_BUSY (1u << 5)
+#define PC_AUTO_ACTION_FLAG_SICK_CORRECT_POLE_AT_TARGET (1u << 6)
 
 typedef struct {
     uint8_t action;    /* 一键动作类型，见 PC_AutoAction_t */
@@ -282,6 +283,12 @@ typedef struct {
     uint8_t rod_step_index;
     uint8_t flags;
     uint8_t reserved;
+    uint8_t rod_action;
+    uint8_t sick_action;
+    uint8_t sick_state;
+    uint8_t sick_result;
+    uint8_t sick_fault;
+    uint8_t sick_step_index;
 } PC_AutoActionFeedback_t;
 
 typedef enum {

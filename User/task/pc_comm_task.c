@@ -21,7 +21,7 @@
 
 extern volatile PC_CommandSource_t g_pc_command_source;
 
-static uint8_t s_tx_buf[256];
+static uint8_t s_tx_buf[320];
 static volatile bool s_tx_dma_busy = false;
 static volatile uint32_t s_tx_dma_start_tick = 0;
 static const uint8_t s_feedback_cmds[] = {
