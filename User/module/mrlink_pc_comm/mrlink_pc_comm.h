@@ -30,7 +30,7 @@ typedef enum {
     PC_CMD_ROD_NEW = 0x14,       /* 取矛头机构舵机/夹爪控制命令 */
     PC_CMD_ORE_STORE = 0x15,     /* 矿仓平台控制命令 */
     PC_CMD_AUTO_ACTION = 0x16,   /* 一键取矿/存矿/上膛/放矿/取矛头命令 */
-    PC_CMD_CAMERA_YAW = 0x17,    /* Camera yaw hold command */
+    PC_CMD_CAMERA_YAW = 0x17,    /* 相机云台 yaw 保持命令 */
     PC_CMD_IMU = 0x20,           /* PC 下发姿态数据命令 */
 } PC_CMD_t;
 
@@ -43,26 +43,26 @@ typedef enum {
     PC_FEEDBACK_ROD_NEW = 0x94,      /* 取矛头机构状态反馈 */
     PC_FEEDBACK_ORE_STORE = 0x95,    /* 矿仓平台状态反馈 */
     PC_FEEDBACK_STATUS = 0xA0,       /* 通信在线、接收计数、CPU 温度等状态反馈 */
-    PC_FEEDBACK_AUTO_ACTION = 0x96,
-    PC_FEEDBACK_IR_ORE = 0x97,
-    PC_FEEDBACK_CAMERA_YAW = 0x98,
+    PC_FEEDBACK_AUTO_ACTION = 0x96,  /* 一键动作总状态反馈，含矿仓/取矛头/SICK 校正子状态 */
+    PC_FEEDBACK_IR_ORE = 0x97,       /* 红外对接矿种与对接状态反馈 */
+    PC_FEEDBACK_CAMERA_YAW = 0x98,   /* 相机云台 yaw 状态反馈 */
 } PC_FeedbackCMD_t;
 
-#define MRLINK_PC_MAX_PAYLOAD_SIZE (64u)
-#define MRLINK_PC_MAX_FRAME_SIZE (2u + 1u + 1u + MRLINK_PC_MAX_PAYLOAD_SIZE + 2u)
-#define PC_COMM_DEBUG_RX_RAW_SIZE (256u)
-#define PC_COMM_DEBUG_TX_RAW_SIZE (96u)
+#define MRLINK_PC_MAX_PAYLOAD_SIZE (64u)    /* 单帧 payload 最大字节数，上位机结构体不能超过该值 */
+#define MRLINK_PC_MAX_FRAME_SIZE (2u + 1u + 1u + MRLINK_PC_MAX_PAYLOAD_SIZE + 2u) /* 完整 mrlink 帧最大长度：帧头+长度+命令+payload+CRC */
+#define PC_COMM_DEBUG_RX_RAW_SIZE (256u)    /* 调试缓存：最近接收原始数据最大保存字节数 */
+#define PC_COMM_DEBUG_TX_RAW_SIZE (96u)     /* 调试缓存：最近发送原始数据最大保存字节数 */
 
 #ifndef MRLINK_PC_RX_DMA_SLOT_COUNT
-#define MRLINK_PC_RX_DMA_SLOT_COUNT (4u)
+#define MRLINK_PC_RX_DMA_SLOT_COUNT (4u)    /* UART RX DMA 环形接收槽数量 */
 #endif
 
 #ifndef MRLINK_PC_RX_DMA_BUF_SIZE
-#define MRLINK_PC_RX_DMA_BUF_SIZE (256u)
+#define MRLINK_PC_RX_DMA_BUF_SIZE (256u)    /* 每个 UART RX DMA 槽的字节数 */
 #endif
 
 #ifndef MRLINK_PC_RX_STREAM_BUF_SIZE
-#define MRLINK_PC_RX_STREAM_BUF_SIZE (512u)
+#define MRLINK_PC_RX_STREAM_BUF_SIZE (512u) /* mrlink 协议解析流缓冲区字节数 */
 #endif
 
 typedef struct {
@@ -104,9 +104,9 @@ typedef struct {
 } PC_OreStoreCMD_t;
 
 typedef struct {
-    uint8_t mode;              /* 0=relax, 1=active */
-    float target_yaw_rad;      /* Target camera yaw in world frame, rad */
-    float feedback_yaw_rad;    /* Real-time camera yaw feedback in world frame, rad */
+    uint8_t mode;              /* 云台 yaw 控制模式，0=放松，1=闭环保持 */
+    float target_yaw_rad;      /* PC 给定的世界系目标 yaw，单位 rad */
+    float feedback_yaw_rad;    /* PC/视觉侧实时反馈的世界系 yaw，单位 rad */
 } PC_CameraYawCMD_t;
 
 typedef enum {
@@ -119,53 +119,53 @@ typedef enum {
     PC_AUTO_ACTION_PICK_NEG_200 = 6,     /* 一键取反 200mm 矿 */
     PC_AUTO_ACTION_ROD_SPEARHEAD = 7,    /* 一键取矛头 */
     PC_AUTO_ACTION_ABORT = 8,            /* 中止一键动作 */
-    PC_AUTO_ACTION_SICK_CORRECT_ROD_SPEARHEAD = 9, /* SICK correction before rod spearhead pickup */
-    PC_AUTO_ACTION_SICK_CORRECT_ORE_RELEASE = 10,  /* Reserved: SICK correction before ore release */
+    PC_AUTO_ACTION_SICK_CORRECT_ROD_SPEARHEAD = 9, /* 取矛头前 SICK 一键校正 */
+    PC_AUTO_ACTION_SICK_CORRECT_ORE_RELEASE = 10,  /* 放矿前 SICK 一键校正，当前预留/不支持 */
     PC_AUTO_ACTION_ROD_DOCK_WAIT = 11,   /* 取矛头机构等待对接 */
 } PC_AutoAction_t;
 
 typedef enum {
-    PC_AUTO_ACTION_SUBSYSTEM_NONE = 0,
-    PC_AUTO_ACTION_SUBSYSTEM_ORE = 1,
-    PC_AUTO_ACTION_SUBSYSTEM_ROD_SPEARHEAD = 2,
-    PC_AUTO_ACTION_SUBSYSTEM_SICK_CORRECT = 3,
+    PC_AUTO_ACTION_SUBSYSTEM_NONE = 0,             /* 无活跃一键动作子系统 */
+    PC_AUTO_ACTION_SUBSYSTEM_ORE = 1,              /* 矿仓/机械臂取矿一键动作子系统 */
+    PC_AUTO_ACTION_SUBSYSTEM_ROD_SPEARHEAD = 2,    /* 取矛头一键动作子系统 */
+    PC_AUTO_ACTION_SUBSYSTEM_SICK_CORRECT = 3,     /* SICK 一键校正子系统 */
 } PC_AutoActionSubsystem_t;
 
 typedef enum {
-    PC_AUTO_ACTION_STATE_IDLE = 0,
-    PC_AUTO_ACTION_STATE_RUNNING = 1,
-    PC_AUTO_ACTION_STATE_SUCCESS = 2,
-    PC_AUTO_ACTION_STATE_FAIL = 3,
-    PC_AUTO_ACTION_STATE_ABORT = 4,
+    PC_AUTO_ACTION_STATE_IDLE = 0,       /* 空闲，未执行 */
+    PC_AUTO_ACTION_STATE_RUNNING = 1,    /* 正在执行 */
+    PC_AUTO_ACTION_STATE_SUCCESS = 2,    /* 已成功结束 */
+    PC_AUTO_ACTION_STATE_FAIL = 3,       /* 已失败结束 */
+    PC_AUTO_ACTION_STATE_ABORT = 4,      /* 已被中止 */
 } PC_AutoActionState_t;
 
 typedef enum {
-    PC_AUTO_ACTION_RESULT_NONE = 0,
-    PC_AUTO_ACTION_RESULT_RUNNING = 1,
-    PC_AUTO_ACTION_RESULT_SUCCESS = 2,
-    PC_AUTO_ACTION_RESULT_FAIL = 3,
-    PC_AUTO_ACTION_RESULT_ABORTED = 4,
+    PC_AUTO_ACTION_RESULT_NONE = 0,       /* 无结果 */
+    PC_AUTO_ACTION_RESULT_RUNNING = 1,    /* 执行中 */
+    PC_AUTO_ACTION_RESULT_SUCCESS = 2,    /* 执行成功 */
+    PC_AUTO_ACTION_RESULT_FAIL = 3,       /* 执行失败 */
+    PC_AUTO_ACTION_RESULT_ABORTED = 4,    /* 被中止 */
 } PC_AutoActionResult_t;
 
 typedef enum {
-    PC_AUTO_ACTION_FAULT_NONE = 0,
-    PC_AUTO_ACTION_FAULT_INVALID_OCCUPANCY = 1,
-    PC_AUTO_ACTION_FAULT_INVALID_PARAM = 2,
-    PC_AUTO_ACTION_FAULT_NOT_HOMED = 3,
-    PC_AUTO_ACTION_FAULT_TIMEOUT = 4,
-    PC_AUTO_ACTION_FAULT_ABORTED = 5,
-    PC_AUTO_ACTION_FAULT_NO_SPEARHEAD = 6,
-    PC_AUTO_ACTION_FAULT_UNSUPPORTED = 7,
-    PC_AUTO_ACTION_FAULT_SENSOR_INVALID = 8,
+    PC_AUTO_ACTION_FAULT_NONE = 0,                /* 无故障 */
+    PC_AUTO_ACTION_FAULT_INVALID_OCCUPANCY = 1,   /* 矿位占用状态不满足动作条件 */
+    PC_AUTO_ACTION_FAULT_INVALID_PARAM = 2,       /* 参数非法或未配置 */
+    PC_AUTO_ACTION_FAULT_NOT_HOMED = 3,           /* 相关机构未回零 */
+    PC_AUTO_ACTION_FAULT_TIMEOUT = 4,             /* 动作执行超时 */
+    PC_AUTO_ACTION_FAULT_ABORTED = 5,             /* 人为中止 */
+    PC_AUTO_ACTION_FAULT_NO_SPEARHEAD = 6,        /* 取矛头光电未检测到矛头 */
+    PC_AUTO_ACTION_FAULT_UNSUPPORTED = 7,         /* 当前动作预留或暂不支持 */
+    PC_AUTO_ACTION_FAULT_SENSOR_INVALID = 8,      /* SICK/传感器数据无效 */
 } PC_AutoActionFault_t;
 
-#define PC_AUTO_ACTION_FLAG_ORE_INITED (1u << 0)
-#define PC_AUTO_ACTION_FLAG_ORE_BUSY (1u << 1)
-#define PC_AUTO_ACTION_FLAG_ROD_INITED (1u << 2)
-#define PC_AUTO_ACTION_FLAG_ROD_BUSY (1u << 3)
-#define PC_AUTO_ACTION_FLAG_SICK_CORRECT_INITED (1u << 4)
-#define PC_AUTO_ACTION_FLAG_SICK_CORRECT_BUSY (1u << 5)
-#define PC_AUTO_ACTION_FLAG_SICK_CORRECT_POLE_AT_TARGET (1u << 6)
+#define PC_AUTO_ACTION_FLAG_ORE_INITED (1u << 0)                  /* 矿仓一键动作模块已初始化 */
+#define PC_AUTO_ACTION_FLAG_ORE_BUSY (1u << 1)                    /* 矿仓一键动作正在执行 */
+#define PC_AUTO_ACTION_FLAG_ROD_INITED (1u << 2)                  /* 取矛头一键动作模块已初始化 */
+#define PC_AUTO_ACTION_FLAG_ROD_BUSY (1u << 3)                    /* 取矛头一键动作正在执行 */
+#define PC_AUTO_ACTION_FLAG_SICK_CORRECT_INITED (1u << 4)         /* SICK 校正模块已初始化 */
+#define PC_AUTO_ACTION_FLAG_SICK_CORRECT_BUSY (1u << 5)           /* SICK 校正正在执行 */
+#define PC_AUTO_ACTION_FLAG_SICK_CORRECT_POLE_AT_TARGET (1u << 6) /* SICK 校正撑杆已到位，可进入测距校正阶段 */
 
 typedef struct {
     uint8_t action;    /* 一键动作类型，见 PC_AutoAction_t */
@@ -245,57 +245,57 @@ typedef struct {
 } PC_OreStoreFeedback_t;
 
 typedef struct {
-    uint8_t mode;
-    uint8_t motor_online;
-    uint8_t feedback_valid;
-    uint8_t at_target;
-    float target_yaw_rad;
-    float feedback_yaw_rad;
-    float error_yaw_rad;
-    float motor_angle_rad;
-    float motor_velocity_rad_s;
-    float output;
-    uint32_t feedback_age_ms;
+    uint8_t mode;                    /* 云台 yaw 当前模式，0=放松，1=闭环保持 */
+    uint8_t motor_online;            /* 云台 yaw 电机在线标志，0=离线，1=在线 */
+    uint8_t feedback_valid;          /* PC/视觉反馈 yaw 是否有效，0=无效，1=有效 */
+    uint8_t at_target;               /* 目标到位标志，0=未到位，1=已到位 */
+    float target_yaw_rad;            /* 当前目标 yaw，单位 rad */
+    float feedback_yaw_rad;          /* 当前外部反馈 yaw，单位 rad */
+    float error_yaw_rad;             /* 目标 yaw 与反馈 yaw 的误差，单位 rad */
+    float motor_angle_rad;           /* 云台 yaw 电机反馈角度，单位 rad */
+    float motor_velocity_rad_s;      /* 云台 yaw 电机反馈速度，单位 rad/s */
+    float output;                    /* 云台 yaw 控制输出，单位随底层电机控制定义 */
+    uint32_t feedback_age_ms;        /* 外部反馈 yaw 距当前时刻的年龄，单位 ms */
 } PC_CameraYawFeedback_t;
 
 typedef struct {
-    uint8_t action;
-    uint8_t busy;
-    uint8_t subsystem;
-    uint8_t state;
-    uint8_t result;
-    uint8_t fault;
-    uint8_t step_index;
-    uint8_t step_phase;
-    uint8_t active_position;
-    uint8_t occupancy_mask;
-    uint8_t ore_action;
-    uint8_t ore_state;
-    uint8_t ore_result;
-    uint8_t ore_fault;
-    uint8_t ore_step_index;
-    uint8_t ore_step_phase;
-    uint8_t ore_active_position;
-    uint8_t ore_occupancy_mask;
-    uint8_t rod_state;
-    uint8_t rod_result;
-    uint8_t rod_fault;
-    uint8_t rod_step_index;
-    uint8_t flags;
-    uint8_t reserved;
-    uint8_t rod_action;
-    uint8_t sick_action;
-    uint8_t sick_state;
-    uint8_t sick_result;
-    uint8_t sick_fault;
-    uint8_t sick_step_index;
+    uint8_t action;                 /* 当前/最近主一键动作，见 PC_AutoAction_t */
+    uint8_t busy;                   /* 任意一键动作是否正在执行，0=空闲，1=忙 */
+    uint8_t subsystem;              /* 主状态当前对应的子系统，见 PC_AutoActionSubsystem_t */
+    uint8_t state;                  /* 主状态机状态，见 PC_AutoActionState_t */
+    uint8_t result;                 /* 主动作结果，见 PC_AutoActionResult_t */
+    uint8_t fault;                  /* 主动作故障，见 PC_AutoActionFault_t */
+    uint8_t step_index;             /* 主动作当前步骤索引；SICK: 0=等撑杆到位，1=SICK 校正 */
+    uint8_t step_phase;             /* 主动作步骤内部阶段；矿仓动作使用，其它子系统为 0 */
+    uint8_t active_position;        /* 主动作当前矿位，矿仓动作使用，见 AutoOre_Position_t */
+    uint8_t occupancy_mask;         /* 主动作矿位占用 bitmask，矿仓动作使用 */
+    uint8_t ore_action;             /* 矿仓子系统当前/最近动作，见 PC_AutoAction_t */
+    uint8_t ore_state;              /* 矿仓子系统状态，见 PC_AutoActionState_t */
+    uint8_t ore_result;             /* 矿仓子系统结果，见 PC_AutoActionResult_t */
+    uint8_t ore_fault;              /* 矿仓子系统故障，见 PC_AutoActionFault_t */
+    uint8_t ore_step_index;         /* 矿仓子系统当前步骤索引 */
+    uint8_t ore_step_phase;         /* 矿仓子系统当前步骤内部阶段 */
+    uint8_t ore_active_position;    /* 矿仓子系统当前矿位，见 AutoOre_Position_t */
+    uint8_t ore_occupancy_mask;     /* 矿仓子系统矿位占用 bitmask */
+    uint8_t rod_state;              /* 取矛头子系统状态，见 PC_AutoActionState_t */
+    uint8_t rod_result;             /* 取矛头子系统结果，见 PC_AutoActionResult_t */
+    uint8_t rod_fault;              /* 取矛头子系统故障，见 PC_AutoActionFault_t */
+    uint8_t rod_step_index;         /* 取矛头子系统步骤索引；等待对接动作通常为 0 */
+    uint8_t flags;                  /* 一键动作模块状态 bitmask，见 PC_AUTO_ACTION_FLAG_* */
+    uint8_t reserved;               /* 保留字段，发送端固定为 0 */
+    uint8_t rod_action;             /* 取矛头子系统当前/最近动作，见 PC_AutoAction_t */
+    uint8_t sick_action;            /* SICK 校正子系统当前/最近动作，见 PC_AutoAction_t */
+    uint8_t sick_state;             /* SICK 校正子系统状态，见 PC_AutoActionState_t */
+    uint8_t sick_result;            /* SICK 校正子系统结果，见 PC_AutoActionResult_t */
+    uint8_t sick_fault;             /* SICK 校正子系统故障，见 PC_AutoActionFault_t */
+    uint8_t sick_step_index;        /* SICK 校正步骤索引：0=等撑杆到位，1=测距闭环校正 */
 } PC_AutoActionFeedback_t;
 
 typedef enum {
-    PC_ORE_TYPE_UNKNOWN = 0,
-    PC_ORE_TYPE_R1 = 1,
-    PC_ORE_TYPE_R2 = 2,
-    PC_ORE_TYPE_FAKE = 3,
+    PC_ORE_TYPE_UNKNOWN = 0,    /* 矿种未知或未收到 */
+    PC_ORE_TYPE_R1 = 1,         /* R1 矿 */
+    PC_ORE_TYPE_R2 = 2,         /* R2 矿 */
+    PC_ORE_TYPE_FAKE = 3,       /* 假矿 */
 } PC_OreType_t;
 
 #define PC_IR_ORE_POSITION_COUNT (12u)
@@ -363,7 +363,7 @@ typedef struct {
     PC_ArmSimpleCMD_t arm_simple;        /* 最近一次简易机械臂命令 */
     PC_RodNewCMD_t rod_new;              /* 最近一次取矛头机构命令 */
     PC_OreStoreCMD_t ore_store;          /* 最近一次矿仓命令 */
-    PC_CameraYawCMD_t camera_yaw;        /* Latest camera yaw command */
+    PC_CameraYawCMD_t camera_yaw;        /* 最近一次相机云台 yaw 命令 */
     PC_AutoActionCMD_t auto_action;      /* 待消费的一键动作命令，消费后清零 */
     PC_StepCMD_t step;                   /* 待执行/最近一次自动台阶命令 */
     PC_ImuCMD_t imu;                     /* 最近一次 PC 姿态数据 */
@@ -375,7 +375,7 @@ typedef struct {
     PC_ArmSimpleFeedback_t arm_simple;     /* 简易机械臂反馈缓存 */
     PC_RodNewFeedback_t rod_new;           /* 取矛头机构反馈缓存 */
     PC_OreStoreFeedback_t ore_store;       /* 矿仓反馈缓存 */
-    PC_CameraYawFeedback_t camera_yaw;      /* Camera yaw feedback cache */
+    PC_CameraYawFeedback_t camera_yaw;     /* 相机云台 yaw 反馈缓存 */
     PC_StepFeedback_t step;                /* 自动台阶反馈缓存 */
     PC_StatusFeedback_t status;            /* 通信/系统状态反馈缓存 */
 } MrlinkPc_FeedbackData_t;
@@ -387,7 +387,7 @@ typedef struct {
     uint32_t last_recv_time;             /* 最近一次收到任意 PC 帧的 tick，单位 ms */
     uint32_t recv_count;                 /* 成功接收帧计数 */
     uint32_t error_count;                /* 通信解析错误计数 */
-    uint32_t camera_yaw_cmd_tick;        /* Last camera yaw command tick, ms */
+    uint32_t camera_yaw_cmd_tick;        /* 最近一次相机云台 yaw 命令 tick，单位 ms */
     bool online;                         /* PC 在线标志，false=离线，true=在线 */
     MrlinkPc_CMD_Data_t cmd;             /* PC 命令缓存 */
     MrlinkPc_FeedbackData_t feedback;    /* 反馈缓存 */
@@ -416,7 +416,7 @@ typedef struct {
     uint32_t rx_rod_new_count;         /* 收到取矛头机构命令次数 */
     uint32_t rx_ore_store_count;       /* 收到矿仓命令次数 */
     uint32_t rx_auto_action_count;     /* 收到一键动作命令次数 */
-    uint32_t rx_camera_yaw_count;      /* Camera yaw command count */
+    uint32_t rx_camera_yaw_count;      /* 收到相机云台 yaw 命令次数 */
     uint32_t rx_step_count;            /* 收到自动台阶命令次数 */
     uint32_t rx_imu_count;             /* 收到 PC 姿态数据次数 */
     uint32_t init_fail_count;          /* PC 通信初始化失败次数 */
@@ -457,7 +457,7 @@ typedef struct {
     PC_ArmSimpleCMD_t rx_arm_simple;        /* 调试用：最近一次简易机械臂命令 */
     PC_RodNewCMD_t rx_rod_new;              /* 调试用：最近一次取矛头机构命令 */
     PC_OreStoreCMD_t rx_ore_store;          /* 调试用：最近一次矿仓命令 */
-    PC_CameraYawCMD_t rx_camera_yaw;        /* Latest camera yaw command debug */
+    PC_CameraYawCMD_t rx_camera_yaw;        /* 调试用：最近一次相机云台 yaw 命令 */
     PC_AutoActionCMD_t rx_auto_action;      /* 调试用：最近一次一键动作命令 */
     PC_StepCMD_t rx_step;                   /* 调试用：最近一次自动台阶命令 */
     PC_ImuCMD_t rx_imu;                     /* 调试用：最近一次 PC 姿态数据 */
@@ -484,36 +484,82 @@ typedef struct {
 
 extern volatile PC_CommDebug_t g_pc_comm_debug;
 
-typedef void (*MrlinkPc_TxCallback_t)(void);
+typedef void (*MrlinkPc_TxCallback_t)(void); /* 发送完成/错误回调函数类型，无参数 */
 
+/* 在通信初始化前选择 PC 通信使用的底层 UART；uart 见 BSP_UART_t。 */
 bool MrlinkPc_SelectUart(BSP_UART_t uart);
+
+/* 初始化 mrlink PC 通信；成功返回 true，失败原因记录到 g_pc_comm_debug.last_init_error。 */
 bool MrlinkPc_CommInit(void);
+
+/* 周期处理接收、解析、在线状态；now_ms 为当前系统毫秒时间戳。 */
 void MrlinkPc_CommProcess(uint32_t now_ms);
+
+/* 返回 PC 是否在线，在线条件由心跳超时逻辑维护。 */
 bool MrlinkPc_CommIsOnline(void);
+
+/* 获取 PC 通信内部状态快照指针，只读使用。 */
 const MrlinkPc_State_t *MrlinkPc_GetState(void);
+
+/* 将内部状态同步到 g_pc_comm_debug，供 Ozone/调试器查看。 */
 void MrlinkPc_DebugUpdate(void);
 
+/* 返回当前是否处于 PC 控制模式。 */
 bool MrlinkPc_IsPCControlMode(void);
+
+/* 返回 PC 心跳是否仍在有效期内。 */
 bool MrlinkPc_IsHeartbeatValid(void);
+
+/* 获取最近一次 PC 底盘命令。 */
 const PC_ChassisCMD_t *MrlinkPc_GetChassisCMD(void);
+
+/* 获取最近一次 PC 撑杆命令。 */
 const PC_PoleCMD_t *MrlinkPc_GetPoleCMD(void);
+
+/* 获取最近一次 PC 机械臂笛卡尔命令，当前保留。 */
 const PC_ArmCMD_t *MrlinkPc_GetArmCMD(void);
+
+/* 获取最近一次 PC 简易机械臂命令。 */
 const PC_ArmSimpleCMD_t *MrlinkPc_GetArmSimpleCMD(void);
+
+/* 获取最近一次 PC 取矛头机构命令。 */
 const PC_RodNewCMD_t *MrlinkPc_GetRodNewCMD(void);
+
+/* 获取最近一次 PC 矿仓命令。 */
 const PC_OreStoreCMD_t *MrlinkPc_GetOreStoreCMD(void);
+
+/* 获取最近一次 PC 相机云台 yaw 命令。 */
 const PC_CameraYawCMD_t *MrlinkPc_GetCameraYawCMD(void);
+
+/* 获取待消费的一键动作命令；无待消费命令时返回 NULL。 */
 const PC_AutoActionCMD_t *MrlinkPc_GetAutoActionCMD(void);
+
+/* 获取最近一次 PC 自动台阶命令。 */
 const PC_StepCMD_t *MrlinkPc_GetStepCMD(void);
+
+/* 获取最近一次 PC 姿态/IMU 命令。 */
 const PC_ImuCMD_t *MrlinkPc_GetImuCMD(void);
 
+/* 发布某个反馈 topic 的最新数据；topic 见 PC_FeedbackCMD_t，feedback 指向对应反馈结构体。 */
 bool MrlinkPc_PublishFeedback(uint8_t topic, const void *feedback);
 
+/* 将 PC_StepCMD_t 映射为 AutoCtrl 可直接使用的台阶参数；无有效模板时返回 NULL。 */
 const PC_AutoStepParams_t *MrlinkPc_GetAutoStepParams(void);
+
+/* 清除待执行自动台阶命令，通常在成功启动流程后调用。 */
 void MrlinkPc_ClearStepCommand(void);
+
+/* 清除待消费一键动作命令，通常在 pc_comm_task 分发后调用。 */
 void MrlinkPc_ClearAutoActionCommand(void);
+
+/* 构造指定反馈 cmd 的 mrlink 帧；tx_buf 为输出缓存，buf_size 为缓存字节数，返回帧长度。 */
 uint16_t MrlinkPc_BuildFeedbackFrame(uint8_t cmd, uint8_t *tx_buf,
                                      uint16_t buf_size);
+
+/* 发送已经打包好的 mrlink 数据；data 为帧缓存，len 为待发送字节数。 */
 int8_t MrlinkPc_SendFrame(uint8_t *data, uint16_t len);
+
+/* 注册底层发送完成/错误回调；tx_done 为成功回调，tx_error 为错误回调。 */
 int8_t MrlinkPc_RegisterTxCallbacks(MrlinkPc_TxCallback_t tx_done,
                                     MrlinkPc_TxCallback_t tx_error);
 
