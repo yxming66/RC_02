@@ -33,7 +33,7 @@ bool auto_ctrl_inited = false;
 AutoOre_t auto_ore_ctrl;
 bool auto_ore_inited = false;
 
-/* Ozone/调试器手动触发一键动作：request=1存矿，2放矿，3上膛，4中止，5取正400，6取正200，7取负200，8取矛头，11等待对接。 */
+/* Ozone/调试器手动触发一键动作：request=1存矿，2放矿，3上膛，4中止，5取正400，6取正200，7取负200，8取矛头，9矛头sick校正，10放矿sick校正，11等待对接。 */
 volatile AutoOre_DebugControl_t g_auto_ore_debug = {0};//手动调用一键函数
 
 AutoRodSpearhead_t auto_rod_spearhead_ctrl;
@@ -446,7 +446,10 @@ static void AutoCtrlFeed_CopySickCorrectParamToDebug(
   }
 
   g_auto_ore_debug.auto_sick_correct_x_target_adc = param->x_target_adc;
-  g_auto_ore_debug.auto_sick_correct_y_target_adc = param->y_target_adc;
+  g_auto_ore_debug.auto_sick_correct_y_left_target_adc =
+      param->y_left_target_adc;
+  g_auto_ore_debug.auto_sick_correct_y_right_target_adc =
+      param->y_right_target_adc;
   g_auto_ore_debug.auto_sick_correct_z_target_diff_adc =
       param->yaw_target_diff_adc;
   g_auto_ore_debug.auto_sick_correct_x_kp_mps_per_adc =
@@ -465,8 +468,10 @@ static void AutoCtrlFeed_InitSickCorrectDebugOverride(
 
   g_auto_ore_debug.auto_sick_correct_override_x_target_adc =
       param->x_target_adc;
-  g_auto_ore_debug.auto_sick_correct_override_y_target_adc =
-      param->y_target_adc;
+  g_auto_ore_debug.auto_sick_correct_override_y_left_target_adc =
+      param->y_left_target_adc;
+  g_auto_ore_debug.auto_sick_correct_override_y_right_target_adc =
+      param->y_right_target_adc;
   g_auto_ore_debug.auto_sick_correct_override_z_target_diff_adc =
       param->yaw_target_diff_adc;
   g_auto_ore_debug.auto_sick_correct_override_x_kp_mps_per_adc =
@@ -500,8 +505,10 @@ static void AutoCtrlFeed_ApplySickCorrectDebugOverride(
 
   const float x_target_adc =
       g_auto_ore_debug.auto_sick_correct_override_x_target_adc;
-  const float y_target_adc =
-      g_auto_ore_debug.auto_sick_correct_override_y_target_adc;
+  const float y_left_target_adc =
+      g_auto_ore_debug.auto_sick_correct_override_y_left_target_adc;
+  const float y_right_target_adc =
+      g_auto_ore_debug.auto_sick_correct_override_y_right_target_adc;
   const float z_target_diff_adc =
       g_auto_ore_debug.auto_sick_correct_override_z_target_diff_adc;
   const float x_kp_mps_per_adc =
@@ -514,8 +521,11 @@ static void AutoCtrlFeed_ApplySickCorrectDebugOverride(
   if (isfinite(x_target_adc)) {
     param->x_target_adc = x_target_adc;
   }
-  if (isfinite(y_target_adc)) {
-    param->y_target_adc = y_target_adc;
+  if (isfinite(y_left_target_adc)) {
+    param->y_left_target_adc = y_left_target_adc;
+  }
+  if (isfinite(y_right_target_adc)) {
+    param->y_right_target_adc = y_right_target_adc;
   }
   if (isfinite(z_target_diff_adc)) {
     param->yaw_target_diff_adc = z_target_diff_adc;
@@ -1074,6 +1084,10 @@ static void AutoCtrlFeed_UpdateAutoSickCorrect(uint32_t now_ms) {
       auto_sick_correct_ctrl.chassis_cmd.ctrl_vec.wz;
   g_auto_ore_debug.auto_sick_correct_pole_target_lift =
       auto_sick_correct_ctrl.pole_cmd.auto_target_lift[0];
+  g_auto_ore_debug.auto_sick_correct_y_sample_index =
+      auto_sick_correct_ctrl.y_sample_index;
+  g_auto_ore_debug.auto_sick_correct_y_target_adc =
+      auto_sick_correct_ctrl.y_target_adc;
   const AutoSickCorrect_PointParams_t *active_param =
       AutoCtrlFeed_SickCorrectParamsForAction(
           AutoSickCorrect_GetAction(&auto_sick_correct_ctrl));

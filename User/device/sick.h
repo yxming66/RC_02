@@ -34,11 +34,11 @@ extern "C" {
 #endif
 
 #ifndef SICK_FRONT_S1_INDEX
-#define SICK_FRONT_S1_INDEX (2u)
+#define SICK_FRONT_S1_INDEX (0u)
 #endif
 
 #ifndef SICK_FRONT_S2_INDEX
-#define SICK_FRONT_S2_INDEX (3u)
+#define SICK_FRONT_S2_INDEX (1u)
 #endif
 
 #ifndef SICK_FRONT_S1_REF_M

@@ -65,7 +65,10 @@ static bool AutoSickCorrect_PointParamValid(
   }
 
   return isfinite(param->x_target_adc) && param->x_target_adc > 0.0f &&
-         isfinite(param->y_target_adc) && param->y_target_adc > 0.0f &&
+         isfinite(param->y_left_target_adc) &&
+             param->y_left_target_adc > 0.0f &&
+         isfinite(param->y_right_target_adc) &&
+             param->y_right_target_adc > 0.0f &&
          isfinite(param->yaw_target_diff_adc) &&
          isfinite(param->x_tolerance_adc) && param->x_tolerance_adc > 0.0f &&
          isfinite(param->y_tolerance_adc) && param->y_tolerance_adc > 0.0f &&
@@ -207,9 +210,11 @@ static bool AutoSickCorrect_Start(AutoSickCorrect_t *ctrl,
   ctrl->x_sample_adc = 0.0f;
   ctrl->y_sample_adc = 0.0f;
   ctrl->yaw_sample_diff_adc = 0.0f;
+  ctrl->y_target_adc = 0.0f;
   ctrl->x_error_adc = 0.0f;
   ctrl->y_error_adc = 0.0f;
   ctrl->yaw_error_adc = 0.0f;
+  ctrl->y_sample_index = 0u;
   AutoSickCorrect_ClearOutputs(ctrl);
   return true;
 }
@@ -277,13 +282,17 @@ void AutoSickCorrect_Update(AutoSickCorrect_t *ctrl,
       (float)feedback->adc_raw[param->front_right_index];
   const float left_adc = (float)feedback->adc_raw[param->left_index];
   const float right_adc = (float)feedback->adc_raw[param->right_index];
+  const bool use_left_y = left_adc <= right_adc;
 
   ctrl->x_sample_adc = (front_left_adc + front_right_adc) * 0.5f;
-  ctrl->y_sample_adc = (left_adc < right_adc) ? left_adc : right_adc;
+  ctrl->y_sample_adc = use_left_y ? left_adc : right_adc;
+  ctrl->y_target_adc =
+      use_left_y ? param->y_left_target_adc : param->y_right_target_adc;
+  ctrl->y_sample_index = use_left_y ? param->left_index : param->right_index;
   ctrl->yaw_sample_diff_adc = front_left_adc - front_right_adc;
 
   ctrl->x_error_adc = param->x_target_adc - ctrl->x_sample_adc;
-  ctrl->y_error_adc = param->y_target_adc - ctrl->y_sample_adc;
+  ctrl->y_error_adc = ctrl->y_target_adc - ctrl->y_sample_adc;
   ctrl->yaw_error_adc = param->yaw_target_diff_adc -
                         ctrl->yaw_sample_diff_adc;
 

@@ -53,7 +53,8 @@ typedef struct {
   uint16_t valid_adc_min;
   uint16_t valid_adc_max;
   float x_target_adc;           /* x correction standard ADC. */
-  float y_target_adc;           /* y correction standard ADC. */
+  float y_left_target_adc;      /* y correction standard ADC when left side is nearer. */
+  float y_right_target_adc;     /* y correction standard ADC when right side is nearer. */
   float yaw_target_diff_adc;    /* z/yaw target: front-left - front-right ADC. */
   float x_tolerance_adc;
   float y_tolerance_adc;
@@ -93,9 +94,11 @@ typedef struct {
   float x_sample_adc;
   float y_sample_adc;
   float yaw_sample_diff_adc;
+  float y_target_adc;
   float x_error_adc;
   float y_error_adc;
   float yaw_error_adc;
+  uint8_t y_sample_index;
   Chassis_CMD_t chassis_cmd;
   Pole_CMD_t pole_cmd;
   AutoSickCorrect_Params_t param;

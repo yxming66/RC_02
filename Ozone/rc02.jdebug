@@ -32,7 +32,7 @@ void OnProjectLoad (void) {
   //
   // User settings
   //
-  Edit.SysVar (VAR_HSS_SPEED, BP_STATE_OFF);
+  Edit.SysVar (VAR_HSS_SPEED, FREQ_500_HZ);
   File.Open ("D:/STM32Projects_HAL/board-H7/RC_02/build/Debug/RC_02.elf");
 }
 

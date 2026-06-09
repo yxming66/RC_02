@@ -13,6 +13,7 @@
 #include "device/sick.h"
 
 Config_RobotParam_t robot_config = {
+    /* 模块参数：底盘 chassis_param，电机、PID、底盘几何、速度/力矩限幅。 */
     .chassis_param = {
         .motor_param = {
             [0] = {.can = BSP_CAN_1, .id = 0x201, .module = MOTOR_M3508, .reverse = false, .gear = true},
@@ -83,6 +84,7 @@ Config_RobotParam_t robot_config = {
         },
         .type = CHASSIS_TYPE_MECANUM,
     },
+    /* 模块参数：撑杆 pole_param，四根撑杆电机、PID、台阶预设高度和行程限幅。 */
     .pole_param = {
         .motor_param = {
             [0] = {.can = BSP_CAN_2, .id = 0x201, .module = MOTOR_M3508, .reverse = true, .gear = true},
@@ -135,6 +137,7 @@ Config_RobotParam_t robot_config = {
             .support_lift_accel = 100.0f,
         },
     },
+    /* 模块参数：矿仓 ore_store_param，矿仓平台电机、回零、预设位置和气缸。 */
     .ore_store_param = {
         .motor_param = {
             [ORE_STORE_AXIS_PLATFORM] =    {.can = BSP_CAN_1, .id = 0x205, .module = MOTOR_M3508, .reverse = false, .gear = true},
@@ -197,6 +200,7 @@ Config_RobotParam_t robot_config = {
             .gpio = BSP_GPIO_ROD_SOLENOID,
         },
     },
+    /* 模块参数：机械臂 arm_param，三关节电机、关节增益、软限位和笛卡尔遥控。 */
     .arm_param = {
         .joint1_motor_param = {
             .can = BSP_CAN_3,
@@ -247,6 +251,7 @@ Config_RobotParam_t robot_config = {
             },
         },
     },
+    /* 模块参数：简易机械臂 arm_simple_param，DM 电机、舵机、吸盘、预设点位。 */
     .arm_simple_param = {
         .dm4340_param = {
             .can = BSP_CAN_3,
@@ -306,6 +311,7 @@ Config_RobotParam_t robot_config = {
             .arrive_threshold_rad = 0.05f,
         },
     },
+    /* 模块参数：一键存取矿 auto_ore_param，存矿、放矿、上膛、取矿流程参数。 */
     .auto_ore_param = {
         /* ArmSimple 一键行为速度上限，单位 rad/s；<=0 表示使用 arm_simple_param.vel_limit 默认值。 */
         .arm_speed = {
@@ -356,6 +362,7 @@ Config_RobotParam_t robot_config = {
         /* 取 -200 矿时底盘前进速度，单位 m/s；可设为 0 禁止底盘前进。 */
         .fetch_neg_200_chassis_vx_mps = 0.20f,
     },
+    /* 模块参数：一键取矛头 auto_rod_spearhead_param，取矛头机构动作时序和检测。 */
     .auto_rod_spearhead_param = {
         /* One-key spearhead action timing; rod_param is filled during init. */
         .open_delay_ms = 1000u,
@@ -364,7 +371,9 @@ Config_RobotParam_t robot_config = {
         .use_photo_check = true,
         .photo_check_ms = 1000u,
     },
+    /* 模块参数：自动台阶/自动控制 auto_ctrl_param，台阶模板和 SICK 校正参数。 */
     .auto_ctrl_param = {
+        /* 模块参数：AutoCtrl 通用参数 common，预对正和 SICK yaw 辅助参数。 */
         .common = {
             .prealign_kp = 5.0f,             /* yaw 误差到 wz 指令的比例系数。 */
             .prealign_wz_limit = 5.0f,       /* yaw 对正最大角速度，单位 rad/s。 */
@@ -375,60 +384,78 @@ Config_RobotParam_t robot_config = {
             .sick_assist_max_rad = 0.35f,    /* SICK yaw 辅助角限幅，单位 rad。 */
             .sick_assist_gain = 1.0f,        /* SICK yaw 辅助量融合增益。 */
         },
-        /* SICK spearhead correction. Tune x/y standard ADC before enabling;
-         * 0 keeps start rejected as invalid. z coefficient maps yaw ADC diff
-         * error to chassis wz. */
+        /* 
+         * SICK correction parameters:
+         * - index fields select the four SICK ADC channels used by correction.
+         *   Current hardware: left=2, front-left=0, front-right=1, right=3.
+         * - x_sample_adc = average(front-left, front-right). x_target_adc is
+         *   the desired front distance ADC.
+         * - y_sample_adc uses the nearer side SICK, selected by smaller ADC.
+         *   If left side is selected, y_left_target_adc is used; if right side
+         *   is selected, y_right_target_adc is used.
+         * - yaw_sample_diff_adc = front-left - front-right. yaw_target_diff_adc
+         *   is the desired yaw/z ADC difference.
+         * - *_kp fields map ADC error to chassis velocity; *_limit fields
+         *   clamp the command. tolerance/stable/timeout define completion.
+         */
+        /* 模块参数：SICK 一键校正 sick_correct，取矛头/放矿前的 SICK 对位参数。 */
         .sick_correct = {
             .rod_spearhead = {
-                .left_index = 0u,
-                .front_left_index = SICK_FRONT_S1_INDEX,
-                .front_right_index = SICK_FRONT_S2_INDEX,
-                .right_index = 1u,
-                .valid_adc_min = 700u,
-                .valid_adc_max = 32100u,
-                .x_target_adc = 0.0f,
-                .y_target_adc = 0.0f,
-                .yaw_target_diff_adc = 0.0f,
-                .x_tolerance_adc = 30.0f,
-                .y_tolerance_adc = 30.0f,
-                .yaw_tolerance_adc = 30.0f,
-                .x_kp_mps_per_adc = 0.0010f,
-                .y_kp_mps_per_adc = 0.0010f,
-                .yaw_kp_rad_s_per_adc = 0.0020f,
-                .vx_limit_mps = 0.30f,
-                .vy_limit_mps = 0.30f,
-                .wz_limit_rad_s = 0.80f,
-                .pole_target_lift = 2.0f,
-                .pole_speed = 50.0f,
-                .finish_stable_ms = 120u,
-                .timeout_ms = 5000u,
+                .left_index = 2u,                    /* 左侧 SICK ADC 通道。 */
+                .front_left_index = SICK_FRONT_S1_INDEX,  /* 前左 SICK ADC 通道。 */
+                .front_right_index = SICK_FRONT_S2_INDEX, /* 前右 SICK ADC 通道。 */
+                .right_index = 3u,                   /* 右侧 SICK ADC 通道。 */
+                .valid_adc_min = 100u,               /* 有效 ADC 下限，低于认为传感器无效。 */
+                .valid_adc_max = 32100u,             /* 有效 ADC 上限，高于认为传感器无效。 */
+                .x_target_adc = 4724,    /* x 方向目标 ADC，前左/前右均值应收敛到这里。 */
+                .y_left_target_adc = 1055.0f,        /* 左侧 SICK 为近端时的 y 目标 ADC。 */
+                .y_right_target_adc = 1055.0f,       /* 右侧 SICK 为近端时的 y 目标 ADC。 */
+                .yaw_target_diff_adc = 0.0f,         /* yaw/z 目标差值 ADC：前左 - 前右。 */
+                .x_tolerance_adc = 5.0f,            /* x 误差小于该值认为 x 到位。 */
+                .y_tolerance_adc = 5.0f,            /* y 误差小于该值认为 y 到位。 */
+                .yaw_tolerance_adc = 30.0f,          /* yaw/z 误差小于该值认为姿态到位。 */
+                .x_kp_mps_per_adc = -0.001f,         /* x ADC 误差到 vx(m/s) 的比例系数。 */
+                .y_kp_mps_per_adc = 0.001f,         /* y ADC 误差到 vy(m/s) 的比例系数。 */
+                .yaw_kp_rad_s_per_adc = 0.0020f,     /* yaw/z ADC 误差到 wz(rad/s) 的比例系数。 */
+                .vx_limit_mps = 0.30f,               /* vx 指令限幅，单位 m/s。 */
+                .vy_limit_mps = 0.30f,               /* vy 指令限幅，单位 m/s。 */
+                .wz_limit_rad_s = 0.80f,             /* wz 指令限幅，单位 rad/s。 */
+                .pole_target_lift = 2.0f,            /* 校正时撑杆目标高度/角度。 */
+                .pole_speed = 50.0f,                 /* 校正时撑杆运动速度。 */
+                .finish_stable_ms = 1000u,            /* 全部误差到位后保持多久才判成功。 */
+                .timeout_ms = 10000u,                 /* 校正总超时，单位 ms。 */
             },
+            /* Reserved for SICK correction before ore release.
+             * The current AutoSickCorrect_StartOreRelease path returns
+             * unsupported, so these values are kept as placeholders. */
             .ore_release = {
-                .left_index = 0u,
-                .front_left_index = SICK_FRONT_S1_INDEX,
-                .front_right_index = SICK_FRONT_S2_INDEX,
-                .right_index = 1u,
-                .valid_adc_min = 700u,
-                .valid_adc_max = 32100u,
-                .x_target_adc = 0.0f,
-                .y_target_adc = 0.0f,
-                .yaw_target_diff_adc = 0.0f,
-                .x_tolerance_adc = 30.0f,
-                .y_tolerance_adc = 30.0f,
-                .yaw_tolerance_adc = 30.0f,
-                .x_kp_mps_per_adc = 0.0010f,
-                .y_kp_mps_per_adc = 0.0010f,
-                .yaw_kp_rad_s_per_adc = 0.0020f,
-                .vx_limit_mps = 0.30f,
-                .vy_limit_mps = 0.30f,
-                .wz_limit_rad_s = 0.80f,
-                .pole_target_lift = 2.0f,
-                .pole_speed = 50.0f,
-                .finish_stable_ms = 120u,
-                .timeout_ms = 5000u,
+                .left_index = 2u,                    /* Left-side SICK ADC channel. */
+                .front_left_index = SICK_FRONT_S1_INDEX,  /* Front-left SICK ADC channel. */
+                .front_right_index = SICK_FRONT_S2_INDEX, /* Front-right SICK ADC channel. */
+                .right_index = 3u,                   /* Right-side SICK ADC channel. */
+                .valid_adc_min = 700u,               /* Minimum valid ADC. */
+                .valid_adc_max = 32100u,             /* Maximum valid ADC. */
+                .x_target_adc = 0.0f,                /* Front average target ADC; 0 keeps this action invalid. */
+                .y_left_target_adc = 0.0f,           /* y target if left side SICK is nearer. */
+                .y_right_target_adc = 0.0f,          /* y target if right side SICK is nearer. */
+                .yaw_target_diff_adc = 0.0f,         /* Target front-left minus front-right ADC. */
+                .x_tolerance_adc = 30.0f,            /* Allowed x ADC error. */
+                .y_tolerance_adc = 30.0f,            /* Allowed y ADC error. */
+                .yaw_tolerance_adc = 30.0f,          /* Allowed yaw/z ADC error. */
+                .x_kp_mps_per_adc = 0.0010f,         /* x error to vx gain. */
+                .y_kp_mps_per_adc = 0.0010f,         /* y error to vy gain. */
+                .yaw_kp_rad_s_per_adc = 0.0020f,     /* yaw/z error to wz gain. */
+                .vx_limit_mps = 0.30f,               /* vx command limit, m/s. */
+                .vy_limit_mps = 0.30f,               /* vy command limit, m/s. */
+                .wz_limit_rad_s = 0.80f,             /* wz command limit, rad/s. */
+                .pole_target_lift = 2.0f,            /* Pole target during correction. */
+                .pole_speed = 50.0f,                 /* Pole speed during correction. */
+                .finish_stable_ms = 120u,            /* Stable time before success. */
+                .timeout_ms = 5000u,                 /* Total correction timeout, ms. */
             },
         },
         /* 头向 / 上台阶 / 200mm 模板参数。 */
+        /* 模块参数：头向上台阶 200mm head_ascend_200。 */
         .head_ascend_200 = {
             /*
              * 专用模板 AutoCtrlTemplate_RunHeadAscendOptimized:
@@ -460,6 +487,7 @@ Config_RobotParam_t robot_config = {
             .rear_photo_timeout_ms = 10000u,    /* 等待后光电触发/下降沿超时，单位 ms。 */
         },
         /* 头向 / 上台阶 / 400mm 模板参数。 */
+        /* 模块参数：头向上台阶 400mm head_ascend_400。 */
         .head_ascend_400 = {
             /*
              * 专用模板 AutoCtrlTemplate_RunHeadAscendOptimized:
@@ -491,6 +519,7 @@ Config_RobotParam_t robot_config = {
             .rear_photo_timeout_ms = 10000u,     /* 等待后光电触发/下降沿超时，单位 ms。 */
         },
         /* 头向 / 下台阶 / 200mm 模板参数。 */
+        /* 模块参数：头向下台阶 200mm head_descend_200。 */
         .head_descend_200 = {
             /*
              * Head-descend 200 optimized flow:
@@ -524,6 +553,7 @@ Config_RobotParam_t robot_config = {
             .hold_ms = 100u,                    /* step6 四杆全伸行走持续时间，单位 ms。 */
         },
         /* 头向 / 下台阶 / 400mm 模板参数。 */
+        /* 模块参数：头向下台阶 400mm head_descend_400。 */
         .head_descend_400 = {
             /*
              * Optimized fixed-start flow:
@@ -555,6 +585,7 @@ Config_RobotParam_t robot_config = {
             .hold_ms = 100u,                    /* step6 四杆全伸行走持续时间，单位 ms。 */
         },
         /* 尾向 / 上台阶 / 200mm 模板参数。 */
+        /* 模块参数：尾向上台阶 200mm tail_ascend_200。 */
         .tail_ascend_200 = {
             .prealign_move_speed = 0.50f,       /* PREALIGN 对正阶段叠加 vx，单位 m/s。 */
             .align_move_speed = 0.0f,           /* 模板 step0 对正阶段 vx；0 表示只对正不前进。 */
@@ -581,6 +612,7 @@ Config_RobotParam_t robot_config = {
             .rear_photo_timeout_ms = 10000u,    /* 等待后光电触发/下降沿超时，单位 ms。 */
         },
         /* 尾向 / 上台阶 / 400mm 模板参数。 */
+        /* 模块参数：尾向上台阶 400mm tail_ascend_400。 */
         .tail_ascend_400 = {
             .prealign_move_speed = 0.50f,       /* PREALIGN 对正阶段叠加 vx，单位 m/s。 */
             .align_move_speed = 0.30f,          /* 模板 step0 对正阶段 vx，单位 m/s。 */
@@ -606,6 +638,7 @@ Config_RobotParam_t robot_config = {
             .rear_photo_timeout_ms = 10000u,     /* 等待后光电触发/下降沿超时，单位 ms。 */
         },
         /* 尾向 / 下台阶 / 200mm 模板参数。 */
+        /* 模块参数：尾向下台阶 200mm tail_descend_200。 */
         .tail_descend_200 = {
             /*
              * Optimized fixed-start flow:
@@ -637,6 +670,7 @@ Config_RobotParam_t robot_config = {
             .hold_ms = 1200u,                   /* 四杆全伸支撑通过时间，单位 ms。 */
         },
         /* 尾向 / 下台阶 / 400mm 模板参数。 */
+        /* 模块参数：尾向下台阶 400mm tail_descend_400。 */
         .tail_descend_400 = {
             /*
              * Optimized fixed-start flow:
@@ -667,6 +701,7 @@ Config_RobotParam_t robot_config = {
             .hold_ms = 1200u,                   /* 四杆全伸支撑通过时间，单位 ms。 */
         },
     },
+    /* 模块参数：取矛头机构 rod_new_param，舵机、夹爪和到位参数。 */
     .rod_new_param = {
         .servo = {
             .pwm_channel = BSP_PWM_ROD_SERVO,
@@ -687,6 +722,7 @@ Config_RobotParam_t robot_config = {
             .grip_timeout_ms = 2000u,        /* 夹取超时 */
         },
     },
+    /* 模块参数：相机 yaw camera_yaw_param，相机云台电机、PID 和限幅。 */
     .camera_yaw_param = {
         .motor_param = {
             .can = BSP_CAN_2,
