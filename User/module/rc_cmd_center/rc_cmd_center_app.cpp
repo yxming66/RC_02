@@ -159,6 +159,7 @@ typedef struct {
   volatile AutoRodSpearhead_State_t auto_rod_spearhead_state;
   volatile AutoRodSpearhead_Result_t auto_rod_spearhead_result;
   volatile AutoRodSpearhead_Fault_t auto_rod_spearhead_fault;
+  volatile AutoRodSpearhead_Action_t auto_rod_spearhead_action;
   volatile uint8_t auto_rod_spearhead_step_index;
   volatile AutoSickCorrect_State_t auto_sick_correct_state;
   volatile AutoSickCorrect_Result_t auto_sick_correct_result;
@@ -722,6 +723,7 @@ static void Rc_LatchFinishedAutoTargets(void) {
         AUTO_ROD_SPEARHEAD_STATE_ABORT) {
       auto_rod_spearhead_hold_after_finish = false;
     } else {
+      Rc_LatchOreStoreCurrentTarget();
       Rc_LatchRodCurrentTarget();
       auto_rod_spearhead_hold_after_finish = true;
     }
@@ -944,6 +946,8 @@ static void Rc_ResetFrameDebug(void) {
       AutoRodSpearhead_GetResult(&auto_rod_spearhead_ctrl);
     g_rc_control_debug.auto_rod_spearhead_fault =
       AutoRodSpearhead_GetFault(&auto_rod_spearhead_ctrl);
+    g_rc_control_debug.auto_rod_spearhead_action =
+      AutoRodSpearhead_GetAction(&auto_rod_spearhead_ctrl);
     g_rc_control_debug.auto_rod_spearhead_step_index =
       AutoRodSpearhead_GetStepIndex(&auto_rod_spearhead_ctrl);
     g_rc_control_debug.auto_sick_correct_state =
@@ -1169,6 +1173,7 @@ static RcCommandPlan_t Rc_SelectCommandPlan(RcBehavior_t behavior) {
   if (Task_AutoRodSpearheadIsBusy()) {
     g_rc_control_debug.page = RC_CONTROL_PAGE_AUTO_ORE;
     g_rc_control_debug.rod_active = true;
+    g_rc_control_debug.ore_store_active = true;
     if (!auto_rod_spearhead_was_busy) {
       Rc_LatchAutoRodSpearheadHoldTargets();
     }
@@ -1579,6 +1584,22 @@ struct RcOreStoreAutoOreRoute {
   }
 };
 
+struct RcOreStoreAutoRodRoute {
+  bool operator()(const RcRuntimeInput &, cmd::Context &,
+                  OreStore_CMD_t &out) const {
+    const OreStore_CMD_t *auto_rod_ore_cmd =
+        Task_AutoRodSpearheadGetOreStoreCommand();
+    if (auto_rod_ore_cmd != NULL) {
+      out = *auto_rod_ore_cmd;
+      ore_store_active_initialized = out.mode == ORE_STORE_MODE_ACTIVE;
+    } else {
+      Rc_SetOreStoreHold();
+      out = ore_store_cmd;
+    }
+    return true;
+  }
+};
+
 struct RcRodNewSafeRoute {
   bool operator()(cmd::Context &, RodNew_CMD_t &out) const {
     if (auto_rod_spearhead_hold_after_finish) {
@@ -1769,6 +1790,9 @@ static void Rc_ConfigureCmdCenter(void) {
           cmd::from<RcRuntimeInput, RcOreStoreAutoOreRoute>()
               .when<RcPlanIn<RC_CMD_PLAN_AUTO_ORE_OUTPUT> >()
               .priority(cmd::Priority::CriticalAuto),
+          cmd::from<RcRuntimeInput, RcOreStoreAutoRodRoute>()
+              .when<RcPlanIn<RC_CMD_PLAN_AUTO_ROD_OUTPUT> >()
+              .priority(cmd::Priority::CriticalAuto),
           cmd::from<RcRuntimeInput, RcOreStoreHoldRoute>()
               .when<RcPlanIn<RC_CMD_PLAN_DRIVE,
                              RC_CMD_PLAN_AUTO_STANDBY,
@@ -1777,7 +1801,6 @@ static void Rc_ConfigureCmdCenter(void) {
                              RC_CMD_PLAN_AUTO_ORE_STANDBY,
                              RC_CMD_PLAN_AUTO_CTRL_OUTPUT,
                              RC_CMD_PLAN_PC_AUTO_CTRL,
-                             RC_CMD_PLAN_AUTO_ROD_OUTPUT,
                              RC_CMD_PLAN_AUTO_SICK_CORRECT_OUTPUT> >()
               .priority(cmd::Priority::Fallback));
 

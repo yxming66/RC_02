@@ -3,6 +3,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "module/ore_store.h"
 #include "module/rod_new.h"
 
 #ifdef __cplusplus
@@ -33,8 +34,15 @@ typedef enum {
   AUTO_ROD_SPEARHEAD_FAULT_NO_SPEARHEAD,
 } AutoRodSpearhead_Fault_t;
 
+typedef enum {
+  AUTO_ROD_SPEARHEAD_ACTION_NONE = 0,
+  AUTO_ROD_SPEARHEAD_ACTION_PICKUP,
+  AUTO_ROD_SPEARHEAD_ACTION_DOCK_WAIT,
+} AutoRodSpearhead_Action_t;
+
 typedef struct {
   const RodNew_Params_t *rod_param;
+  const OreStore_Params_t *ore_store_param;
   uint32_t open_delay_ms;
   uint32_t grab_high_delay_ms;
   uint32_t dock_wait_delay_ms;
@@ -45,6 +53,7 @@ typedef struct {
 typedef struct {
   bool rod_photo_triggered;
   bool rod_at_target;
+  bool ore_store_at_target;
   bool dock_complete_received;
 } AutoRodSpearhead_Feedback_t;
 
@@ -52,6 +61,7 @@ typedef struct {
   AutoRodSpearhead_State_t state;
   AutoRodSpearhead_Result_t result;
   AutoRodSpearhead_Fault_t fault;
+  AutoRodSpearhead_Action_t action;
   uint8_t step_index;
   uint32_t step_enter_time_ms;
   bool step_entered;
@@ -60,12 +70,17 @@ typedef struct {
   uint32_t photo_stable_start_time_ms;
   bool rod_cmd_valid;
   RodNew_CMD_t rod_cmd;
+  bool ore_store_cmd_valid;
+  OreStore_CMD_t ore_store_cmd;
   AutoRodSpearhead_Params_t param;
 } AutoRodSpearhead_t;
 
 void AutoRodSpearhead_Init(AutoRodSpearhead_t *ctrl,
                            const AutoRodSpearhead_Params_t *param);
 bool AutoRodSpearhead_Start(AutoRodSpearhead_t *ctrl, uint32_t now_ms);
+bool AutoRodSpearhead_StartPickup(AutoRodSpearhead_t *ctrl, uint32_t now_ms);
+bool AutoRodSpearhead_StartDockWait(AutoRodSpearhead_t *ctrl,
+                                    uint32_t now_ms);
 void AutoRodSpearhead_Update(AutoRodSpearhead_t *ctrl,
                              const AutoRodSpearhead_Feedback_t *feedback,
                              uint32_t now_ms);
@@ -77,8 +92,12 @@ AutoRodSpearhead_Result_t AutoRodSpearhead_GetResult(
     const AutoRodSpearhead_t *ctrl);
 AutoRodSpearhead_Fault_t AutoRodSpearhead_GetFault(
     const AutoRodSpearhead_t *ctrl);
+AutoRodSpearhead_Action_t AutoRodSpearhead_GetAction(
+    const AutoRodSpearhead_t *ctrl);
 uint8_t AutoRodSpearhead_GetStepIndex(const AutoRodSpearhead_t *ctrl);
 const RodNew_CMD_t *AutoRodSpearhead_GetRodCommand(
+    const AutoRodSpearhead_t *ctrl);
+const OreStore_CMD_t *AutoRodSpearhead_GetOreStoreCommand(
     const AutoRodSpearhead_t *ctrl);
 
 #ifdef __cplusplus

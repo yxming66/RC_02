@@ -79,6 +79,7 @@ typedef enum {
     AUTO_ORE_DEBUG_REQUEST_ROD_SPEARHEAD = 8,
     AUTO_ORE_DEBUG_REQUEST_SICK_CORRECT_ROD_SPEARHEAD = 9,
     AUTO_ORE_DEBUG_REQUEST_SICK_CORRECT_ORE_RELEASE = 10,
+    AUTO_ORE_DEBUG_REQUEST_ROD_DOCK_WAIT = 11,
 } AutoOre_DebugRequest_t;
 
 typedef struct {
@@ -136,13 +137,17 @@ typedef struct {
     volatile AutoRodSpearhead_State_t auto_rod_spearhead_state;
     volatile AutoRodSpearhead_Result_t auto_rod_spearhead_result;
     volatile AutoRodSpearhead_Fault_t auto_rod_spearhead_fault;
+    volatile AutoRodSpearhead_Action_t auto_rod_spearhead_action;
     volatile uint8_t auto_rod_spearhead_step_index;
     volatile bool auto_rod_spearhead_rod_at_target;
+    volatile bool auto_rod_spearhead_ore_store_at_target;
     volatile bool auto_rod_spearhead_photo_stable_state;
     volatile bool auto_rod_spearhead_rod_cmd_valid;
     volatile RodNew_Pose_t auto_rod_spearhead_rod_cmd_pose;
     volatile RodNew_GripState_t auto_rod_spearhead_rod_cmd_grip;
     volatile float auto_rod_spearhead_rod_cmd_target_angle_rad;
+    volatile bool auto_rod_spearhead_ore_store_cmd_valid;
+    volatile float auto_rod_spearhead_ore_store_cmd_platform_rad;
     volatile bool auto_sick_correct_busy;
     volatile AutoSickCorrect_State_t auto_sick_correct_state;
     volatile AutoSickCorrect_Result_t auto_sick_correct_result;
@@ -335,9 +340,11 @@ bool Task_AutoOreStartPickPos200(void);
 bool Task_AutoOreStartPickNeg200(void);
 void Task_AutoOreAbort(void);
 bool Task_AutoRodSpearheadStart(void);
+bool Task_AutoRodSpearheadStartDockWait(void);
 void Task_AutoRodSpearheadAbort(void);
 bool Task_AutoRodSpearheadIsBusy(void);
 const RodNew_CMD_t *Task_AutoRodSpearheadGetCommand(void);
+const OreStore_CMD_t *Task_AutoRodSpearheadGetOreStoreCommand(void);
 bool Task_AutoSickCorrectStartRodSpearhead(void);
 bool Task_AutoSickCorrectStartOreRelease(void);
 void Task_AutoSickCorrectAbort(void);

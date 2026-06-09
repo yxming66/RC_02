@@ -78,6 +78,7 @@ static bool AutoRodSpearhead_CommandRod(AutoRodSpearhead_t *ctrl,
                                         RodNew_GripState_t grip) {
   if (ctrl->param.rod_param == 0) {
     ctrl->rod_cmd_valid = false;
+    ctrl->ore_store_cmd_valid = false;
     ctrl->state = AUTO_ROD_SPEARHEAD_STATE_FAIL;
     ctrl->result = AUTO_ROD_SPEARHEAD_RESULT_FAIL;
     ctrl->fault = AUTO_ROD_SPEARHEAD_FAULT_INVALID_PARAM;
@@ -94,8 +95,25 @@ static bool AutoRodSpearhead_CommandRod(AutoRodSpearhead_t *ctrl,
   return true;
 }
 
-static void AutoRodSpearhead_ClearRodCommand(AutoRodSpearhead_t *ctrl) {
+static bool AutoRodSpearhead_CommandOreStore(
+    AutoRodSpearhead_t *ctrl,
+    OreStore_TransformPoint_t transform,
+    bool cylinder_closed) {
+  ctrl->ore_store_cmd_valid = OreStore_MakePresetCommand(
+      ctrl->param.ore_store_param, transform, cylinder_closed,
+      &ctrl->ore_store_cmd);
+  if (!ctrl->ore_store_cmd_valid) {
+    ctrl->rod_cmd_valid = false;
+    ctrl->state = AUTO_ROD_SPEARHEAD_STATE_FAIL;
+    ctrl->result = AUTO_ROD_SPEARHEAD_RESULT_FAIL;
+    ctrl->fault = AUTO_ROD_SPEARHEAD_FAULT_INVALID_PARAM;
+  }
+  return ctrl->ore_store_cmd_valid;
+}
+
+static void AutoRodSpearhead_ClearOutputs(AutoRodSpearhead_t *ctrl) {
   ctrl->rod_cmd_valid = false;
+  ctrl->ore_store_cmd_valid = false;
 }
 
 static bool AutoRodSpearhead_PhotoStateStable(AutoRodSpearhead_t *ctrl,
@@ -117,21 +135,21 @@ static void AutoRodSpearhead_FinishSuccess(AutoRodSpearhead_t *ctrl) {
   ctrl->state = AUTO_ROD_SPEARHEAD_STATE_SUCCESS;
   ctrl->result = AUTO_ROD_SPEARHEAD_RESULT_SUCCESS;
   ctrl->fault = AUTO_ROD_SPEARHEAD_FAULT_NONE;
-  AutoRodSpearhead_ClearRodCommand(ctrl);
+  AutoRodSpearhead_ClearOutputs(ctrl);
 }
 
 static void AutoRodSpearhead_FinishNoSpearhead(AutoRodSpearhead_t *ctrl) {
   ctrl->state = AUTO_ROD_SPEARHEAD_STATE_FAIL;
   ctrl->result = AUTO_ROD_SPEARHEAD_RESULT_FAIL;
   ctrl->fault = AUTO_ROD_SPEARHEAD_FAULT_NO_SPEARHEAD;
-  AutoRodSpearhead_ClearRodCommand(ctrl);
+  AutoRodSpearhead_ClearOutputs(ctrl);
 }
 
 static void AutoRodSpearhead_FinishTimeout(AutoRodSpearhead_t *ctrl) {
   ctrl->state = AUTO_ROD_SPEARHEAD_STATE_FAIL;
   ctrl->result = AUTO_ROD_SPEARHEAD_RESULT_FAIL;
   ctrl->fault = AUTO_ROD_SPEARHEAD_FAULT_TIMEOUT;
-  AutoRodSpearhead_ClearRodCommand(ctrl);
+  AutoRodSpearhead_ClearOutputs(ctrl);
 }
 
 void AutoRodSpearhead_Init(AutoRodSpearhead_t *ctrl,
@@ -148,11 +166,14 @@ void AutoRodSpearhead_Init(AutoRodSpearhead_t *ctrl,
   ctrl->fault = AUTO_ROD_SPEARHEAD_FAULT_NONE;
 }
 
-bool AutoRodSpearhead_Start(AutoRodSpearhead_t *ctrl, uint32_t now_ms) {
+static bool AutoRodSpearhead_StartAction(AutoRodSpearhead_t *ctrl,
+                                         AutoRodSpearhead_Action_t action,
+                                         uint32_t now_ms) {
   if (ctrl == 0 || AutoRodSpearhead_IsBusy(ctrl)) {
     return false;
   }
-  if (ctrl->param.rod_param == 0) {
+  if (ctrl->param.rod_param == 0 || ctrl->param.ore_store_param == 0 ||
+      action == AUTO_ROD_SPEARHEAD_ACTION_NONE) {
     ctrl->state = AUTO_ROD_SPEARHEAD_STATE_FAIL;
     ctrl->result = AUTO_ROD_SPEARHEAD_RESULT_FAIL;
     ctrl->fault = AUTO_ROD_SPEARHEAD_FAULT_INVALID_PARAM;
@@ -161,33 +182,64 @@ bool AutoRodSpearhead_Start(AutoRodSpearhead_t *ctrl, uint32_t now_ms) {
   ctrl->state = AUTO_ROD_SPEARHEAD_STATE_RUNNING;
   ctrl->result = AUTO_ROD_SPEARHEAD_RESULT_RUNNING;
   ctrl->fault = AUTO_ROD_SPEARHEAD_FAULT_NONE;
+  ctrl->action = action;
   ctrl->step_index = 0u;
   ctrl->step_entered = false;
   ctrl->step_enter_time_ms = now_ms;
   ctrl->photo_stable_started = false;
   ctrl->photo_stable_state = false;
   ctrl->photo_stable_start_time_ms = now_ms;
-  ctrl->rod_cmd_valid = false;
+  AutoRodSpearhead_ClearOutputs(ctrl);
   return true;
 }
 
-void AutoRodSpearhead_Update(AutoRodSpearhead_t *ctrl,
-                             const AutoRodSpearhead_Feedback_t *feedback,
-                             uint32_t now_ms) {
-  if (ctrl == 0 || ctrl->state != AUTO_ROD_SPEARHEAD_STATE_RUNNING) {
-    return;
-  }
+bool AutoRodSpearhead_Start(AutoRodSpearhead_t *ctrl, uint32_t now_ms) {
+  return AutoRodSpearhead_StartPickup(ctrl, now_ms);
+}
 
+bool AutoRodSpearhead_StartPickup(AutoRodSpearhead_t *ctrl,
+                                  uint32_t now_ms) {
+  return AutoRodSpearhead_StartAction(
+      ctrl, AUTO_ROD_SPEARHEAD_ACTION_PICKUP, now_ms);
+}
+
+bool AutoRodSpearhead_StartDockWait(AutoRodSpearhead_t *ctrl,
+                                    uint32_t now_ms) {
+  return AutoRodSpearhead_StartAction(
+      ctrl, AUTO_ROD_SPEARHEAD_ACTION_DOCK_WAIT, now_ms);
+}
+
+static void AutoRodSpearhead_RunPickup(
+    AutoRodSpearhead_t *ctrl,
+    const AutoRodSpearhead_Feedback_t *feedback,
+    uint32_t now_ms) {
   const bool rod_photo_triggered =
       feedback != 0 && feedback->rod_photo_triggered;
   const bool rod_at_target = feedback != 0 && feedback->rod_at_target;
-  const bool dock_complete_received =
-      feedback != 0 && feedback->dock_complete_received;
+  const bool ore_store_at_target =
+      feedback != 0 && feedback->ore_store_at_target;
 
   switch (ctrl->step_index) {
     case 0:
       AutoRodSpearhead_EnterStep(ctrl, now_ms);
-      if (!AutoRodSpearhead_CommandRod(ctrl, ROD_NEW_POSE_STANDBY,
+      if (!AutoRodSpearhead_CommandOreStore(
+              ctrl, ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP, false)) {
+        return;
+      }
+      if (ore_store_at_target) {
+        AutoRodSpearhead_NextStep(ctrl);
+        return;
+      }
+      if (AutoRodSpearhead_StepElapsed(ctrl, now_ms) >=
+          AutoRodSpearhead_DockWaitDelayMs(ctrl)) {
+        AutoRodSpearhead_FinishTimeout(ctrl);
+      }
+      return;
+    case 1:
+      AutoRodSpearhead_EnterStep(ctrl, now_ms);
+      if (!AutoRodSpearhead_CommandOreStore(
+              ctrl, ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP, false) ||
+          !AutoRodSpearhead_CommandRod(ctrl, ROD_NEW_POSE_STANDBY,
                                        ROD_NEW_GRIP_RELEASE)) {
         return;
       }
@@ -196,9 +248,11 @@ void AutoRodSpearhead_Update(AutoRodSpearhead_t *ctrl,
         AutoRodSpearhead_NextStep(ctrl);
       }
       return;
-    case 1:
+    case 2:
       AutoRodSpearhead_EnterStep(ctrl, now_ms);
-      if (!AutoRodSpearhead_CommandRod(ctrl, ROD_NEW_POSE_GRAB_HIGH,
+      if (!AutoRodSpearhead_CommandOreStore(
+              ctrl, ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP, false) ||
+          !AutoRodSpearhead_CommandRod(ctrl, ROD_NEW_POSE_GRAB_HIGH,
                                        ROD_NEW_GRIP_GRAB)) {
         return;
       }
@@ -207,10 +261,11 @@ void AutoRodSpearhead_Update(AutoRodSpearhead_t *ctrl,
         AutoRodSpearhead_NextStep(ctrl);
       }
       return;
-    case 2:
-    {
+    case 3:
       AutoRodSpearhead_EnterStep(ctrl, now_ms);
-      if (!AutoRodSpearhead_CommandRod(ctrl, ROD_NEW_POSE_DOCK_WAIT,
+      if (!AutoRodSpearhead_CommandOreStore(
+              ctrl, ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP, false) ||
+          !AutoRodSpearhead_CommandRod(ctrl, ROD_NEW_POSE_GRAB_HIGH,
                                        ROD_NEW_GRIP_GRAB)) {
         return;
       }
@@ -219,7 +274,10 @@ void AutoRodSpearhead_Update(AutoRodSpearhead_t *ctrl,
       }
       if (!ctrl->param.use_photo_check) {
         if (rod_at_target) {
-          AutoRodSpearhead_NextStep(ctrl);
+          AutoRodSpearhead_FinishSuccess(ctrl);
+        } else if (AutoRodSpearhead_StepElapsed(ctrl, now_ms) >=
+                   AutoRodSpearhead_DockWaitDelayMs(ctrl)) {
+          AutoRodSpearhead_FinishTimeout(ctrl);
         }
         return;
       }
@@ -247,14 +305,30 @@ void AutoRodSpearhead_Update(AutoRodSpearhead_t *ctrl,
       }
       AutoRodSpearhead_FinishSuccess(ctrl);
       return;
-    }
-    case 3:
+    default:
+      AutoRodSpearhead_FinishSuccess(ctrl);
+      return;
+  }
+}
+
+static void AutoRodSpearhead_RunDockWait(
+    AutoRodSpearhead_t *ctrl,
+    const AutoRodSpearhead_Feedback_t *feedback,
+    uint32_t now_ms) {
+  const bool rod_at_target = feedback != 0 && feedback->rod_at_target;
+  const bool ore_store_at_target =
+      feedback != 0 && feedback->ore_store_at_target;
+
+  switch (ctrl->step_index) {
+    case 0:
       AutoRodSpearhead_EnterStep(ctrl, now_ms);
-      if (!AutoRodSpearhead_CommandRod(ctrl, ROD_NEW_POSE_DOCK_WAIT,
+      if (!AutoRodSpearhead_CommandOreStore(
+              ctrl, ORE_STORE_TRANSFORM_STANDBY, false) ||
+          !AutoRodSpearhead_CommandRod(ctrl, ROD_NEW_POSE_DOCK_WAIT,
                                        ROD_NEW_GRIP_GRAB)) {
         return;
       }
-      if (dock_complete_received) {
+      if (rod_at_target && ore_store_at_target) {
         AutoRodSpearhead_FinishSuccess(ctrl);
         return;
       }
@@ -269,6 +343,30 @@ void AutoRodSpearhead_Update(AutoRodSpearhead_t *ctrl,
   }
 }
 
+void AutoRodSpearhead_Update(AutoRodSpearhead_t *ctrl,
+                             const AutoRodSpearhead_Feedback_t *feedback,
+                             uint32_t now_ms) {
+  if (ctrl == 0 || ctrl->state != AUTO_ROD_SPEARHEAD_STATE_RUNNING) {
+    return;
+  }
+
+  switch (ctrl->action) {
+    case AUTO_ROD_SPEARHEAD_ACTION_PICKUP:
+      AutoRodSpearhead_RunPickup(ctrl, feedback, now_ms);
+      return;
+    case AUTO_ROD_SPEARHEAD_ACTION_DOCK_WAIT:
+      AutoRodSpearhead_RunDockWait(ctrl, feedback, now_ms);
+      return;
+    case AUTO_ROD_SPEARHEAD_ACTION_NONE:
+    default:
+      ctrl->state = AUTO_ROD_SPEARHEAD_STATE_FAIL;
+      ctrl->result = AUTO_ROD_SPEARHEAD_RESULT_FAIL;
+      ctrl->fault = AUTO_ROD_SPEARHEAD_FAULT_INVALID_PARAM;
+      AutoRodSpearhead_ClearOutputs(ctrl);
+      return;
+  }
+}
+
 void AutoRodSpearhead_Abort(AutoRodSpearhead_t *ctrl) {
   if (ctrl == 0) {
     return;
@@ -276,7 +374,8 @@ void AutoRodSpearhead_Abort(AutoRodSpearhead_t *ctrl) {
   ctrl->state = AUTO_ROD_SPEARHEAD_STATE_ABORT;
   ctrl->result = AUTO_ROD_SPEARHEAD_RESULT_ABORTED;
   ctrl->fault = AUTO_ROD_SPEARHEAD_FAULT_ABORTED;
-  ctrl->rod_cmd_valid = false;
+  ctrl->action = AUTO_ROD_SPEARHEAD_ACTION_NONE;
+  AutoRodSpearhead_ClearOutputs(ctrl);
 }
 
 bool AutoRodSpearhead_IsBusy(const AutoRodSpearhead_t *ctrl) {
@@ -298,6 +397,11 @@ AutoRodSpearhead_Fault_t AutoRodSpearhead_GetFault(
   return ctrl == 0 ? AUTO_ROD_SPEARHEAD_FAULT_INVALID_PARAM : ctrl->fault;
 }
 
+AutoRodSpearhead_Action_t AutoRodSpearhead_GetAction(
+    const AutoRodSpearhead_t *ctrl) {
+  return ctrl == 0 ? AUTO_ROD_SPEARHEAD_ACTION_NONE : ctrl->action;
+}
+
 uint8_t AutoRodSpearhead_GetStepIndex(const AutoRodSpearhead_t *ctrl) {
   return ctrl == 0 ? 0u : ctrl->step_index;
 }
@@ -305,4 +409,9 @@ uint8_t AutoRodSpearhead_GetStepIndex(const AutoRodSpearhead_t *ctrl) {
 const RodNew_CMD_t *AutoRodSpearhead_GetRodCommand(
     const AutoRodSpearhead_t *ctrl) {
   return (ctrl != 0 && ctrl->rod_cmd_valid) ? &ctrl->rod_cmd : 0;
+}
+
+const OreStore_CMD_t *AutoRodSpearhead_GetOreStoreCommand(
+    const AutoRodSpearhead_t *ctrl) {
+  return (ctrl != 0 && ctrl->ore_store_cmd_valid) ? &ctrl->ore_store_cmd : 0;
 }

@@ -167,7 +167,7 @@ Config_RobotParam_t robot_config = {
             .config = { 
                 [ORE_STORE_AXIS_PLATFORM] = {.stall_velocity_threshold_rad_s = 0.04f, .stall_position_window_rad = 0.0015f, .stall_cycles_required = 30u, .seek_timeout_s = 8.0f, .online_wait_timeout_s = 1.5f, .limit_margin_rad = 0.02f, .learned_limit_margin_rad = 0.02f, .min_range_rad = 0.01f},
             },
-            .travel_rad = {22.7f},
+            .travel_rad = {24.7f},
             .lower_seek_velocity_rad_s = {0.20f},
             .move_velocity_rad_s = {400.0f},
             .arrive_threshold_rad = {0.05f},
@@ -189,9 +189,11 @@ Config_RobotParam_t robot_config = {
                 [ORE_STORE_TRANSFORM_LIFT] = 22.7f,
                 /* 平台缓冲/备用预设位，待实机标定。 */
                 [ORE_STORE_TRANSFORM_BUFFER] = 0.0f,
+                /* 取矛头平台预设位，待实机标定。 */
+                [ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP] = 22.5139351f,
             },
         },
-        .fixed_ore_cylinder = {
+        .fixed_ore_cylinder = {    
             .gpio = BSP_GPIO_ROD_SOLENOID,
         },
     },
@@ -356,7 +358,7 @@ Config_RobotParam_t robot_config = {
     },
     .auto_rod_spearhead_param = {
         /* One-key spearhead action timing; rod_param is filled during init. */
-        .open_delay_ms = 1200u,
+        .open_delay_ms = 1000u,
         .grab_high_delay_ms = 200u,
         .dock_wait_delay_ms = 5000u,
         .use_photo_check = true,

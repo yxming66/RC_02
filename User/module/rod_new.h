@@ -43,7 +43,7 @@ typedef enum {
 } RodNew_GripState_t;
 
 typedef enum {
-  ROD_NEW_POSE_STANDBY = 0,  /* 待机位（放平） */
+  ROD_NEW_POSE_STANDBY = 0,  /* 放平位 */
   ROD_NEW_POSE_GRAB_HIGH,     /* 高位夹取 */
   ROD_NEW_POSE_DOCK_WAIT,     /* 等待对接位置 */
   ROD_NEW_POSE_MANUAL,        /* 手动角度 */

@@ -101,6 +101,8 @@ static AutoOre_DebugRequest_t PcComm_MapAutoAction(uint8_t action) {
             return AUTO_ORE_DEBUG_REQUEST_SICK_CORRECT_ROD_SPEARHEAD;
         case PC_AUTO_ACTION_SICK_CORRECT_ORE_RELEASE:
             return AUTO_ORE_DEBUG_REQUEST_SICK_CORRECT_ORE_RELEASE;
+        case PC_AUTO_ACTION_ROD_DOCK_WAIT:
+            return AUTO_ORE_DEBUG_REQUEST_ROD_DOCK_WAIT;
         case PC_AUTO_ACTION_ABORT:
             return AUTO_ORE_DEBUG_REQUEST_ABORT;
         case PC_AUTO_ACTION_NONE:

@@ -38,6 +38,7 @@ typedef enum {
   ORE_STORE_TRANSFORM_MID_WAIT,     // 平台中间等待位
   ORE_STORE_TRANSFORM_LIFT,         // 平台抬升/满行程位
   ORE_STORE_TRANSFORM_BUFFER,       // 平台缓冲/备用预设位
+  ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP, // 取矛头平台预设位
   ORE_STORE_TRANSFORM_POINT_NUM,
 } OreStore_TransformPoint_t;
 

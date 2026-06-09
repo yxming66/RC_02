@@ -121,6 +121,7 @@ typedef enum {
     PC_AUTO_ACTION_ABORT = 8,            /* 中止一键动作 */
     PC_AUTO_ACTION_SICK_CORRECT_ROD_SPEARHEAD = 9, /* SICK correction before rod spearhead pickup */
     PC_AUTO_ACTION_SICK_CORRECT_ORE_RELEASE = 10,  /* Reserved: SICK correction before ore release */
+    PC_AUTO_ACTION_ROD_DOCK_WAIT = 11,   /* 取矛头机构等待对接 */
 } PC_AutoAction_t;
 
 typedef enum {
