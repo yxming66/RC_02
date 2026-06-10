@@ -394,12 +394,12 @@ typedef struct {
 } MrlinkPc_State_t;
 
 typedef struct {
-    uint8_t usart10_config_ok;         /* USART10 配置检查，0=异常，1=符合 PC 通信配置 */
-    uint32_t usart10_baudrate;         /* USART10 波特率 */
-    uint32_t usart10_word_length;      /* USART10 数据位配置，HAL UART_WORDLENGTH_* */
-    uint32_t usart10_stop_bits;        /* USART10 停止位配置，HAL UART_STOPBITS_* */
-    uint32_t usart10_parity;           /* USART10 校验位配置，HAL UART_PARITY_* */
-    uint32_t usart10_mode;             /* USART10 收发模式配置，HAL UART_MODE_* */
+    uint8_t usart10_config_ok;         /* PC UART(当前 USART1) 配置检查，0=异常，1=符合 PC 通信配置 */
+    uint32_t usart10_baudrate;         /* PC UART(当前 USART1) 波特率 */
+    uint32_t usart10_word_length;      /* PC UART(当前 USART1) 数据位配置，HAL UART_WORDLENGTH_* */
+    uint32_t usart10_stop_bits;        /* PC UART(当前 USART1) 停止位配置，HAL UART_STOPBITS_* */
+    uint32_t usart10_parity;           /* PC UART(当前 USART1) 校验位配置，HAL UART_PARITY_* */
+    uint32_t usart10_mode;             /* PC UART(当前 USART1) 收发模式配置，HAL UART_MODE_* */
 
     uint8_t online;                    /* PC 在线标志，0=离线，1=在线 */
     uint8_t heartbeat_valid;           /* PC 心跳有效标志，0=超时/无效，1=有效 */

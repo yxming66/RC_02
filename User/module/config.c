@@ -369,9 +369,9 @@ Config_RobotParam_t robot_config = {
         /* One-key spearhead action timing; rod_param is filled during init. */
         .open_delay_ms = 1000u,
         .grab_high_delay_ms = 200u,
-        .dock_wait_delay_ms = 5000u,
+        .dock_wait_delay_ms = 2000u,
         .use_photo_check = true,
-        .photo_check_ms = 1000u,
+        .photo_check_ms = 500u,
     },
     /* 模块参数：自动台阶/自动控制 auto_ctrl_param，台阶模板和 SICK 校正参数。 */
     .auto_ctrl_param = {
@@ -409,9 +409,9 @@ Config_RobotParam_t robot_config = {
                 .right_index = 3u,                   /* 右侧 SICK ADC 通道。 */
                 .valid_adc_min = 100u,               /* 有效 ADC 下限，低于认为传感器无效。 */
                 .valid_adc_max = 32100u,             /* 有效 ADC 上限，高于认为传感器无效。 */
-                .x_target_adc = 4778,    /* x 方向目标 ADC，前左/前右均值应收敛到这里。 */
+                .x_target_adc = 4748,    /* x 方向目标 ADC，前左/前右均值应收敛到这里。 */
                 .y_left_target_adc = 2048.0f,        /* 左侧 SICK 为近端时的 y 目标 ADC。 */
-                .y_right_target_adc = 1048.0f,       /* 右侧 SICK 为近端时的 y 目标 ADC。 */
+                .y_right_target_adc = 1050.0f,       /* 右侧 SICK 为近端时的 y 目标 ADC。 */
                 .yaw_target_diff_adc = 0.0f,         /* yaw/z 目标差值 ADC：前左 - 前右。 */
                 .x_tolerance_adc = 5.0f,            /* x 误差小于该值认为 x 到位。 */
                 .y_tolerance_adc = 10.0f,            /* y 误差小于该值认为 y 到位。 */
@@ -425,7 +425,7 @@ Config_RobotParam_t robot_config = {
                 .pole_target_lift = 2.0f,            /* 校正时撑杆目标高度/角度。 */
                 .pole_speed = 50.0f,                 /* 校正时撑杆运动速度。 */
                 .finish_stable_ms = 100u,            /* 全部误差到位后保持多久才判成功。 */
-                .timeout_ms = 10000u,                 /* 校正总超时，单位 ms。 */
+                .timeout_ms = 3000u,                 /* 校正总超时，单位 ms。 */
             }, 
             /* Reserved for SICK correction before ore release.
              * The current AutoSickCorrect_StartOreRelease path returns

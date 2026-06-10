@@ -30,6 +30,7 @@
 #define DR16_CH_VALUE_MIN (364u)
 #define DR16_CH_VALUE_MID (1024u)
 #define DR16_CH_VALUE_MAX (1684u)
+#define DR16_FRAME_SIZE ((uint16_t)sizeof(DR16_RawData_t))
 
 /* USER DEFINE BEGIN */
 
@@ -41,9 +42,24 @@
 
 static osThreadId_t thread_alert;
 static bool inited = false;
+static uint8_t rx_buf[sizeof(DR16_RawData_t)];
+static volatile uint16_t rx_size = 0;
+static volatile bool rx_error = false;
 
 /* Private function  -------------------------------------------------------- */
 static void DR16_RxCpltCallback(void) {
+  rx_size = DR16_FRAME_SIZE;
+  osThreadFlagsSet(thread_alert, SIGNAL_DR16_RAW_REDY);
+}
+
+static void DR16_RxEventCallback(uint16_t size) {
+  rx_size = size;
+  osThreadFlagsSet(thread_alert, SIGNAL_DR16_RAW_REDY);
+}
+
+static void DR16_ErrorCallback(void) {
+  rx_error = true;
+  rx_size = 0;
   osThreadFlagsSet(thread_alert, SIGNAL_DR16_RAW_REDY);
 }
 
@@ -81,21 +97,34 @@ int8_t DR16_Init(DR16_t *dr16) {
 
   BSP_UART_RegisterCallback(BSP_UART_RC, BSP_UART_RX_CPLT_CB,
                             DR16_RxCpltCallback);
+  BSP_UART_RegisterRxEventCallback(BSP_UART_RC, DR16_RxEventCallback);
+  BSP_UART_RegisterCallback(BSP_UART_RC, BSP_UART_ERROR_CB, DR16_ErrorCallback);
 
   inited = true;
   return DEVICE_OK;
 }
 
 int8_t DR16_Restart(void) {
-  __HAL_UART_DISABLE(BSP_UART_GetHandle(BSP_UART_RC));
-  __HAL_UART_ENABLE(BSP_UART_GetHandle(BSP_UART_RC));
+  UART_HandleTypeDef *huart = BSP_UART_GetHandle(BSP_UART_RC);
+  if (huart == NULL) return DEVICE_ERR_NULL;
+
+  (void)HAL_UART_AbortReceive(huart);
+  __HAL_UART_CLEAR_FLAG(huart, UART_CLEAR_PEF | UART_CLEAR_FEF |
+                                   UART_CLEAR_NEF | UART_CLEAR_OREF |
+                                   UART_CLEAR_IDLEF);
+  huart->ErrorCode = HAL_UART_ERROR_NONE;
   return DEVICE_OK;
 }
 
 int8_t DR16_StartDmaRecv(DR16_t *dr16) {
-  if (HAL_UART_Receive_DMA(BSP_UART_GetHandle(BSP_UART_RC),
-                           (uint8_t *)&(dr16->raw_data),
-                           sizeof(dr16->raw_data)) == HAL_OK)
+  if (dr16 == NULL) return DEVICE_ERR_NULL;
+
+  rx_size = 0;
+  rx_error = false;
+  osThreadFlagsClear(SIGNAL_DR16_RAW_REDY);
+
+  if (BSP_UART_ReceiveToIdle(BSP_UART_RC, rx_buf, DR16_FRAME_SIZE, true) ==
+      HAL_OK)
     return DEVICE_OK;
   return DEVICE_ERR;
 }
@@ -107,6 +136,9 @@ bool DR16_WaitDmaCplt(uint32_t timeout) {
 
 int8_t DR16_ParseData(DR16_t *dr16){
   if (dr16 == NULL) return DEVICE_ERR_NULL;
+  if (rx_error || rx_size != DR16_FRAME_SIZE) return DEVICE_ERR;
+
+  memcpy(&(dr16->raw_data), rx_buf, sizeof(dr16->raw_data));
 
   if (DR16_DataCorrupted(dr16)) {
     return DEVICE_ERR;

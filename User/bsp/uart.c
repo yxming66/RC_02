@@ -26,9 +26,9 @@ static BSP_UART_RxEventCallback_t UART_RxEventCallback[BSP_UART_NUM];
 static BSP_UART_t UART_Get(UART_HandleTypeDef *huart) {
   if (huart->Instance == UART5)
     return BSP_UART_RC;
-  else if (huart->Instance == USART10)
+  else if (huart->Instance == USART1)
     return BSP_UART_PC;
-  else if (huart->Instance == UART7)
+  else if (huart->Instance == USART10)
     return BSP_UART_IR;
   else
     return BSP_UART_ERR;
@@ -132,9 +132,9 @@ UART_HandleTypeDef *BSP_UART_GetHandle(BSP_UART_t uart) {
     case BSP_UART_RC:
       return &huart5;
     case BSP_UART_PC:
-      return &huart10;
+      return &huart1;
     case BSP_UART_IR:
-      return &huart7;
+      return &huart10;
     default:
       return NULL;
   }

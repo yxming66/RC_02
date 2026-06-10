@@ -85,7 +85,7 @@ void DebugUpdateUsartConfig() {
   g_pc_comm_debug.usart10_parity = huart->Init.Parity;
   g_pc_comm_debug.usart10_mode = huart->Init.Mode;
   g_pc_comm_debug.usart10_config_ok =
-      (huart->Instance == USART10 && huart->Init.BaudRate == 115200u &&
+      (huart->Instance == USART1 && huart->Init.BaudRate == 115200u &&
        huart->Init.WordLength == UART_WORDLENGTH_8B &&
        huart->Init.StopBits == UART_STOPBITS_1 &&
        huart->Init.Parity == UART_PARITY_NONE)

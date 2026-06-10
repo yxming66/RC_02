@@ -68,7 +68,7 @@
 
 #define RC_POLE_CH_RES_DEADBAND (1.0e-4f)
 #ifndef RC_POLE_CH_RES_ENABLE
-#define RC_POLE_CH_RES_ENABLE (0u)
+#define RC_POLE_CH_RES_ENABLE (1u)
 #endif
 
 /* USER STRUCT BEGIN */
@@ -550,6 +550,21 @@ static void Rc_SetPoleManual(float left, float right) {
   pole_cmd.auto_target_lift[1] = 0.0f;
   pole_cmd.auto_lift_speed[0] = 0.0f;
   pole_cmd.auto_lift_speed[1] = 0.0f;
+  pole_cmd.disable_lift_accel = false;
+}
+
+static void Rc_SetPoleAutoTarget(float left_target, float right_target) {
+  pole_cmd.mode = POLE_MODE_ACTIVE;
+  pole_cmd.lift[0] = 0.0f;
+  pole_cmd.lift[1] = 0.0f;
+  pole_cmd.auto_target_enable[0] = true;
+  pole_cmd.auto_target_enable[1] = true;
+  pole_cmd.auto_target_lift[0] = left_target;
+  pole_cmd.auto_target_lift[1] = right_target;
+  pole_cmd.auto_lift_speed[0] = 0.0f;
+  pole_cmd.auto_lift_speed[1] = 0.0f;
+  pole_cmd.auto_lift_accel[0] = 0.0f;
+  pole_cmd.auto_lift_accel[1] = 0.0f;
   pole_cmd.disable_lift_accel = false;
 }
 
@@ -1435,6 +1450,14 @@ struct RcPoleAutoSickCorrectRoute {
   }
 };
 
+struct RcPoleAutoRodRoute {
+  bool operator()(const RcRuntimeInput &, cmd::Context &, Pole_CMD_t &out) const {
+    Rc_SetPoleAutoTarget(0.0f, 0.0f);
+    out = pole_cmd;
+    return true;
+  }
+};
+
 struct RcArmSimpleSafeRoute {
   bool operator()(cmd::Context &, ArmSimple_CMD_t &out) const {
     Rc_SetArmSimpleRelax();
@@ -1737,13 +1760,15 @@ static void Rc_ConfigureCmdCenter(void) {
           cmd::from<RcRuntimeInput, RcPoleAutoSickCorrectRoute>()
               .when<RcPlanIn<RC_CMD_PLAN_AUTO_SICK_CORRECT_OUTPUT> >()
               .priority(cmd::Priority::CriticalAuto),
+          cmd::from<RcRuntimeInput, RcPoleAutoRodRoute>()
+              .when<RcPlanIn<RC_CMD_PLAN_AUTO_ROD_OUTPUT> >()
+              .priority(cmd::Priority::Auto),
           cmd::from<RcRuntimeInput, RcPoleHoldRoute>()
               .when<RcPlanIn<RC_CMD_PLAN_AUTO_STANDBY,
                              RC_CMD_PLAN_ARM_SIMPLE,
                              RC_CMD_PLAN_ORE_STORE,
                              RC_CMD_PLAN_ROD_NEW,
-                             RC_CMD_PLAN_AUTO_ORE_STANDBY,
-                             RC_CMD_PLAN_AUTO_ROD_OUTPUT> >()
+                             RC_CMD_PLAN_AUTO_ORE_STANDBY> >()
               .priority(cmd::Priority::Fallback));
 
   rc_cmd_center

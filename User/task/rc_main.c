@@ -21,19 +21,31 @@ void Task_rc_main(void *argument) {
     return;
   }
   if (DR16_StartDmaRecv(&dr16) != DEVICE_OK) {
-    osThreadTerminate(osThreadGetId());
-    return;
+    DR16_Restart();
+    if (DR16_StartDmaRecv(&dr16) != DEVICE_OK) {
+      osThreadTerminate(osThreadGetId());
+      return;
+    }
   }
 
   RcCmdCenterApp_Init();
 
   while (1) {
     tick += delay_tick;
-    DR16_StartDmaRecv(&dr16);
     if (DR16_WaitDmaCplt(100)) {
-      DR16_ParseData(&dr16);
+      if (DR16_ParseData(&dr16) != DEVICE_OK) {
+        DR16_Offline(&dr16);
+        DR16_Restart();
+      }
     } else {
       DR16_Offline(&dr16);
+      DR16_Restart();
+    }
+
+    if (DR16_StartDmaRecv(&dr16) != DEVICE_OK) {
+      DR16_Offline(&dr16);
+      DR16_Restart();
+      (void)DR16_StartDmaRecv(&dr16);
     }
 
     RcCmdCenterApp_Update(BSP_TIME_Get_ms());
