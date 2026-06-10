@@ -145,6 +145,9 @@ void TouchOnline(uint8_t cmd) {
     case PC_CMD_CAMERA_YAW:
       g_pc_comm_debug.rx_camera_yaw_count++;
       break;
+    case PC_CMD_ABSTRACT_POSITION:
+      g_pc_comm_debug.rx_abstract_position_count++;
+      break;
     case PC_CMD_STEP:
       g_pc_comm_debug.rx_step_count++;
       break;
@@ -171,6 +174,8 @@ void OnPole(const wire::PoleCmd &cmd) {
   s_state.cmd.pole.mode = cmd.mode;
   s_state.cmd.pole.lift[0] = cmd.lift0;
   s_state.cmd.pole.lift[1] = cmd.lift1;
+  s_state.cmd.abstract_position.enable_mask &=
+      static_cast<uint8_t>(~PC_ABSTRACT_MODULE_POLE);
   MarkRxFrame(PC_CMD_POLE, sizeof(cmd), MRLINK_OK);
   TouchOnline(PC_CMD_POLE);
 }
@@ -181,6 +186,8 @@ void OnArmSimple(const wire::ArmSimpleCmd &cmd) {
   s_state.cmd.arm_simple.suction = cmd.suction;
   s_state.cmd.arm_simple.target_joint1_rad = cmd.target_joint1_rad;
   s_state.cmd.arm_simple.target_joint2_rad = cmd.target_joint2_rad;
+  s_state.cmd.abstract_position.enable_mask &=
+      static_cast<uint8_t>(~PC_ABSTRACT_MODULE_ARM_SIMPLE);
   MarkRxFrame(PC_CMD_ARM_SIMPLE, sizeof(cmd), MRLINK_OK);
   TouchOnline(PC_CMD_ARM_SIMPLE);
 }
@@ -190,6 +197,8 @@ void OnRodNew(const wire::RodNewCmd &cmd) {
   s_state.cmd.rod_new.pose = cmd.pose;
   s_state.cmd.rod_new.grip = cmd.grip;
   s_state.cmd.rod_new.target_angle_rad = cmd.target_angle_rad;
+  s_state.cmd.abstract_position.enable_mask &=
+      static_cast<uint8_t>(~PC_ABSTRACT_MODULE_ROD_NEW);
   MarkRxFrame(PC_CMD_ROD_NEW, sizeof(cmd), MRLINK_OK);
   TouchOnline(PC_CMD_ROD_NEW);
 }
@@ -198,6 +207,8 @@ void OnOreStore(const wire::OreStoreCmd &cmd) {
   s_state.cmd.ore_store.mode = cmd.mode;
   s_state.cmd.ore_store.force_rehome = cmd.force_rehome;
   s_state.cmd.ore_store.platform_target_rad = cmd.platform_target_rad;
+  s_state.cmd.abstract_position.enable_mask &=
+      static_cast<uint8_t>(~PC_ABSTRACT_MODULE_ORE_STORE);
   MarkRxFrame(PC_CMD_ORE_STORE, sizeof(cmd), MRLINK_OK);
   TouchOnline(PC_CMD_ORE_STORE);
 }
@@ -215,6 +226,12 @@ void OnCameraYaw(const wire::CameraYawCmd &cmd) {
   MarkRxFrame(PC_CMD_CAMERA_YAW, sizeof(cmd), MRLINK_OK);
   TouchOnline(PC_CMD_CAMERA_YAW);
   s_state.camera_yaw_cmd_tick = BSP_TIME_Get_ms();
+}
+
+void OnAbstractPosition(const PC_AbstractPositionCMD_t &cmd) {
+  s_state.cmd.abstract_position = cmd;
+  MarkRxFrame(PC_CMD_ABSTRACT_POSITION, sizeof(cmd), MRLINK_OK);
+  TouchOnline(PC_CMD_ABSTRACT_POSITION);
 }
 
 void OnStep(const wire::StepCmd &cmd) {
@@ -258,6 +275,8 @@ bool RegisterHandlers() {
              MRLINK_OK &&
          s_bus.Subscribe<wire::AutoActionCmd>(OnAutoAction) == MRLINK_OK &&
          s_bus.SubscribeLatest<wire::CameraYawCmd>(OnCameraYaw) == MRLINK_OK &&
+         s_bus.SubscribeLatest<PC_AbstractPositionCMD_t>(OnAbstractPosition) ==
+             MRLINK_OK &&
          s_bus.SubscribeLatest<wire::StepCmd>(OnStep) == MRLINK_OK &&
          s_bus.SubscribeLatest<PC_ImuCMD_t>(OnImu) == MRLINK_OK;
 }
@@ -514,6 +533,8 @@ extern "C" void MrlinkPc_DebugUpdate(void) {
   CopyPlainToVolatile(&g_pc_comm_debug.rx_ore_store, &s_state.cmd.ore_store);
   CopyPlainToVolatile(&g_pc_comm_debug.rx_camera_yaw,
                       &s_state.cmd.camera_yaw);
+  CopyPlainToVolatile(&g_pc_comm_debug.rx_abstract_position,
+                      &s_state.cmd.abstract_position);
   CopyPlainToVolatile(&g_pc_comm_debug.rx_auto_action,
                       &s_state.cmd.auto_action);
   CopyPlainToVolatile(&g_pc_comm_debug.rx_step, &s_state.cmd.step);
@@ -559,6 +580,12 @@ extern "C" const PC_OreStoreCMD_t *MrlinkPc_GetOreStoreCMD(void) {
 
 extern "C" const PC_CameraYawCMD_t *MrlinkPc_GetCameraYawCMD(void) {
   return &s_state.cmd.camera_yaw;
+}
+
+extern "C" const PC_AbstractPositionCMD_t *MrlinkPc_GetAbstractPositionCMD(void) {
+  return (s_state.cmd.abstract_position.enable_mask != 0u)
+             ? &s_state.cmd.abstract_position
+             : nullptr;
 }
 
 extern "C" const PC_AutoActionCMD_t *MrlinkPc_GetAutoActionCMD(void) {

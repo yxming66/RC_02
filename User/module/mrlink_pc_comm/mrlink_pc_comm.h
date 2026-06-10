@@ -31,6 +31,7 @@ typedef enum {
     PC_CMD_ORE_STORE = 0x15,     /* 矿仓平台控制命令 */
     PC_CMD_AUTO_ACTION = 0x16,   /* 一键取矿/存矿/上膛/放矿/取矛头命令 */
     PC_CMD_CAMERA_YAW = 0x17,    /* 相机云台 yaw 保持命令 */
+    PC_CMD_ABSTRACT_POSITION = 0x18, /* Abstract position command */
     PC_CMD_IMU = 0x20,           /* PC 下发姿态数据命令 */
 } PC_CMD_t;
 
@@ -108,6 +109,70 @@ typedef struct {
     float target_yaw_rad;      /* PC 给定的世界系目标 yaw，单位 rad */
     float feedback_yaw_rad;    /* PC/视觉侧实时反馈的世界系 yaw，单位 rad */
 } PC_CameraYawCMD_t;
+
+typedef enum {
+    PC_ABSTRACT_MODULE_ARM_SIMPLE = (1u << 0),
+    PC_ABSTRACT_MODULE_ROD_NEW = (1u << 1),
+    PC_ABSTRACT_MODULE_ORE_STORE = (1u << 2),
+    PC_ABSTRACT_MODULE_POLE = (1u << 3),
+} PC_AbstractModuleMask_t;
+
+typedef enum {
+    PC_ABSTRACT_ARM_SIMPLE_RELAX = 0,
+    PC_ABSTRACT_ARM_SIMPLE_SLEEP = 1,
+    PC_ABSTRACT_ARM_SIMPLE_GRAB = 2,
+    PC_ABSTRACT_ARM_SIMPLE_LIFT = 3,
+    PC_ABSTRACT_ARM_SIMPLE_RELEASE = 4,
+    PC_ABSTRACT_ARM_SIMPLE_BEHAVIOR_STANDBY = 16,
+    PC_ABSTRACT_ARM_SIMPLE_BEHAVIOR_STORE_ORE = 17,
+    PC_ABSTRACT_ARM_SIMPLE_BEHAVIOR_CHAMBER_ORE = 18,
+    PC_ABSTRACT_ARM_SIMPLE_BEHAVIOR_WAIT_STORE_ORE = 19,
+    PC_ABSTRACT_ARM_SIMPLE_BEHAVIOR_WAIT_RELEASE_ORE = 20,
+    PC_ABSTRACT_ARM_SIMPLE_BEHAVIOR_RELEASE_ORE = 21,
+    PC_ABSTRACT_ARM_SIMPLE_BEHAVIOR_PICK_POS_400 = 22,
+    PC_ABSTRACT_ARM_SIMPLE_BEHAVIOR_PICK_POS_200 = 23,
+    PC_ABSTRACT_ARM_SIMPLE_BEHAVIOR_PICK_NEG_200 = 24,
+} PC_AbstractArmSimplePosition_t;
+
+typedef enum {
+    PC_ABSTRACT_ROD_NEW_RELAX = 0,
+    PC_ABSTRACT_ROD_NEW_STANDBY = 1,
+    PC_ABSTRACT_ROD_NEW_GRAB_HIGH = 2,
+    PC_ABSTRACT_ROD_NEW_DOCK_WAIT = 3,
+} PC_AbstractRodNewPosition_t;
+
+typedef enum {
+    PC_ABSTRACT_ORE_STORE_RELAX = 0,
+    PC_ABSTRACT_ORE_STORE_HOME = 1,
+    PC_ABSTRACT_ORE_STORE_STANDBY = 2,
+    PC_ABSTRACT_ORE_STORE_MID_WAIT = 3,
+    PC_ABSTRACT_ORE_STORE_LIFT = 4,
+    PC_ABSTRACT_ORE_STORE_BUFFER = 5,
+    PC_ABSTRACT_ORE_STORE_SPEARHEAD_PICKUP = 6,
+} PC_AbstractOreStorePosition_t;
+
+typedef enum {
+    PC_ABSTRACT_POLE_RELAX = 0,
+    PC_ABSTRACT_POLE_STEP_200_ALL_EXTEND = 1,
+    PC_ABSTRACT_POLE_STEP_200_FRONT_RETRACT = 2,
+    PC_ABSTRACT_POLE_STEP_200_ALL_RETRACT = 3,
+    PC_ABSTRACT_POLE_STEP_200_SMALL = 4,
+    PC_ABSTRACT_POLE_STEP_400_ALL_EXTEND = 5,
+    PC_ABSTRACT_POLE_STEP_400_FRONT_RETRACT = 6,
+    PC_ABSTRACT_POLE_STEP_400_ALL_RETRACT = 7,
+    PC_ABSTRACT_POLE_ORE_RELEASE = 8,
+} PC_AbstractPolePosition_t;
+
+typedef struct {
+    uint8_t enable_mask;               /* PC_AbstractModuleMask_t bits */
+    uint8_t arm_simple_position;       /* PC_AbstractArmSimplePosition_t */
+    uint8_t arm_simple_suction;        /* 0=off, nonzero=on */
+    uint8_t rod_new_position;          /* PC_AbstractRodNewPosition_t */
+    uint8_t rod_new_grip;              /* 0=release, nonzero=grab */
+    uint8_t ore_store_position;        /* PC_AbstractOreStorePosition_t */
+    uint8_t ore_store_cylinder_closed; /* 0=open, nonzero=closed */
+    uint8_t pole_position;             /* PC_AbstractPolePosition_t */
+} PC_AbstractPositionCMD_t;
 
 typedef enum {
     PC_AUTO_ACTION_NONE = 0,             /* 无一键动作 */
@@ -364,6 +429,7 @@ typedef struct {
     PC_RodNewCMD_t rod_new;              /* 最近一次取矛头机构命令 */
     PC_OreStoreCMD_t ore_store;          /* 最近一次矿仓命令 */
     PC_CameraYawCMD_t camera_yaw;        /* 最近一次相机云台 yaw 命令 */
+    PC_AbstractPositionCMD_t abstract_position; /* 最近一次抽象位置命令 */
     PC_AutoActionCMD_t auto_action;      /* 待消费的一键动作命令，消费后清零 */
     PC_StepCMD_t step;                   /* 待执行/最近一次自动台阶命令 */
     PC_ImuCMD_t imu;                     /* 最近一次 PC 姿态数据 */
@@ -417,6 +483,7 @@ typedef struct {
     uint32_t rx_ore_store_count;       /* 收到矿仓命令次数 */
     uint32_t rx_auto_action_count;     /* 收到一键动作命令次数 */
     uint32_t rx_camera_yaw_count;      /* 收到相机云台 yaw 命令次数 */
+    uint32_t rx_abstract_position_count; /* 收到抽象位置命令次数 */
     uint32_t rx_step_count;            /* 收到自动台阶命令次数 */
     uint32_t rx_imu_count;             /* 收到 PC 姿态数据次数 */
     uint32_t init_fail_count;          /* PC 通信初始化失败次数 */
@@ -458,6 +525,7 @@ typedef struct {
     PC_RodNewCMD_t rx_rod_new;              /* 调试用：最近一次取矛头机构命令 */
     PC_OreStoreCMD_t rx_ore_store;          /* 调试用：最近一次矿仓命令 */
     PC_CameraYawCMD_t rx_camera_yaw;        /* 调试用：最近一次相机云台 yaw 命令 */
+    PC_AbstractPositionCMD_t rx_abstract_position; /* 调试用：最近一次抽象位置命令 */
     PC_AutoActionCMD_t rx_auto_action;      /* 调试用：最近一次一键动作命令 */
     PC_StepCMD_t rx_step;                   /* 调试用：最近一次自动台阶命令 */
     PC_ImuCMD_t rx_imu;                     /* 调试用：最近一次 PC 姿态数据 */
@@ -530,6 +598,9 @@ const PC_OreStoreCMD_t *MrlinkPc_GetOreStoreCMD(void);
 
 /* 获取最近一次 PC 相机云台 yaw 命令。 */
 const PC_CameraYawCMD_t *MrlinkPc_GetCameraYawCMD(void);
+
+/* 获取最近一次 PC 抽象位置命令；未启用任何模块时返回 NULL。 */
+const PC_AbstractPositionCMD_t *MrlinkPc_GetAbstractPositionCMD(void);
 
 /* 获取待消费的一键动作命令；无待消费命令时返回 NULL。 */
 const PC_AutoActionCMD_t *MrlinkPc_GetAutoActionCMD(void);
