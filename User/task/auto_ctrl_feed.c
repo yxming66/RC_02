@@ -40,7 +40,7 @@ AutoRodSpearhead_t auto_rod_spearhead_ctrl;
 bool auto_rod_spearhead_inited = false;
 AutoSickCorrect_t auto_sick_correct_ctrl;
 bool auto_sick_correct_inited = false;
-bool auto_ctrl_local_yaw_zero_initialized = false;
+bool auto_ctrl_local_yaw_zero_initialized = false; 
 float auto_ctrl_local_yaw_zero_rad = 0.0f;
 auto_ctrl_feedback_t feedback = {0};
 static Sick_Output_t auto_ctrl_sick_output = {0};

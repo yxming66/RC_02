@@ -281,7 +281,7 @@ void Task_blink(void *argument) {
   CloudMusic_Config_t cloudmusic_config;
   CloudMusic_GetDefaultConfig(&cloudmusic_config);
   cloudmusic_config.enable_startup_music = true;
-  cloudmusic_config.enable_music_loop = false;
+  cloudmusic_config.enable_music_loop = true;
   if (CloudMusic_Init(&cloudmusic, &buzzer, &cloudmusic_config) != DEVICE_OK) {
     osThreadTerminate(osThreadGetId());
     return;
