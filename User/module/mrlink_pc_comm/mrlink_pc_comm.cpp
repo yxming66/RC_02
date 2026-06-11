@@ -21,6 +21,7 @@ constexpr uint8_t kRxDmaSlotCount = MRLINK_PC_RX_DMA_SLOT_COUNT;
 constexpr uint16_t kRxDmaBufSize = MRLINK_PC_RX_DMA_BUF_SIZE;
 constexpr uint16_t kMrlinkRxBufSize = MRLINK_PC_RX_STREAM_BUF_SIZE;
 constexpr uint16_t kMrlinkTxBufSize = MRLINK_PC_MAX_FRAME_SIZE;
+constexpr uint32_t kAutoActionRepeatReleaseMs = 300u;
 
 static_assert(kRxDmaSlotCount >= 2u, "MRLINK_PC_RX_DMA_SLOT_COUNT must be >= 2");
 static_assert(kRxDmaBufSize >= MRLINK_PC_MAX_FRAME_SIZE,
@@ -48,6 +49,8 @@ static uint8_t s_rx_parse_buf[kRxDmaBufSize];
 static osThreadId_t s_thread_id = nullptr;
 static PC_AutoStepParams_t s_auto_step_params{};
 static PC_AutoActionFeedback_t s_auto_action_feedback{};
+static uint8_t s_auto_action_rx_latch = PC_AUTO_ACTION_NONE;
+static uint32_t s_auto_action_rx_latch_tick = 0u;
 static PC_IrOreFeedback_t s_ir_ore_feedback{};
 static MrlinkPc_TxCallback_t s_tx_done_callback = nullptr;
 static MrlinkPc_TxCallback_t s_tx_error_callback = nullptr;
@@ -214,7 +217,25 @@ void OnOreStore(const wire::OreStoreCmd &cmd) {
 }
 
 void OnAutoAction(const wire::AutoActionCmd &cmd) {
-  s_state.cmd.auto_action.action = cmd.action;
+  const uint32_t now_ms = BSP_TIME_Get_ms();
+  const bool latch_expired =
+      s_auto_action_rx_latch != PC_AUTO_ACTION_NONE &&
+      (now_ms - s_auto_action_rx_latch_tick) >= kAutoActionRepeatReleaseMs;
+
+  if (cmd.action == PC_AUTO_ACTION_NONE) {
+    s_auto_action_rx_latch = PC_AUTO_ACTION_NONE;
+    s_auto_action_rx_latch_tick = now_ms;
+    s_state.cmd.auto_action.action = PC_AUTO_ACTION_NONE;
+  } else if (cmd.action != s_auto_action_rx_latch) {
+    s_state.cmd.auto_action.action = cmd.action;
+    s_auto_action_rx_latch = cmd.action;
+    s_auto_action_rx_latch_tick = now_ms;
+  } else if (latch_expired) {
+    s_state.cmd.auto_action.action = cmd.action;
+    s_auto_action_rx_latch_tick = now_ms;
+  } else {
+    s_auto_action_rx_latch_tick = now_ms;
+  }
   MarkRxFrame(PC_CMD_AUTO_ACTION, sizeof(cmd), MRLINK_OK);
   TouchOnline(PC_CMD_AUTO_ACTION);
 }

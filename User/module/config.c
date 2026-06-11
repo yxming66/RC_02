@@ -92,7 +92,7 @@ Config_RobotParam_t robot_config = {
             [0] = {.can = BSP_CAN_2, .id = 0x201, .module = MOTOR_M3508, .reverse = true, .gear = true},
             [1] = {.can = BSP_CAN_2, .id = 0x202, .module = MOTOR_M3508, .reverse = false, .gear = true},
             [2] = {.can = BSP_CAN_2, .id = 0x203, .module = MOTOR_M3508, .reverse = true, .gear = true},
-            [3] = {.can = BSP_CAN_2, .id = 0x204, .module = MOTOR_M3508, .reverse = true, .gear = true},
+            [3] = {.can = BSP_CAN_2, .id = 0x204, .module = MOTOR_M3508, .reverse = false, .gear = true},
         },
         .pid = {
             .support_pos_pid = {
@@ -369,7 +369,7 @@ Config_RobotParam_t robot_config = {
         /* One-key spearhead action timing; rod_param is filled during init. */
         .open_delay_ms = 1000u,
         .grab_high_delay_ms = 200u,
-        .dock_wait_delay_ms = 2000u,
+        .dock_wait_delay_ms = 5000u,
         .use_photo_check = true,
         .photo_check_ms = 500u,
     },
@@ -472,7 +472,7 @@ Config_RobotParam_t robot_config = {
             .front_retract_move_speed = 0.50f,  /* 前杆动作阶段 vx，单位 m/s。 */
             .front_retract_timeout_ms = 5000u,  /* 前光电触发后，等待前杆收回到位超时，单位 ms。 */
             .mid_move_speed = 1.5f,             /* 前杆收回到位后的中段平移 vx，单位 m/s。 */
-            .mid_move_ms = 250u,                  /* 中段平移持续时间，单位 ms。 */
+            .mid_move_ms = 150u,                  /* 中段平移持续时间，单位 ms。 */
             .rear_retract_move_speed = 0.40f,   /* 等待后光电触发的低速 vx，单位 m/s。 */
             .rear_retract_timeout_ms = 5000u,   /* 后光电触发后，全收腿动作超时，单位 ms。 */
             .rear_retract_move_ms = 300u,       /* 后光电触发后，全收腿移动持续时间，单位 ms。 */
@@ -536,11 +536,11 @@ Config_RobotParam_t robot_config = {
              */
             /* Active fields used by AutoCtrlTemplate_RunHeadDescend200Optimized. */
             .prealign_move_speed = 0.20f,       /* PREALIGN yaw 对正时叠加的前进 vx，单位 m/s。 */
-            .front_retract_move_speed = 0.3f,  /* step4 等待 PE13/photo1 下降沿的慢速 vx，单位 m/s。 */
+            .front_retract_move_speed = 0.1f,  /* step4 等待 PE13/photo1 下降沿的慢速 vx，单位 m/s。 */
             .mid_move_speed = 1.20f,            /* step0/step3 两段固定快跑 vx，单位 m/s。 */
-            .mid_move_ms = 240u,                /* step0 第一次固定快跑持续时间，单位 ms。 */ 
-            .rear_retract_move_speed = 0.25f,   /* step1 等待 PA2/photo3 下降沿的慢速 vx，单位 m/s。 */
-            .rear_retract_move_ms = 180u,       /* step3 第二次固定快跑持续时间，单位 ms。 */
+            .mid_move_ms = 100u,                /* step0 第一次固定快跑持续时间，单位 ms。 */ 
+            .rear_retract_move_speed = 0.10f,   /* step1 等待 PA2/photo3 下降沿的慢速 vx，单位 m/s。 */
+            .rear_retract_move_ms = 100u,       /* step3 第二次固定快跑持续时间，单位 ms。 */
             .second_photo_retract_move_speed = 0.50f, /* step7 第二个下降沿后全收杆离开 vx，单位 m/s。 */
             .final_move_speed = 0.05f,          /* step7 离开 vx 的备用值；second_photo_retract_move_speed <= 0 时使用。 */
             .final_move_ms = 100u,              /* step7 全收杆离开持续时间，单位 ms。 */
@@ -548,7 +548,7 @@ Config_RobotParam_t robot_config = {
             .pole_front_retract_speed = 25.0f,  /* step0/1/7 前杆保持或回收到全收目标的速度，单位 rad/s。 */
             .pole_rear_extend_speed = 50.0f,    /* step5/6 四杆全伸时的后杆速度，单位 rad/s。 */
             .pole_rear_retract_speed = 25.0f,   /* step0-4/7 后杆保持或回收到全收目标的速度，单位 rad/s。 */
-            .pole_lift_accel = 180.0f,          /* Per-template pole accel limit, rad/s^2. */
+            .pole_lift_accel = 250.0f,          /* Per-template pole accel limit, rad/s^2. */
             .front_photo_timeout_ms = 5000u,    /* step4 等待 PE13/photo1 下降沿超时，单位 ms。 */
             .rear_photo_timeout_ms = 5000u,     /* step1 等待 PA2/photo3 下降沿超时，单位 ms。 */
             .pole_extend_move_speed = 1.5f,    /* step6 四杆全伸行走 vx，单位 m/s。 */

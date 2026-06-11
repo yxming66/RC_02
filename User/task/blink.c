@@ -81,6 +81,8 @@ static CloudMusic_Input_t Blink_GetCloudMusicInput(void) {
       .rc_online = dr16.header.online,
       .sw_l = dr16.data.sw_l,
       .sw_r = dr16.data.sw_r,
+      .ch_r_x = dr16.data.ch_r_x,
+      .ch_r_y = dr16.data.ch_r_y,
   };
   return input;
 }
@@ -282,6 +284,7 @@ void Task_blink(void *argument) {
   CloudMusic_GetDefaultConfig(&cloudmusic_config);
   cloudmusic_config.enable_startup_music = true;
   cloudmusic_config.enable_music_loop = true;
+  cloudmusic_config.start_music_loop_paused = true;
   if (CloudMusic_Init(&cloudmusic, &buzzer, &cloudmusic_config) != DEVICE_OK) {
     osThreadTerminate(osThreadGetId());
     return;
