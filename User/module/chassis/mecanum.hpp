@@ -45,8 +45,11 @@ class MecanumController final {
   int8_t ComputeWheelSpeeds();
   float PlanWheelStartSpeed(uint8_t idx, float target_speed_mps);
   bool ShouldHoldZeroCommand() const;
+  bool UpdateWheelHoldEntryReady();
+  void ResetWheelHoldEntryState();
   void EnterWheelHold();
   void ExitWheelHold();
+  bool WheelHoldPositionJumped(uint8_t idx, float position_rad) const;
   int8_t ControlWheelHold();
   int8_t RegisterWheels(float target_freq);
   float WheelSpeedFeedback(uint8_t idx) const;
@@ -78,7 +81,9 @@ class MecanumController final {
   float mech_zero_ = 0.0f;
   float wz_multi_ = 1.0f;
   bool wheel_hold_active_ = false;
+  float wheel_hold_still_time_s_ = 0.0f;
   std::array<float, kWheelCount> wheel_hold_position_rad_{};
+  std::array<float, kWheelCount> wheel_hold_last_position_rad_{};
   alignas(Wheel) unsigned char wheel_storage_[kWheelCount][sizeof(Wheel)]{};
 };
 

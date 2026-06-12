@@ -27,7 +27,10 @@ constexpr float kMaxDtS = 0.050f;
 constexpr float kMinWheelSpeedMps = 1e-4f;
 constexpr float kMinWheelRadiusM = 1e-4f;
 constexpr float kHoldCommandDeadband = 1e-4f;
-constexpr bool kZeroCommandWheelPositionHoldEnabled = false;
+constexpr bool kZeroCommandWheelPositionHoldEnabled = true;//零向量锁死
+constexpr float kWheelHoldEnterSpeedMps = 0.8f;
+constexpr float kWheelHoldEnterStillTimeS = 0.030f;
+constexpr float kWheelHoldMaxPositionStepRad = 0.35f;
 constexpr float kDefaultStaticFrictionDeadbandMps = 0.01f;
 
 mr::robotics::chassis::MecanumGeometry MakeMecanumGeometry(
@@ -265,10 +268,17 @@ int8_t MecanumController::Control(const Chassis_CMD_t &cmd, uint32_t now) {
   debug_.cmd_vec_limited = move_vec_;
 
   if (ShouldHoldZeroCommand()) {
-    const int8_t ret = ControlWheelHold();
-    debug_.control_us = static_cast<uint32_t>(BSP_TIME_Get_us() - start_us);
-    return ret;
+    const bool hold_ready =
+        wheel_hold_active_ || UpdateWheelHoldEntryReady();
+    if (hold_ready) {
+      const int8_t ret = ControlWheelHold();
+      debug_.control_us = static_cast<uint32_t>(BSP_TIME_Get_us() - start_us);
+      return ret;
+    }
+  } else {
+    ResetWheelHoldEntryState();
   }
+
   if (wheel_hold_active_) {
     ExitWheelHold();
   }
@@ -408,7 +418,9 @@ void MecanumController::ResetRuntime() {
   mech_zero_ = 0.0f;
   wz_multi_ = 1.0f;
   wheel_hold_active_ = false;
+  wheel_hold_still_time_s_ = 0.0f;
   wheel_hold_position_rad_ = {};
+  wheel_hold_last_position_rad_ = {};
 
   for (uint8_t i = 0; i < kWheelCount; ++i) {
     out_.set_torque_ret[i] = DEVICE_ERR;
@@ -453,6 +465,7 @@ void MecanumController::ResetControlStateOnModeChange() {
     LowPassFilter2p_Reset(&body_velocity_filter_[i], 0.0f);
   }
   wheel_hold_active_ = false;
+  ResetWheelHoldEntryState();
   ResetWheelSpeedPlanner();
 }
 
@@ -584,8 +597,6 @@ float MecanumController::PlanWheelStartSpeed(uint8_t idx,
 }
 
 bool MecanumController::ShouldHoldZeroCommand() const {
-  // Keep idle active chassis in velocity-loop zero. Wheel position hold can
-  // saturate on encoder position jumps or normal chassis coast after stick release.
   if (!kZeroCommandWheelPositionHoldEnabled) {
     return false;
   }
@@ -599,11 +610,30 @@ bool MecanumController::ShouldHoldZeroCommand() const {
          std::fabs(move_vec_.wz) <= kHoldCommandDeadband;
 }
 
+bool MecanumController::UpdateWheelHoldEntryReady() {
+  for (uint8_t i = 0; i < kWheelCount; ++i) {
+    const float speed_mps = WheelSpeedFeedback(i);
+    if (!scalar::is_finite_scalar(speed_mps) ||
+        std::fabs(speed_mps) > kWheelHoldEnterSpeedMps) {
+      ResetWheelHoldEntryState();
+      return false;
+    }
+  }
+
+  wheel_hold_still_time_s_ += dt_;
+  return wheel_hold_still_time_s_ >= kWheelHoldEnterStillTimeS;
+}
+
+void MecanumController::ResetWheelHoldEntryState() {
+  wheel_hold_still_time_s_ = 0.0f;
+}
+
 void MecanumController::EnterWheelHold() {
   ResetWheelSpeedPlanner();
   for (uint8_t i = 0; i < kWheelCount; ++i) {
     wheel_hold_position_rad_[i] =
         (wheels_[i] != nullptr) ? wheels_[i]->State().position_rad : 0.0f;
+    wheel_hold_last_position_rad_[i] = wheel_hold_position_rad_[i];
     if (wheels_[i] != nullptr) {
       wheels_[i]->ClearPendingCommand();
     }
@@ -617,7 +647,20 @@ void MecanumController::EnterWheelHold() {
 void MecanumController::ExitWheelHold() {
   ResetWheelVelocityControlState();
   ResetWheelHoldControlState();
+  ResetWheelHoldEntryState();
   wheel_hold_active_ = false;
+}
+
+bool MecanumController::WheelHoldPositionJumped(uint8_t idx,
+                                                float position_rad) const {
+  if (idx >= kWheelCount || !scalar::is_finite_scalar(position_rad)) {
+    return true;
+  }
+
+  const float last_position = wheel_hold_last_position_rad_[idx];
+  return scalar::is_finite_scalar(last_position) &&
+         std::fabs(position_rad - last_position) >
+             kWheelHoldMaxPositionStepRad;
 }
 
 int8_t MecanumController::ControlWheelHold() {
@@ -635,9 +678,20 @@ int8_t MecanumController::ControlWheelHold() {
     debug_.wheel_speed_ref_mps[i] = 0.0f;
     debug_.wheel_speed_fdb_mps[i] = WheelSpeedFeedback(i);
     debug_.wheel_speed_fdb_filtered_mps[i] = FilteredWheelSpeedFeedback(i);
-    const float torque_cmd = PID_Calc(&wheel_hold_pid_[i],
-                                      wheel_hold_position_rad_[i],
-                                      wheel->State().position_rad, 0.0f, dt_);
+    const float position_rad = wheel->State().position_rad;
+    float torque_cmd = 0.0f;
+    if (!scalar::is_finite_scalar(position_rad)) {
+      PID_Reset(&wheel_hold_pid_[i]);
+    } else {
+      if (WheelHoldPositionJumped(i, position_rad)) {
+        wheel_hold_position_rad_[i] = position_rad;
+        PID_Reset(&wheel_hold_pid_[i]);
+      }
+      torque_cmd = PID_Calc(&wheel_hold_pid_[i],
+                            wheel_hold_position_rad_[i],
+                            position_rad, 0.0f, dt_);
+      wheel_hold_last_position_rad_[i] = position_rad;
+    }
     debug_.wheel_torque_pid_out[i] = torque_cmd;
     out_.motor[i] = ClampSymmetric(torque_cmd, param_->limit.max_torque_cmd);
     debug_.wheel_torque_cmd_nm[i] = out_.motor[i];

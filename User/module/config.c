@@ -33,7 +33,7 @@ Config_RobotParam_t robot_config = {
                 .range = 0.0f,
             },
             .motor_pid_param = {
-                .k = 2.2f,
+                .k = 1.4f,
                 .p = 1.8f,
                 .i = 0.24f,
                 .d = 0.0f,

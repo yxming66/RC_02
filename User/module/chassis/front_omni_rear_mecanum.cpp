@@ -27,7 +27,10 @@ constexpr float kMaxDtS = 0.050f;
 constexpr float kMinWheelSpeedMps = 1e-4f;
 constexpr float kMinWheelRadiusM = 1e-4f;
 constexpr float kHoldCommandDeadband = 1e-4f;
-constexpr bool kZeroCommandWheelPositionHoldEnabled = false;
+constexpr bool kZeroCommandWheelPositionHoldEnabled = true;
+constexpr float kWheelHoldEnterSpeedMps = 0.03f;
+constexpr float kWheelHoldEnterStillTimeS = 0.030f;
+constexpr float kWheelHoldMaxPositionStepRad = 0.35f;
 
 mr::robotics::chassis::FrontOmniRearMecanumGeometry
 MakeGeometry(const Chassis_Params_t *param) {
@@ -270,9 +273,15 @@ int8_t FrontOmniRearMecanumController::Control(const Chassis_CMD_t &cmd,
   debug_.cmd_vec_limited = move_vec_;
 
   if (ShouldHoldZeroCommand()) {
-    const int8_t ret = ControlWheelHold();
-    debug_.control_us = static_cast<uint32_t>(BSP_TIME_Get_us() - start_us);
-    return ret;
+    const bool hold_ready =
+        wheel_hold_active_ || UpdateWheelHoldEntryReady();
+    if (hold_ready) {
+      const int8_t ret = ControlWheelHold();
+      debug_.control_us = static_cast<uint32_t>(BSP_TIME_Get_us() - start_us);
+      return ret;
+    }
+  } else {
+    ResetWheelHoldEntryState();
   }
   if (wheel_hold_active_) {
     ExitWheelHold();
@@ -409,9 +418,11 @@ void FrontOmniRearMecanumController::ResetRuntime() {
   wz_multi_ = 1.0f;
   yaw_rate_rad_s_ = 0.0f;
   wheel_hold_active_ = false;
+  wheel_hold_still_time_s_ = 0.0f;
   lateral_heading_hold_active_ = false;
   lateral_heading_target_rad_ = 0.0f;
   wheel_hold_position_rad_ = {};
+  wheel_hold_last_position_rad_ = {};
 
   for (uint8_t i = 0; i < kWheelCount; ++i) {
     out_.set_torque_ret[i] = DEVICE_ERR;
@@ -456,6 +467,7 @@ void FrontOmniRearMecanumController::ResetControlStateOnModeChange() {
     LowPassFilter2p_Reset(&body_velocity_filter_[i], 0.0f);
   }
   wheel_hold_active_ = false;
+  ResetWheelHoldEntryState();
   lateral_heading_hold_active_ = false;
   lateral_heading_target_rad_ = feedback_.encoder_gimbalYawMotor;
 }
@@ -540,8 +552,6 @@ int8_t FrontOmniRearMecanumController::ComputeWheelSpeeds() {
 }
 
 bool FrontOmniRearMecanumController::ShouldHoldZeroCommand() const {
-  // Keep idle active chassis in velocity-loop zero. Wheel position hold can
-  // saturate on encoder position jumps or normal chassis coast after stick release.
   if (!kZeroCommandWheelPositionHoldEnabled) {
     return false;
   }
@@ -553,6 +563,24 @@ bool FrontOmniRearMecanumController::ShouldHoldZeroCommand() const {
   return std::fabs(move_vec_.vx) <= kHoldCommandDeadband &&
          std::fabs(move_vec_.vy) <= kHoldCommandDeadband &&
          std::fabs(move_vec_.wz) <= kHoldCommandDeadband;
+}
+
+bool FrontOmniRearMecanumController::UpdateWheelHoldEntryReady() {
+  for (uint8_t i = 0; i < kWheelCount; ++i) {
+    const float speed_mps = WheelSpeedFeedback(i);
+    if (!scalar::is_finite_scalar(speed_mps) ||
+        std::fabs(speed_mps) > kWheelHoldEnterSpeedMps) {
+      ResetWheelHoldEntryState();
+      return false;
+    }
+  }
+
+  wheel_hold_still_time_s_ += dt_;
+  return wheel_hold_still_time_s_ >= kWheelHoldEnterStillTimeS;
+}
+
+void FrontOmniRearMecanumController::ResetWheelHoldEntryState() {
+  wheel_hold_still_time_s_ = 0.0f;
 }
 
 bool FrontOmniRearMecanumController::ShouldUseLateralYawCorrection(
@@ -588,6 +616,7 @@ void FrontOmniRearMecanumController::EnterWheelHold() {
   for (uint8_t i = 0; i < kWheelCount; ++i) {
     wheel_hold_position_rad_[i] =
         (wheels_[i] != nullptr) ? wheels_[i]->State().position_rad : 0.0f;
+    wheel_hold_last_position_rad_[i] = wheel_hold_position_rad_[i];
     if (wheels_[i] != nullptr) {
       wheels_[i]->ClearPendingCommand();
     }
@@ -601,6 +630,7 @@ void FrontOmniRearMecanumController::EnterWheelHold() {
 void FrontOmniRearMecanumController::ExitWheelHold() {
   ResetWheelVelocityControlState();
   ResetWheelHoldControlState();
+  ResetWheelHoldEntryState();
   wheel_hold_active_ = false;
 }
 
@@ -645,6 +675,18 @@ float FrontOmniRearMecanumController::CalcLateralHeadingHoldWz() {
   return ClampSymmetric(correction_wz, limit);
 }
 
+bool FrontOmniRearMecanumController::WheelHoldPositionJumped(
+    uint8_t idx, float position_rad) const {
+  if (idx >= kWheelCount || !scalar::is_finite_scalar(position_rad)) {
+    return true;
+  }
+
+  const float last_position = wheel_hold_last_position_rad_[idx];
+  return scalar::is_finite_scalar(last_position) &&
+         std::fabs(position_rad - last_position) >
+             kWheelHoldMaxPositionStepRad;
+}
+
 int8_t FrontOmniRearMecanumController::ControlWheelHold() {
   if (!wheel_hold_active_) {
     EnterWheelHold();
@@ -660,9 +702,20 @@ int8_t FrontOmniRearMecanumController::ControlWheelHold() {
     debug_.wheel_speed_ref_mps[i] = 0.0f;
     debug_.wheel_speed_fdb_mps[i] = WheelSpeedFeedback(i);
     debug_.wheel_speed_fdb_filtered_mps[i] = FilteredWheelSpeedFeedback(i);
-    const float torque_cmd = PID_Calc(&wheel_hold_pid_[i],
-                                      wheel_hold_position_rad_[i],
-                                      wheel->State().position_rad, 0.0f, dt_);
+    const float position_rad = wheel->State().position_rad;
+    float torque_cmd = 0.0f;
+    if (!scalar::is_finite_scalar(position_rad)) {
+      PID_Reset(&wheel_hold_pid_[i]);
+    } else {
+      if (WheelHoldPositionJumped(i, position_rad)) {
+        wheel_hold_position_rad_[i] = position_rad;
+        PID_Reset(&wheel_hold_pid_[i]);
+      }
+      torque_cmd = PID_Calc(&wheel_hold_pid_[i],
+                            wheel_hold_position_rad_[i],
+                            position_rad, 0.0f, dt_);
+      wheel_hold_last_position_rad_[i] = position_rad;
+    }
     debug_.wheel_torque_pid_out[i] = torque_cmd;
     out_.motor[i] = ClampSymmetric(torque_cmd, param_->limit.max_torque_cmd);
     debug_.wheel_torque_cmd_nm[i] = out_.motor[i];
