@@ -70,6 +70,7 @@ typedef struct {
   } motor_install[4];
   struct {
     KPID_Params_t motor_pid_param;
+    KPID_Params_t motor_high_pole_pid_param;
     KPID_Params_t motor_pos_pid_param;
     KPID_Params_t follow_pid_param;
   } pid;
@@ -98,6 +99,7 @@ typedef struct {
     float wheel_start_accel_mps2; /* Wheel ref accel limit for soft start; <=0 disables. */
     float wheel_static_friction_nm; /* Static friction torque feedforward per wheel; <=0 disables. */
     float wheel_static_friction_deadband_mps; /* Ref wheel speed deadband for static friction FF. */
+    float wheel_high_pole_pid_switch_lift; /* Use high-pole wheel speed PID when any pole lift exceeds this rad; <=0 disables. */
   } controller;
   struct {
     float lateral_vy_to_wz_feedforward; /* wz_ff = gain * vy, rad/m. */
@@ -150,6 +152,8 @@ typedef struct {
   float wheel_speed_ref_mps[4];
   float wheel_speed_fdb_mps[4];
   float wheel_speed_fdb_filtered_mps[4];
+  float wheel_pid_switch_pole_lift;
+  bool wheel_high_pole_pid_active;
   float wheel_torque_pid_out[4];
   float wheel_static_friction_ff_nm[4];
   float wheel_torque_cmd_nm[4];

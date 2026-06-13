@@ -312,6 +312,14 @@ static bool AutoCtrlTemplate_DescendSecondPhotoEdge(const auto_ctrl_t *ctrl,
   return ctrl->template_ctx.pa0_photo4_falling_edge_latched;
 }
 
+static void AutoCtrlTemplate_CommandPhotoStopAndPole(
+    auto_ctrl_t *ctrl, float front_target, float rear_target,
+    float front_speed, float rear_speed) {
+  AutoCtrlPrimitive_CommandFlatMove(ctrl, 0.0f);
+  AutoCtrlTemplate_CommandPole(ctrl, front_target, rear_target, front_speed,
+                               rear_speed);
+}
+
 static bool AutoCtrlTemplate_RunAscend(auto_ctrl_t *ctrl, uint32_t now_ms,
                                        const Config_RobotParam_t *robot_param,
                                        const AutoCtrl_TemplateParam_t *param,
@@ -621,6 +629,9 @@ static bool AutoCtrlTemplate_RunTailDescendOptimized(
     case 1:
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
       if (AutoCtrlTemplate_DescendFirstPhotoEdge(ctrl, true, use_400mm)) {
+        AutoCtrlTemplate_CommandPhotoStopAndPole(
+            ctrl, pole.all_retract[0], pole.all_extend[1],
+            param->pole_front_retract_speed, param->pole_rear_extend_speed);
         AutoCtrlTemplate_NextStep(ctrl);
         return false;
       }
@@ -637,6 +648,9 @@ static bool AutoCtrlTemplate_RunTailDescendOptimized(
     case 2:
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
       if (AutoCtrlTemplate_DescendFirstPhotoEdge(ctrl, true, use_400mm)) {
+        AutoCtrlTemplate_CommandPhotoStopAndPole(
+            ctrl, pole.all_retract[0], pole.all_extend[1],
+            param->pole_front_retract_speed, param->pole_rear_extend_speed);
         AutoCtrlTemplate_NextStep(ctrl);
         return false;
       }
@@ -668,6 +682,9 @@ static bool AutoCtrlTemplate_RunTailDescendOptimized(
     case 4:
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
       if (AutoCtrlTemplate_DescendSecondPhotoEdge(ctrl, true, use_400mm)) {
+        AutoCtrlTemplate_CommandPhotoStopAndPole(
+            ctrl, pole.all_extend[0], pole.all_extend[1],
+            param->pole_front_extend_speed, param->pole_rear_extend_speed);
         AutoCtrlTemplate_NextStep(ctrl);
         return false;
       }
@@ -685,6 +702,9 @@ static bool AutoCtrlTemplate_RunTailDescendOptimized(
     case 5:
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
       if (AutoCtrlTemplate_DescendSecondPhotoEdge(ctrl, true, use_400mm)) {
+        AutoCtrlTemplate_CommandPhotoStopAndPole(
+            ctrl, pole.all_extend[0], pole.all_extend[1],
+            param->pole_front_extend_speed, param->pole_rear_extend_speed);
         AutoCtrlTemplate_NextStep(ctrl);
         return false;
       }
@@ -780,6 +800,9 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
     case 1:
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
       if (AutoCtrlTemplate_DescendFirstPhotoEdge(ctrl, false, use_400mm)) {
+        AutoCtrlTemplate_CommandPhotoStopAndPole(
+            ctrl, pole.all_extend[0], pole.all_retract[1],
+            param->pole_front_extend_speed, param->pole_rear_retract_speed);
         AutoCtrlTemplate_NextStep(ctrl);
         return false;
       }
@@ -827,6 +850,9 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
     case 4:
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
       if (AutoCtrlTemplate_DescendSecondPhotoEdge(ctrl, false, use_400mm)) {
+        AutoCtrlTemplate_CommandPhotoStopAndPole(
+            ctrl, pole.all_extend[0], pole.all_extend[1],
+            param->pole_front_extend_speed, param->pole_rear_extend_speed);
         AutoCtrlTemplate_NextStep(ctrl);
         return false;
       }

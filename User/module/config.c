@@ -33,12 +33,22 @@ Config_RobotParam_t robot_config = {
                 .range = 0.0f,
             },
             .motor_pid_param = {
-                .k = 1.8f,
+                .k = 1.4f,
                 .p = 1.8f,
                 .i = 0.24f,
                 .d = 0.0f,
                 .i_limit = 2.0f,
                 .out_limit = 6.0f,
+                .d_cutoff_freq = 35.0f,
+                .range = 0.0f,
+            },
+            .motor_high_pole_pid_param = {
+                .k = 1.0f,
+                .p = 1.5f,
+                .i = 0.10f,
+                .d = 0.0f,
+                .i_limit = 1.0f,
+                .out_limit = 4.0f,
                 .d_cutoff_freq = 35.0f,
                 .range = 0.0f,
             },
@@ -74,6 +84,7 @@ Config_RobotParam_t robot_config = {
             .wheel_start_accel_mps2 = 0.0f,
             .wheel_static_friction_nm = 0.5f,
             .wheel_static_friction_deadband_mps = 0.01f,
+            .wheel_high_pole_pid_switch_lift = 3.0f,
         },
         .front_omni_rear_mecanum = {
             .lateral_vy_to_wz_feedforward = 0.10f,//1.1f不会偏航会有-vx
@@ -97,7 +108,7 @@ Config_RobotParam_t robot_config = {
         .pid = {
             .support_pos_pid = {
                 .k = 15.0f,
-                .p = 10.0f,
+                .p = 20.0f,
                 .i = 0.0f,
                 .d = 0.0f,
                 .i_limit = 0.15f,
@@ -107,7 +118,7 @@ Config_RobotParam_t robot_config = {
             },
             .support_vel_pid = {
                 .k = 0.1f,
-                .p = 0.1f,
+                .p = 0.15f,
                 .i = 0.0f,
                 .d = 0.0f,
                 .i_limit = 0.0f,
@@ -135,8 +146,8 @@ Config_RobotParam_t robot_config = {
         .limit = {
             .max_current = 1.0f,
             .support_total_travel = 26.7f,//26.7//27.3
-            .support_lift_speed = 40.0f,
-            .support_lift_accel = 100.0f,
+            .support_lift_speed = 25.0f,
+            .support_lift_accel = 140.0f,
         },
     },
     /* 模块参数：矿仓 ore_store_param，矿仓平台电机、回零、预设位置和气缸。 */
@@ -468,23 +479,23 @@ Config_RobotParam_t robot_config = {
              * - second_photo_retract_move_speed: 后光电触发后，全收腿时的前进速度。
              */
             .prealign_move_speed = 0.0f,        /* PREALIGN 对正阶段叠加 vx，单位 m/s。 */
-            .pole_extend_move_speed = 0.50f,    /* 撑杆伸出阶段 vx，单位 m/s。 */
-            .front_retract_move_speed = 0.50f,  /* 前杆动作阶段 vx，单位 m/s。 */
+            .pole_extend_move_speed = 0.30f,    /* 撑杆伸出阶段 vx，单位 m/s。 */
+            .front_retract_move_speed = 0.30f,  /* 前杆动作阶段 vx，单位 m/s。 */
             .front_retract_timeout_ms = 5000u,  /* 前光电触发后，等待前杆收回到位超时，单位 ms。 */
-            .mid_move_speed = 1.2f,             /* 前杆收回到位后的中段平移 vx，单位 m/s。 */
-            .mid_move_ms = 120u,                  /* 中段平移持续时间，单位 ms。 */
+            .mid_move_speed = 1.0f,             /* 前杆收回到位后的中段平移 vx，单位 m/s。 */
+            .mid_move_ms = 100u,                  /* 中段平移持续时间，单位 ms。 */
             .rear_retract_move_speed = 0.40f,   /* 等待后光电触发的低速 vx，单位 m/s。 */
             .rear_retract_timeout_ms = 5000u,   /* 后光电触发后，全收腿动作超时，单位 ms。 */
             .rear_retract_move_ms = 300u,       /* 后光电触发后，全收腿移动持续时间，单位 ms。 */
             .second_photo_retract_move_speed = 0.50f, /* 后一个光电触发收腿时向头向移动 vx，单位 m/s。 */
             .final_move_speed = 4.0f,          /* 收尾离开台阶 vx，单位 m/s。 */
             .final_move_ms = 500u,                /* 收尾离开台阶持续时间，单位 ms。 */
-            .pole_all_extend_speed = 50.0f,     /* 四杆全伸目标跟随速度，单位 rad/s。 */
+            .pole_all_extend_speed = 25.0f,     /* 四杆全伸目标跟随速度，单位 rad/s。 */
             .pole_front_extend_speed = 20.0f,   /* 前杆伸出目标跟随速度，单位 rad/s。 */
             .pole_front_retract_speed = 60.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
             .pole_rear_extend_speed = 18.0f,    /* 后杆伸出目标跟随速度，单位 rad/s。 */
             .pole_rear_retract_speed = 30.0f,   /* 后杆回收目标跟随速度，单位 rad/s。 */
-            .pole_lift_accel = 80.0f,          /* Per-template pole accel limit, rad/s^2. */
+            .pole_lift_accel = 140.0f,          /* Per-template pole accel limit, rad/s^2. */
             .front_photo_timeout_ms = 5000u,    /* 等待前光电触发/下降沿超时，单位 ms。 */
             .rear_photo_timeout_ms = 10000u,    /* 等待后光电触发/下降沿超时，单位 ms。 */
         },

@@ -112,6 +112,8 @@ extern "C" void Task_chassis_main(void *argument) {
     osMessageQueueGet(task_runtime.msgq.chassis.cmd, &chassis_cmd, nullptr, 0);
 
     chassis.SetGimbalYaw(chassis_imu.eulr.yaw);
+    chassis.SetPoleLift(pole.feedback.support_lift[0],
+                        pole.feedback.support_lift[1]);
     (void)chassis.UpdateFeedback();
 
     /* Update motor speed for gyro calibration in atti_esti task */

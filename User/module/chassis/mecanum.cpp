@@ -137,6 +137,16 @@ float StaticFrictionFeedforward(const Chassis_Params_t *param,
   return (ref_speed_mps > 0.0f) ? compensation_nm : -compensation_nm;
 }
 
+bool ShouldUseHighPoleWheelPid(const Chassis_Params_t *param,
+                               float pole_lift_max_rad) {
+  if (param == nullptr || !scalar::is_finite_scalar(pole_lift_max_rad)) {
+    return false;
+  }
+  const float switch_lift = param->controller.wheel_high_pole_pid_switch_lift;
+  return scalar::is_positive_scalar(switch_lift) &&
+         pole_lift_max_rad > switch_lift;
+}
+
 }  // namespace
 
 int8_t MecanumController::Init(const Chassis_Params_t *param,
@@ -167,6 +177,18 @@ int8_t MecanumController::Init(const Chassis_Params_t *param,
 
   UpdateBodyVelocityFeedback();
   return CHASSIS_OK;
+}
+
+void MecanumController::SetPoleLift(float front_lift_rad,
+                                    float rear_lift_rad) {
+  float max_lift = 0.0f;
+  if (scalar::is_finite_scalar(front_lift_rad) && front_lift_rad > max_lift) {
+    max_lift = front_lift_rad;
+  }
+  if (scalar::is_finite_scalar(rear_lift_rad) && rear_lift_rad > max_lift) {
+    max_lift = rear_lift_rad;
+  }
+  pole_lift_max_rad_ = max_lift;
 }
 
 int8_t MecanumController::UpdateFeedback() {
@@ -208,6 +230,7 @@ int8_t MecanumController::Control(const Chassis_CMD_t &cmd, uint32_t now) {
     debug_.control_us = static_cast<uint32_t>(BSP_TIME_Get_us() - start_us);
     return mode_ret;
   }
+  UpdateWheelPidSelection();
 
   switch (mode_) {
     case CHASSIS_MODE_BREAK:
@@ -307,7 +330,7 @@ int8_t MecanumController::Control(const Chassis_CMD_t &cmd, uint32_t now) {
       case CHASSIS_MODE_ROTOR:
       case CHASSIS_MODE_INDEPENDENT:
         torque_cmd =
-            PID_Calc(&wheel_pid_[i], ref_speed, feedback, 0.0f, dt_);
+            PID_Calc(ActiveWheelSpeedPid(i), ref_speed, feedback, 0.0f, dt_);
         debug_.wheel_static_friction_ff_nm[i] =
             StaticFrictionFeedforward(param_, ref_speed);
         torque_cmd += debug_.wheel_static_friction_ff_nm[i];
@@ -417,6 +440,8 @@ void MecanumController::ResetRuntime() {
   dt_ = 0.0f;
   mech_zero_ = 0.0f;
   wz_multi_ = 1.0f;
+  pole_lift_max_rad_ = 0.0f;
+  wheel_high_pole_pid_active_ = false;
   wheel_hold_active_ = false;
   wheel_hold_still_time_s_ = 0.0f;
   wheel_hold_position_rad_ = {};
@@ -435,6 +460,8 @@ void MecanumController::InitFiltersAndPid(float target_freq) {
   for (uint8_t i = 0; i < kWheelCount; ++i) {
     PID_Init(&wheel_pid_[i], KPID_MODE_NO_D, target_freq,
              &param_->pid.motor_pid_param);
+    PID_Init(&wheel_high_pole_pid_[i], KPID_MODE_NO_D, target_freq,
+             &param_->pid.motor_high_pole_pid_param);
     PID_Init(&wheel_hold_pid_[i], KPID_MODE_CALC_D, target_freq,
              &param_->pid.motor_pos_pid_param);
     LowPassFilter2p_Init(&wheel_speed_filter_[i], target_freq,
@@ -472,6 +499,7 @@ void MecanumController::ResetControlStateOnModeChange() {
 void MecanumController::ResetWheelVelocityControlState() {
   for (uint8_t i = 0; i < kWheelCount; ++i) {
     PID_Reset(&wheel_pid_[i]);
+    PID_Reset(&wheel_high_pole_pid_[i]);
     LowPassFilter2p_Reset(&wheel_speed_filter_[i], 0.0f);
     LowPassFilter2p_Reset(&output_filter_[i], 0.0f);
   }
@@ -485,6 +513,31 @@ void MecanumController::ResetWheelHoldControlState() {
 
 void MecanumController::ResetWheelSpeedPlanner() {
   wheel_speed_ref_planned_ = {};
+}
+
+void MecanumController::UpdateWheelPidSelection() {
+  debug_.wheel_pid_switch_pole_lift = pole_lift_max_rad_;
+  const bool use_high_pole_pid =
+      ShouldUseHighPoleWheelPid(param_, pole_lift_max_rad_);
+  if (use_high_pole_pid == wheel_high_pole_pid_active_) {
+    debug_.wheel_high_pole_pid_active = wheel_high_pole_pid_active_;
+    return;
+  }
+
+  wheel_high_pole_pid_active_ = use_high_pole_pid;
+  for (uint8_t i = 0; i < kWheelCount; ++i) {
+    PID_Reset(&wheel_pid_[i]);
+    PID_Reset(&wheel_high_pole_pid_[i]);
+  }
+  debug_.wheel_high_pole_pid_active = wheel_high_pole_pid_active_;
+}
+
+KPID_t *MecanumController::ActiveWheelSpeedPid(uint8_t idx) {
+  if (idx >= kWheelCount) {
+    return nullptr;
+  }
+  return wheel_high_pole_pid_active_ ? &wheel_high_pole_pid_[idx]
+                                     : &wheel_pid_[idx];
 }
 
 int8_t MecanumController::SetMode(Chassis_Mode_t mode, uint32_t now) {

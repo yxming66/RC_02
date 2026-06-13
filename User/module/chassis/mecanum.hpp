@@ -20,6 +20,7 @@ class MecanumController final {
   void ResetOutput();
 
   void SetGimbalYaw(float yaw_rad) { feedback_.encoder_gimbalYawMotor = yaw_rad; }
+  void SetPoleLift(float front_lift_rad, float rear_lift_rad);
 
   Chassis_Mode_t mode() const { return mode_; }
   const Chassis_Feedback_t &feedback() const { return feedback_; }
@@ -39,6 +40,8 @@ class MecanumController final {
   void ResetWheelVelocityControlState();
   void ResetWheelHoldControlState();
   void ResetWheelSpeedPlanner();
+  void UpdateWheelPidSelection();
+  KPID_t *ActiveWheelSpeedPid(uint8_t idx);
   int8_t SetMode(Chassis_Mode_t mode, uint32_t now);
   void LimitMoveVector();
   void UpdateBodyVelocityFeedback();
@@ -69,6 +72,7 @@ class MecanumController final {
   Chassis_Debug_t debug_{};
   Chassis_Output_t out_{};
   std::array<KPID_t, kWheelCount> wheel_pid_{};
+  std::array<KPID_t, kWheelCount> wheel_high_pole_pid_{};
   std::array<KPID_t, kWheelCount> wheel_hold_pid_{};
   std::array<float, kWheelCount> wheel_speed_ref_planned_{};
   KPID_t follow_pid_{};
@@ -80,6 +84,8 @@ class MecanumController final {
   float dt_ = 0.0f;
   float mech_zero_ = 0.0f;
   float wz_multi_ = 1.0f;
+  float pole_lift_max_rad_ = 0.0f;
+  bool wheel_high_pole_pid_active_ = false;
   bool wheel_hold_active_ = false;
   float wheel_hold_still_time_s_ = 0.0f;
   std::array<float, kWheelCount> wheel_hold_position_rad_{};

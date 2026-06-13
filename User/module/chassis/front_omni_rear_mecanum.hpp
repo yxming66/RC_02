@@ -17,7 +17,7 @@ class FrontOmniRearMecanumController final {
   int8_t UpdateFeedback();
   int8_t Control(const Chassis_CMD_t &cmd, uint32_t now);
   void Output();
-  void ResetOutput();
+  void ResetOutput(); 
 
   void SetGimbalYaw(float yaw_rad, float yaw_rate_rad_s = 0.0f) {
     feedback_.encoder_gimbalYawMotor = yaw_rad;
