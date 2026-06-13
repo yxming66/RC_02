@@ -400,30 +400,25 @@ Config_RobotParam_t robot_config = {
         /* 
          * SICK correction parameters:
          * - index fields select the four SICK ADC channels used by correction.
-         *   Current hardware: left=2, front-left=0, front-right=1, right=3.
-         * - x_sample_adc = average(front-left, front-right). x_target_adc is
-         *   the desired front distance ADC.
-         * - y_sample_adc uses the nearer side SICK, selected by smaller ADC.
-         *   If left side is selected, y_left_target_adc is used; if right side
-         *   is selected, y_right_target_adc is used.
-         * - yaw_sample_diff_adc = front-left - front-right. yaw_target_diff_adc
-         *   is the desired yaw/z ADC difference.
+         *   Current hardware: front=0, rod-front=1, rear=2, rod-rear=3.
+         * - x_sample_adc uses the nearer front/rear SICK.
+         * - y_sample_adc = average(rod-front, rod-rear).
+         * - yaw_sample_diff_adc = rod-front - rod-rear.
          * - *_kp fields map ADC error to chassis velocity; *_limit fields
          *   clamp the command. tolerance/stable/timeout define completion.
          */
         /* 模块参数：SICK 一键校正 sick_correct，取矛头/放矿前的 SICK 对位参数。 */
         .sick_correct = {
             .rod_spearhead = {
-                .left_index = 2u,                    /* 左侧 SICK ADC 通道。 */
-                .front_left_index = SICK_FRONT_S1_INDEX,  /* 前左 SICK ADC 通道。 */
-                .front_right_index = SICK_FRONT_S2_INDEX, /* 前右 SICK ADC 通道。 */
-                .right_index = 3u,                   /* 右侧 SICK ADC 通道。 */
+                .front_index = SICK_FRONT_INDEX,
+                .rod_front_index = SICK_ROD_FRONT_INDEX,
+                .rear_index = SICK_REAR_INDEX,
+                .rod_rear_index = SICK_ROD_REAR_INDEX,
                 .valid_adc_min = 100u,               /* 有效 ADC 下限，低于认为传感器无效。 */
                 .valid_adc_max = 32100u,             /* 有效 ADC 上限，高于认为传感器无效。 */
-                .x_target_adc = 4748,    /* x 方向目标 ADC，前左/前右均值应收敛到这里。 */
-                .y_left_target_adc = 2048.0f,        /* 左侧 SICK 为近端时的 y 目标 ADC。 */
-                .y_right_target_adc = 1050.0f,       /* 右侧 SICK 为近端时的 y 目标 ADC。 */
-                .yaw_target_diff_adc = 0.0f,         /* yaw/z 目标差值 ADC：前左 - 前右。 */
+                .x_target_adc = 4748.0f,             /* nearer front/rear x target ADC. */
+                .y_target_adc = 2048.0f,             /* rod-side average y target ADC. */
+                .yaw_target_diff_adc = 0.0f,         /* yaw target ADC: rod-front - rod-rear. */
                 .x_tolerance_adc = 5.0f,            /* x 误差小于该值认为 x 到位。 */
                 .y_tolerance_adc = 10.0f,            /* y 误差小于该值认为 y 到位。 */
                 .yaw_tolerance_adc = 10.0f,          /* yaw/z 误差小于该值认为姿态到位。 */
@@ -442,16 +437,15 @@ Config_RobotParam_t robot_config = {
              * The current AutoSickCorrect_StartOreRelease path returns
              * unsupported, so these values are kept as placeholders. */
             .ore_release = {
-                .left_index = 2u,                    /* Left-side SICK ADC channel. */
-                .front_left_index = SICK_FRONT_S1_INDEX,  /* Front-left SICK ADC channel. */
-                .front_right_index = SICK_FRONT_S2_INDEX, /* Front-right SICK ADC channel. */
-                .right_index = 3u,                   /* Right-side SICK ADC channel. */
+                .front_index = SICK_FRONT_INDEX,
+                .rod_front_index = SICK_ROD_FRONT_INDEX,
+                .rear_index = SICK_REAR_INDEX,
+                .rod_rear_index = SICK_ROD_REAR_INDEX,
                 .valid_adc_min = 700u,               /* Minimum valid ADC. */
                 .valid_adc_max = 32100u,             /* Maximum valid ADC. */
                 .x_target_adc = 0.0f,                /* Front average target ADC; 0 keeps this action invalid. */
-                .y_left_target_adc = 0.0f,           /* y target if left side SICK is nearer. */
-                .y_right_target_adc = 0.0f,          /* y target if right side SICK is nearer. */
-                .yaw_target_diff_adc = 0.0f,         /* Target front-left minus front-right ADC. */
+                .y_target_adc = 0.0f,                /* Rod-side average target ADC. */
+                .yaw_target_diff_adc = 0.0f,         /* Target rod-front minus rod-rear ADC. */
                 .x_tolerance_adc = 30.0f,            /* Allowed x ADC error. */
                 .y_tolerance_adc = 30.0f,            /* Allowed y ADC error. */
                 .yaw_tolerance_adc = 30.0f,          /* Allowed yaw/z ADC error. */
@@ -482,15 +476,15 @@ Config_RobotParam_t robot_config = {
             .pole_extend_move_speed = 0.30f,    /* 撑杆伸出阶段 vx，单位 m/s。 */
             .front_retract_move_speed = 0.30f,  /* 前杆动作阶段 vx，单位 m/s。 */
             .front_retract_timeout_ms = 5000u,  /* 前光电触发后，等待前杆收回到位超时，单位 ms。 */
-            .mid_move_speed = 1.0f,             /* 前杆收回到位后的中段平移 vx，单位 m/s。 */
+            .mid_move_speed = 1.5f,             /* 前杆收回到位后的中段平移 vx，单位 m/s。 */
             .mid_move_ms = 100u,                  /* 中段平移持续时间，单位 ms。 */
             .rear_retract_move_speed = 0.40f,   /* 等待后光电触发的低速 vx，单位 m/s。 */
             .rear_retract_timeout_ms = 5000u,   /* 后光电触发后，全收腿动作超时，单位 ms。 */
             .rear_retract_move_ms = 300u,       /* 后光电触发后，全收腿移动持续时间，单位 ms。 */
             .second_photo_retract_move_speed = 0.50f, /* 后一个光电触发收腿时向头向移动 vx，单位 m/s。 */
-            .final_move_speed = 4.0f,          /* 收尾离开台阶 vx，单位 m/s。 */
-            .final_move_ms = 500u,                /* 收尾离开台阶持续时间，单位 ms。 */
-            .pole_all_extend_speed = 25.0f,     /* 四杆全伸目标跟随速度，单位 rad/s。 */
+            .final_move_speed = 1.0f,          /* 收尾离开台阶 vx，单位 m/s。 */
+            .final_move_ms = 800u,                /* 收尾离开台阶持续时间，单位 ms。 */
+            .pole_all_extend_speed = 50.0f,     /* 四杆全伸目标跟随速度，单位 rad/s。 */
             .pole_front_extend_speed = 20.0f,   /* 前杆伸出目标跟随速度，单位 rad/s。 */
             .pole_front_retract_speed = 60.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
             .pole_rear_extend_speed = 18.0f,    /* 后杆伸出目标跟随速度，单位 rad/s。 */

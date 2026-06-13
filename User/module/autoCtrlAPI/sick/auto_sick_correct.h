@@ -46,22 +46,21 @@ typedef enum {
 } AutoSickCorrect_Fault_t;
 
 typedef struct {
-  uint8_t left_index;
-  uint8_t front_left_index;
-  uint8_t front_right_index;
-  uint8_t right_index;
+  uint8_t front_index;
+  uint8_t rod_front_index;
+  uint8_t rear_index;
+  uint8_t rod_rear_index;
   uint16_t valid_adc_min;
   uint16_t valid_adc_max;
-  float x_target_adc;           /* x correction standard ADC. */
-  float y_left_target_adc;      /* y correction standard ADC when left side is nearer. */
-  float y_right_target_adc;     /* y correction standard ADC when right side is nearer. */
-  float yaw_target_diff_adc;    /* z/yaw target: front-left - front-right ADC. */
+  float x_target_adc;         /* x target for nearer front/rear SICK ADC. */
+  float y_target_adc;         /* y target for rod-side front/rear average ADC. */
+  float yaw_target_diff_adc;  /* yaw target: rod-side front - rear ADC. */
   float x_tolerance_adc;
   float y_tolerance_adc;
   float yaw_tolerance_adc;
   float x_kp_mps_per_adc;
   float y_kp_mps_per_adc;
-  float yaw_kp_rad_s_per_adc;   /* z/yaw correction gain to chassis wz. */
+  float yaw_kp_rad_s_per_adc; /* yaw correction gain to chassis wz. */
   float vx_limit_mps;
   float vy_limit_mps;
   float wz_limit_rad_s;
@@ -99,7 +98,7 @@ typedef struct {
   float x_error_adc;
   float y_error_adc;
   float yaw_error_adc;
-  uint8_t y_sample_index;
+  uint8_t x_sample_index;
   Chassis_CMD_t chassis_cmd;
   Pole_CMD_t pole_cmd;
   AutoSickCorrect_Params_t param;

@@ -30,7 +30,8 @@ extern "C" {
 /* 任务运行频率 */
 #define BLINK_FREQ (500.0)
 #define ATTI_ESTI_FREQ (400.0)
-#define CHASSIS_MAIN_FREQ (1000.0)
+#define CHASSIS_MAIN_FREQ (250.0)
+#define POLE_MAIN_FREQ (1000.0)
 #define RC_MAIN_FREQ (1000.0)
 #define SICK_FREQ (100.0)
 #define AUTO_CTRL_FREQ (100.0)
@@ -44,6 +45,7 @@ extern "C" {
 #define BLINK_INIT_DELAY (0)
 #define ATTI_ESTI_INIT_DELAY (0)
 #define CHASSIS_MAIN_INIT_DELAY (0) 
+#define POLE_MAIN_INIT_DELAY (1u)
 #define RC_MAIN_INIT_DELAY (0)
 #define SICK_INIT_DELAY (0)
 #define AUTO_CTRL_INIT_DELAY (0)
@@ -165,19 +167,16 @@ typedef struct {
     volatile float auto_sick_correct_vy_mps;
     volatile float auto_sick_correct_wz_rad_s;
     volatile float auto_sick_correct_pole_target_lift;
-    volatile uint8_t auto_sick_correct_y_sample_index;
+    volatile uint8_t auto_sick_correct_x_sample_index;
     volatile float auto_sick_correct_x_target_adc;
     volatile float auto_sick_correct_y_target_adc;
-    volatile float auto_sick_correct_y_left_target_adc;
-    volatile float auto_sick_correct_y_right_target_adc;
     volatile float auto_sick_correct_z_target_diff_adc;
     volatile float auto_sick_correct_x_kp_mps_per_adc;
     volatile float auto_sick_correct_y_kp_mps_per_adc;
     volatile float auto_sick_correct_z_kp_rad_s_per_adc;
     volatile bool auto_sick_correct_param_override_enable;
     volatile float auto_sick_correct_override_x_target_adc;
-    volatile float auto_sick_correct_override_y_left_target_adc;
-    volatile float auto_sick_correct_override_y_right_target_adc;
+    volatile float auto_sick_correct_override_y_target_adc;
     volatile float auto_sick_correct_override_z_target_diff_adc;
     volatile float auto_sick_correct_override_x_kp_mps_per_adc;
     volatile float auto_sick_correct_override_y_kp_mps_per_adc;
@@ -196,6 +195,7 @@ typedef struct {
         osThreadId_t blink;
         osThreadId_t atti_esti;
         osThreadId_t chassis_main;
+        osThreadId_t pole_main;
         osThreadId_t rc_main;
         osThreadId_t sick;
         osThreadId_t auto_ctrl;
@@ -261,6 +261,7 @@ typedef struct {
         volatile uint32_t blink;
         volatile uint32_t atti_esti;
         volatile uint32_t chassis_main;
+        volatile uint32_t pole_main;
         volatile uint32_t rc_main;
         volatile uint32_t sick;
         volatile uint32_t auto_ctrl;
@@ -276,6 +277,7 @@ typedef struct {
         UBaseType_t blink;
         UBaseType_t atti_esti;
         UBaseType_t chassis_main;
+        UBaseType_t pole_main;
         UBaseType_t rc_main;
         UBaseType_t sick;
         UBaseType_t auto_ctrl;
@@ -312,6 +314,7 @@ extern const osThreadAttr_t attr_init;
 extern const osThreadAttr_t attr_blink;
 extern const osThreadAttr_t attr_atti_esti;
 extern const osThreadAttr_t attr_chassis_main;
+extern const osThreadAttr_t attr_pole_main;
 extern const osThreadAttr_t attr_rc_main;
 extern const osThreadAttr_t attr_sick;
 extern const osThreadAttr_t attr_auto_ctrl;
@@ -325,6 +328,7 @@ void Task_Init(void *argument);
 void Task_blink(void *argument);
 void Task_atti_esti(void *argument);
 void Task_chassis_main(void *argument);
+void Task_pole_main(void *argument);
 void Task_rc_main(void *argument);
 void Task_sick(void *argument);
 void Task_auto_ctrl(void *argument);
@@ -334,9 +338,9 @@ void Task_pc_comm(void *argument);
 void Task_ore_store(void *argument);
 void Task_ir_dock(void *argument);
 
-bool Task_ChassisMainPoleGroupAtTarget(uint8_t group, float threshold_rad);
-bool Task_ChassisMainPoleAllAtTarget(float threshold_rad);
-bool Task_ChassisMainGetPoleHoldCommand(Pole_CMD_t *cmd);
+bool Task_PoleMainGroupAtTarget(uint8_t group, float threshold_rad);
+bool Task_PoleMainAllAtTarget(float threshold_rad);
+bool Task_PoleMainGetHoldCommand(Pole_CMD_t *cmd);
 bool Task_AutoOreStartStore(void);
 bool Task_AutoOreStartRelease(void);
 bool Task_AutoOreStartChamber(void);

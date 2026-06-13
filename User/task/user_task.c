@@ -25,6 +25,11 @@ const osThreadAttr_t attr_chassis_main = {
     .priority = osPriorityAboveNormal,
     .stack_size = 256 * 4,
 };
+const osThreadAttr_t attr_pole_main = {
+    .name = "pole_main",
+    .priority = osPriorityHigh,
+    .stack_size = 256 * 4,
+};
 const osThreadAttr_t attr_rc_main = {
     .name = "rc_main",
     .priority = osPriorityAboveNormal,
