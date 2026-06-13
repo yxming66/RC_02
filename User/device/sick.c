@@ -76,18 +76,6 @@ static uint16_t SICK_AdjustAdcRaw(uint8_t index, uint16_t adc_raw_value) {
   return adc_raw_value;
 }
 
-static double SICK_ApplyChannelCalibrationM(uint8_t index, double distance_m_raw) {
-#if SICK_FRONT_S2_COMP_ENABLE
-  if (index == SICK_FRONT_S2_INDEX) {
-    const double corrected_m = distance_m_raw - (SICK_FRONT_S2_REF_M - SICK_FRONT_S1_REF_M);
-    return (corrected_m < SICK_DISTANCE_MIN_M) ? SICK_DISTANCE_MIN_M : corrected_m;
-  }
-#endif
-
-  (void)index;
-  return distance_m_raw;
-}
-
 static void SICK_PublishLatestOutput(uint32_t now_ms) {
   Sick_Output_t output = {0};
 
@@ -148,9 +136,7 @@ static void SICK_UpdateDistance(void) {
   }
 
   for (uint8_t i = 0u; i < SICK_OUTPUT_CHANNEL_COUNT; i++) {
-    const double mapped_m = SICK_MapAdcToDistanceM(sick_adc_raw[i]);
-    const double calibrated_m = SICK_ApplyChannelCalibrationM(i, mapped_m);
-    sick_distance_m[i] = (float)calibrated_m;
+    sick_distance_m[i] = (float)SICK_MapAdcToDistanceM(sick_adc_raw[i]);
   }
 }
 

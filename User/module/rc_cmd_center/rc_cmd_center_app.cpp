@@ -638,7 +638,7 @@ static void Rc_SetArmSimpleHold(void) {
 
 static void Rc_LatchPoleCurrentTarget(void) {
   Pole_CMD_t hold_cmd;
-  if (Task_ChassisMainGetPoleHoldCommand(&hold_cmd)) {
+  if (Task_PoleMainGetHoldCommand(&hold_cmd)) {
     pole_cmd = hold_cmd;
     return;
   }

@@ -12,6 +12,13 @@
   function: Task_chassis_main
   name: chassis_main
   stack: 256
+- delay: 1
+  description: ''
+  freq_control: true
+  frequency: 500.0
+  function: Task_pole_main
+  name: pole_main
+  stack: 256
 - delay: 0
   description: ''
   freq_control: true

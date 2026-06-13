@@ -33,24 +33,20 @@ extern "C" {
 #define SICK_CAN_BUS BSP_CAN_3
 #endif
 
-#ifndef SICK_FRONT_S1_INDEX
-#define SICK_FRONT_S1_INDEX (0u)
+#ifndef SICK_FRONT_INDEX
+#define SICK_FRONT_INDEX (0u)
 #endif
 
-#ifndef SICK_FRONT_S2_INDEX
-#define SICK_FRONT_S2_INDEX (1u)
+#ifndef SICK_ROD_FRONT_INDEX
+#define SICK_ROD_FRONT_INDEX (1u)
 #endif
 
-#ifndef SICK_FRONT_S1_REF_M
-#define SICK_FRONT_S1_REF_M (0.239326894)
+#ifndef SICK_REAR_INDEX
+#define SICK_REAR_INDEX (2u)
 #endif
 
-#ifndef SICK_FRONT_S2_REF_M
-#define SICK_FRONT_S2_REF_M (0.265225768)
-#endif
-
-#ifndef SICK_FRONT_S2_COMP_ENABLE
-#define SICK_FRONT_S2_COMP_ENABLE (1u)
+#ifndef SICK_ROD_REAR_INDEX
+#define SICK_ROD_REAR_INDEX (3u)
 #endif
 
 #ifndef SICK_CHANNEL_2_ADC_OFFSET

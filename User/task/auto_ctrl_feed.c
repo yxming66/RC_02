@@ -446,10 +446,7 @@ static void AutoCtrlFeed_CopySickCorrectParamToDebug(
   }
 
   g_auto_ore_debug.auto_sick_correct_x_target_adc = param->x_target_adc;
-  g_auto_ore_debug.auto_sick_correct_y_left_target_adc =
-      param->y_left_target_adc;
-  g_auto_ore_debug.auto_sick_correct_y_right_target_adc =
-      param->y_right_target_adc;
+  g_auto_ore_debug.auto_sick_correct_y_target_adc = param->y_target_adc;
   g_auto_ore_debug.auto_sick_correct_z_target_diff_adc =
       param->yaw_target_diff_adc;
   g_auto_ore_debug.auto_sick_correct_x_kp_mps_per_adc =
@@ -468,10 +465,8 @@ static void AutoCtrlFeed_InitSickCorrectDebugOverride(
 
   g_auto_ore_debug.auto_sick_correct_override_x_target_adc =
       param->x_target_adc;
-  g_auto_ore_debug.auto_sick_correct_override_y_left_target_adc =
-      param->y_left_target_adc;
-  g_auto_ore_debug.auto_sick_correct_override_y_right_target_adc =
-      param->y_right_target_adc;
+  g_auto_ore_debug.auto_sick_correct_override_y_target_adc =
+      param->y_target_adc;
   g_auto_ore_debug.auto_sick_correct_override_z_target_diff_adc =
       param->yaw_target_diff_adc;
   g_auto_ore_debug.auto_sick_correct_override_x_kp_mps_per_adc =
@@ -505,10 +500,8 @@ static void AutoCtrlFeed_ApplySickCorrectDebugOverride(
 
   const float x_target_adc =
       g_auto_ore_debug.auto_sick_correct_override_x_target_adc;
-  const float y_left_target_adc =
-      g_auto_ore_debug.auto_sick_correct_override_y_left_target_adc;
-  const float y_right_target_adc =
-      g_auto_ore_debug.auto_sick_correct_override_y_right_target_adc;
+  const float y_target_adc =
+      g_auto_ore_debug.auto_sick_correct_override_y_target_adc;
   const float z_target_diff_adc =
       g_auto_ore_debug.auto_sick_correct_override_z_target_diff_adc;
   const float x_kp_mps_per_adc =
@@ -521,11 +514,8 @@ static void AutoCtrlFeed_ApplySickCorrectDebugOverride(
   if (isfinite(x_target_adc)) {
     param->x_target_adc = x_target_adc;
   }
-  if (isfinite(y_left_target_adc)) {
-    param->y_left_target_adc = y_left_target_adc;
-  }
-  if (isfinite(y_right_target_adc)) {
-    param->y_right_target_adc = y_right_target_adc;
+  if (isfinite(y_target_adc)) {
+    param->y_target_adc = y_target_adc;
   }
   if (isfinite(z_target_diff_adc)) {
     param->yaw_target_diff_adc = z_target_diff_adc;
@@ -899,7 +889,7 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms) {
       .arm_at_target = arm_at_target,
       .ore_store_all_homed = Task_OreStoreIsAllHomed(),
       .ore_store_all_at_target = ore_store_all_at_target,
-      .pole_all_at_target = Task_ChassisMainPoleAllAtTarget(
+      .pole_all_at_target = Task_PoleMainAllAtTarget(
         auto_ore_ctrl.param.pole_arrive_threshold_rad),
       .ore_store_platform_error_rad = ore_store_platform_error_rad,
       .photoelectric_occupancy = {
@@ -1113,8 +1103,8 @@ static void AutoCtrlFeed_UpdateAutoSickCorrect(uint32_t now_ms) {
       auto_sick_correct_ctrl.chassis_cmd.ctrl_vec.wz;
   g_auto_ore_debug.auto_sick_correct_pole_target_lift =
       auto_sick_correct_ctrl.pole_cmd.auto_target_lift[0];
-  g_auto_ore_debug.auto_sick_correct_y_sample_index =
-      auto_sick_correct_ctrl.y_sample_index;
+  g_auto_ore_debug.auto_sick_correct_x_sample_index =
+      auto_sick_correct_ctrl.x_sample_index;
   g_auto_ore_debug.auto_sick_correct_y_target_adc =
       auto_sick_correct_ctrl.y_target_adc;
   const AutoSickCorrect_PointParams_t *active_param =
@@ -1374,18 +1364,14 @@ void Task_auto_ctrl(void *argument) {
       AutoCtrlFeed_CacheLocalYawZero();
 
       feedback.yaw_auto_rad = AutoCtrlFeed_SelectYawRad();
-      /* 当前 AutoCtrl API 只消费前向两路 SICK。 */
+      /* New SICK layout has no paired-front sensors; keep old yaw assist invalid. */
       (void)Task_SickGetLatestOutput(&auto_ctrl_sick_output);
       feedback.sick_front_left_cm =
-          auto_ctrl_sick_output.valid[SICK_FRONT_S1_INDEX]
-                    ? auto_ctrl_sick_output.distance_m[SICK_FRONT_S1_INDEX] *
+          auto_ctrl_sick_output.valid[SICK_FRONT_INDEX]
+                    ? auto_ctrl_sick_output.distance_m[SICK_FRONT_INDEX] *
                           100.0f
                     : -1.0f;
-      feedback.sick_front_right_cm =
-          auto_ctrl_sick_output.valid[SICK_FRONT_S2_INDEX]
-                     ? auto_ctrl_sick_output.distance_m[SICK_FRONT_S2_INDEX] *
-                           100.0f
-                     : -1.0f;
+      feedback.sick_front_right_cm = -1.0f;
 
       GPIO_PinState photo1_state = HAL_GPIO_ReadPin(GPIOE, GPIO_PIN_13);
       GPIO_PinState photo2_state = HAL_GPIO_ReadPin(GPIOE, GPIO_PIN_9);
@@ -1397,13 +1383,13 @@ void Task_auto_ctrl(void *argument) {
       feedback.pa2_photo3_triggered = (photo3_state == photo3_active_state);
       feedback.pa0_photo4_triggered = (photo4_state == photo4_active_state);
       const bool raw_pole_front_at_target =
-          Task_ChassisMainPoleGroupAtTarget(0u,
-                                            AUTO_CTRL_POLE_TARGET_THRESHOLD_RAD);
+          Task_PoleMainGroupAtTarget(0u,
+                                     AUTO_CTRL_POLE_TARGET_THRESHOLD_RAD);
       const bool raw_pole_rear_at_target =
-          Task_ChassisMainPoleGroupAtTarget(1u,
-                                            AUTO_CTRL_POLE_TARGET_THRESHOLD_RAD);
+          Task_PoleMainGroupAtTarget(1u,
+                                     AUTO_CTRL_POLE_TARGET_THRESHOLD_RAD);
       const bool raw_pole_all_at_target =
-          Task_ChassisMainPoleAllAtTarget(AUTO_CTRL_POLE_TARGET_THRESHOLD_RAD);
+          Task_PoleMainAllAtTarget(AUTO_CTRL_POLE_TARGET_THRESHOLD_RAD);
 
       feedback.pole_front_at_target = AutoCtrlFeed_DebouncePoleReady(
           raw_pole_front_at_target, &pole_front_at_target_stable_count);
