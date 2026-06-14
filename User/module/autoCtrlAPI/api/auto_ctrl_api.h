@@ -31,6 +31,8 @@ typedef struct {
   bool pe9_photo2_triggered;  /* PE9, photo2. */
   bool pa2_photo3_triggered;  /* PA2, photo3. */
   bool pa0_photo4_triggered;  /* PA0, photo4. */
+  float pole_front_lift_rad;  /* Front pole lift feedback, rad. */
+  float pole_rear_lift_rad;   /* Rear pole lift feedback, rad. */
   bool pole_front_at_target;  /* Front pole group reached current target. */
   bool pole_rear_at_target;   /* Rear pole group reached current target. */
   bool pole_all_at_target;    /* All pole groups reached current target. */

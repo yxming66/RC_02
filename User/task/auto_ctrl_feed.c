@@ -1382,6 +1382,12 @@ void Task_auto_ctrl(void *argument) {
       feedback.pe9_photo2_triggered = (photo2_state == photo2_active_state);
       feedback.pa2_photo3_triggered = (photo3_state == photo3_active_state);
       feedback.pa0_photo4_triggered = (photo4_state == photo4_active_state);
+      float pole_front_lift_rad = 0.0f;
+      float pole_rear_lift_rad = 0.0f;
+      (void)Task_PoleMainGetSupportLift(&pole_front_lift_rad,
+                                        &pole_rear_lift_rad);
+      feedback.pole_front_lift_rad = pole_front_lift_rad;
+      feedback.pole_rear_lift_rad = pole_rear_lift_rad;
       const bool raw_pole_front_at_target =
           Task_PoleMainGroupAtTarget(0u,
                                      AUTO_CTRL_POLE_TARGET_THRESHOLD_RAD);

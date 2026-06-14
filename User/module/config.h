@@ -41,6 +41,8 @@ typedef struct {
   float align_move_speed;        /* ascend/template alignment vx, m/s */
   float pole_extend_move_speed;  /* vx for all-pole extend/support-pass stages, m/s */
   uint32_t pole_extend_settle_ms;/* ascend all-pole target minimum settle time, ms */
+  uint32_t photo_stop_settle_ms; /* descend photo stop hold before pole extend, ms */
+  float descend_start_pole_lift_threshold; /* min lift before first descend sprint, rad; <=0 disables */
 
   float front_retract_move_speed;     /* vx for front-side action or second-edge slow capture, m/s */
   float front_retract_vy;             /* optional vy while waiting front-side photo, m/s */

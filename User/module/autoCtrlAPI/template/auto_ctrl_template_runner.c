@@ -12,7 +12,7 @@ typedef struct {
   const float *small;
 } auto_ctrl_pole_targets_t;
 
-#define AUTO_CTRL_ASCEND_PHOTO_STABLE_MS (50u)
+#define AUTO_CTRL_PHOTO_STABLE_MS (150u) /* stable photo trigger time, ms */
 
 static void AutoCtrlTemplate_EnterStep(auto_ctrl_t *ctrl, uint32_t now_ms) {
   if (!ctrl->template_ctx.step_entered) {
@@ -36,6 +36,10 @@ static void AutoCtrlTemplate_NextStep(auto_ctrl_t *ctrl) {
   ctrl->template_ctx.step_index++;
   ctrl->template_ctx.step_entered = false;
   ctrl->template_ctx.pole_target_seen_not_ready = false;
+  ctrl->template_ctx.photo_stop_entered = false;
+  ctrl->template_ctx.photo_stop_enter_time_ms = 0u;
+  ctrl->template_ctx.descend_start_move_entered = false;
+  ctrl->template_ctx.descend_start_move_time_ms = 0u;
 }
 
 static bool AutoCtrlTemplate_IsYawAligned(const auto_ctrl_t *ctrl) {
@@ -112,6 +116,39 @@ static void AutoCtrlTemplate_CommandPole(auto_ctrl_t *ctrl, float front_target,
   ctrl->pole_cmd.disable_lift_accel = lift_accel < 0.0f;
 }
 
+static bool AutoCtrlTemplate_DescendStartPoleLiftReady(
+    const auto_ctrl_t *ctrl, const AutoCtrl_TemplateParam_t *param) {
+  if (param == 0 || param->descend_start_pole_lift_threshold <= 0.0f) {
+    return true;
+  }
+
+  const float threshold = param->descend_start_pole_lift_threshold;
+  return ctrl->feedback.pole_front_lift_rad >= threshold &&
+         ctrl->feedback.pole_rear_lift_rad >= threshold;
+}
+
+static bool AutoCtrlTemplate_RunDescendStartSprint(
+    auto_ctrl_t *ctrl, uint32_t now_ms, const AutoCtrl_TemplateParam_t *param,
+    float vx_mps, float front_target, float rear_target,
+    float front_speed, float rear_speed) {
+  AutoCtrlTemplate_CommandPole(ctrl, front_target, rear_target, front_speed,
+                               rear_speed);
+
+  if (!AutoCtrlTemplate_DescendStartPoleLiftReady(ctrl, param)) {
+    AutoCtrlPrimitive_CommandFlatMove(ctrl, 0.0f);
+    return false;
+  }
+
+  if (!ctrl->template_ctx.descend_start_move_entered) {
+    ctrl->template_ctx.descend_start_move_entered = true;
+    ctrl->template_ctx.descend_start_move_time_ms = now_ms;
+  }
+
+  AutoCtrlPrimitive_CommandFlatMove(ctrl, vx_mps);
+  return (now_ms - ctrl->template_ctx.descend_start_move_time_ms) >=
+         param->mid_move_ms;
+}
+
 static float AutoCtrlTemplate_SecondPhotoRetractVx(
     const AutoCtrl_TemplateParam_t *param, bool tail_side, float fallback_vx) {
   if (param == 0 || param->second_photo_retract_move_speed <= 0.0f) {
@@ -139,79 +176,42 @@ static void AutoCtrlTemplate_SelectPoleTargets(
   targets->small = robot_param->pole_param.preset.step_200_small;
 }
 
-static void AutoCtrlTemplate_ResetEdgeDetection(auto_ctrl_t *ctrl) {
-  ctrl->template_ctx.pe13_photo1_prev_triggered =
-      ctrl->feedback.pe13_photo1_triggered;
-  ctrl->template_ctx.pa2_photo3_prev_triggered =
-      ctrl->feedback.pa2_photo3_triggered;
-  ctrl->template_ctx.pe9_photo2_prev_triggered =
-      ctrl->feedback.pe9_photo2_triggered;
-  ctrl->template_ctx.pa0_photo4_prev_triggered =
-      ctrl->feedback.pa0_photo4_triggered;
-  ctrl->template_ctx.pe13_photo1_falling_edge_latched = false;
-  ctrl->template_ctx.pa2_photo3_falling_edge_latched = false;
-  ctrl->template_ctx.pe9_photo2_falling_edge_latched = false;
-  ctrl->template_ctx.pa0_photo4_falling_edge_latched = false;
+static void AutoCtrlTemplate_ResetPhotoDetection(auto_ctrl_t *ctrl) {
+  ctrl->template_ctx.pe13_photo1_triggered_latched = false;
+  ctrl->template_ctx.pe9_photo2_triggered_latched = false;
+  ctrl->template_ctx.pa2_photo3_triggered_latched = false;
+  ctrl->template_ctx.pa0_photo4_triggered_latched = false;
   ctrl->template_ctx.pe13_photo1_triggered_since_ms = 0u;
   ctrl->template_ctx.pe9_photo2_triggered_since_ms = 0u;
   ctrl->template_ctx.pa2_photo3_triggered_since_ms = 0u;
   ctrl->template_ctx.pa0_photo4_triggered_since_ms = 0u;
 }
 
-static void AutoCtrlTemplate_UpdateEdgeDetection(auto_ctrl_t *ctrl) {
-  bool curr;
-
-  curr = ctrl->feedback.pe13_photo1_triggered;
-  if (ctrl->template_ctx.pe13_photo1_prev_triggered && !curr) {
-    ctrl->template_ctx.pe13_photo1_falling_edge_latched = true;
-  }
-  ctrl->template_ctx.pe13_photo1_prev_triggered = curr;
-
-  curr = ctrl->feedback.pa2_photo3_triggered;
-  if (ctrl->template_ctx.pa2_photo3_prev_triggered && !curr) {
-    ctrl->template_ctx.pa2_photo3_falling_edge_latched = true;
-  }
-  ctrl->template_ctx.pa2_photo3_prev_triggered = curr;
-
-  curr = ctrl->feedback.pe9_photo2_triggered;
-  if (ctrl->template_ctx.pe9_photo2_prev_triggered && !curr) {
-    ctrl->template_ctx.pe9_photo2_falling_edge_latched = true;
-  }
-  ctrl->template_ctx.pe9_photo2_prev_triggered = curr;
-
-  curr = ctrl->feedback.pa0_photo4_triggered;
-  if (ctrl->template_ctx.pa0_photo4_prev_triggered && !curr) {
-    ctrl->template_ctx.pa0_photo4_falling_edge_latched = true;
-  }
-  ctrl->template_ctx.pa0_photo4_prev_triggered = curr;
-}
-
-static bool AutoCtrlTemplate_LatchFrontPhoto(auto_ctrl_t *ctrl, bool tail_side) {
-  if (tail_side) {
-    if (ctrl->feedback.pe9_photo2_triggered) {
-      ctrl->template_ctx.pe9_photo2_triggered_latched = true;
-    }
-    return ctrl->template_ctx.pe9_photo2_triggered_latched;
+static bool AutoCtrlTemplate_LatchPhotoStable(bool triggered, bool *latched,
+                                              uint32_t *triggered_since_ms,
+                                              uint32_t now_ms) {
+  if (latched == 0 || triggered_since_ms == 0) {
+    return false;
   }
 
-  if (ctrl->feedback.pe13_photo1_triggered) {
-    ctrl->template_ctx.pe13_photo1_triggered_latched = true;
-  }
-  return ctrl->template_ctx.pe13_photo1_triggered_latched;
-}
-
-static bool AutoCtrlTemplate_LatchRearPhoto(auto_ctrl_t *ctrl, bool tail_side) {
-  if (tail_side) {
-    if (ctrl->feedback.pa0_photo4_triggered) {
-      ctrl->template_ctx.pa0_photo4_triggered_latched = true;
-    }
-    return ctrl->template_ctx.pa0_photo4_triggered_latched;
+  if (*latched) {
+    return true;
   }
 
-  if (ctrl->feedback.pa2_photo3_triggered) {
-    ctrl->template_ctx.pa2_photo3_triggered_latched = true;
+  if (!triggered) {
+    *triggered_since_ms = 0u;
+    return false;
   }
-  return ctrl->template_ctx.pa2_photo3_triggered_latched;
+
+  if (*triggered_since_ms == 0u) {
+    *triggered_since_ms = now_ms;
+    return false;
+  }
+
+  if ((now_ms - *triggered_since_ms) >= AUTO_CTRL_PHOTO_STABLE_MS) {
+    *latched = true;
+  }
+  return *latched;
 }
 
 static bool AutoCtrlTemplate_LatchFrontPhotoStable(auto_ctrl_t *ctrl,
@@ -233,24 +233,8 @@ static bool AutoCtrlTemplate_LatchFrontPhotoStable(auto_ctrl_t *ctrl,
         &ctrl->template_ctx.pe13_photo1_triggered_since_ms;
   }
 
-  if (*latched) {
-    return true;
-  }
-
-  if (!triggered) {
-    *triggered_since_ms = 0u;
-    return false;
-  }
-
-  if (*triggered_since_ms == 0u) {
-    *triggered_since_ms = now_ms;
-    return false;
-  }
-
-  if ((now_ms - *triggered_since_ms) >= AUTO_CTRL_ASCEND_PHOTO_STABLE_MS) {
-    *latched = true;
-  }
-  return *latched;
+  return AutoCtrlTemplate_LatchPhotoStable(triggered, latched,
+                                           triggered_since_ms, now_ms);
 }
 
 static bool AutoCtrlTemplate_LatchRearPhotoStable(auto_ctrl_t *ctrl,
@@ -272,52 +256,71 @@ static bool AutoCtrlTemplate_LatchRearPhotoStable(auto_ctrl_t *ctrl,
         &ctrl->template_ctx.pa2_photo3_triggered_since_ms;
   }
 
-  if (*latched) {
-    return true;
-  }
-
-  if (!triggered) {
-    *triggered_since_ms = 0u;
-    return false;
-  }
-
-  if (*triggered_since_ms == 0u) {
-    *triggered_since_ms = now_ms;
-    return false;
-  }
-
-  if ((now_ms - *triggered_since_ms) >= AUTO_CTRL_ASCEND_PHOTO_STABLE_MS) {
-    *latched = true;
-  }
-  return *latched;
+  return AutoCtrlTemplate_LatchPhotoStable(triggered, latched,
+                                           triggered_since_ms, now_ms);
 }
 
-static bool AutoCtrlTemplate_DescendFirstPhotoEdge(const auto_ctrl_t *ctrl,
-                                                   bool tail_side,
-                                                   bool use_400mm) {
+static bool AutoCtrlTemplate_DescendFirstPhotoStable(auto_ctrl_t *ctrl,
+                                                     bool tail_side,
+                                                     bool use_400mm,
+                                                     uint32_t now_ms) {
   (void)use_400mm;
   if (tail_side) {
-    return ctrl->template_ctx.pa2_photo3_falling_edge_latched;
+    return AutoCtrlTemplate_LatchPhotoStable(
+        ctrl->feedback.pa2_photo3_triggered,
+        &ctrl->template_ctx.pa2_photo3_triggered_latched,
+        &ctrl->template_ctx.pa2_photo3_triggered_since_ms, now_ms);
   }
-  return ctrl->template_ctx.pe9_photo2_falling_edge_latched;
+  return AutoCtrlTemplate_LatchPhotoStable(
+      ctrl->feedback.pe9_photo2_triggered,
+      &ctrl->template_ctx.pe9_photo2_triggered_latched,
+      &ctrl->template_ctx.pe9_photo2_triggered_since_ms, now_ms);
 }
 
-static bool AutoCtrlTemplate_DescendSecondPhotoEdge(const auto_ctrl_t *ctrl,
-                                                    bool tail_side,
-                                                    bool use_400mm) {
+static bool AutoCtrlTemplate_DescendSecondPhotoStable(auto_ctrl_t *ctrl,
+                                                      bool tail_side,
+                                                      bool use_400mm,
+                                                      uint32_t now_ms) {
   (void)use_400mm;
   if (tail_side) {
-    return ctrl->template_ctx.pe13_photo1_falling_edge_latched;
+    return AutoCtrlTemplate_LatchPhotoStable(
+        ctrl->feedback.pe13_photo1_triggered,
+        &ctrl->template_ctx.pe13_photo1_triggered_latched,
+        &ctrl->template_ctx.pe13_photo1_triggered_since_ms, now_ms);
   }
-  return ctrl->template_ctx.pa0_photo4_falling_edge_latched;
+  return AutoCtrlTemplate_LatchPhotoStable(
+      ctrl->feedback.pa0_photo4_triggered,
+      &ctrl->template_ctx.pa0_photo4_triggered_latched,
+      &ctrl->template_ctx.pa0_photo4_triggered_since_ms, now_ms);
 }
 
-static void AutoCtrlTemplate_CommandPhotoStopAndPole(
-    auto_ctrl_t *ctrl, float front_target, float rear_target,
+static bool AutoCtrlTemplate_PhotoStopSettled(auto_ctrl_t *ctrl,
+                                              uint32_t now_ms,
+                                              uint32_t settle_ms) {
+  if (!ctrl->template_ctx.photo_stop_entered) {
+    ctrl->template_ctx.photo_stop_entered = true;
+    ctrl->template_ctx.photo_stop_enter_time_ms = now_ms;
+  }
+
+  return (now_ms - ctrl->template_ctx.photo_stop_enter_time_ms) >= settle_ms;
+}
+
+static bool AutoCtrlTemplate_CommandPhotoStopAndPole(
+    auto_ctrl_t *ctrl, uint32_t now_ms, uint32_t settle_ms,
+    float hold_front_target, float hold_rear_target,
+    float hold_front_speed, float hold_rear_speed,
+    float front_target, float rear_target,
     float front_speed, float rear_speed) {
   AutoCtrlPrimitive_CommandFlatMove(ctrl, 0.0f);
+  if (!AutoCtrlTemplate_PhotoStopSettled(ctrl, now_ms, settle_ms)) {
+    AutoCtrlTemplate_CommandPole(ctrl, hold_front_target, hold_rear_target,
+                                 hold_front_speed, hold_rear_speed);
+    return false;
+  }
+
   AutoCtrlTemplate_CommandPole(ctrl, front_target, rear_target, front_speed,
                                rear_speed);
+  return true;
 }
 
 static bool AutoCtrlTemplate_RunAscend(auto_ctrl_t *ctrl, uint32_t now_ms,
@@ -328,11 +331,14 @@ static bool AutoCtrlTemplate_RunAscend(auto_ctrl_t *ctrl, uint32_t now_ms,
   AutoCtrlTemplate_SelectPoleTargets(robot_param, use_400mm, &pole);
 
   const bool first_photo_ready =
-      tail_side ? AutoCtrlTemplate_LatchRearPhoto(ctrl, tail_side)
-                : AutoCtrlTemplate_LatchFrontPhoto(ctrl, tail_side);
+      tail_side ? AutoCtrlTemplate_LatchRearPhotoStable(ctrl, tail_side, now_ms)
+                : AutoCtrlTemplate_LatchFrontPhotoStable(ctrl, tail_side,
+                                                         now_ms);
   const bool second_photo_ready =
-      tail_side ? AutoCtrlTemplate_LatchFrontPhoto(ctrl, tail_side)
-                : AutoCtrlTemplate_LatchRearPhoto(ctrl, tail_side);
+      tail_side ? AutoCtrlTemplate_LatchFrontPhotoStable(ctrl, tail_side,
+                                                         now_ms)
+                : AutoCtrlTemplate_LatchRearPhotoStable(ctrl, tail_side,
+                                                        now_ms);
   const uint32_t first_photo_timeout_ms =
       tail_side ? param->rear_photo_timeout_ms : param->front_photo_timeout_ms;
   const uint32_t second_photo_timeout_ms =
@@ -623,16 +629,25 @@ static bool AutoCtrlTemplate_RunTailDescendOptimized(
       AutoCtrlTemplate_CommandPole(ctrl, pole.small[0], pole.small[1],
                                    param->pole_front_retract_speed,
                                    param->pole_rear_retract_speed);
-      AutoCtrlTemplate_NextStep(ctrl);
+      if (AutoCtrlTemplate_DescendStartPoleLiftReady(ctrl, param)) {
+        AutoCtrlTemplate_NextStep(ctrl);
+      }
       return false;
 
     case 1:
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      if (AutoCtrlTemplate_DescendFirstPhotoEdge(ctrl, true, use_400mm)) {
-        AutoCtrlTemplate_CommandPhotoStopAndPole(
-            ctrl, pole.all_retract[0], pole.all_extend[1],
-            param->pole_front_retract_speed, param->pole_rear_extend_speed);
-        AutoCtrlTemplate_NextStep(ctrl);
+      if (AutoCtrlTemplate_DescendFirstPhotoStable(ctrl, true, use_400mm,
+                                                   now_ms)) {
+        if (AutoCtrlTemplate_CommandPhotoStopAndPole(
+                ctrl, now_ms, param->photo_stop_settle_ms,
+                pole.all_retract[0], pole.all_retract[1],
+                param->pole_front_retract_speed,
+                param->pole_rear_retract_speed,
+                pole.all_retract[0], pole.all_extend[1],
+                param->pole_front_retract_speed,
+                param->pole_rear_extend_speed)) {
+          AutoCtrlTemplate_NextStep(ctrl);
+        }
         return false;
       }
       AutoCtrlPrimitive_CommandFlatMove(ctrl, -param->mid_move_speed);
@@ -647,11 +662,18 @@ static bool AutoCtrlTemplate_RunTailDescendOptimized(
 
     case 2:
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      if (AutoCtrlTemplate_DescendFirstPhotoEdge(ctrl, true, use_400mm)) {
-        AutoCtrlTemplate_CommandPhotoStopAndPole(
-            ctrl, pole.all_retract[0], pole.all_extend[1],
-            param->pole_front_retract_speed, param->pole_rear_extend_speed);
-        AutoCtrlTemplate_NextStep(ctrl);
+      if (AutoCtrlTemplate_DescendFirstPhotoStable(ctrl, true, use_400mm,
+                                                   now_ms)) {
+        if (AutoCtrlTemplate_CommandPhotoStopAndPole(
+                ctrl, now_ms, param->photo_stop_settle_ms,
+                pole.all_retract[0], pole.all_retract[1],
+                param->pole_front_retract_speed,
+                param->pole_rear_retract_speed,
+                pole.all_retract[0], pole.all_extend[1],
+                param->pole_front_retract_speed,
+                param->pole_rear_extend_speed)) {
+          AutoCtrlTemplate_NextStep(ctrl);
+        }
         return false;
       }
       AutoCtrlPrimitive_CommandFlatMove(ctrl, -param->rear_retract_move_speed);
@@ -681,11 +703,18 @@ static bool AutoCtrlTemplate_RunTailDescendOptimized(
 
     case 4:
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      if (AutoCtrlTemplate_DescendSecondPhotoEdge(ctrl, true, use_400mm)) {
-        AutoCtrlTemplate_CommandPhotoStopAndPole(
-            ctrl, pole.all_extend[0], pole.all_extend[1],
-            param->pole_front_extend_speed, param->pole_rear_extend_speed);
-        AutoCtrlTemplate_NextStep(ctrl);
+      if (AutoCtrlTemplate_DescendSecondPhotoStable(ctrl, true, use_400mm,
+                                                    now_ms)) {
+        if (AutoCtrlTemplate_CommandPhotoStopAndPole(
+                ctrl, now_ms, param->photo_stop_settle_ms,
+                pole.all_retract[0], pole.all_extend[1],
+                param->pole_front_retract_speed,
+                param->pole_rear_extend_speed,
+                pole.all_extend[0], pole.all_extend[1],
+                param->pole_front_extend_speed,
+                param->pole_rear_extend_speed)) {
+          AutoCtrlTemplate_NextStep(ctrl);
+        }
         return false;
       }
       AutoCtrlPrimitive_CommandFlatMove(ctrl, -param->mid_move_speed);
@@ -701,11 +730,18 @@ static bool AutoCtrlTemplate_RunTailDescendOptimized(
 
     case 5:
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      if (AutoCtrlTemplate_DescendSecondPhotoEdge(ctrl, true, use_400mm)) {
-        AutoCtrlTemplate_CommandPhotoStopAndPole(
-            ctrl, pole.all_extend[0], pole.all_extend[1],
-            param->pole_front_extend_speed, param->pole_rear_extend_speed);
-        AutoCtrlTemplate_NextStep(ctrl);
+      if (AutoCtrlTemplate_DescendSecondPhotoStable(ctrl, true, use_400mm,
+                                                    now_ms)) {
+        if (AutoCtrlTemplate_CommandPhotoStopAndPole(
+                ctrl, now_ms, param->photo_stop_settle_ms,
+                pole.all_retract[0], pole.all_extend[1],
+                param->pole_front_retract_speed,
+                param->pole_rear_extend_speed,
+                pole.all_extend[0], pole.all_extend[1],
+                param->pole_front_extend_speed,
+                param->pole_rear_extend_speed)) {
+          AutoCtrlTemplate_NextStep(ctrl);
+        }
         return false;
       }
       AutoCtrlPrimitive_CommandFlatMove(ctrl, -param->front_retract_move_speed);
@@ -778,7 +814,6 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
   switch (ctrl->template_ctx.step_index) {
     case 0:
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      AutoCtrlPrimitive_CommandFlatMove(ctrl, param->mid_move_speed);
       // AutoCtrlTemplate_CommandPole(ctrl,
       //                              use_400mm ? pole.all_retract[0]
       //                                        : pole.small[0],
@@ -786,24 +821,28 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
       //                                        : pole.small[1],
       //                              param->pole_front_retract_speed,
       //                              param->pole_rear_retract_speed);
-      AutoCtrlTemplate_CommandPole(ctrl,
-                                  pole.small[0],
-                                  pole.small[1],
-                                   param->pole_front_retract_speed,
-                                   param->pole_rear_retract_speed);
-      
-      if (AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >= param->mid_move_ms) {
+      if (AutoCtrlTemplate_RunDescendStartSprint(
+              ctrl, now_ms, param, param->mid_move_speed, pole.small[0],
+              pole.small[1], param->pole_front_retract_speed,
+              param->pole_rear_retract_speed)) {
         AutoCtrlTemplate_NextStep(ctrl);
       }
       return false;
 
     case 1:
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      if (AutoCtrlTemplate_DescendFirstPhotoEdge(ctrl, false, use_400mm)) {
-        AutoCtrlTemplate_CommandPhotoStopAndPole(
-            ctrl, pole.all_extend[0], pole.all_retract[1],
-            param->pole_front_extend_speed, param->pole_rear_retract_speed);
-        AutoCtrlTemplate_NextStep(ctrl);
+      if (AutoCtrlTemplate_DescendFirstPhotoStable(ctrl, false, use_400mm,
+                                                   now_ms)) {
+        if (AutoCtrlTemplate_CommandPhotoStopAndPole(
+                ctrl, now_ms, param->photo_stop_settle_ms,
+                pole.all_retract[0], pole.all_retract[1],
+                param->pole_front_retract_speed,
+                param->pole_rear_retract_speed,
+                pole.all_extend[0], pole.all_retract[1],
+                param->pole_front_extend_speed,
+                param->pole_rear_retract_speed)) {
+          AutoCtrlTemplate_NextStep(ctrl);
+        }
         return false;
       }
       AutoCtrlPrimitive_CommandFlatMove(ctrl, param->rear_retract_move_speed);
@@ -836,9 +875,9 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
       AutoCtrlPrimitive_CommandFlatMove(ctrl, param->mid_move_speed);
       AutoCtrlTemplate_CommandPole(ctrl,
                                    use_400mm ? pole.all_extend[0]
-                                             : pole.all_extend[0] + 1.0f,
-                                   use_400mm ? pole.all_retract[1] + 1.0f
-                                             : pole.all_retract[1] + 1.0f,
+                                             : pole.all_extend[0],
+                                   use_400mm ? pole.all_retract[1]
+                                             : pole.all_retract[1],
                                    param->pole_front_extend_speed,
                                    param->pole_rear_retract_speed);
       if (AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
@@ -849,16 +888,23 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
 
     case 4:
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      if (AutoCtrlTemplate_DescendSecondPhotoEdge(ctrl, false, use_400mm)) {
-        AutoCtrlTemplate_CommandPhotoStopAndPole(
-            ctrl, pole.all_extend[0], pole.all_extend[1],
-            param->pole_front_extend_speed, param->pole_rear_extend_speed);
-        AutoCtrlTemplate_NextStep(ctrl);
+      if (AutoCtrlTemplate_DescendSecondPhotoStable(ctrl, false, use_400mm,
+                                                    now_ms)) {
+        if (AutoCtrlTemplate_CommandPhotoStopAndPole(
+                ctrl, now_ms, param->photo_stop_settle_ms,
+                pole.all_extend[0], pole.all_retract[1],
+                param->pole_front_extend_speed,
+                param->pole_rear_retract_speed,
+                pole.all_extend[0], pole.all_extend[1],
+                param->pole_front_extend_speed,
+                param->pole_rear_extend_speed)) {
+          AutoCtrlTemplate_NextStep(ctrl);
+        }
         return false;
       }
       AutoCtrlPrimitive_CommandFlatMove(ctrl, param->front_retract_move_speed);
-      AutoCtrlTemplate_CommandPole(ctrl, pole.all_extend[0] + 1.0f,
-                                   pole.all_retract[1] + 1.0f,
+      AutoCtrlTemplate_CommandPole(ctrl, pole.all_extend[0],
+                                   pole.all_retract[1],
                                    param->pole_front_extend_speed,
                                    param->pole_rear_retract_speed);
       if (param->front_photo_timeout_ms > 0u &&
@@ -988,10 +1034,8 @@ bool AutoCtrlTemplate_Run(auto_ctrl_t *ctrl, uint32_t now_ms) {
 
   if (ctrl->template_ctx.template_start_time_ms == 0u) {
     ctrl->template_ctx.template_start_time_ms = now_ms;
-    AutoCtrlTemplate_ResetEdgeDetection(ctrl);
+    AutoCtrlTemplate_ResetPhotoDetection(ctrl);
   }
-
-  AutoCtrlTemplate_UpdateEdgeDetection(ctrl);
 
   switch (ctrl->template_id) {
     case AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD:

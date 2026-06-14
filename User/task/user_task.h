@@ -340,6 +340,7 @@ void Task_ir_dock(void *argument);
 
 bool Task_PoleMainGroupAtTarget(uint8_t group, float threshold_rad);
 bool Task_PoleMainAllAtTarget(float threshold_rad);
+bool Task_PoleMainGetSupportLift(float *front_lift_rad, float *rear_lift_rad);
 bool Task_PoleMainGetHoldCommand(Pole_CMD_t *cmd);
 bool Task_AutoOreStartStore(void);
 bool Task_AutoOreStartRelease(void);

@@ -26,6 +26,16 @@ bool Task_PoleMainAllAtTarget(float threshold_rad) {
   return Pole_IsAllAtFinalTarget(&pole, threshold_rad);
 }
 
+bool Task_PoleMainGetSupportLift(float *front_lift_rad, float *rear_lift_rad) {
+  if (front_lift_rad == nullptr || rear_lift_rad == nullptr) {
+    return false;
+  }
+
+  *front_lift_rad = pole.feedback.support_lift[0];
+  *rear_lift_rad = pole.feedback.support_lift[1];
+  return true;
+}
+
 bool Task_PoleMainGetHoldCommand(Pole_CMD_t *cmd) {
   if (cmd == nullptr || pole.param == nullptr) {
     return false;
