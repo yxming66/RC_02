@@ -159,7 +159,7 @@ Config_RobotParam_t robot_config = {
             [ORE_STORE_AXIS_PLATFORM] = {.external_ratio = 1.0f, .reverse_output = false},
         },
         .pid = {
-            .position_pid = {
+            .position_pid = {    
                 [ORE_STORE_AXIS_PLATFORM] = {.k = 1.0f, .p = 24.0f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 60.0f, .d_cutoff_freq = 80.0f, .range = 0.0f},
             },
             .velocity_pid = {
@@ -476,7 +476,7 @@ Config_RobotParam_t robot_config = {
             .pole_extend_move_speed = 0.30f,    /* 撑杆伸出阶段 vx，单位 m/s。 */
             .front_retract_move_speed = 0.30f,  /* 前杆动作阶段 vx，单位 m/s。 */
             .front_retract_timeout_ms = 5000u,  /* 前光电触发后，等待前杆收回到位超时，单位 ms。 */
-            .mid_move_speed = 2.5f,             /* 前杆收回到位后的中段平移 vx，单位 m/s。 */
+            .mid_move_speed = 3.0f,             /* 前杆收回到位后的中段平移 vx，单位 m/s。 */
             .mid_move_ms = 200u,                  /* 中段平移持续时间，单位 ms。 */
             .rear_retract_move_speed = 0.05f,   /* 等待后光电触发的低速 vx，单位 m/s。 */
             .rear_retract_timeout_ms = 5000u,   /* 后光电触发后，全收腿动作超时，单位 ms。 */
@@ -521,7 +521,7 @@ Config_RobotParam_t robot_config = {
             .pole_front_retract_speed = 60.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
             .pole_rear_extend_speed = 18.0f,    /* 后杆伸出目标跟随速度，单位 rad/s。 */
             .pole_rear_retract_speed = 30.0f,   /* 后杆回收目标跟随速度，单位 rad/s。 */
-            .pole_lift_accel = 100.0f,          /* Per-template pole accel limit, rad/s^2. */
+            .pole_lift_accel = 180.0f,          /* Per-template pole accel limit, rad/s^2. */
             .front_photo_timeout_ms = 5000u,    /* 等待前光电触发/下降沿超时，单位 ms。 */
             .rear_photo_timeout_ms = 10000u,     /* 等待后光电触发/下降沿超时，单位 ms。 */
         },
@@ -552,9 +552,9 @@ Config_RobotParam_t robot_config = {
             .final_move_speed = 0.05f,          /* step7 离开 vx 的备用值；second_photo_retract_move_speed <= 0 时使用。 */
             .final_move_ms = 100u,              /* step7 全收杆离开持续时间，单位 ms。 */
             .pole_front_extend_speed = 65.0f,   /* step2 前杆伸出、step5/6 四杆全伸时的前杆速度，单位 rad/s。 */
-            .pole_front_retract_speed = 25.0f,  /* step0/1/7 前杆保持或回收到全收目标的速度，单位 rad/s。 */
+            .pole_front_retract_speed = 40.0f,  /* step0/1/7 前杆保持或回收到全收目标的速度，单位 rad/s。 */
             .pole_rear_extend_speed = 50.0f,    /* step5/6 四杆全伸时的后杆速度，单位 rad/s。 */
-            .pole_rear_retract_speed = 25.0f,   /* step0-4/7 后杆保持或回收到全收目标的速度，单位 rad/s。 */
+            .pole_rear_retract_speed = 40.0f,   /* step0-4/7 后杆保持或回收到全收目标的速度，单位 rad/s。 */
             .pole_lift_accel = 250.0f,          /* Per-template pole accel limit, rad/s^2. */
             .front_photo_timeout_ms = 5000u,    /* step4 等待 PE13/photo1 下降沿超时，单位 ms。 */
             .rear_photo_timeout_ms = 5000u,     /* step1 等待 PA2/photo3 下降沿超时，单位 ms。 */

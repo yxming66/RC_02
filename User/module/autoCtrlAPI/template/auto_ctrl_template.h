@@ -24,7 +24,7 @@ typedef struct {
   uint32_t step_enter_time_ms;   /* 当前 step 首次进入时刻（ms）。 */
   uint32_t template_start_time_ms; /* 当前模板开始时刻（ms）。 */
   bool step_entered;             /* 当前 step 是否已经执行过 enter 初始化。 */
-  /* 连续触发锁存（用于上/下台阶） */
+  /* Stable photo trigger/release detection state. */
   bool pe13_photo1_triggered_latched; /* PE13/photo1 latched as triggered. */
   bool pe9_photo2_triggered_latched;  /* PE9/photo2 latched as triggered. */
   bool pa2_photo3_triggered_latched;  /* PA2/photo3 latched as triggered. */
@@ -37,6 +37,10 @@ typedef struct {
   bool pe9_photo2_stable_trigger_seen;
   bool pa2_photo3_stable_trigger_seen;
   bool pa0_photo4_stable_trigger_seen;
+  bool pe13_photo1_stable_release_latched;
+  bool pe9_photo2_stable_release_latched;
+  bool pa2_photo3_stable_release_latched;
+  bool pa0_photo4_stable_release_latched;
   uint32_t pe13_photo1_released_since_ms;
   uint32_t pe9_photo2_released_since_ms;
   uint32_t pa2_photo3_released_since_ms;

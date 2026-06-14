@@ -12,14 +12,14 @@ typedef struct {
   const float *small;
 } auto_ctrl_pole_targets_t;
 
-#define AUTO_CTRL_PHOTO_STABLE_MS (150u) /* stable photo trigger time, ms */
+#define AUTO_CTRL_PHOTO_STABLE_MS (100u) /* stable photo trigger time, ms */
 
 static void AutoCtrlTemplate_EnterStep(auto_ctrl_t *ctrl, uint32_t now_ms) {
   if (!ctrl->template_ctx.step_entered) {
     ctrl->template_ctx.step_entered = true;
     ctrl->template_ctx.step_enter_time_ms = now_ms;
   }
-}
+} 
 
 static uint32_t AutoCtrlTemplate_StepElapsed(const auto_ctrl_t *ctrl,
                                              uint32_t now_ms) {
@@ -185,6 +185,18 @@ static void AutoCtrlTemplate_ResetPhotoDetection(auto_ctrl_t *ctrl) {
   ctrl->template_ctx.pe9_photo2_triggered_since_ms = 0u;
   ctrl->template_ctx.pa2_photo3_triggered_since_ms = 0u;
   ctrl->template_ctx.pa0_photo4_triggered_since_ms = 0u;
+  ctrl->template_ctx.pe13_photo1_stable_trigger_seen = false;
+  ctrl->template_ctx.pe9_photo2_stable_trigger_seen = false;
+  ctrl->template_ctx.pa2_photo3_stable_trigger_seen = false;
+  ctrl->template_ctx.pa0_photo4_stable_trigger_seen = false;
+  ctrl->template_ctx.pe13_photo1_stable_release_latched = false;
+  ctrl->template_ctx.pe9_photo2_stable_release_latched = false;
+  ctrl->template_ctx.pa2_photo3_stable_release_latched = false;
+  ctrl->template_ctx.pa0_photo4_stable_release_latched = false;
+  ctrl->template_ctx.pe13_photo1_released_since_ms = 0u;
+  ctrl->template_ctx.pe9_photo2_released_since_ms = 0u;
+  ctrl->template_ctx.pa2_photo3_released_since_ms = 0u;
+  ctrl->template_ctx.pa0_photo4_released_since_ms = 0u;
 }
 
 static bool AutoCtrlTemplate_LatchPhotoStable(bool triggered, bool *latched,
@@ -212,6 +224,53 @@ static bool AutoCtrlTemplate_LatchPhotoStable(bool triggered, bool *latched,
     *latched = true;
   }
   return *latched;
+}
+
+static bool AutoCtrlTemplate_LatchPhotoStableFalling(
+    bool triggered, bool *stable_trigger_seen, bool *stable_release_latched,
+    uint32_t *triggered_since_ms, uint32_t *released_since_ms,
+    uint32_t now_ms) {
+  if (stable_trigger_seen == 0 || stable_release_latched == 0 ||
+      triggered_since_ms == 0 || released_since_ms == 0) {
+    return false;
+  }
+
+  if (*stable_release_latched) {
+    return true;
+  }
+
+  if (!*stable_trigger_seen) {
+    if (!triggered) {
+      *triggered_since_ms = 0u;
+      return false;
+    }
+
+    if (*triggered_since_ms == 0u) {
+      *triggered_since_ms = now_ms;
+      return false;
+    }
+
+    if ((now_ms - *triggered_since_ms) >= AUTO_CTRL_PHOTO_STABLE_MS) {
+      *stable_trigger_seen = true;
+      *released_since_ms = 0u;
+    }
+    return false;
+  }
+
+  if (triggered) {
+    *released_since_ms = 0u;
+    return false;
+  }
+
+  if (*released_since_ms == 0u) {
+    *released_since_ms = now_ms;
+    return false;
+  }
+
+  if ((now_ms - *released_since_ms) >= AUTO_CTRL_PHOTO_STABLE_MS) {
+    *stable_release_latched = true;
+  }
+  return *stable_release_latched;
 }
 
 static bool AutoCtrlTemplate_LatchFrontPhotoStable(auto_ctrl_t *ctrl,
@@ -260,38 +319,46 @@ static bool AutoCtrlTemplate_LatchRearPhotoStable(auto_ctrl_t *ctrl,
                                            triggered_since_ms, now_ms);
 }
 
-static bool AutoCtrlTemplate_DescendFirstPhotoStable(auto_ctrl_t *ctrl,
-                                                     bool tail_side,
-                                                     bool use_400mm,
-                                                     uint32_t now_ms) {
+static bool AutoCtrlTemplate_DescendFirstPhotoFallingStable(auto_ctrl_t *ctrl,
+                                                            bool tail_side,
+                                                            bool use_400mm,
+                                                            uint32_t now_ms) {
   (void)use_400mm;
   if (tail_side) {
-    return AutoCtrlTemplate_LatchPhotoStable(
+    return AutoCtrlTemplate_LatchPhotoStableFalling(
         ctrl->feedback.pa2_photo3_triggered,
-        &ctrl->template_ctx.pa2_photo3_triggered_latched,
-        &ctrl->template_ctx.pa2_photo3_triggered_since_ms, now_ms);
+        &ctrl->template_ctx.pa2_photo3_stable_trigger_seen,
+        &ctrl->template_ctx.pa2_photo3_stable_release_latched,
+        &ctrl->template_ctx.pa2_photo3_triggered_since_ms,
+        &ctrl->template_ctx.pa2_photo3_released_since_ms, now_ms);
   }
-  return AutoCtrlTemplate_LatchPhotoStable(
+  return AutoCtrlTemplate_LatchPhotoStableFalling(
       ctrl->feedback.pe9_photo2_triggered,
-      &ctrl->template_ctx.pe9_photo2_triggered_latched,
-      &ctrl->template_ctx.pe9_photo2_triggered_since_ms, now_ms);
+      &ctrl->template_ctx.pe9_photo2_stable_trigger_seen,
+      &ctrl->template_ctx.pe9_photo2_stable_release_latched,
+      &ctrl->template_ctx.pe9_photo2_triggered_since_ms,
+      &ctrl->template_ctx.pe9_photo2_released_since_ms, now_ms);
 }
 
-static bool AutoCtrlTemplate_DescendSecondPhotoStable(auto_ctrl_t *ctrl,
-                                                      bool tail_side,
-                                                      bool use_400mm,
-                                                      uint32_t now_ms) {
+static bool AutoCtrlTemplate_DescendSecondPhotoFallingStable(auto_ctrl_t *ctrl,
+                                                             bool tail_side,
+                                                             bool use_400mm,
+                                                             uint32_t now_ms) {
   (void)use_400mm;
   if (tail_side) {
-    return AutoCtrlTemplate_LatchPhotoStable(
+    return AutoCtrlTemplate_LatchPhotoStableFalling(
         ctrl->feedback.pe13_photo1_triggered,
-        &ctrl->template_ctx.pe13_photo1_triggered_latched,
-        &ctrl->template_ctx.pe13_photo1_triggered_since_ms, now_ms);
+        &ctrl->template_ctx.pe13_photo1_stable_trigger_seen,
+        &ctrl->template_ctx.pe13_photo1_stable_release_latched,
+        &ctrl->template_ctx.pe13_photo1_triggered_since_ms,
+        &ctrl->template_ctx.pe13_photo1_released_since_ms, now_ms);
   }
-  return AutoCtrlTemplate_LatchPhotoStable(
+  return AutoCtrlTemplate_LatchPhotoStableFalling(
       ctrl->feedback.pa0_photo4_triggered,
-      &ctrl->template_ctx.pa0_photo4_triggered_latched,
-      &ctrl->template_ctx.pa0_photo4_triggered_since_ms, now_ms);
+      &ctrl->template_ctx.pa0_photo4_stable_trigger_seen,
+      &ctrl->template_ctx.pa0_photo4_stable_release_latched,
+      &ctrl->template_ctx.pa0_photo4_triggered_since_ms,
+      &ctrl->template_ctx.pa0_photo4_released_since_ms, now_ms);
 }
 
 static bool AutoCtrlTemplate_PhotoStopSettled(auto_ctrl_t *ctrl,
@@ -345,7 +412,7 @@ static bool AutoCtrlTemplate_RunAscend(auto_ctrl_t *ctrl, uint32_t now_ms,
       tail_side ? param->front_photo_timeout_ms : param->rear_photo_timeout_ms;
 
   switch (ctrl->template_ctx.step_index) {
-    case 0:
+    case 0: /* yaw 预对正，四杆保持全收。 */
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
       AutoCtrlPrimitive_ApplyPrealignWithMove(ctrl, param->align_move_speed,
                                               0.0f);
@@ -358,7 +425,7 @@ static bool AutoCtrlTemplate_RunAscend(auto_ctrl_t *ctrl, uint32_t now_ms,
       }
       return false;
 
-    case 1:
+    case 1: /* 四杆全伸，等待四杆到位。 */
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
       AutoCtrlPrimitive_ApplyPrealignWithMove(ctrl,
                                               param->pole_extend_move_speed,
@@ -377,7 +444,7 @@ static bool AutoCtrlTemplate_RunAscend(auto_ctrl_t *ctrl, uint32_t now_ms,
       }
       return false;
 
-    case 2:
+    case 2: /* 等待第一个光电，触发后收前杆。 */
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
       if (!first_photo_ready) {
         if (first_photo_timeout_ms > 0u &&
@@ -394,8 +461,7 @@ static bool AutoCtrlTemplate_RunAscend(auto_ctrl_t *ctrl, uint32_t now_ms,
                                      param->pole_rear_extend_speed);
         return false;
       }
-      AutoCtrlPrimitive_ApplyPrealignWithMove(
-          ctrl, param->front_retract_move_speed, 0.0f);
+      AutoCtrlPrimitive_CommandFlatMove(ctrl, 0.0f);
       AutoCtrlTemplate_CommandPole(ctrl, pole.front_retract[0],
                                    pole.front_retract[1],
                                    param->pole_front_retract_speed,
@@ -411,7 +477,7 @@ static bool AutoCtrlTemplate_RunAscend(auto_ctrl_t *ctrl, uint32_t now_ms,
       }
       return false;
 
-    case 3:
+    case 3: /* 前杆收回后的中段定时移动。 */
       AutoCtrlPrimitive_CommandFlatMove(ctrl, param->mid_move_speed);
       AutoCtrlTemplate_CommandPole(ctrl, pole.front_retract[0],
                                    pole.front_retract[1],
@@ -422,7 +488,7 @@ static bool AutoCtrlTemplate_RunAscend(auto_ctrl_t *ctrl, uint32_t now_ms,
       }
       return false;
 
-    case 4:
+    case 4: /* 等待第二个光电，触发后四杆全收。 */
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
       if (!second_photo_ready) {
         if (second_photo_timeout_ms > 0u &&
@@ -438,17 +504,13 @@ static bool AutoCtrlTemplate_RunAscend(auto_ctrl_t *ctrl, uint32_t now_ms,
                                      param->pole_rear_extend_speed);
         return false;
       }
-      AutoCtrlPrimitive_ApplyPrealignWithMove(
-          ctrl,
-          AutoCtrlTemplate_SecondPhotoRetractVx(
-              param, tail_side, param->rear_retract_move_speed),
-          0.0f);
+      AutoCtrlPrimitive_CommandFlatMove(ctrl, 0.0f);
       AutoCtrlTemplate_CommandPole(ctrl, pole.all_retract[0],
                                    pole.all_retract[1],
                                    param->pole_front_retract_speed,
                                    param->pole_rear_retract_speed);
-      if (AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
-          param->rear_retract_move_ms) {
+      if (AutoCtrlTemplate_PoleReadyAfterNewTarget(
+              ctrl, ctrl->feedback.pole_all_at_target)) {
         AutoCtrlTemplate_NextStep(ctrl);
       }
       if (param->rear_retract_timeout_ms > 0u &&
@@ -458,7 +520,7 @@ static bool AutoCtrlTemplate_RunAscend(auto_ctrl_t *ctrl, uint32_t now_ms,
       }
       return false;
 
-    case 5:
+    case 5: /* 四杆全收后的离开移动。 */
       AutoCtrlPrimitive_CommandFlatMove(ctrl, param->final_move_speed);
       AutoCtrlTemplate_CommandPole(ctrl, pole.all_retract[0],
                                    pole.all_retract[1],
@@ -469,7 +531,7 @@ static bool AutoCtrlTemplate_RunAscend(auto_ctrl_t *ctrl, uint32_t now_ms,
       }
       return false;
 
-    case 6:
+    case 6: /* 模板完成。 */
       return true;
 
     default:
@@ -486,7 +548,7 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
   AutoCtrlTemplate_SelectPoleTargets(robot_param, use_400mm, &pole);
 
   switch (ctrl->template_ctx.step_index) {
-    case 0:
+    case 0: /* 四杆全伸并前进，等待四杆到位。 */
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
       AutoCtrlPrimitive_ApplyPrealignWithMove(
           ctrl, param->pole_extend_move_speed, 0.0f);
@@ -500,7 +562,7 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
       }
       return false;
 
-    case 1:
+    case 1: /* 等待前光电连续稳定触发。 */
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
       const bool first_photo_ready =
           AutoCtrlTemplate_LatchFrontPhotoStable(ctrl, false, now_ms);
@@ -521,12 +583,11 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
       AutoCtrlTemplate_NextStep(ctrl);
       return false;
 
-    case 2:
+    case 2: /* 停车并收前杆，等待前杆到位。 */
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      AutoCtrlPrimitive_ApplyPrealignWithMove(
-          ctrl, param->front_retract_move_speed, 0.0f);
+      AutoCtrlPrimitive_CommandFlatMove(ctrl, 0.0f);
       AutoCtrlTemplate_CommandPole(ctrl, pole.front_retract[0],
-                                   pole.front_retract[1],
+                                   pole.front_retract[1]+1.0f,
                                    param->pole_front_retract_speed,
                                    param->pole_rear_extend_speed);
       if (AutoCtrlTemplate_PoleReadyAfterNewTarget(
@@ -540,10 +601,10 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
       }
       return false;
 
-    case 3:
+    case 3: /* 前杆收回后的中段定时移动。 */
       AutoCtrlPrimitive_CommandFlatMove(ctrl, param->mid_move_speed);
       AutoCtrlTemplate_CommandPole(ctrl, pole.front_retract[0],
-                                   pole.front_retract[1],
+                                   pole.front_retract[1]+1.0f,
                                    param->pole_front_retract_speed,
                                    param->pole_rear_extend_speed);
       if (AutoCtrlTemplate_StepTimeout(ctrl, now_ms, param->mid_move_ms)) {
@@ -551,7 +612,7 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
       }
       return false;
 
-    case 4:
+    case 4: /* 等待后光电连续稳定触发。 */
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
       const bool second_photo_ready =
           AutoCtrlTemplate_LatchRearPhotoStable(ctrl, false, now_ms);
@@ -564,7 +625,7 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
         AutoCtrlPrimitive_ApplyPrealignWithMove(
             ctrl, param->rear_retract_move_speed, 0.0f);
         AutoCtrlTemplate_CommandPole(ctrl, pole.front_retract[0],
-                                     pole.front_retract[1],
+                                     pole.front_retract[1]+1.0f,
                                      param->pole_front_retract_speed,
                                      param->pole_rear_extend_speed);
         return false;
@@ -572,19 +633,15 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
       AutoCtrlTemplate_NextStep(ctrl);
       return false;
 
-    case 5:
+    case 5: /* 停车并四杆全收，等待四杆到位。 */
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      AutoCtrlPrimitive_ApplyPrealignWithMove(
-          ctrl,
-          AutoCtrlTemplate_SecondPhotoRetractVx(
-              param, false, param->rear_retract_move_speed),
-          0.0f);
+      AutoCtrlPrimitive_CommandFlatMove(ctrl, 0.0f);
       AutoCtrlTemplate_CommandPole(ctrl, pole.all_retract[0],
                                    pole.all_retract[1],
                                    param->pole_front_retract_speed,
                                    param->pole_rear_retract_speed);
-      if (AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
-          param->rear_retract_move_ms) {
+      if (AutoCtrlTemplate_PoleReadyAfterNewTarget(
+              ctrl, ctrl->feedback.pole_all_at_target)) {
         AutoCtrlTemplate_NextStep(ctrl);
       }
       if (param->rear_retract_timeout_ms > 0u &&
@@ -594,7 +651,7 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
       }
       return false;
 
-    case 6:
+    case 6: /* 四杆全收后的离开移动。 */
       AutoCtrlPrimitive_ApplyPrealignWithMove(ctrl, param->final_move_speed,
                                               0.0f);
       AutoCtrlTemplate_CommandPole(ctrl, pole.all_retract[0],
@@ -606,7 +663,7 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
       }
       return false;
 
-    case 7:
+    case 7: /* 模板完成。 */
       return true;
 
     default:
@@ -623,7 +680,7 @@ static bool AutoCtrlTemplate_RunTailDescendOptimized(
   AutoCtrlTemplate_SelectPoleTargets(robot_param, use_400mm, &pole);
 
   switch (ctrl->template_ctx.step_index) {
-    case 0:
+    case 0: /* 尾向下台阶起步前，先收杆到小抬升目标。 */
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
       AutoCtrlPrimitive_CommandFlatMove(ctrl, 0.0f);
       AutoCtrlTemplate_CommandPole(ctrl, pole.small[0], pole.small[1],
@@ -634,10 +691,10 @@ static bool AutoCtrlTemplate_RunTailDescendOptimized(
       }
       return false;
 
-    case 1:
+    case 1: /* 第一段快速接近，同时检测第一个稳定下降沿。 */
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      if (AutoCtrlTemplate_DescendFirstPhotoStable(ctrl, true, use_400mm,
-                                                   now_ms)) {
+      if (AutoCtrlTemplate_DescendFirstPhotoFallingStable(ctrl, true,
+                                                          use_400mm, now_ms)) {
         if (AutoCtrlTemplate_CommandPhotoStopAndPole(
                 ctrl, now_ms, param->photo_stop_settle_ms,
                 pole.all_retract[0], pole.all_retract[1],
@@ -660,10 +717,10 @@ static bool AutoCtrlTemplate_RunTailDescendOptimized(
       }
       return false;
 
-    case 2:
+    case 2: /* 慢速捕获第一个稳定下降沿。 */
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      if (AutoCtrlTemplate_DescendFirstPhotoStable(ctrl, true, use_400mm,
-                                                   now_ms)) {
+      if (AutoCtrlTemplate_DescendFirstPhotoFallingStable(ctrl, true,
+                                                          use_400mm, now_ms)) {
         if (AutoCtrlTemplate_CommandPhotoStopAndPole(
                 ctrl, now_ms, param->photo_stop_settle_ms,
                 pole.all_retract[0], pole.all_retract[1],
@@ -688,7 +745,7 @@ static bool AutoCtrlTemplate_RunTailDescendOptimized(
       }
       return false;
 
-    case 3:
+    case 3: /* 停车并伸后杆，等待后杆支撑到位。 */
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
       AutoCtrlPrimitive_CommandFlatMove(ctrl, 0.0f);
       AutoCtrlTemplate_CommandPole(ctrl, pole.all_retract[0],
@@ -701,10 +758,10 @@ static bool AutoCtrlTemplate_RunTailDescendOptimized(
       }
       return false;
 
-    case 4:
+    case 4: /* 第二段定时接近，同时检测第二个稳定下降沿。 */
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      if (AutoCtrlTemplate_DescendSecondPhotoStable(ctrl, true, use_400mm,
-                                                    now_ms)) {
+      if (AutoCtrlTemplate_DescendSecondPhotoFallingStable(ctrl, true,
+                                                           use_400mm, now_ms)) {
         if (AutoCtrlTemplate_CommandPhotoStopAndPole(
                 ctrl, now_ms, param->photo_stop_settle_ms,
                 pole.all_retract[0], pole.all_extend[1],
@@ -728,10 +785,10 @@ static bool AutoCtrlTemplate_RunTailDescendOptimized(
       }
       return false;
 
-    case 5:
+    case 5: /* 慢速捕获第二个稳定下降沿。 */
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      if (AutoCtrlTemplate_DescendSecondPhotoStable(ctrl, true, use_400mm,
-                                                    now_ms)) {
+      if (AutoCtrlTemplate_DescendSecondPhotoFallingStable(ctrl, true,
+                                                           use_400mm, now_ms)) {
         if (AutoCtrlTemplate_CommandPhotoStopAndPole(
                 ctrl, now_ms, param->photo_stop_settle_ms,
                 pole.all_retract[0], pole.all_extend[1],
@@ -756,7 +813,7 @@ static bool AutoCtrlTemplate_RunTailDescendOptimized(
       }
       return false;
 
-    case 6:
+    case 6: /* 停车并四杆全伸，等待支撑到位。 */
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
       AutoCtrlPrimitive_CommandFlatMove(ctrl, 0.0f);
       AutoCtrlTemplate_CommandPole(ctrl, pole.all_extend[0],
@@ -769,7 +826,7 @@ static bool AutoCtrlTemplate_RunTailDescendOptimized(
       }
       return false;
 
-    case 7:
+    case 7: /* 四杆全伸支撑通过。 */
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
       AutoCtrlPrimitive_CommandFlatMove(ctrl, -param->pole_extend_move_speed);
       AutoCtrlTemplate_CommandPole(ctrl, pole.all_extend[0],
@@ -781,7 +838,7 @@ static bool AutoCtrlTemplate_RunTailDescendOptimized(
       }
       return false;
 
-    case 8:
+    case 8: /* 四杆全收并离开。 */
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
       AutoCtrlPrimitive_CommandFlatMove(
           ctrl, AutoCtrlTemplate_SecondPhotoRetractVx(
@@ -795,7 +852,7 @@ static bool AutoCtrlTemplate_RunTailDescendOptimized(
       }
       return false;
 
-    case 9:
+    case 9: /* 模板完成。 */
       return true;
 
     default:
@@ -812,7 +869,7 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
   AutoCtrlTemplate_SelectPoleTargets(robot_param, use_400mm, &pole);
 
   switch (ctrl->template_ctx.step_index) {
-    case 0:
+    case 0: /* 头向下台阶起步，杆到起步高度后快速接近。 */
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
       // AutoCtrlTemplate_CommandPole(ctrl,
       //                              use_400mm ? pole.all_retract[0]
@@ -829,10 +886,10 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
       }
       return false;
 
-    case 1:
+    case 1: /* 慢速捕获第一个稳定下降沿，随后伸前杆。 */
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      if (AutoCtrlTemplate_DescendFirstPhotoStable(ctrl, false, use_400mm,
-                                                   now_ms)) {
+      if (AutoCtrlTemplate_DescendFirstPhotoFallingStable(ctrl, false,
+                                                          use_400mm, now_ms)) {
         if (AutoCtrlTemplate_CommandPhotoStopAndPole(
                 ctrl, now_ms, param->photo_stop_settle_ms,
                 pole.all_retract[0], pole.all_retract[1],
@@ -857,7 +914,7 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
       }
       return false;
 
-    case 2:
+    case 2: /* 停车并等待前杆支撑到位。 */
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
       AutoCtrlPrimitive_CommandFlatMove(ctrl, 0.0f);
       AutoCtrlTemplate_CommandPole(ctrl, pole.all_extend[0],
@@ -870,7 +927,7 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
       }
       return false;
 
-    case 3:
+    case 3: /* 前杆支撑后的第二段定时接近。 */
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
       AutoCtrlPrimitive_CommandFlatMove(ctrl, param->mid_move_speed);
       AutoCtrlTemplate_CommandPole(ctrl,
@@ -886,10 +943,10 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
       }
       return false;
 
-    case 4:
+    case 4: /* 慢速捕获第二个稳定下降沿，随后四杆全伸。 */
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      if (AutoCtrlTemplate_DescendSecondPhotoStable(ctrl, false, use_400mm,
-                                                    now_ms)) {
+      if (AutoCtrlTemplate_DescendSecondPhotoFallingStable(ctrl, false,
+                                                           use_400mm, now_ms)) {
         if (AutoCtrlTemplate_CommandPhotoStopAndPole(
                 ctrl, now_ms, param->photo_stop_settle_ms,
                 pole.all_extend[0], pole.all_retract[1],
@@ -914,7 +971,7 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
       }
       return false;
 
-    case 5:
+    case 5: /* 停车并等待四杆支撑到位。 */
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
       AutoCtrlPrimitive_CommandFlatMove(ctrl, 0.0f);
       AutoCtrlTemplate_CommandPole(ctrl, pole.all_extend[0],
@@ -927,7 +984,7 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
       }
       return false;
 
-    case 6:
+    case 6: /* 四杆全伸支撑通过。 */
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
       AutoCtrlPrimitive_CommandFlatMove(ctrl, param->pole_extend_move_speed);
       AutoCtrlTemplate_CommandPole(ctrl, pole.all_extend[0],
@@ -939,7 +996,7 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
       }
       return false;
 
-    case 7:
+    case 7: /* 四杆全收并离开。 */
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
       AutoCtrlPrimitive_CommandFlatMove(
           ctrl, AutoCtrlTemplate_SecondPhotoRetractVx(
@@ -953,7 +1010,7 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
       }
       return false;
 
-    case 8:
+    case 8: /* 模板完成。 */
       return true;
 
     default:
