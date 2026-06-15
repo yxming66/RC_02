@@ -270,6 +270,12 @@ auto_ctrl_yaw_source_e AutoCtrl_GetYawSource(const auto_ctrl_t *ctrl) {
   return (ctrl == 0) ? AUTO_CTRL_YAW_SOURCE_STM32 : ctrl->yaw_source;
 }
 
+/* 设置外部 yaw rate 命令，非法输入按 0 处理。 */
+void AutoCtrl_SetYawRateCommand(auto_ctrl_t *ctrl, float wz_rad_s) {
+  if (ctrl == 0) return;
+  ctrl->yaw_rate_cmd_rad_s = isfinite(wz_rad_s) ? wz_rad_s : 0.0f;
+}
+
 /* 更新反馈并把输入 yaw 转为 auto yaw。 */
 void AutoCtrl_SetFeedback(auto_ctrl_t *ctrl,
                           const auto_ctrl_feedback_t *feedback) {

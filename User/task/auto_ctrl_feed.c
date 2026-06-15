@@ -109,6 +109,20 @@ static float AutoCtrlFeed_SelectYawRad(void) {
   return chassis_imu.eulr.yaw;
 }
 
+static void AutoCtrlFeed_UpdateYawRateCommand(void) {
+  float wz_rad_s = 0.0f;
+
+  if (AutoCtrl_GetYawSource(&auto_ctrl) == AUTO_CTRL_YAW_SOURCE_PC &&
+      MrlinkPc_IsHeartbeatValid()) {
+    const PC_ChassisCMD_t *pc_chassis_cmd = MrlinkPc_GetChassisCMD();
+    if (pc_chassis_cmd != NULL) {
+      wz_rad_s = pc_chassis_cmd->wz;
+    }
+  }
+
+  AutoCtrl_SetYawRateCommand(&auto_ctrl, wz_rad_s);
+}
+
 static void AutoCtrlFeed_CacheLocalYawZero(void) {
   if (!auto_ctrl_local_yaw_zero_initialized) {
     if (!isfinite(chassis_imu.eulr.yaw)) {
@@ -1405,6 +1419,7 @@ void Task_auto_ctrl(void *argument) {
           raw_pole_all_at_target, &pole_all_at_target_stable_count);
 
       AutoCtrl_SetFeedback(&auto_ctrl, &feedback);
+      AutoCtrlFeed_UpdateYawRateCommand();
 
       AutoCtrl_Update(&auto_ctrl, now_ms);
       AutoCtrlFeed_HandleAutoOreDebugRequest();

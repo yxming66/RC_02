@@ -65,6 +65,14 @@ float AutoCtrlPrimitive_Clamp(float value, float min_value, float max_value) {
   return mr::component::math::clamp_scalar(value, min_value, max_value);
 }
 
+static float AutoCtrlPrimitive_GetActiveYawRateCommand(auto_ctrl_t *ctrl) {
+  if (ctrl == nullptr || ctrl->yaw_source != AUTO_CTRL_YAW_SOURCE_PC) {
+    return 0.0f;
+  }
+
+  return ctrl->yaw_rate_cmd_rad_s;
+}
+
 /* 仅执行 yaw 对齐控制，不注入平移速度。 */
 void AutoCtrlPrimitive_ApplyPrealign(auto_ctrl_t *ctrl) {
   const Config_RobotParam_t *robot_param = Config_GetRobotParam();
@@ -72,6 +80,12 @@ void AutoCtrlPrimitive_ApplyPrealign(auto_ctrl_t *ctrl) {
   ctrl->chassis_cmd.mode = CHASSIS_MODE_INDEPENDENT;
   ctrl->chassis_cmd.ctrl_vec.vx = 0.0f;
   ctrl->chassis_cmd.ctrl_vec.vy = 0.0f;
+  if (ctrl->yaw_source == AUTO_CTRL_YAW_SOURCE_PC) {
+    ctrl->chassis_cmd.ctrl_vec.wz =
+        AutoCtrlPrimitive_GetActiveYawRateCommand(ctrl);
+    return;
+  }
+
   ctrl->chassis_cmd.ctrl_vec.wz = AutoCtrlPrimitive_Clamp(
       ctrl->yaw_error_rad * robot_param->auto_ctrl_param.common.prealign_kp,
       -robot_param->auto_ctrl_param.common.prealign_wz_limit,
@@ -98,6 +112,14 @@ void AutoCtrlPrimitive_CommandFlatMove(auto_ctrl_t *ctrl, float vx_mps) {
   ctrl->chassis_cmd.ctrl_vec.vx = vx_mps;
   ctrl->chassis_cmd.ctrl_vec.vy = 0.0f;
   ctrl->chassis_cmd.ctrl_vec.wz = 0.0f;
+}
+
+/* Send a flat move while carrying the external yaw-rate command. */
+void AutoCtrlPrimitive_CommandFlatMoveWithYawRate(auto_ctrl_t *ctrl,
+                                                  float vx_mps) {
+  AutoCtrlPrimitive_CommandFlatMove(ctrl, vx_mps);
+  ctrl->chassis_cmd.ctrl_vec.wz =
+      AutoCtrlPrimitive_GetActiveYawRateCommand(ctrl);
 }
 
 /* 下发撑杆目标位：同时使能前后杆自动目标。 */

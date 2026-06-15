@@ -135,7 +135,7 @@ static bool AutoCtrlTemplate_RunDescendStartSprint(
                                rear_speed);
 
   if (!AutoCtrlTemplate_DescendStartPoleLiftReady(ctrl, param)) {
-    AutoCtrlPrimitive_CommandFlatMove(ctrl, 0.0f);
+    AutoCtrlPrimitive_CommandFlatMoveWithYawRate(ctrl, 0.0f);
     return false;
   }
 
@@ -144,7 +144,7 @@ static bool AutoCtrlTemplate_RunDescendStartSprint(
     ctrl->template_ctx.descend_start_move_time_ms = now_ms;
   }
 
-  AutoCtrlPrimitive_CommandFlatMove(ctrl, vx_mps);
+  AutoCtrlPrimitive_CommandFlatMoveWithYawRate(ctrl, vx_mps);
   return (now_ms - ctrl->template_ctx.descend_start_move_time_ms) >=
          param->mid_move_ms;
 }
@@ -478,7 +478,8 @@ static bool AutoCtrlTemplate_RunAscend(auto_ctrl_t *ctrl, uint32_t now_ms,
       return false;
 
     case 3: /* 前杆收回后的中段定时移动。 */
-      AutoCtrlPrimitive_CommandFlatMove(ctrl, param->mid_move_speed);
+      AutoCtrlPrimitive_CommandFlatMoveWithYawRate(ctrl,
+                                                   param->mid_move_speed);
       AutoCtrlTemplate_CommandPole(ctrl, pole.front_retract[0],
                                    pole.front_retract[1],
                                    param->pole_front_retract_speed,
@@ -521,7 +522,8 @@ static bool AutoCtrlTemplate_RunAscend(auto_ctrl_t *ctrl, uint32_t now_ms,
       return false;
 
     case 5: /* 四杆全收后的离开移动。 */
-      AutoCtrlPrimitive_CommandFlatMove(ctrl, param->final_move_speed);
+      AutoCtrlPrimitive_CommandFlatMoveWithYawRate(ctrl,
+                                                   param->final_move_speed);
       AutoCtrlTemplate_CommandPole(ctrl, pole.all_retract[0],
                                    pole.all_retract[1],
                                    param->pole_front_retract_speed,
@@ -602,7 +604,8 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
       return false;
 
     case 3: /* 前杆收回后的中段定时移动。 */
-      AutoCtrlPrimitive_CommandFlatMove(ctrl, param->mid_move_speed);
+      AutoCtrlPrimitive_CommandFlatMoveWithYawRate(ctrl,
+                                                   param->mid_move_speed);
       AutoCtrlTemplate_CommandPole(ctrl, pole.front_retract[0],
                                    pole.front_retract[1],
                                    param->pole_front_retract_speed,
@@ -682,7 +685,7 @@ static bool AutoCtrlTemplate_RunTailDescendOptimized(
   switch (ctrl->template_ctx.step_index) {
     case 0: /* 尾向下台阶起步前，先收杆到小抬升目标。 */
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      AutoCtrlPrimitive_CommandFlatMove(ctrl, 0.0f);
+      AutoCtrlPrimitive_CommandFlatMoveWithYawRate(ctrl, 0.0f);
       AutoCtrlTemplate_CommandPole(ctrl, pole.small[0], pole.small[1],
                                    param->pole_front_retract_speed,
                                    param->pole_rear_retract_speed);
@@ -707,7 +710,8 @@ static bool AutoCtrlTemplate_RunTailDescendOptimized(
         }
         return false;
       }
-      AutoCtrlPrimitive_CommandFlatMove(ctrl, -param->mid_move_speed);
+      AutoCtrlPrimitive_CommandFlatMoveWithYawRate(ctrl,
+                                                   -param->mid_move_speed);
       AutoCtrlTemplate_CommandPole(ctrl, pole.all_retract[0],
                                    pole.all_retract[1],
                                    param->pole_front_retract_speed,
@@ -733,7 +737,8 @@ static bool AutoCtrlTemplate_RunTailDescendOptimized(
         }
         return false;
       }
-      AutoCtrlPrimitive_CommandFlatMove(ctrl, -param->rear_retract_move_speed);
+      AutoCtrlPrimitive_CommandFlatMoveWithYawRate(
+          ctrl, -param->rear_retract_move_speed);
       AutoCtrlTemplate_CommandPole(ctrl, pole.all_retract[0],
                                    pole.all_retract[1],
                                    param->pole_front_retract_speed,
@@ -774,7 +779,8 @@ static bool AutoCtrlTemplate_RunTailDescendOptimized(
         }
         return false;
       }
-      AutoCtrlPrimitive_CommandFlatMove(ctrl, -param->mid_move_speed);
+      AutoCtrlPrimitive_CommandFlatMoveWithYawRate(ctrl,
+                                                   -param->mid_move_speed);
       AutoCtrlTemplate_CommandPole(ctrl, pole.all_retract[0],
                                    pole.all_extend[1],
                                    param->pole_front_retract_speed,
@@ -801,7 +807,8 @@ static bool AutoCtrlTemplate_RunTailDescendOptimized(
         }
         return false;
       }
-      AutoCtrlPrimitive_CommandFlatMove(ctrl, -param->front_retract_move_speed);
+      AutoCtrlPrimitive_CommandFlatMoveWithYawRate(
+          ctrl, -param->front_retract_move_speed);
       AutoCtrlTemplate_CommandPole(ctrl, pole.all_retract[0],
                                    pole.all_extend[1],
                                    param->pole_front_retract_speed,
@@ -828,7 +835,8 @@ static bool AutoCtrlTemplate_RunTailDescendOptimized(
 
     case 7: /* 四杆全伸支撑通过。 */
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      AutoCtrlPrimitive_CommandFlatMove(ctrl, -param->pole_extend_move_speed);
+      AutoCtrlPrimitive_CommandFlatMoveWithYawRate(
+          ctrl, -param->pole_extend_move_speed);
       AutoCtrlTemplate_CommandPole(ctrl, pole.all_extend[0],
                                    pole.all_extend[1],
                                    param->pole_front_extend_speed,
@@ -840,7 +848,7 @@ static bool AutoCtrlTemplate_RunTailDescendOptimized(
 
     case 8: /* 四杆全收并离开。 */
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      AutoCtrlPrimitive_CommandFlatMove(
+      AutoCtrlPrimitive_CommandFlatMoveWithYawRate(
           ctrl, AutoCtrlTemplate_SecondPhotoRetractVx(
                     param, true, -param->final_move_speed));
       AutoCtrlTemplate_CommandPole(ctrl, pole.all_retract[0],
@@ -902,7 +910,8 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
         }
         return false;
       }
-      AutoCtrlPrimitive_CommandFlatMove(ctrl, param->rear_retract_move_speed);
+      AutoCtrlPrimitive_CommandFlatMoveWithYawRate(
+          ctrl, param->rear_retract_move_speed);
       AutoCtrlTemplate_CommandPole(ctrl, pole.all_retract[0],
                                    pole.all_retract[1],
                                    param->pole_front_retract_speed,
@@ -929,7 +938,8 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
 
     case 3: /* 前杆支撑后的第二段定时接近。 */
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      AutoCtrlPrimitive_CommandFlatMove(ctrl, param->mid_move_speed);
+      AutoCtrlPrimitive_CommandFlatMoveWithYawRate(ctrl,
+                                                   param->mid_move_speed);
       AutoCtrlTemplate_CommandPole(ctrl,
                                    use_400mm ? pole.all_extend[0]
                                              : pole.all_extend[0],
@@ -959,7 +969,8 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
         }
         return false;
       }
-      AutoCtrlPrimitive_CommandFlatMove(ctrl, param->front_retract_move_speed);
+      AutoCtrlPrimitive_CommandFlatMoveWithYawRate(
+          ctrl, param->front_retract_move_speed);
       AutoCtrlTemplate_CommandPole(ctrl, pole.all_extend[0],
                                    pole.all_retract[1],
                                    param->pole_front_extend_speed,
@@ -986,7 +997,8 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
 
     case 6: /* 四杆全伸支撑通过。 */
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      AutoCtrlPrimitive_CommandFlatMove(ctrl, param->pole_extend_move_speed);
+      AutoCtrlPrimitive_CommandFlatMoveWithYawRate(
+          ctrl, param->pole_extend_move_speed);
       AutoCtrlTemplate_CommandPole(ctrl, pole.all_extend[0],
                                    pole.all_extend[1],
                                    param->pole_front_extend_speed,
@@ -998,7 +1010,7 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
 
     case 7: /* 四杆全收并离开。 */
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      AutoCtrlPrimitive_CommandFlatMove(
+      AutoCtrlPrimitive_CommandFlatMoveWithYawRate(
           ctrl, AutoCtrlTemplate_SecondPhotoRetractVx(
                     param, false, param->final_move_speed));
       AutoCtrlTemplate_CommandPole(ctrl, pole.all_retract[0],

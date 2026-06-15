@@ -43,6 +43,10 @@ void AutoCtrlPrimitive_ApplyPrealignWithMove(auto_ctrl_t *ctrl, float vx_mps,
 /* Send a pure forward/backward command on vx; vy/wz are cleared. */
 void AutoCtrlPrimitive_CommandFlatMove(auto_ctrl_t *ctrl, float vx_mps);
 
+/* Send a flat move and apply the active external yaw-rate command if enabled. */
+void AutoCtrlPrimitive_CommandFlatMoveWithYawRate(auto_ctrl_t *ctrl,
+                                                  float vx_mps);
+
 /* 发送前/后撑杆目标位。 */
 void AutoCtrlPrimitive_CommandPoleTarget(auto_ctrl_t *ctrl, float front_target,
                                          float rear_target);
