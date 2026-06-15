@@ -587,7 +587,7 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
       AutoCtrlPrimitive_CommandFlatMove(ctrl, 0.0f);
       AutoCtrlTemplate_CommandPole(ctrl, pole.front_retract[0],
-                                   pole.front_retract[1]+1.0f,
+                                   pole.front_retract[1],
                                    param->pole_front_retract_speed,
                                    param->pole_rear_extend_speed);
       if (AutoCtrlTemplate_PoleReadyAfterNewTarget(
@@ -604,7 +604,7 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
     case 3: /* 前杆收回后的中段定时移动。 */
       AutoCtrlPrimitive_CommandFlatMove(ctrl, param->mid_move_speed);
       AutoCtrlTemplate_CommandPole(ctrl, pole.front_retract[0],
-                                   pole.front_retract[1]+1.0f,
+                                   pole.front_retract[1],
                                    param->pole_front_retract_speed,
                                    param->pole_rear_extend_speed);
       if (AutoCtrlTemplate_StepTimeout(ctrl, now_ms, param->mid_move_ms)) {
@@ -625,7 +625,7 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
         AutoCtrlPrimitive_ApplyPrealignWithMove(
             ctrl, param->rear_retract_move_speed, 0.0f);
         AutoCtrlTemplate_CommandPole(ctrl, pole.front_retract[0],
-                                     pole.front_retract[1]+1.0f,
+                                     pole.front_retract[1],
                                      param->pole_front_retract_speed,
                                      param->pole_rear_extend_speed);
         return false;

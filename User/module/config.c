@@ -129,9 +129,9 @@ Config_RobotParam_t robot_config = {
         },
         .preset = {
             /* 200mm 台阶四杆全伸位；一键取矿 PICK_POS_200 也使用该撑杆高度。 */
-            .step_200_all_extend = {13.8f, 13.8f},//13.3f
+            .step_200_all_extend = {13.4f, 13.4f},//13.3f
             /* 200mm 台阶前杆收回、后杆保持支撑位。 */
-            .step_200_front_retract = {0.0f, 13.8f},
+            .step_200_front_retract = {0.0f, 13.4f},
             /* 200mm 台阶四杆全收位。 */
             .step_200_all_retract = {0.0f, 0.0f},
             /* 200mm 小抬升位；一键取矿 PICK_NEG_200 使用该撑杆高度。 */
@@ -476,9 +476,9 @@ Config_RobotParam_t robot_config = {
             .pole_extend_move_speed = 0.30f,    /* 撑杆伸出阶段 vx，单位 m/s。 */
             .front_retract_move_speed = 0.30f,  /* 前杆动作阶段 vx，单位 m/s。 */
             .front_retract_timeout_ms = 5000u,  /* 前光电触发后，等待前杆收回到位超时，单位 ms。 */
-            .mid_move_speed = 3.0f,             /* 前杆收回到位后的中段平移 vx，单位 m/s。 */
-            .mid_move_ms = 200u,                  /* 中段平移持续时间，单位 ms。 */
-            .rear_retract_move_speed = 0.05f,   /* 等待后光电触发的低速 vx，单位 m/s。 */
+            .mid_move_speed = 2.5f,             /* 前杆收回到位后的中段平移 vx，单位 m/s。 */
+            .mid_move_ms = 220u,                  /* 中段平移持续时间，单位 ms。 */
+            .rear_retract_move_speed = 0.04f,   /* 等待后光电触发的低速 vx，单位 m/s。 */
             .rear_retract_timeout_ms = 5000u,   /* 后光电触发后，全收腿动作超时，单位 ms。 */
             .rear_retract_move_ms = 300u,       /* 后光电触发后，全收腿移动持续时间，单位 ms。 */
             .second_photo_retract_move_speed = 0.50f, /* 后一个光电触发收腿时向头向移动 vx，单位 m/s。 */
@@ -544,10 +544,10 @@ Config_RobotParam_t robot_config = {
             /* Active fields used by AutoCtrlTemplate_RunHeadDescend200Optimized. */
             .prealign_move_speed = 0.20f,       /* PREALIGN yaw 对正时叠加的前进 vx，单位 m/s。 */
             .front_retract_move_speed = 0.03f,  /* step4 等待 PE13/photo1 下降沿的慢速 vx，单位 m/s。 */
-            .mid_move_speed = 1.20f,            /* step0/step3 两段固定快跑 vx，单位 m/s。 */
+            .mid_move_speed = 1.5f,            /* step0/step3 两段固定快跑 vx，单位 m/s。 */
             .mid_move_ms = 100u,                /* step0 第一次固定快跑持续时间，单位 ms。 */ 
             .rear_retract_move_speed = 0.03f,   /* step1 等待 PA2/photo3 下降沿的慢速 vx，单位 m/s。 */
-            .rear_retract_move_ms = 100u,       /* step3 第二次固定快跑持续时间，单位 ms。 */
+            .rear_retract_move_ms = 300u,       /* step3 第二次固定快跑持续时间，单位 ms。 */
             .second_photo_retract_move_speed = 0.50f, /* step7 第二个下降沿后全收杆离开 vx，单位 m/s。 */
             .final_move_speed = 0.05f,          /* step7 离开 vx 的备用值；second_photo_retract_move_speed <= 0 时使用。 */
             .final_move_ms = 100u,              /* step7 全收杆离开持续时间，单位 ms。 */
