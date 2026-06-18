@@ -62,9 +62,9 @@ struct __attribute__((packed)) OreStoreCmd {
 };
 
 struct __attribute__((packed)) CameraYawCmd {
-  uint8_t mode;              /* 云台 yaw 控制模式，0=放松，1=闭环保持 */
-  float target_yaw_rad;      /* PC 给定的世界系目标 yaw，单位 rad */
-  float feedback_yaw_rad;    /* PC/视觉侧实时反馈的世界系 yaw，单位 rad */
+  uint8_t mode[PC_CAMERA_YAW_COUNT];              /* [0]=左云台，[1]=右云台 */
+  float target_yaw_rad[PC_CAMERA_YAW_COUNT];      /* 世界系目标 yaw，单位 rad */
+  float feedback_yaw_rad[PC_CAMERA_YAW_COUNT];    /* PC/视觉反馈 yaw，单位 rad */
 };
 
 struct __attribute__((packed)) AutoActionCmd {
@@ -104,6 +104,10 @@ struct __attribute__((packed)) OreStoreFeedback {
   uint8_t online_mask;             /* 轴在线 bitmask，bit0=平台轴在线，1 表示在线 */
   uint8_t homed_mask;              /* 轴回零 bitmask，bit0=平台轴已回零，1 表示已回零 */
   float platform_position_rad;     /* 平台轴当前位置，单位 rad */
+  uint8_t transform_low_has_ore;    /* 变形机构低位占矿状态，0/1 */
+  uint8_t transform_high_has_ore;   /* 变形机构高位占矿状态，0/1 */
+  uint8_t arm_has_ore;              /* 机械臂持矿状态，0/1 */
+  uint8_t reserved;                 /* 保留字段，发送端固定为 0 */
 };
 
 struct __attribute__((packed)) StepFeedback {

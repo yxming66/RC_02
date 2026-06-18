@@ -1081,7 +1081,7 @@ static bool Rc_PrepareLocalAutoYawFeedback(void) {
 
 static float Rc_SelectLocalAutoTargetYawRad(float head_yaw_rad,
                                            auto_ctrl_travel_dir_e travel_dir) {
-  /* Tail-forward tasks choose the cardinal target by tail heading first. */
+  /* 尾向前进任务优先按尾部朝向选择正交目标航向。 */
   if (travel_dir == AUTO_CTRL_TRAVEL_DIR_TAIL_FORWARD) {
     const float tail_yaw_rad =
         AutoCtrlMath_WrapYawRad(head_yaw_rad + AUTO_CTRL_RC_PI_RAD);
@@ -1104,6 +1104,18 @@ static void Rc_TryStartAutoCtrlBySwitch(uint32_t now_ms) {
   if (!dr16.header.online || !auto_ctrl_inited || AutoCtrl_IsBusy(&auto_ctrl) ||
       (auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl)) ||
       Task_AutoRodSpearheadIsBusy() || Task_AutoSickCorrectIsBusy()) {
+    return;
+  }
+
+  if (dr16.data.sw_l == DR16_SW_MID && last_sw_r == DR16_SW_MID &&
+      dr16.data.sw_r == DR16_SW_UP) {
+    g_rc_control_debug.auto_200_start_event = true;
+    g_rc_control_debug.auto_200_template = AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD;
+    g_rc_control_debug.auto_200_start_ok =
+        Task_AutoOreStartStepPickStoreAscend200Head();
+    if (g_rc_control_debug.auto_200_start_ok) {
+      g_auto_ore_debug.force_output_enable = true;
+    }
     return;
   }
 

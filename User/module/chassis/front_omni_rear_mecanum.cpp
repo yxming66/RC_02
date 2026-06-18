@@ -24,7 +24,6 @@ constexpr float kFollowOffset35DegRad = M_2PI * 7.0f / 72.0f;
 constexpr float kDefaultDtS = 0.001f;
 constexpr float kMinDtS = 0.0005f;
 constexpr float kMaxDtS = 0.050f;
-constexpr float kMinWheelSpeedMps = 1e-4f;
 constexpr float kMinWheelRadiusM = 1e-4f;
 constexpr float kHoldCommandDeadband = 1e-4f;
 constexpr bool kZeroCommandWheelPositionHoldEnabled = true;
@@ -72,14 +71,6 @@ float ResolveWheelRadius(const Chassis_Params_t *param) {
     return kMinWheelRadiusM;
   }
   return param->physical.wheel_radius_m;
-}
-
-float WheelSpeedLimit(const Chassis_Params_t *param) {
-  if (param == nullptr) {
-    return 0.0f;
-  }
-  const float limit = param->physical.wheel_output_max_speed;
-  return scalar::is_positive_scalar(limit) ? limit : 0.0f;
 }
 
 float ClampSymmetric(float value, float limit) {
@@ -313,8 +304,7 @@ int8_t FrontOmniRearMecanumController::Control(const Chassis_CMD_t &cmd,
             PID_Calc(&wheel_pid_[i], ref_speed, feedback, 0.0f, dt_);
         break;
       case CHASSIS_MODE_OPEN:
-        torque_cmd = ref_speed /
-                     std::fmax(WheelSpeedLimit(param_), kMinWheelSpeedMps);
+        torque_cmd = ref_speed;
         break;
       case CHASSIS_MODE_RELAX:
         torque_cmd = 0.0f;
@@ -546,7 +536,6 @@ int8_t FrontOmniRearMecanumController::ComputeWheelSpeeds() {
     return CHASSIS_ERR_TYPE;
   }
 
-  Kinematics::ScaleWheelSpeedsToLimit(wheel_speeds, WheelSpeedLimit(param_));
   wheel_speed_ref_ = wheel_speeds;
   return CHASSIS_OK;
 }

@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 #include "module/arm_simple.h"
+#include "module/autoCtrlAPI/api/auto_ctrl_api.h"
 #include "module/chassis.h"
 #include "module/ore_store.h"
 #include "module/pole.h"
@@ -20,6 +21,7 @@ typedef enum {
   AUTO_ORE_ACTION_PICK_POS_400,
   AUTO_ORE_ACTION_PICK_POS_200,
   AUTO_ORE_ACTION_PICK_NEG_200,
+  AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD,
 } AutoOre_Action_t;
 
 typedef enum {
@@ -45,6 +47,7 @@ typedef enum {
   AUTO_ORE_FAULT_NOT_HOMED,
   AUTO_ORE_FAULT_TIMEOUT,
   AUTO_ORE_FAULT_ABORTED,
+  AUTO_ORE_FAULT_SENSOR_INVALID,
 } AutoOre_Fault_t;
 
 typedef enum {
@@ -70,6 +73,19 @@ typedef struct {
   bool ore_store_all_homed;
   bool ore_store_all_at_target;
   bool pole_all_at_target;
+  bool pole_front_at_target;
+  bool pole_rear_at_target;
+  bool arm_photo_has_ore;
+  bool precontact_front_photo_triggered;
+  bool pe13_photo1_triggered;
+  bool pe9_photo2_triggered;
+  bool pa2_photo3_triggered;
+  bool pa0_photo4_triggered;
+  float yaw_auto_rad;
+  float yaw_rate_cmd_rad_s;
+  float pole_front_lift_rad;
+  float pole_rear_lift_rad;
+  float wheel_position_rad[4];
   float ore_store_platform_error_rad;
   AutoOre_Occupancy_t photoelectric_occupancy;
 } AutoOre_Feedback_t;
@@ -86,6 +102,10 @@ typedef struct {
   uint32_t chamber_cylinder_open_ms;
   uint32_t fetch_chassis_move_ms;
   uint32_t fetch_neg_200_chassis_move_ms;
+  uint32_t fused_prealign_stable_ms;
+  uint32_t fused_pick_precontact_timeout_ms;
+  uint32_t fused_pick_lift_detect_ms;
+  uint32_t fused_arm_photo_stable_ms;
 } AutoOre_TimingParam_t;
 
 typedef struct {
@@ -106,7 +126,22 @@ typedef struct {
   AutoOre_ArmSpeedLimit_t pick_standby;
   AutoOre_ArmSpeedLimit_t pick_place;
   AutoOre_ArmSpeedLimit_t pick_fetch;
+  AutoOre_ArmSpeedLimit_t pick_lift_detect;
 } AutoOre_ArmSpeedParam_t;
+
+typedef struct {
+  auto_ctrl_template_e step_template;
+  AutoOre_Action_t pick_action;
+  float target_yaw_rad;
+  float yaw_tolerance_rad;
+  float precontact_vx_mps;
+  float precontact_distance_m;
+  float step_start_vx_mps;
+  float step_start_distance_m;
+  float step_mid_distance_m;
+  bool use_arm_photo_confirm;
+  bool fail_on_precontact_front_photo;
+} AutoOre_FusedParam_t;
 
 typedef struct {
   const ArmSimple_Params_t *arm_param;
@@ -120,6 +155,8 @@ typedef struct {
   float pole_arrive_threshold_rad;
   float fetch_chassis_vx_mps;
   float fetch_neg_200_chassis_vx_mps;
+  float wheel_radius_m;
+  AutoOre_FusedParam_t fused_step_pick_store_ascend_200_head;
 } AutoOre_Params_t;
 
 typedef struct {
@@ -143,6 +180,22 @@ typedef struct {
   OreStore_CMD_t ore_store_cmd;
   Pole_CMD_t pole_cmd;
   Chassis_CMD_t chassis_cmd;
+  auto_ctrl_t step_ctrl;
+  bool step_ctrl_active;
+  bool step_ctrl_started;
+  bool fused_step_done;
+  bool fused_store_done;
+  bool pick_lift_confirmed;
+  bool distance_latch_valid;
+  float distance_start_wheel_rad[4];
+  float distance_travel_m;
+  float distance_target_m;
+  uint32_t fused_yaw_stable_since_ms;
+  uint32_t fused_arm_photo_since_ms;
+  uint8_t fused_store_step_index;
+  uint8_t fused_store_step_phase;
+  AutoOre_Position_t fused_store_position;
+  float fused_target_yaw_rad;
   AutoOre_Params_t param;
   AutoOre_Feedback_t feedback;
 } AutoOre_t;
@@ -157,6 +210,7 @@ bool AutoOre_StartChamber(AutoOre_t *ctrl, uint32_t now_ms);
 bool AutoOre_StartPickPos400(AutoOre_t *ctrl, uint32_t now_ms);
 bool AutoOre_StartPickPos200(AutoOre_t *ctrl, uint32_t now_ms);
 bool AutoOre_StartPickNeg200(AutoOre_t *ctrl, uint32_t now_ms);
+bool AutoOre_StartStepPickStoreAscend200Head(AutoOre_t *ctrl, uint32_t now_ms);
 void AutoOre_Update(AutoOre_t *ctrl, const AutoOre_Feedback_t *feedback,
                     uint32_t now_ms);
 void AutoOre_Abort(AutoOre_t *ctrl);

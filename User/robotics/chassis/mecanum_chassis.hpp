@@ -7,15 +7,15 @@
 namespace mr::robotics::chassis {
 
 struct PlanarVelocity {
-  // Body frame: +x forward, +y left, +wz counter-clockwise (+z up).
+  // 车体系：+x 向前，+y 向左，+wz 逆时针（+z 向上）。
   float vx_mps = 0.0f;
   float vy_mps = 0.0f;
   float wz_rad_s = 0.0f;
 };
 
 struct MecanumGeometry {
-  // The existing chassis config stores half of the front-rear and left-right
-  // wheel spacing. Their sum is the effective rotation radius used here.
+  // L 和 W 为车体中心到车轮接地点中心的距离。
+  // 实际前后/左右轮距分别为 2 * wheelbase_m 和 2 * trackwidth_m。
   float wheelbase_m = 0.0f;
   float trackwidth_m = 0.0f;
 

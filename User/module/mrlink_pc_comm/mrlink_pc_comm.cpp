@@ -243,9 +243,11 @@ void OnAutoAction(const wire::AutoActionCmd &cmd) {
 }
 
 void OnCameraYaw(const wire::CameraYawCmd &cmd) {
-  s_state.cmd.camera_yaw.mode = cmd.mode;
-  s_state.cmd.camera_yaw.target_yaw_rad = cmd.target_yaw_rad;
-  s_state.cmd.camera_yaw.feedback_yaw_rad = cmd.feedback_yaw_rad;
+  for (uint8_t yaw = 0u; yaw < PC_CAMERA_YAW_COUNT; ++yaw) {
+    s_state.cmd.camera_yaw.mode[yaw] = cmd.mode[yaw];
+    s_state.cmd.camera_yaw.target_yaw_rad[yaw] = cmd.target_yaw_rad[yaw];
+    s_state.cmd.camera_yaw.feedback_yaw_rad[yaw] = cmd.feedback_yaw_rad[yaw];
+  }
   MarkRxFrame(PC_CMD_CAMERA_YAW, sizeof(cmd), MRLINK_OK);
   TouchOnline(PC_CMD_CAMERA_YAW);
   s_state.camera_yaw_cmd_tick = BSP_TIME_Get_ms();
@@ -405,6 +407,10 @@ wire::OreStoreFeedback MakeOreStoreFeedbackWire(
   wire_feedback.online_mask = feedback.online_mask;
   wire_feedback.homed_mask = feedback.homed_mask;
   wire_feedback.platform_position_rad = feedback.platform_position_rad;
+  wire_feedback.transform_low_has_ore = feedback.transform_low_has_ore;
+  wire_feedback.transform_high_has_ore = feedback.transform_high_has_ore;
+  wire_feedback.arm_has_ore = feedback.arm_has_ore;
+  wire_feedback.reserved = 0u;
   return wire_feedback;
 }
 

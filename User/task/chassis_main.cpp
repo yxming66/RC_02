@@ -16,6 +16,10 @@ Chassis_CMD_t chassis_cmd{};
 extern "C" {
 Chassis_IMU_t chassis_imu{};
 float chassis_motor_speed_rpm[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+
+const Chassis_Feedback_t *Task_ChassisGetFeedback(void) {
+  return &chassis.feedback();
+}
 }
 
 extern "C" void Task_chassis_main(void *argument) {
@@ -50,7 +54,7 @@ extern "C" void Task_chassis_main(void *argument) {
     chassis.SetPoleLift(pole_front_lift_rad, pole_rear_lift_rad);
     (void)chassis.UpdateFeedback();
 
-    /* Update motor speed for gyro calibration in atti_esti task */
+    /* 更新电机转速，供 atti_esti 任务做陀螺仪标定。 */
     const auto &fb = chassis.feedback();
     for (int i = 0; i < 4; i++) {
       chassis_motor_speed_rpm[i] =

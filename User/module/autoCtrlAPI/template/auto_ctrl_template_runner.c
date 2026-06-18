@@ -12,7 +12,7 @@ typedef struct {
   const float *small;
 } auto_ctrl_pole_targets_t;
 
-#define AUTO_CTRL_PHOTO_STABLE_MS (100u) /* stable photo trigger time, ms */
+#define AUTO_CTRL_PHOTO_STABLE_MS (100u) /* 光电稳定触发时间，单位 ms。 */
 #define AUTO_CTRL_TIMED_MOVE_YAW_TOLERANCE_DEFAULT_RAD (0.1745329252f)
 
 static void AutoCtrlTemplate_EnterStep(auto_ctrl_t *ctrl, uint32_t now_ms) {
@@ -27,12 +27,6 @@ static uint32_t AutoCtrlTemplate_StepElapsed(const auto_ctrl_t *ctrl,
   return now_ms - ctrl->template_ctx.step_enter_time_ms;
 }
 
-static bool AutoCtrlTemplate_StepTimeout(auto_ctrl_t *ctrl, uint32_t now_ms,
-                                         uint32_t timeout_ms) {
-  AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-  return AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >= timeout_ms;
-}
-
 static void AutoCtrlTemplate_NextStep(auto_ctrl_t *ctrl) {
   ctrl->template_ctx.step_index++;
   ctrl->template_ctx.step_entered = false;
@@ -41,6 +35,8 @@ static void AutoCtrlTemplate_NextStep(auto_ctrl_t *ctrl) {
   ctrl->template_ctx.photo_stop_enter_time_ms = 0u;
   ctrl->template_ctx.descend_start_move_entered = false;
   ctrl->template_ctx.descend_start_move_time_ms = 0u;
+  ctrl->template_ctx.distance_latch_valid = false;
+  ctrl->template_ctx.distance_travel_m = 0.0f;
 }
 
 static bool AutoCtrlTemplate_IsYawAligned(const auto_ctrl_t *ctrl) {
@@ -78,6 +74,59 @@ static bool AutoCtrlTemplate_TimedMoveReady(auto_ctrl_t *ctrl,
                                             const AutoCtrl_TemplateParam_t *param) {
   AutoCtrlTemplate_EnterStep(ctrl, now_ms);
   return AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >= move_ms &&
+         AutoCtrlTemplate_IsTimedMoveYawAligned(ctrl, param);
+}
+
+static float AutoCtrlTemplate_AbsFloat(float value) {
+  return (value >= 0.0f) ? value : -value;
+}
+
+static float AutoCtrlTemplate_WheelRadiusM(
+    const Config_RobotParam_t *robot_param) {
+  if (robot_param != 0 &&
+      robot_param->chassis_param.physical.wheel_radius_m > 0.0f) {
+    return robot_param->chassis_param.physical.wheel_radius_m;
+  }
+  return 0.076f;
+}
+
+static bool AutoCtrlTemplate_DistanceMoveReady(
+    auto_ctrl_t *ctrl, uint32_t now_ms, float target_distance_m,
+    uint32_t fallback_move_ms, const AutoCtrl_TemplateParam_t *param,
+    const Config_RobotParam_t *robot_param) {
+  AutoCtrlTemplate_EnterStep(ctrl, now_ms);
+
+  if (target_distance_m <= 0.0f) {
+    return AutoCtrlTemplate_TimedMoveReady(ctrl, now_ms, fallback_move_ms,
+                                           param);
+  }
+
+  if (!ctrl->template_ctx.distance_latch_valid) {
+    for (uint8_t i = 0u; i < 4u; ++i) {
+      ctrl->template_ctx.distance_start_wheel_rad[i] =
+          ctrl->feedback.wheel_position_rad[i];
+    }
+    ctrl->template_ctx.distance_travel_m = 0.0f;
+    ctrl->template_ctx.distance_latch_valid = true;
+    return false;
+  }
+
+  float wheel_delta_abs_sum_rad = 0.0f;
+  for (uint8_t i = 0u; i < 4u; ++i) {
+    wheel_delta_abs_sum_rad += AutoCtrlTemplate_AbsFloat(
+        ctrl->feedback.wheel_position_rad[i] -
+        ctrl->template_ctx.distance_start_wheel_rad[i]);
+  }
+  ctrl->template_ctx.distance_travel_m =
+      (wheel_delta_abs_sum_rad * 0.25f) *
+      AutoCtrlTemplate_WheelRadiusM(robot_param);
+
+  const bool distance_ready =
+      ctrl->template_ctx.distance_travel_m >= target_distance_m;
+  const bool fallback_timeout =
+      fallback_move_ms > 0u &&
+      AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >= fallback_move_ms;
+  return (distance_ready || fallback_timeout) &&
          AutoCtrlTemplate_IsTimedMoveYawAligned(ctrl, param);
 }
 
@@ -145,7 +194,7 @@ static void AutoCtrlTemplate_CommandPole(auto_ctrl_t *ctrl, float front_target,
 
   AutoCtrlPrimitive_CommandPoleTargetWithSpeed(ctrl, front_target, rear_target,
                                                front_speed, rear_speed);
-  /* 0 lets Pole use the global default; a negative value disables accel. */
+  /* 0 表示让 Pole 使用全局默认值；负值表示禁用加速度限制。 */
   ctrl->pole_cmd.auto_lift_accel[0] = lift_accel;
   ctrl->pole_cmd.auto_lift_accel[1] = lift_accel;
   ctrl->pole_cmd.disable_lift_accel = lift_accel < 0.0f;
@@ -520,8 +569,9 @@ static bool AutoCtrlTemplate_RunAscend(auto_ctrl_t *ctrl, uint32_t now_ms,
                                    pole.front_retract[1],
                                    param->pole_front_retract_speed,
                                    param->pole_rear_extend_speed);
-      if (AutoCtrlTemplate_TimedMoveReady(ctrl, now_ms, param->mid_move_ms,
-                                          param)) {
+      if (AutoCtrlTemplate_DistanceMoveReady(
+              ctrl, now_ms, param->mid_move_distance_m, param->mid_move_ms,
+              param, robot_param)) {
         AutoCtrlTemplate_NextStep(ctrl);
       }
       return false;
@@ -565,7 +615,9 @@ static bool AutoCtrlTemplate_RunAscend(auto_ctrl_t *ctrl, uint32_t now_ms,
                                    pole.all_retract[1],
                                    param->pole_front_retract_speed,
                                    param->pole_rear_retract_speed);
-      if (AutoCtrlTemplate_StepTimeout(ctrl, now_ms, param->final_move_ms)) {
+      if (AutoCtrlTemplate_DistanceMoveReady(
+              ctrl, now_ms, param->final_move_distance_m,
+              param->final_move_ms, param, robot_param)) {
         AutoCtrlTemplate_NextStep(ctrl);
       }
       return false;
@@ -647,8 +699,9 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
                                    pole.front_retract[1],
                                    param->pole_front_retract_speed,
                                    param->pole_rear_extend_speed);
-      if (AutoCtrlTemplate_TimedMoveReady(ctrl, now_ms, param->mid_move_ms,
-                                          param)) {
+      if (AutoCtrlTemplate_DistanceMoveReady(
+              ctrl, now_ms, param->mid_move_distance_m, param->mid_move_ms,
+              param, robot_param)) {
         AutoCtrlTemplate_NextStep(ctrl);
       }
       return false;
@@ -699,7 +752,9 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
                                    pole.all_retract[1],
                                    param->pole_front_retract_speed,
                                    param->pole_rear_retract_speed);
-      if (AutoCtrlTemplate_StepTimeout(ctrl, now_ms, param->final_move_ms)) {
+      if (AutoCtrlTemplate_DistanceMoveReady(
+              ctrl, now_ms, param->final_move_distance_m,
+              param->final_move_ms, param, robot_param)) {
         AutoCtrlTemplate_NextStep(ctrl);
       }
       return false;

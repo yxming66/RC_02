@@ -84,9 +84,8 @@ typedef struct {
   } reverse;
   struct {
     float wheel_radius_m;
-    float wheelbase_m;
-    float trackwidth_m;
-    float wheel_output_max_speed;
+    float wheelbase_m;  /* L：车体中心到前/后轮接地点距离，单位 m。 */
+    float trackwidth_m; /* W：车体中心到左/右轮接地点距离，单位 m。 */
   } physical;
   struct {
     float max_vx;
@@ -96,19 +95,19 @@ typedef struct {
   } limit;
   struct {
     float sample_freq;
-    float wheel_start_accel_mps2; /* Wheel ref accel limit for soft start; <=0 disables. */
-    float wheel_static_friction_nm; /* Static friction torque feedforward per wheel; <=0 disables. */
-    float wheel_static_friction_deadband_mps; /* Ref wheel speed deadband for static friction FF. */
-    float wheel_high_pole_pid_switch_lift; /* Use high-pole wheel speed PID when any pole lift exceeds this rad; <=0 disables. */
+    float wheel_start_accel_mps2; /* 轮速参考软启动加速度限幅；<=0 禁用。 */
+    float wheel_static_friction_nm; /* 单轮静摩擦力矩前馈；<=0 禁用。 */
+    float wheel_static_friction_deadband_mps; /* 静摩擦前馈使用的参考轮速死区。 */
+    float wheel_high_pole_pid_switch_lift; /* 任一撑杆高度超过该值时切换高撑杆轮速 PID，单位 rad；<=0 禁用。 */
   } controller;
   struct {
-    float lateral_vy_to_wz_feedforward; /* wz_ff = gain * vy, rad/m. */
-    bool lateral_heading_hold_enable;   /* Enable gyro yaw hold during lateral move. */
-    float lateral_heading_hold_kp;      /* yaw error to wz correction gain. */
-    float lateral_heading_hold_kd;      /* gyro z damping gain. */
-    float lateral_heading_hold_max_wz;  /* max gyro correction, rad/s. */
-    float lateral_heading_hold_wz_deadband;    /* raw wz considered zero. */
-    float lateral_heading_hold_error_deadband;  /* yaw error deadband, rad. */
+    float lateral_vy_to_wz_feedforward; /* wz_ff = gain * vy，单位 rad/m。 */
+    bool lateral_heading_hold_enable;   /* 横移时启用陀螺仪 yaw 保持。 */
+    float lateral_heading_hold_kp;      /* yaw 误差到 wz 修正量的增益。 */
+    float lateral_heading_hold_kd;      /* 陀螺仪 z 轴阻尼增益。 */
+    float lateral_heading_hold_max_wz;  /* 陀螺仪最大修正角速度，单位 rad/s。 */
+    float lateral_heading_hold_wz_deadband;    /* 原始 wz 视为 0 的死区。 */
+    float lateral_heading_hold_error_deadband;  /* yaw 误差死区，单位 rad。 */
   } front_omni_rear_mecanum;
   MOTOR_TemperatureProtectionConfig_t motor_temperature_protection;
 } Chassis_Params_t;
@@ -182,9 +181,9 @@ typedef struct {
 /* PC上位机接口 */
 typedef struct {
   bool pc_control_enable;     /* PC控制使能 */
-  float pc_vx;               /* +forward velocity command, m/s */
-  float pc_vy;               /* +left velocity command, m/s */
-  float pc_wz;               /* +counter-clockwise yaw rate, rad/s */
+  float pc_vx;               /* 前向为正的速度命令，单位 m/s。 */
+  float pc_vy;               /* 左向为正的速度命令，单位 m/s。 */
+  float pc_wz;               /* 逆时针为正的 yaw 角速度命令，单位 rad/s。 */
 } Chassis_PCInterface_t;
 
 #ifdef __cplusplus

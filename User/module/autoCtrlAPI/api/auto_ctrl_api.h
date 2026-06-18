@@ -36,6 +36,7 @@ typedef struct {
   bool pole_front_at_target;  /* Front pole group reached current target. */
   bool pole_rear_at_target;   /* Rear pole group reached current target. */
   bool pole_all_at_target;    /* All pole groups reached current target. */
+  float wheel_position_rad[4]; /* 底盘四轮累计位置，单位 rad。 */
 } auto_ctrl_feedback_t;
 
 typedef enum {

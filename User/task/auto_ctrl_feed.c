@@ -220,6 +220,8 @@ static PC_AutoAction_t AutoCtrlFeed_MapOreAction(AutoOre_Action_t action) {
       return PC_AUTO_ACTION_PICK_POS_200;
     case AUTO_ORE_ACTION_PICK_NEG_200:
       return PC_AUTO_ACTION_PICK_NEG_200;
+    case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD:
+      return PC_AUTO_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD;
     case AUTO_ORE_ACTION_NONE:
     default:
       return PC_AUTO_ACTION_NONE;
@@ -613,6 +615,10 @@ static bool AutoCtrlFeed_StartOreAction(AutoOre_Action_t action) {
     case AUTO_ORE_ACTION_PICK_NEG_200:
       result = AutoOre_StartPickNeg200(&auto_ore_ctrl, now_ms);
       break;
+    case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD:
+      result = AutoOre_StartStepPickStoreAscend200Head(&auto_ore_ctrl,
+                                                       now_ms);
+      break;
     case AUTO_ORE_ACTION_NONE:
     default:
       result = false;
@@ -898,6 +904,7 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms) {
   const bool ore_low_photo_triggered = AutoCtrlFeed_ReadOreLowPhoto(now_ms);
   const bool ore_high_photo_triggered = AutoCtrlFeed_ReadOreHighPhoto(now_ms);
   const bool spear_photo_triggered = AutoCtrlFeed_ReadRodSpearheadPhoto();
+  const Chassis_Feedback_t *chassis_feedback = Task_ChassisGetFeedback();
 
   AutoOre_Feedback_t auto_ore_feedback = {
       .arm_at_target = arm_at_target,
@@ -905,6 +912,18 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms) {
       .ore_store_all_at_target = ore_store_all_at_target,
       .pole_all_at_target = Task_PoleMainAllAtTarget(
         auto_ore_ctrl.param.pole_arrive_threshold_rad),
+      .pole_front_at_target = feedback.pole_front_at_target,
+      .pole_rear_at_target = feedback.pole_rear_at_target,
+      .arm_photo_has_ore = ore_low_photo_triggered || ore_high_photo_triggered,
+      .precontact_front_photo_triggered = feedback.pe13_photo1_triggered,
+      .pe13_photo1_triggered = feedback.pe13_photo1_triggered,
+      .pe9_photo2_triggered = feedback.pe9_photo2_triggered,
+      .pa2_photo3_triggered = feedback.pa2_photo3_triggered,
+      .pa0_photo4_triggered = feedback.pa0_photo4_triggered,
+      .yaw_auto_rad = feedback.yaw_auto_rad,
+      .yaw_rate_cmd_rad_s = auto_ctrl.yaw_rate_cmd_rad_s,
+      .pole_front_lift_rad = feedback.pole_front_lift_rad,
+      .pole_rear_lift_rad = feedback.pole_rear_lift_rad,
       .ore_store_platform_error_rad = ore_store_platform_error_rad,
       .photoelectric_occupancy = {
           .transform_low_has_ore = ore_low_photo_triggered,
@@ -912,6 +931,12 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms) {
           .arm_has_ore = false,
       },
   };
+  if (chassis_feedback != NULL) {
+    for (uint8_t i = 0u; i < 4u; ++i) {
+      auto_ore_feedback.wheel_position_rad[i] =
+          chassis_feedback->motor[i].position_rad;
+    }
+  }
   AutoOre_Update(&auto_ore_ctrl, &auto_ore_feedback, now_ms);
 
   g_auto_ore_debug.busy = AutoOre_IsBusy(&auto_ore_ctrl);
@@ -936,6 +961,11 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms) {
   g_auto_ore_debug.arm_cmd_valid = auto_ore_ctrl.arm_cmd_valid;
   g_auto_ore_debug.ore_store_cmd_valid = auto_ore_ctrl.ore_store_cmd_valid;
   g_auto_ore_debug.arm_at_target = auto_ore_feedback.arm_at_target;
+  g_auto_ore_debug.pick_lift_confirmed = auto_ore_ctrl.pick_lift_confirmed;
+  g_auto_ore_debug.fused_wheel_distance_m = auto_ore_ctrl.distance_travel_m;
+  g_auto_ore_debug.fused_target_distance_m = auto_ore_ctrl.distance_target_m;
+  g_auto_ore_debug.fused_step_done = auto_ore_ctrl.fused_step_done;
+  g_auto_ore_debug.fused_store_done = auto_ore_ctrl.fused_store_done;
   const ArmSimple_Feedback_t *arm_fb = Task_ArmSimpleGetFeedback();
   if (arm_fb != NULL) {
     g_auto_ore_debug.arm_feedback_joint1_rad = arm_fb->joint1_angle_rad;
@@ -1154,6 +1184,11 @@ bool Task_AutoOreStartPickNeg200(void) {
   return AutoCtrlFeed_StartOreAction(AUTO_ORE_ACTION_PICK_NEG_200);
 }
 
+bool Task_AutoOreStartStepPickStoreAscend200Head(void) {
+  return AutoCtrlFeed_StartOreAction(
+      AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD);
+}
+
 void Task_AutoOreAbort(void) {
   if (auto_ore_inited) {
     if (AutoOre_IsBusy(&auto_ore_ctrl)) {
@@ -1193,6 +1228,9 @@ static void AutoCtrlFeed_HandleAutoOreDebugRequest(void) {
       break;
     case AUTO_ORE_DEBUG_REQUEST_PICK_NEG_200:
       result = Task_AutoOreStartPickNeg200();
+      break;
+    case AUTO_ORE_DEBUG_REQUEST_STEP_PICK_STORE_ASCEND_200_HEAD:
+      result = Task_AutoOreStartStepPickStoreAscend200Head();
       break;
     case AUTO_ORE_DEBUG_REQUEST_ROD_SPEARHEAD:
       result = Task_AutoRodSpearheadStart();
@@ -1378,7 +1416,7 @@ void Task_auto_ctrl(void *argument) {
       AutoCtrlFeed_CacheLocalYawZero();
 
       feedback.yaw_auto_rad = AutoCtrlFeed_SelectYawRad();
-      /* New SICK layout has no paired-front sensors; keep old yaw assist invalid. */
+      /* 新 SICK 布局没有成对前侧传感器，保持旧 yaw 辅助无效。 */
       (void)Task_SickGetLatestOutput(&auto_ctrl_sick_output);
       feedback.sick_front_left_cm =
           auto_ctrl_sick_output.valid[SICK_FRONT_INDEX]
@@ -1417,6 +1455,13 @@ void Task_auto_ctrl(void *argument) {
           raw_pole_rear_at_target, &pole_rear_at_target_stable_count);
       feedback.pole_all_at_target = AutoCtrlFeed_DebouncePoleReady(
           raw_pole_all_at_target, &pole_all_at_target_stable_count);
+      const Chassis_Feedback_t *chassis_feedback = Task_ChassisGetFeedback();
+      if (chassis_feedback != NULL) {
+        for (uint8_t i = 0u; i < 4u; ++i) {
+          feedback.wheel_position_rad[i] =
+              chassis_feedback->motor[i].position_rad;
+        }
+      }
 
       AutoCtrl_SetFeedback(&auto_ctrl, &feedback);
       AutoCtrlFeed_UpdateYawRateCommand();

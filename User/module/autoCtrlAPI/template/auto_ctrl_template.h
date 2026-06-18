@@ -17,14 +17,14 @@ extern "C" {
 
 typedef struct {
   uint32_t photo_stop_enter_time_ms; /* descend photo stop hold start, ms */
-  uint32_t descend_start_move_time_ms; /* first descend sprint start, ms */
+  uint32_t descend_start_move_time_ms; /* 下台阶首次冲刺起始时间，单位 ms。 */
   bool photo_stop_entered;       /* descend photo stop hold has started */
-  bool descend_start_move_entered; /* first descend sprint timer has started */
+  bool descend_start_move_entered; /* 下台阶首次冲刺计时已启动。 */
   uint8_t step_index;            /* 当前模板执行到的 step 编号。 */
   uint32_t step_enter_time_ms;   /* 当前 step 首次进入时刻（ms）。 */
   uint32_t template_start_time_ms; /* 当前模板开始时刻（ms）。 */
   bool step_entered;             /* 当前 step 是否已经执行过 enter 初始化。 */
-  /* Stable photo trigger/release detection state. */
+  /* 光电稳定触发/释放检测状态。 */
   bool pe13_photo1_triggered_latched; /* PE13/photo1 latched as triggered. */
   bool pe9_photo2_triggered_latched;  /* PE9/photo2 latched as triggered. */
   bool pa2_photo3_triggered_latched;  /* PA2/photo3 latched as triggered. */
@@ -45,7 +45,10 @@ typedef struct {
   uint32_t pe9_photo2_released_since_ms;
   uint32_t pa2_photo3_released_since_ms;
   uint32_t pa0_photo4_released_since_ms;
-  bool pole_target_seen_not_ready; /* Current step has observed pole target not ready. */
+  bool pole_target_seen_not_ready; /* 当前 step 已检测到支撑杆目标未到位。 */
+  bool distance_latch_valid;        /* 轮编码器距离门控已锁存起点位置。 */
+  float distance_start_wheel_rad[4]; /* 当前距离门控 step 入口的四轮位置。 */
+  float distance_travel_m;          /* 当前距离门控 step 的行进距离估算，单位 m。 */
 } auto_ctrl_template_ctx_t;
 
 #ifdef __cplusplus

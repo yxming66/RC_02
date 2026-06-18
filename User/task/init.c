@@ -56,7 +56,7 @@ void Task_Init(void *argument) {
   task_runtime.msgq.rod.cmd =
       osMessageQueueNew(1u, sizeof(RodNew_CMD_t), NULL);
   task_runtime.msgq.camera_yaw.cmd =
-      osMessageQueueNew(1u, sizeof(CameraYaw_CMD_t), NULL);
+      osMessageQueueNew(1u, sizeof(CameraYaw_GroupCMD_t), NULL);
   task_runtime.msgq.ore_store.cmd =
       osMessageQueueNew(1u, sizeof(OreStore_CMD_t), NULL);
 

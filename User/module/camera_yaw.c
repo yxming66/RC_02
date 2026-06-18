@@ -167,7 +167,7 @@ int8_t CameraYaw_Control(CameraYaw_t *c, const CameraYaw_CMD_t *cmd,
   return CAMERA_YAW_OK;
 }
 
-void CameraYaw_Output(CameraYaw_t *c) {
+void CameraYaw_SetOutput(CameraYaw_t *c) {
   if (c == NULL || c->param == NULL) {
     return;
   }
@@ -180,7 +180,19 @@ void CameraYaw_Output(CameraYaw_t *c) {
   c->feedback.output = output;
 
   (void)MOTOR_RM_SetOutput((MOTOR_RM_Param_t *)&c->param->motor_param, output);
-  (void)MOTOR_RM_Ctrl((MOTOR_RM_Param_t *)&c->param->motor_param);
+}
+
+void CameraYaw_FlushOutput(CameraYaw_t *c) {
+  if (c == NULL || c->param == NULL) {
+    return;
+  }
+
+  (void)MOTOR_RM_FlushGroup((MOTOR_RM_Param_t *)&c->param->motor_param);
+}
+
+void CameraYaw_Output(CameraYaw_t *c) {
+  CameraYaw_SetOutput(c);
+  CameraYaw_FlushOutput(c);
 }
 
 void CameraYaw_ResetOutput(CameraYaw_t *c) {

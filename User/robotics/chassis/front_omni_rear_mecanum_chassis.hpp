@@ -8,8 +8,8 @@
 namespace mr::robotics::chassis {
 
 struct FrontOmniRearMecanumGeometry {
-  // Same convention as MecanumGeometry: half of front-rear and left-right
-  // wheel spacing. Front omni wheels drive along body x only.
+  // 与 MecanumGeometry 约定一致：L/W 为车体中心到车轮接地点中心的距离。
+  // 前全向轮只沿车体系 x 方向驱动。
   float wheelbase_m = 0.0f;
   float trackwidth_m = 0.0f;
 

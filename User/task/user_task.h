@@ -82,6 +82,7 @@ typedef enum {
     AUTO_ORE_DEBUG_REQUEST_SICK_CORRECT_ROD_SPEARHEAD = 9,
     AUTO_ORE_DEBUG_REQUEST_SICK_CORRECT_ORE_RELEASE = 10,
     AUTO_ORE_DEBUG_REQUEST_ROD_DOCK_WAIT = 11,
+    AUTO_ORE_DEBUG_REQUEST_STEP_PICK_STORE_ASCEND_200_HEAD = 12,
 } AutoOre_DebugRequest_t;
 
 typedef struct {
@@ -112,6 +113,11 @@ typedef struct {
     volatile bool ore_store_cmd_valid;
     volatile bool pole_cmd_valid;
     volatile bool chassis_cmd_valid;
+    volatile bool pick_lift_confirmed;
+    volatile float fused_wheel_distance_m;
+    volatile float fused_target_distance_m;
+    volatile bool fused_step_done;
+    volatile bool fused_store_done;
     volatile bool arm_at_target;
     volatile bool ore_store_all_at_target;
     volatile bool pole_all_at_target;
@@ -338,6 +344,7 @@ void Task_pc_comm(void *argument);
 void Task_ore_store(void *argument);
 void Task_ir_dock(void *argument);
 
+const Chassis_Feedback_t *Task_ChassisGetFeedback(void);
 bool Task_PoleMainGroupAtTarget(uint8_t group, float threshold_rad);
 bool Task_PoleMainAllAtTarget(float threshold_rad);
 bool Task_PoleMainGetSupportLift(float *front_lift_rad, float *rear_lift_rad);
@@ -348,6 +355,7 @@ bool Task_AutoOreStartChamber(void);
 bool Task_AutoOreStartPickPos400(void);
 bool Task_AutoOreStartPickPos200(void);
 bool Task_AutoOreStartPickNeg200(void);
+bool Task_AutoOreStartStepPickStoreAscend200Head(void);
 void Task_AutoOreAbort(void);
 bool Task_AutoRodSpearheadStart(void);
 bool Task_AutoRodSpearheadStartDockWait(void);
@@ -377,7 +385,9 @@ bool Task_SickGetLatestOutput(Sick_Output_t *output);
 const ArmSimple_Feedback_t *Task_ArmSimpleGetFeedback(void);
 const RodNew_Feedback_t *Task_RodNewGetFeedback(void);
 const CameraYaw_Feedback_t *Task_CameraYawGetFeedback(void);
+const CameraYaw_GroupFeedback_t *Task_CameraYawGetGroupFeedback(void);
 int8_t Task_CameraYawPostCommand(const CameraYaw_CMD_t *cmd);
+int8_t Task_CameraYawPostGroupCommand(const CameraYaw_GroupCMD_t *cmd);
 const OreStore_Feedback_t *Task_OreStoreGetFeedback(void);
 const OreStore_Debug_t *Task_OreStoreGetDebug(void);
 #ifdef __cplusplus

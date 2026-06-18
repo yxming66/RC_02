@@ -7,6 +7,8 @@
 #include "module/autoCtrlAPI/core/auto_ctrl_def.h"
 #include "mrlink/mrlink.h"
 
+#define PC_CAMERA_YAW_COUNT (2u)
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -31,7 +33,7 @@ typedef enum {
     PC_CMD_ORE_STORE = 0x15,     /* 矿仓平台控制命令 */
     PC_CMD_AUTO_ACTION = 0x16,   /* 一键取矿/存矿/上膛/放矿/取矛头命令 */
     PC_CMD_CAMERA_YAW = 0x17,    /* 相机云台 yaw 保持命令 */
-    PC_CMD_ABSTRACT_POSITION = 0x18, /* Abstract position command */
+    PC_CMD_ABSTRACT_POSITION = 0x18, /* 抽象位置命令 */
     PC_CMD_IMU = 0x20,           /* PC 下发姿态数据命令 */
 } PC_CMD_t;
 
@@ -105,9 +107,9 @@ typedef struct {
 } PC_OreStoreCMD_t;
 
 typedef struct {
-    uint8_t mode;              /* 云台 yaw 控制模式，0=放松，1=闭环保持 */
-    float target_yaw_rad;      /* PC 给定的世界系目标 yaw，单位 rad */
-    float feedback_yaw_rad;    /* PC/视觉侧实时反馈的世界系 yaw，单位 rad */
+    uint8_t mode[PC_CAMERA_YAW_COUNT];              /* [0]=左云台，[1]=右云台；0=放松，非 0=使能 */
+    float target_yaw_rad[PC_CAMERA_YAW_COUNT];      /* 世界系目标 yaw，单位 rad */
+    float feedback_yaw_rad[PC_CAMERA_YAW_COUNT];    /* PC/视觉反馈 yaw，单位 rad */
 } PC_CameraYawCMD_t;
 
 typedef enum {
@@ -164,13 +166,13 @@ typedef enum {
 } PC_AbstractPolePosition_t;
 
 typedef struct {
-    uint8_t enable_mask;               /* PC_AbstractModuleMask_t bits */
+    uint8_t enable_mask;               /* PC_AbstractModuleMask_t 位掩码 */
     uint8_t arm_simple_position;       /* PC_AbstractArmSimplePosition_t */
-    uint8_t arm_simple_suction;        /* 0=off, nonzero=on */
+    uint8_t arm_simple_suction;        /* 0=关闭，非 0=开启 */
     uint8_t rod_new_position;          /* PC_AbstractRodNewPosition_t */
-    uint8_t rod_new_grip;              /* 0=release, nonzero=grab */
+    uint8_t rod_new_grip;              /* 0=松开，非 0=夹紧 */
     uint8_t ore_store_position;        /* PC_AbstractOreStorePosition_t */
-    uint8_t ore_store_cylinder_closed; /* 0=open, nonzero=closed */
+    uint8_t ore_store_cylinder_closed; /* 0=打开，非 0=关闭 */
     uint8_t pole_position;             /* PC_AbstractPolePosition_t */
 } PC_AbstractPositionCMD_t;
 
@@ -187,6 +189,7 @@ typedef enum {
     PC_AUTO_ACTION_SICK_CORRECT_ROD_SPEARHEAD = 9, /* 取矛头前 SICK 一键校正 */
     PC_AUTO_ACTION_SICK_CORRECT_ORE_RELEASE = 10,  /* 放矿前 SICK 一键校正，当前预留/不支持 */
     PC_AUTO_ACTION_ROD_DOCK_WAIT = 11,   /* 取矛头机构等待对接 */
+    PC_AUTO_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD = 12, /* 融合取矿存矿并头向上 200mm 台阶 */
 } PC_AutoAction_t;
 
 typedef enum {
@@ -307,20 +310,24 @@ typedef struct {
     uint8_t online_mask;             /* 轴在线 bitmask，bit0=平台轴在线，1 表示在线 */
     uint8_t homed_mask;              /* 轴回零 bitmask，bit0=平台轴已回零，1 表示已回零 */
     float platform_position_rad;     /* 平台轴当前位置，单位 rad */
+    uint8_t transform_low_has_ore;    /* 变形机构低位占矿状态，0/1 */
+    uint8_t transform_high_has_ore;   /* 变形机构高位占矿状态，0/1 */
+    uint8_t arm_has_ore;              /* 机械臂持矿状态，0/1 */
+    uint8_t reserved;                 /* 保留字段，发送端固定为 0 */
 } PC_OreStoreFeedback_t;
 
 typedef struct {
-    uint8_t mode;                    /* 云台 yaw 当前模式，0=放松，1=闭环保持 */
-    uint8_t motor_online;            /* 云台 yaw 电机在线标志，0=离线，1=在线 */
-    uint8_t feedback_valid;          /* PC/视觉反馈 yaw 是否有效，0=无效，1=有效 */
-    uint8_t at_target;               /* 目标到位标志，0=未到位，1=已到位 */
-    float target_yaw_rad;            /* 当前目标 yaw，单位 rad */
-    float feedback_yaw_rad;          /* 当前外部反馈 yaw，单位 rad */
-    float error_yaw_rad;             /* 目标 yaw 与反馈 yaw 的误差，单位 rad */
-    float motor_angle_rad;           /* 云台 yaw 电机反馈角度，单位 rad */
-    float motor_velocity_rad_s;      /* 云台 yaw 电机反馈速度，单位 rad/s */
-    float output;                    /* 云台 yaw 控制输出，单位随底层电机控制定义 */
-    uint32_t feedback_age_ms;        /* 外部反馈 yaw 距当前时刻的年龄，单位 ms */
+    uint8_t mode[PC_CAMERA_YAW_COUNT];                    /* [0]=左云台，[1]=右云台 */
+    uint8_t motor_online[PC_CAMERA_YAW_COUNT];
+    uint8_t feedback_valid[PC_CAMERA_YAW_COUNT];
+    uint8_t at_target[PC_CAMERA_YAW_COUNT];
+    float target_yaw_rad[PC_CAMERA_YAW_COUNT];
+    float feedback_yaw_rad[PC_CAMERA_YAW_COUNT];
+    float error_yaw_rad[PC_CAMERA_YAW_COUNT];
+    float motor_angle_rad[PC_CAMERA_YAW_COUNT];
+    float motor_velocity_rad_s[PC_CAMERA_YAW_COUNT];
+    float output[PC_CAMERA_YAW_COUNT];
+    uint32_t feedback_age_ms[PC_CAMERA_YAW_COUNT];
 } PC_CameraYawFeedback_t;
 
 typedef struct {

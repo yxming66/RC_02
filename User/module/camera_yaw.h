@@ -23,6 +23,12 @@ typedef enum {
   CAMERA_YAW_MODE_ACTIVE = 1,
 } CameraYaw_Mode_t;
 
+typedef enum {
+  CAMERA_YAW_LEFT = 0,
+  CAMERA_YAW_RIGHT = 1,
+  CAMERA_YAW_NUM = 2,
+} CameraYaw_Channel_t;
+
 typedef struct {
   MOTOR_RM_Param_t motor_param;
   struct {
@@ -59,6 +65,14 @@ typedef struct {
 } CameraYaw_Feedback_t;
 
 typedef struct {
+  CameraYaw_CMD_t yaw[CAMERA_YAW_NUM];
+} CameraYaw_GroupCMD_t;
+
+typedef struct {
+  CameraYaw_Feedback_t yaw[CAMERA_YAW_NUM];
+} CameraYaw_GroupFeedback_t;
+
+typedef struct {
   volatile bool enable;
   volatile bool direct_output_enable;
   volatile CameraYaw_Mode_t mode;
@@ -84,6 +98,8 @@ int8_t CameraYaw_Init(CameraYaw_t *c, const CameraYaw_Params_t *param,
 int8_t CameraYaw_UpdateFeedback(CameraYaw_t *c);
 int8_t CameraYaw_Control(CameraYaw_t *c, const CameraYaw_CMD_t *cmd,
                          uint32_t now_ms);
+void CameraYaw_SetOutput(CameraYaw_t *c);
+void CameraYaw_FlushOutput(CameraYaw_t *c);
 void CameraYaw_Output(CameraYaw_t *c);
 void CameraYaw_ResetOutput(CameraYaw_t *c);
 bool CameraYaw_IsAtTarget(const CameraYaw_t *c);
