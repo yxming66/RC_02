@@ -66,19 +66,7 @@ typedef enum {
   MUSIC_XING_CUN_ZHE,
 } MUSIC_t;
 
-typedef struct {
-  const Tone_t *melody;
-  size_t melody_length;
-  size_t tone_index;
-  uint32_t next_tick;
-  uint16_t tone_gap_ms;
-  MUSIC_t music;
-  bool active;
-  bool paused;
-  bool loop;
-  bool waiting_tone;
-  bool waiting_gap;
-} CloudMusic_Player_t;
+typedef Buzzer_Player_t CloudMusic_Player_t;
 
 typedef struct {
   bool rc_online;
@@ -129,6 +117,7 @@ typedef struct {
   size_t playlist_length;
   size_t playlist_index;
   MUSIC_t startup_music;
+  MUSIC_t current_music;
   bool enable_startup_music;
   bool enable_music_loop;
   bool start_music_loop_paused;

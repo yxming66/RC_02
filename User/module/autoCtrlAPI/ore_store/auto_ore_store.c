@@ -266,6 +266,10 @@ static void AutoOre_CommandChassisMove(AutoOre_t *ctrl, float vx_mps) {
   ctrl->chassis_cmd_valid = true;
 }
 
+static void AutoOre_CommandChassisHold(AutoOre_t *ctrl) {
+  AutoOre_CommandChassisMove(ctrl, 0.0f);
+}
+
 static void AutoOre_FailInvalidParam(AutoOre_t *ctrl) {
   ctrl->state = AUTO_ORE_STATE_FAIL;
   ctrl->result = AUTO_ORE_RESULT_FAIL;
@@ -519,6 +523,8 @@ static bool AutoOre_CommandReleaseOreStoreHold(
 }
 
 static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
+  AutoOre_CommandChassisHold(ctrl);
+
   switch (ctrl->step_index) {
     case 0:
       AutoOre_EnterStep(ctrl, now_ms);

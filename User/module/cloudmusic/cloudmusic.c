@@ -1,7 +1,5 @@
 #include "module/cloudmusic/cloudmusic.h"
 
-#include <cmsis_os2.h>
-
 #define ARRAY_LEN(arr) (sizeof(arr) / sizeof((arr)[0]))
 
 #if ((CLOUDMUSIC_FEATURES &                                             \
@@ -354,29 +352,7 @@ const Tone_t HAPPY_DOU_DI_ZHU_MELODY[] = {
 
 /* USER MUSIC MENU END */
 
-typedef struct {
-    const Tone_t *melody;
-    size_t melody_length;
-    uint16_t tone_gap_ms;
-} CloudMusicData_t;
-
-static uint32_t CloudMusic_PlayerMsToTicks(uint32_t ms) {
-    uint32_t tick_freq = osKernelGetTickFreq();
-    uint64_t ticks = ((uint64_t)ms * tick_freq + 999ULL) / 1000ULL;
-    if (ticks == 0ULL) {
-        ticks = 1ULL;
-    }
-    if (ticks > UINT32_MAX) {
-        ticks = UINT32_MAX;
-    }
-    return (uint32_t)ticks;
-}
-
-static bool CloudMusic_PlayerTickReached(uint32_t now_tick, uint32_t target_tick) {
-    return (int32_t)(now_tick - target_tick) >= 0;
-}
-
-static int8_t CloudMusic_GetMusicData(MUSIC_t music, CloudMusicData_t *data) {
+static int8_t CloudMusic_GetMusicData(MUSIC_t music, Buzzer_Score_t *data) {
     if (data == NULL) {
         return DEVICE_ERR;
     }
@@ -548,23 +524,12 @@ int8_t CloudMusic_PlayMusic(BUZZER_t *buzzer, MUSIC_t music) {
         return DEVICE_ERR;
     }
 
-    CloudMusicData_t data;
+    Buzzer_Score_t data;
     if (CloudMusic_GetMusicData(music, &data) != DEVICE_OK) {
         return DEVICE_ERR;
     }
 
-    for (size_t i = 0; i < data.melody_length; i++) {
-        if (BUZZER_PlayTone(buzzer, data.melody[i].note,
-                                data.melody[i].octave,
-                                data.melody[i].duration_ms,
-                                data.tone_gap_ms) != DEVICE_OK) {
-            BUZZER_Stop(buzzer);
-            return DEVICE_ERR;
-        }
-    }
-
-    BUZZER_Stop(buzzer);
-    return DEVICE_OK;
+    return BUZZER_PlayScore(buzzer, &data);
 }
 int8_t CloudMusic_PlayerStart(CloudMusic_Player_t *player,
                                 BUZZER_t *buzzer, MUSIC_t music, bool loop,
@@ -573,134 +538,40 @@ int8_t CloudMusic_PlayerStart(CloudMusic_Player_t *player,
         return DEVICE_ERR;
     }
 
-    CloudMusicData_t data;
+    Buzzer_Score_t data;
     if (CloudMusic_GetMusicData(music, &data) != DEVICE_OK) {
         return DEVICE_ERR;
     }
 
-    player->melody = data.melody;
-    player->melody_length = data.melody_length;
-    player->tone_index = 0;
-    player->next_tick = now_tick;
-    player->tone_gap_ms = data.tone_gap_ms;
-    player->music = music;
-    player->active = true;
-    player->paused = false;
-    player->loop = loop;
-    player->waiting_tone = false;
-    player->waiting_gap = false;
-
-    BUZZER_Stop(buzzer);
-    return CloudMusic_PlayerUpdate(player, buzzer, now_tick);
+    return BUZZER_PlayerStart(player, buzzer, &data, loop, now_tick);
 }
 
 int8_t CloudMusic_PlayerUpdate(CloudMusic_Player_t *player,
                                  BUZZER_t *buzzer, uint32_t now_tick) {
-    if (player == NULL || buzzer == NULL || !buzzer->header.online) {
-        return DEVICE_ERR;
-    }
-
-    if (!player->active || player->paused) {
-        return DEVICE_OK;
-    }
-
-    if ((player->waiting_tone || player->waiting_gap) &&
-        !CloudMusic_PlayerTickReached(now_tick, player->next_tick)) {
-        return DEVICE_OK;
-    }
-
-    if (player->waiting_tone) {
-        BUZZER_Stop(buzzer);
-        player->waiting_tone = false;
-
-        if (player->tone_gap_ms > 0U) {
-            player->waiting_gap = true;
-            player->next_tick =
-                now_tick + CloudMusic_PlayerMsToTicks(player->tone_gap_ms);
-            return DEVICE_OK;
-        }
-    }
-
-    if (player->waiting_gap) {
-        player->waiting_gap = false;
-    }
-
-    if (player->tone_index >= player->melody_length) {
-        if (player->loop) {
-            player->tone_index = 0;
-        } else {
-            player->active = false;
-            BUZZER_Stop(buzzer);
-            return DEVICE_OK;
-        }
-    }
-
-    const Tone_t *tone = &player->melody[player->tone_index++];
-    if (BUZZER_ApplyTone(buzzer, tone->note, tone->octave) != DEVICE_OK) {
-        player->active = false;
-        BUZZER_Stop(buzzer);
-        return DEVICE_ERR;
-    }
-
-    player->waiting_tone = true;
-    player->next_tick = now_tick + CloudMusic_PlayerMsToTicks(tone->duration_ms);
-    return DEVICE_OK;
+    return BUZZER_PlayerUpdate(player, buzzer, now_tick);
 }
 
 void CloudMusic_PlayerStop(CloudMusic_Player_t *player, BUZZER_t *buzzer) {
-    if (player != NULL) {
-        player->active = false;
-        player->paused = false;
-        player->waiting_tone = false;
-        player->waiting_gap = false;
-        player->tone_index = 0;
-    }
-
-    if (buzzer != NULL) {
-        BUZZER_Stop(buzzer);
-    }
+    BUZZER_PlayerStop(player, buzzer);
 }
 
 void CloudMusic_PlayerSilence(CloudMusic_Player_t *player,
                                 BUZZER_t *buzzer) {
-    if (player != NULL) {
-        if (player->waiting_tone && player->tone_index > 0U) {
-            player->tone_index--;
-        }
-        player->waiting_tone = false;
-        player->waiting_gap = false;
-    }
-
-    if (buzzer != NULL) {
-        BUZZER_Stop(buzzer);
-    }
+    BUZZER_PlayerSilence(player, buzzer);
 }
 
 void CloudMusic_PlayerSetPaused(CloudMusic_Player_t *player,
                                   BUZZER_t *buzzer, bool paused,
                                   uint32_t now_tick) {
-    if (player == NULL) {
-        return;
-    }
-
-    if (paused) {
-        if (!player->paused) {
-            CloudMusic_PlayerSilence(player, buzzer);
-        }
-        player->paused = true;
-        return;
-    }
-
-    player->paused = false;
-    player->next_tick = now_tick;
+    BUZZER_PlayerSetPaused(player, buzzer, paused, now_tick);
 }
 
 bool CloudMusic_PlayerIsActive(const CloudMusic_Player_t *player) {
-    return player != NULL && player->active;
+    return BUZZER_PlayerIsActive(player);
 }
 
 bool CloudMusic_PlayerIsPaused(const CloudMusic_Player_t *player) {
-    return player != NULL && player->paused;
+    return BUZZER_PlayerIsPaused(player);
 }
 
 static bool CloudMusic_AxisReleased(float value) {
@@ -741,15 +612,21 @@ static int8_t CloudMusic_StartPlaylistTrack(CloudMusic_t *cloudmusic,
     cloudmusic->playlist_index = 0U;
   }
 
-  int8_t ret = CloudMusic_PlayerStart(
-      &cloudmusic->player, cloudmusic->buzzer,
-      cloudmusic->playlist[cloudmusic->playlist_index], false, now_tick);
+  MUSIC_t music = cloudmusic->playlist[cloudmusic->playlist_index];
+  int8_t ret = CloudMusic_PlayerStart(&cloudmusic->player, cloudmusic->buzzer,
+                                      music, false, now_tick);
+  if (ret == DEVICE_OK) {
+    cloudmusic->current_music = music;
+  }
   if (ret != DEVICE_OK) {
     cloudmusic->playlist_index =
         (cloudmusic->playlist_index + 1U) % cloudmusic->playlist_length;
+    music = cloudmusic->playlist[cloudmusic->playlist_index];
     ret = CloudMusic_PlayerStart(&cloudmusic->player, cloudmusic->buzzer,
-                                  cloudmusic->playlist[cloudmusic->playlist_index],
-                                  false, now_tick);
+                                  music, false, now_tick);
+    if (ret == DEVICE_OK) {
+      cloudmusic->current_music = music;
+    }
   }
 
   cloudmusic->user_paused = should_pause;
@@ -844,6 +721,7 @@ int8_t CloudMusic_Init(CloudMusic_t *cloudmusic, BUZZER_t *buzzer,
   cloudmusic->playlist = config->playlist;
   cloudmusic->playlist_length = config->playlist_length;
   cloudmusic->startup_music = config->startup_music;
+  cloudmusic->current_music = config->startup_music;
   cloudmusic->enable_startup_music = config->enable_startup_music;
   cloudmusic->enable_music_loop = config->enable_music_loop;
   cloudmusic->start_music_loop_paused = config->start_music_loop_paused;
@@ -859,8 +737,11 @@ int8_t CloudMusic_Start(CloudMusic_t *cloudmusic, uint32_t now_tick) {
   if (cloudmusic->enable_startup_music) {
     cloudmusic->startup_active =
         CloudMusic_PlayerStart(&cloudmusic->player, cloudmusic->buzzer,
-                                cloudmusic->startup_music, false,
-                                now_tick) == DEVICE_OK;
+                               cloudmusic->startup_music, false,
+                               now_tick) == DEVICE_OK;
+    if (cloudmusic->startup_active) {
+      cloudmusic->current_music = cloudmusic->startup_music;
+    }
   }
 
   if (cloudmusic->enable_music_loop && !cloudmusic->startup_active) {
@@ -1064,7 +945,7 @@ void CloudMusic_GetStatus(const CloudMusic_t *cloudmusic,
   status->switch_pending = cloudmusic->switch_pending;
   status->playlist_index = cloudmusic->playlist_index;
   status->playlist_length = cloudmusic->playlist_length;
-  status->current_music = cloudmusic->player.music;
+  status->current_music = cloudmusic->current_music;
   status->next_count = cloudmusic->next_count;
   status->previous_count = cloudmusic->previous_count;
   status->pause_toggle_count = cloudmusic->pause_toggle_count;

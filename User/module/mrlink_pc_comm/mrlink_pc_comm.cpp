@@ -56,6 +56,7 @@ static MrlinkPc_TxCallback_t s_tx_done_callback = nullptr;
 static MrlinkPc_TxCallback_t s_tx_error_callback = nullptr;
 static BSP_UART_t s_channel_uart = BSP_UART_PC;
 static bool s_comm_initialized = false;
+static bool s_pole_cmd_received = false;
 
 uint16_t DebugCopyRaw(volatile uint8_t *dst, uint16_t dst_size,
                       const uint8_t *src, uint16_t src_len) {
@@ -177,6 +178,7 @@ void OnPole(const wire::PoleCmd &cmd) {
   s_state.cmd.pole.mode = cmd.mode;
   s_state.cmd.pole.lift[0] = cmd.lift0;
   s_state.cmd.pole.lift[1] = cmd.lift1;
+  s_pole_cmd_received = true;
   s_state.cmd.abstract_position.enable_mask &=
       static_cast<uint8_t>(~PC_ABSTRACT_MODULE_POLE);
   MarkRxFrame(PC_CMD_POLE, sizeof(cmd), MRLINK_OK);
@@ -452,6 +454,7 @@ extern "C" bool MrlinkPc_CommInit(void) {
   }
 
   std::memset(&s_state, 0, sizeof(s_state));
+  s_pole_cmd_received = false;
   s_state.control_mode = PC_MODE_RC;
   s_state.feedback.status.command_source = PC_COMMAND_SOURCE_RC;
 
@@ -486,6 +489,7 @@ extern "C" void MrlinkPc_CommProcess(uint32_t now_ms) {
     s_state.heartbeat_valid = false;
     s_state.control_mode = PC_MODE_RC;
     s_state.online = false;
+    s_pole_cmd_received = false;
   }
 
   (void)WaitRecvComplete(0u);
@@ -581,6 +585,10 @@ extern "C" const PC_ChassisCMD_t *MrlinkPc_GetChassisCMD(void) {
 
 extern "C" const PC_PoleCMD_t *MrlinkPc_GetPoleCMD(void) {
   return &s_state.cmd.pole;
+}
+
+extern "C" bool MrlinkPc_HasPoleCMD(void) {
+  return s_pole_cmd_received;
 }
 
 extern "C" const PC_ArmCMD_t *MrlinkPc_GetArmCMD(void) {

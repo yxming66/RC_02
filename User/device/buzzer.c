@@ -2,6 +2,7 @@
 
 #include "bsp/time.h"
 
+#include <cmsis_os2.h>
 #include <math.h>
 
 /* USER INCLUDE BEGIN */
@@ -18,6 +19,26 @@
 static void BUZZER_Update(BUZZER_t *buzzer) {
     buzzer->header.online = true;
     buzzer->header.last_online_time = BSP_TIME_Get_ms();
+}
+
+static bool BUZZER_ScoreIsValid(const Buzzer_Score_t *score) {
+    return score != NULL && score->melody != NULL && score->melody_length > 0U;
+}
+
+static uint32_t BUZZER_MsToTicks(uint32_t ms) {
+    uint32_t tick_freq = osKernelGetTickFreq();
+    uint64_t ticks = ((uint64_t)ms * tick_freq + 999ULL) / 1000ULL;
+    if (ticks == 0ULL) {
+        ticks = 1ULL;
+    }
+    if (ticks > UINT32_MAX) {
+        ticks = UINT32_MAX;
+    }
+    return (uint32_t)ticks;
+}
+
+static bool BUZZER_TickReached(uint32_t now_tick, uint32_t target_tick) {
+    return (int32_t)(now_tick - target_tick) >= 0;
 }
 
 int8_t BUZZER_Init(BUZZER_t *buzzer, BSP_PWM_Channel_t channel) {
@@ -114,6 +135,155 @@ int8_t BUZZER_PlayTone(BUZZER_t *buzzer, NOTE_t note, uint8_t octave,
     }
 
     return DEVICE_OK;
+}
+
+int8_t BUZZER_PlayScore(BUZZER_t *buzzer, const Buzzer_Score_t *score) {
+    if (buzzer == NULL || !buzzer->header.online ||
+        !BUZZER_ScoreIsValid(score)) {
+        return DEVICE_ERR;
+    }
+
+    for (size_t i = 0; i < score->melody_length; i++) {
+        if (BUZZER_PlayTone(buzzer, score->melody[i].note,
+                            score->melody[i].octave,
+                            score->melody[i].duration_ms,
+                            score->tone_gap_ms) != DEVICE_OK) {
+            BUZZER_Stop(buzzer);
+            return DEVICE_ERR;
+        }
+    }
+
+    BUZZER_Stop(buzzer);
+    return DEVICE_OK;
+}
+
+int8_t BUZZER_PlayerStart(Buzzer_Player_t *player, BUZZER_t *buzzer,
+                          const Buzzer_Score_t *score, bool loop,
+                          uint32_t now_tick) {
+    if (player == NULL || buzzer == NULL || !buzzer->header.online ||
+        !BUZZER_ScoreIsValid(score)) {
+        return DEVICE_ERR;
+    }
+
+    player->melody = score->melody;
+    player->melody_length = score->melody_length;
+    player->tone_index = 0;
+    player->next_tick = now_tick;
+    player->tone_gap_ms = score->tone_gap_ms;
+    player->active = true;
+    player->paused = false;
+    player->loop = loop;
+    player->waiting_tone = false;
+    player->waiting_gap = false;
+
+    BUZZER_Stop(buzzer);
+    return BUZZER_PlayerUpdate(player, buzzer, now_tick);
+}
+
+int8_t BUZZER_PlayerUpdate(Buzzer_Player_t *player, BUZZER_t *buzzer,
+                           uint32_t now_tick) {
+    if (player == NULL || buzzer == NULL || !buzzer->header.online) {
+        return DEVICE_ERR;
+    }
+
+    if (!player->active || player->paused) {
+        return DEVICE_OK;
+    }
+
+    if ((player->waiting_tone || player->waiting_gap) &&
+        !BUZZER_TickReached(now_tick, player->next_tick)) {
+        return DEVICE_OK;
+    }
+
+    if (player->waiting_tone) {
+        BUZZER_Stop(buzzer);
+        player->waiting_tone = false;
+
+        if (player->tone_gap_ms > 0U) {
+            player->waiting_gap = true;
+            player->next_tick = now_tick + BUZZER_MsToTicks(player->tone_gap_ms);
+            return DEVICE_OK;
+        }
+    }
+
+    if (player->waiting_gap) {
+        player->waiting_gap = false;
+    }
+
+    if (player->tone_index >= player->melody_length) {
+        if (player->loop) {
+            player->tone_index = 0;
+        } else {
+            player->active = false;
+            BUZZER_Stop(buzzer);
+            return DEVICE_OK;
+        }
+    }
+
+    const Tone_t *tone = &player->melody[player->tone_index++];
+    if (BUZZER_ApplyTone(buzzer, tone->note, tone->octave) != DEVICE_OK) {
+        player->active = false;
+        BUZZER_Stop(buzzer);
+        return DEVICE_ERR;
+    }
+
+    player->waiting_tone = true;
+    player->next_tick = now_tick + BUZZER_MsToTicks(tone->duration_ms);
+    return DEVICE_OK;
+}
+
+void BUZZER_PlayerStop(Buzzer_Player_t *player, BUZZER_t *buzzer) {
+    if (player != NULL) {
+        player->active = false;
+        player->paused = false;
+        player->waiting_tone = false;
+        player->waiting_gap = false;
+        player->tone_index = 0;
+    }
+
+    if (buzzer != NULL) {
+        BUZZER_Stop(buzzer);
+    }
+}
+
+void BUZZER_PlayerSilence(Buzzer_Player_t *player, BUZZER_t *buzzer) {
+    if (player != NULL) {
+        if (player->waiting_tone && player->tone_index > 0U) {
+            player->tone_index--;
+        }
+        player->waiting_tone = false;
+        player->waiting_gap = false;
+    }
+
+    if (buzzer != NULL) {
+        BUZZER_Stop(buzzer);
+    }
+}
+
+void BUZZER_PlayerSetPaused(Buzzer_Player_t *player, BUZZER_t *buzzer,
+                            bool paused, uint32_t now_tick) {
+    if (player == NULL) {
+        return;
+    }
+
+    if (paused) {
+        if (!player->paused) {
+            BUZZER_PlayerSilence(player, buzzer);
+        }
+        player->paused = true;
+        return;
+    }
+
+    player->paused = false;
+    player->next_tick = now_tick;
+}
+
+bool BUZZER_PlayerIsActive(const Buzzer_Player_t *player) {
+    return player != NULL && player->active;
+}
+
+bool BUZZER_PlayerIsPaused(const Buzzer_Player_t *player) {
+    return player != NULL && player->paused;
 }
 
 /* USER FUNCTION BEGIN */

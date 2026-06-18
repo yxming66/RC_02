@@ -584,6 +584,8 @@ const PC_ChassisCMD_t *MrlinkPc_GetChassisCMD(void);
 /* 获取最近一次 PC 撑杆命令。 */
 const PC_PoleCMD_t *MrlinkPc_GetPoleCMD(void);
 
+bool MrlinkPc_HasPoleCMD(void);
+
 /* 获取最近一次 PC 机械臂笛卡尔命令，当前保留。 */
 const PC_ArmCMD_t *MrlinkPc_GetArmCMD(void);
 

@@ -13,6 +13,7 @@ typedef struct {
 } auto_ctrl_pole_targets_t;
 
 #define AUTO_CTRL_PHOTO_STABLE_MS (100u) /* stable photo trigger time, ms */
+#define AUTO_CTRL_TIMED_MOVE_YAW_TOLERANCE_DEFAULT_RAD (0.1745329252f)
 
 static void AutoCtrlTemplate_EnterStep(auto_ctrl_t *ctrl, uint32_t now_ms) {
   if (!ctrl->template_ctx.step_entered) {
@@ -44,6 +45,40 @@ static void AutoCtrlTemplate_NextStep(auto_ctrl_t *ctrl) {
 
 static bool AutoCtrlTemplate_IsYawAligned(const auto_ctrl_t *ctrl) {
   return fabsf(ctrl->yaw_error_rad) <= ctrl->yaw_tolerance_rad;
+}
+
+static float AutoCtrlTemplate_GetTimedMoveYawTolerance(
+    const auto_ctrl_t *ctrl, const AutoCtrl_TemplateParam_t *param) {
+  if (param != 0 && isfinite(param->timed_move_yaw_tolerance_rad) &&
+      param->timed_move_yaw_tolerance_rad > 0.0f) {
+    return param->timed_move_yaw_tolerance_rad;
+  }
+
+  if (ctrl != 0 && isfinite(ctrl->yaw_tolerance_rad) &&
+      ctrl->yaw_tolerance_rad > 0.0f) {
+    return ctrl->yaw_tolerance_rad;
+  }
+
+  return AUTO_CTRL_TIMED_MOVE_YAW_TOLERANCE_DEFAULT_RAD;
+}
+
+static bool AutoCtrlTemplate_IsTimedMoveYawAligned(
+    const auto_ctrl_t *ctrl, const AutoCtrl_TemplateParam_t *param) {
+  if (ctrl == 0) {
+    return false;
+  }
+
+  return fabsf(ctrl->yaw_error_rad) <=
+         AutoCtrlTemplate_GetTimedMoveYawTolerance(ctrl, param);
+}
+
+static bool AutoCtrlTemplate_TimedMoveReady(auto_ctrl_t *ctrl,
+                                            uint32_t now_ms,
+                                            uint32_t move_ms,
+                                            const AutoCtrl_TemplateParam_t *param) {
+  AutoCtrlTemplate_EnterStep(ctrl, now_ms);
+  return AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >= move_ms &&
+         AutoCtrlTemplate_IsTimedMoveYawAligned(ctrl, param);
 }
 
 static const AutoCtrl_TemplateParam_t *AutoCtrlTemplate_GetTemplateParam(
@@ -144,9 +179,10 @@ static bool AutoCtrlTemplate_RunDescendStartSprint(
     ctrl->template_ctx.descend_start_move_time_ms = now_ms;
   }
 
-  AutoCtrlPrimitive_CommandFlatMoveWithYawRate(ctrl, vx_mps);
+  AutoCtrlPrimitive_ApplyPrealignWithMove(ctrl, vx_mps, 0.0f);
   return (now_ms - ctrl->template_ctx.descend_start_move_time_ms) >=
-         param->mid_move_ms;
+             param->mid_move_ms &&
+         AutoCtrlTemplate_IsTimedMoveYawAligned(ctrl, param);
 }
 
 static float AutoCtrlTemplate_SecondPhotoRetractVx(
@@ -478,13 +514,14 @@ static bool AutoCtrlTemplate_RunAscend(auto_ctrl_t *ctrl, uint32_t now_ms,
       return false;
 
     case 3: /* 前杆收回后的中段定时移动。 */
-      AutoCtrlPrimitive_CommandFlatMoveWithYawRate(ctrl,
-                                                   param->mid_move_speed);
+      AutoCtrlPrimitive_ApplyPrealignWithMove(ctrl, param->mid_move_speed,
+                                              0.0f);
       AutoCtrlTemplate_CommandPole(ctrl, pole.front_retract[0],
                                    pole.front_retract[1],
                                    param->pole_front_retract_speed,
                                    param->pole_rear_extend_speed);
-      if (AutoCtrlTemplate_StepTimeout(ctrl, now_ms, param->mid_move_ms)) {
+      if (AutoCtrlTemplate_TimedMoveReady(ctrl, now_ms, param->mid_move_ms,
+                                          param)) {
         AutoCtrlTemplate_NextStep(ctrl);
       }
       return false;
@@ -604,13 +641,14 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
       return false;
 
     case 3: /* 前杆收回后的中段定时移动。 */
-      AutoCtrlPrimitive_CommandFlatMoveWithYawRate(ctrl,
-                                                   param->mid_move_speed);
+      AutoCtrlPrimitive_ApplyPrealignWithMove(ctrl, param->mid_move_speed,
+                                              0.0f);
       AutoCtrlTemplate_CommandPole(ctrl, pole.front_retract[0],
                                    pole.front_retract[1],
                                    param->pole_front_retract_speed,
                                    param->pole_rear_extend_speed);
-      if (AutoCtrlTemplate_StepTimeout(ctrl, now_ms, param->mid_move_ms)) {
+      if (AutoCtrlTemplate_TimedMoveReady(ctrl, now_ms, param->mid_move_ms,
+                                          param)) {
         AutoCtrlTemplate_NextStep(ctrl);
       }
       return false;
@@ -710,13 +748,14 @@ static bool AutoCtrlTemplate_RunTailDescendOptimized(
         }
         return false;
       }
-      AutoCtrlPrimitive_CommandFlatMoveWithYawRate(ctrl,
-                                                   -param->mid_move_speed);
+      AutoCtrlPrimitive_ApplyPrealignWithMove(ctrl, -param->mid_move_speed,
+                                              0.0f);
       AutoCtrlTemplate_CommandPole(ctrl, pole.all_retract[0],
                                    pole.all_retract[1],
                                    param->pole_front_retract_speed,
                                    param->pole_rear_retract_speed);
-      if (AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >= param->mid_move_ms) {
+      if (AutoCtrlTemplate_TimedMoveReady(ctrl, now_ms, param->mid_move_ms,
+                                          param)) {
         AutoCtrlTemplate_NextStep(ctrl);
       }
       return false;
@@ -779,14 +818,14 @@ static bool AutoCtrlTemplate_RunTailDescendOptimized(
         }
         return false;
       }
-      AutoCtrlPrimitive_CommandFlatMoveWithYawRate(ctrl,
-                                                   -param->mid_move_speed);
+      AutoCtrlPrimitive_ApplyPrealignWithMove(ctrl, -param->mid_move_speed,
+                                              0.0f);
       AutoCtrlTemplate_CommandPole(ctrl, pole.all_retract[0],
                                    pole.all_extend[1],
                                    param->pole_front_retract_speed,
                                    param->pole_rear_extend_speed);
-      if (AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
-          param->rear_retract_move_ms) {
+      if (AutoCtrlTemplate_TimedMoveReady(
+              ctrl, now_ms, param->rear_retract_move_ms, param)) {
         AutoCtrlTemplate_NextStep(ctrl);
       }
       return false;
@@ -938,8 +977,8 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
 
     case 3: /* 前杆支撑后的第二段定时接近。 */
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      AutoCtrlPrimitive_CommandFlatMoveWithYawRate(ctrl,
-                                                   param->mid_move_speed);
+      AutoCtrlPrimitive_ApplyPrealignWithMove(ctrl, param->mid_move_speed,
+                                              0.0f);
       AutoCtrlTemplate_CommandPole(ctrl,
                                    use_400mm ? pole.all_extend[0]
                                              : pole.all_extend[0],
@@ -947,8 +986,8 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
                                              : pole.all_retract[1],
                                    param->pole_front_extend_speed,
                                    param->pole_rear_retract_speed);
-      if (AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
-          param->rear_retract_move_ms) {
+      if (AutoCtrlTemplate_TimedMoveReady(
+              ctrl, now_ms, param->rear_retract_move_ms, param)) {
         AutoCtrlTemplate_NextStep(ctrl);
       }
       return false;

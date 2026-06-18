@@ -1,13 +1,8 @@
 
 
-GraphedExpression="((pole).setpoint).support_target_angle[0]", Color=#e56a6f
-GraphedExpression="(((pole).feedback).motor[0]).rotor_total_angle", Color=#35792b
-GraphedExpression="((((pole).pid).support_pos[0]).last).out", Color=#769dda
-GraphedExpression="((((pole).pid).support_vel[0]).last).out", Color=#b14f0d, Show=0
+OpenDocument="atti_esti.c", FilePath="D:/STM32Projects_HAL/board-H7/RC_02/User/task/atti_esti.c", Line=309
 OpenDocument="startup_stm32h723xx.s", FilePath="D:/STM32Projects_HAL/board-H7/RC_02/startup_stm32h723xx.s", Line=48
 OpenDocument="rod_new.h", FilePath="D:/STM32Projects_HAL/board-H7/RC_02/User/module/rod_new.h", Line=66
-OpenDocument="memcpy.c", FilePath="/build/gnu-tools-for-stm32_14.3.rel1.20251027-0700/src/newlib/newlib/libc/string/memcpy.c", Line=0
-OpenDocument="", FilePath="", Line=0
 OpenDocument="mecanum.cpp", FilePath="D:/STM32Projects_HAL/board-H7/RC_02/User/module/chassis/mecanum.cpp", Line=159
 OpenDocument="mrlink_pc_comm.cpp", FilePath="D:/STM32Projects_HAL/board-H7/RC_02/User/module/mrlink_pc_comm/mrlink_pc_comm.cpp", Line=468
 OpenDocument="pc_messages.hpp", FilePath="D:/STM32Projects_HAL/board-H7/RC_02/User/module/mrlink_pc_comm/pc_messages.hpp", Line=0
@@ -30,27 +25,27 @@ OpenDocument="fdcan.c", FilePath="D:/STM32Projects_HAL/board-H7/RC_02/Core/Src/f
 OpenDocument="fdcan.c", FilePath="D:/STM32Projects_HAL/board-H7/RC_02/User/bsp/fdcan.c", Line=64
 OpenDocument="chassis_main.cpp", FilePath="D:/STM32Projects_HAL/board-H7/RC_02/User/task/chassis_main.cpp", Line=0
 OpenDocument="ore_store_main.c", FilePath="D:/STM32Projects_HAL/board-H7/RC_02/User/task/ore_store_main.c", Line=0
-OpenDocument="main.c", FilePath="D:/STM32Projects_HAL/board-H7/RC_02/Core/Src/main.c", Line=114
+OpenDocument="main.c", FilePath="D:/STM32Projects_HAL/board-H7/RC_02/Core/Src/main.c", Line=47
 OpenToolbar="Debug", Floating=0, x=0, y=0
 OpenWindow="Registers 1", DockArea=RIGHT, x=0, y=0, w=960, h=930, TabPos=2, TopOfStack=0, FilterBarShown=0, TotalValueBarShown=0, ToolBarShown=0, FilteredItems=[], RefreshRate=1
-OpenWindow="Source Files", DockArea=LEFT, x=0, y=1, w=323, h=777, TabPos=0, TopOfStack=1, FilterBarShown=0, TotalValueBarShown=0, ToolBarShown=0
+OpenWindow="Source Files", DockArea=LEFT, x=0, y=1, w=323, h=764, TabPos=0, TopOfStack=1, FilterBarShown=0, TotalValueBarShown=0, ToolBarShown=0
 OpenWindow="Disassembly", DockArea=RIGHT, x=0, y=0, w=960, h=930, TabPos=0, TopOfStack=0, FilterBarShown=0, TotalValueBarShown=0, ToolBarShown=0
 OpenWindow="Memory 1", DockArea=BOTTOM, x=0, y=0, w=377, h=544, FilterBarShown=0, TotalValueBarShown=0, ToolBarShown=0, EditorAddress=0xFFFF5088
 OpenWindow="Watched Data 1", DockArea=RIGHT, x=0, y=0, w=960, h=930, TabPos=1, TopOfStack=1, FilterBarShown=0, TotalValueBarShown=0, ToolBarShown=0
-OpenWindow="Functions", DockArea=LEFT, x=0, y=1, w=323, h=777, TabPos=1, TopOfStack=0, FilterBarShown=0, TotalValueBarShown=0, ToolBarShown=0
-OpenWindow="Memory Usage", DockArea=LEFT, x=0, y=0, w=323, h=152, FilterBarShown=0, TotalValueBarShown=0, ToolBarShown=0
+OpenWindow="Functions", DockArea=LEFT, x=0, y=1, w=323, h=764, TabPos=1, TopOfStack=0, FilterBarShown=0, TotalValueBarShown=0, ToolBarShown=0
+OpenWindow="Memory Usage", DockArea=LEFT, x=0, y=0, w=323, h=165, FilterBarShown=0, TotalValueBarShown=0, ToolBarShown=0
 OpenWindow="Data Sampling", DockArea=BOTTOM, x=2, y=0, w=404, h=525, TabPos=1, TopOfStack=1, FilterBarShown=0, TotalValueBarShown=0, ToolBarShown=0, VisibleTab=0, UniformSampleSpacing=0
 OpenWindow="Timeline", DockArea=BOTTOM, x=1, y=0, w=1777, h=544, FilterBarShown=0, TotalValueBarShown=0, ToolBarShown=1, DataPaneShown=1, PowerPaneShown=0, CodePaneShown=0, PinCursor="Cursor Movable", TimePerDiv="500 ms / Div", TimeStampFormat="Time", DataGraphDrawAsPoints=0, DataGraphLegendShown=1, DataGraphUniformSampleSpacing=0, DataGraphLegendPosition="1199;0", DataGraphShowNamesAtCursor=0, PowerGraphDrawAsPoints=0, PowerGraphLegendShown=0, PowerGraphAvgFilterTime=Off, PowerGraphAvgFilterLen=Off, PowerGraphUniformSampleSpacing=0, PowerGraphLegendPosition="886;-69", CodeGraphLegendShown=0, CodeGraphLegendPosition="902;0"
 OpenWindow="Console", DockArea=BOTTOM, x=2, y=0, w=404, h=525, TabPos=0, TopOfStack=0, FilterBarShown=0, TotalValueBarShown=0, ToolBarShown=0
 SmartViewPlugin="", Page="", Toolbar="Hidden", Window="SmartView 1"
-TableHeader="Watched Data 1", SortCol="Expression", SortOrder="ASCENDING", VisibleCols=["Expression";"Value";"Location";"Refresh";"Access"], ColWidths=[414;447;100;192;100]
-TableHeader="Data Sampling Table", SortCol="None", SortOrder="ASCENDING", VisibleCols=["Index";"Time";" ((pole).setpoint).support_target_angle[0]";" (((pole).feedback).motor[0]).rotor_total_angle";" ((((pole).pid).support_pos[0]).last).out";" ((((pole).pid).support_vel[0]).last).out"], ColWidths=[100;100;100;100;100;100]
-TableHeader="Data Sampling Setup", SortCol="Expression", SortOrder="ASCENDING", VisibleCols=["Expression";"Type";"Value";"Min";"Max";"Average";"# Changes";"Min. Change";"Max. Change"], ColWidths=[118;100;154;144;114;124;110;134;126]
-TableHeader="Registers 1", SortCol="Name", SortOrder="ASCENDING", VisibleCols=["Name";"Value";"Description"], ColWidths=[120;144;704]
+TableHeader="Registers 1", SortCol="Name", SortOrder="ASCENDING", VisibleCols=["Name";"Value";"Description"], ColWidths=[120;144;696]
 TableHeader="Functions", SortCol="Name", SortOrder="ASCENDING", VisibleCols=["Name";"Address";"Size";"#Insts";"Class";"Source"], ColWidths=[1594;104;100;100;27;100]
 TableHeader="Power Sampling", SortCol="None", SortOrder="ASCENDING", VisibleCols=["Index";"Time";"Ch 0"], ColWidths=[100;100;100]
 TableHeader="RegisterSelectionDialog", SortCol="None", SortOrder="ASCENDING", VisibleCols=[], ColWidths=[]
 TableHeader="Source Files", SortCol="File", SortOrder="ASCENDING", VisibleCols=["File";"Status";"Size";"#Insts";"Path"], ColWidths=[215;100;100;100;1342]
+TableHeader="Watched Data 1", SortCol="Expression", SortOrder="ASCENDING", VisibleCols=["Expression";"Value";"Location";"Refresh";"Access"], ColWidths=[414;447;100;100;100]
+TableHeader="Data Sampling Table", SortCol="None", SortOrder="ASCENDING", VisibleCols=["Index";"Time"], ColWidths=[100;100]
+TableHeader="Data Sampling Setup", SortCol="Expression", SortOrder="ASCENDING", VisibleCols=["Expression";"Type";"Value";"Min";"Max";"Average";"# Changes";"Min. Change";"Max. Change"], ColWidths=[118;100;100;100;100;100;110;126;126]
 TableHeader="TargetExceptionDialog", SortCol="Name", SortOrder="ASCENDING", VisibleCols=["Name";"Value";"Address";"Description"], ColWidths=[200;100;100;340]
 WatchedExpression="chassis_main.cpp::chassis", RefreshRate=5, Window=Watched Data 1
 WatchedExpression="ore_store", RefreshRate=5, Window=Watched Data 1
@@ -66,3 +61,4 @@ WatchedExpression="s_state", RefreshRate=5, Window=Watched Data 1
 WatchedExpression="g_pc_comm_debug", RefreshRate=5, Window=Watched Data 1
 WatchedExpression="rod_new", RefreshRate=5, Window=Watched Data 1
 WatchedExpression="rod_new_cmd", RefreshRate=5, Window=Watched Data 1
+WatchedExpression="eulr_chassis", RefreshRate=5, Window=Watched Data 1

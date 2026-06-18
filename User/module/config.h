@@ -50,6 +50,7 @@ typedef struct {
 
   float mid_move_speed;       /* fixed fast-approach/middle move speed, m/s */
   uint32_t mid_move_ms;       /* first fixed fast-approach/middle move time, ms */
+  float timed_move_yaw_tolerance_rad; /* yaw tolerance for timed middle moves, rad */
 
   float rear_retract_move_speed;     /* vx for rear-side action or first-edge slow capture, m/s */
   uint32_t rear_retract_timeout_ms;  /* rear-side action/photo timeout, ms */

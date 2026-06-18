@@ -13,6 +13,7 @@ extern "C" {
 #include "device.h"
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 /* USER INCLUDE BEGIN */
@@ -54,6 +55,25 @@ typedef struct {
   uint16_t duration_ms;
 } Tone_t;
 
+typedef struct {
+  const Tone_t *melody;
+  size_t melody_length;
+  uint16_t tone_gap_ms;
+} Buzzer_Score_t;
+
+typedef struct {
+  const Tone_t *melody;
+  size_t melody_length;
+  size_t tone_index;
+  uint32_t next_tick;
+  uint16_t tone_gap_ms;
+  bool active;
+  bool paused;
+  bool loop;
+  bool waiting_tone;
+  bool waiting_gap;
+} Buzzer_Player_t;
+
 /* USER STRUCT BEGIN */
 
 /* USER STRUCT END */
@@ -68,6 +88,18 @@ float BUZZER_CalcFreq(NOTE_t note, uint8_t octave);
 int8_t BUZZER_ApplyTone(BUZZER_t *buzzer, NOTE_t note, uint8_t octave);
 int8_t BUZZER_PlayTone(BUZZER_t *buzzer, NOTE_t note, uint8_t octave,
                        uint16_t duration_ms, uint16_t gap_ms);
+int8_t BUZZER_PlayScore(BUZZER_t *buzzer, const Buzzer_Score_t *score);
+int8_t BUZZER_PlayerStart(Buzzer_Player_t *player, BUZZER_t *buzzer,
+                          const Buzzer_Score_t *score, bool loop,
+                          uint32_t now_tick);
+int8_t BUZZER_PlayerUpdate(Buzzer_Player_t *player, BUZZER_t *buzzer,
+                           uint32_t now_tick);
+void BUZZER_PlayerStop(Buzzer_Player_t *player, BUZZER_t *buzzer);
+void BUZZER_PlayerSilence(Buzzer_Player_t *player, BUZZER_t *buzzer);
+void BUZZER_PlayerSetPaused(Buzzer_Player_t *player, BUZZER_t *buzzer,
+                            bool paused, uint32_t now_tick);
+bool BUZZER_PlayerIsActive(const Buzzer_Player_t *player);
+bool BUZZER_PlayerIsPaused(const Buzzer_Player_t *player);
 
 /* USER FUNCTION BEGIN */
 

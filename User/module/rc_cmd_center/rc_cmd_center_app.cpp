@@ -583,6 +583,33 @@ static void Rc_SetPoleAuto(float left_target, float right_target) {
   pole_cmd.disable_lift_accel = false;
 }
 
+static bool Rc_SetPolePcCommand(bool require_received_cmd) {
+  if (!MrlinkPc_IsPCControlMode()) {
+    return false;
+  }
+  if (require_received_cmd && !MrlinkPc_HasPoleCMD()) {
+    return false;
+  }
+
+  const PC_PoleCMD_t *pc_pole_cmd = MrlinkPc_GetPoleCMD();
+  if (pc_pole_cmd == NULL) {
+    return false;
+  }
+
+  pole_cmd.mode = (pc_pole_cmd->mode == 0u) ? POLE_MODE_RELAX
+                                             : POLE_MODE_ACTIVE;
+  pole_cmd.lift[0] = 0.0f;
+  pole_cmd.lift[1] = 0.0f;
+  pole_cmd.auto_target_enable[0] = (pole_cmd.mode == POLE_MODE_ACTIVE);
+  pole_cmd.auto_target_enable[1] = (pole_cmd.mode == POLE_MODE_ACTIVE);
+  pole_cmd.auto_target_lift[0] = pc_pole_cmd->lift[0];
+  pole_cmd.auto_target_lift[1] = pc_pole_cmd->lift[1];
+  pole_cmd.auto_lift_speed[0] = 0.0f;
+  pole_cmd.auto_lift_speed[1] = 0.0f;
+  pole_cmd.disable_lift_accel = false;
+  return true;
+}
+
 static void Rc_SetPoleHold(void) {
   if (pole_cmd.mode == POLE_MODE_ACTIVE) {
     pole_cmd.lift[0] = 0.0f;
@@ -1335,6 +1362,10 @@ struct RcChassisAutoOreRoute {
         AutoOre_GetChassisCommand(&auto_ore_ctrl);
     if (auto_chassis_cmd != NULL) {
       out = *auto_chassis_cmd;
+    } else if (auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl) &&
+               auto_ore_ctrl.action == AUTO_ORE_ACTION_RELEASE) {
+      Rc_SetChassisHold();
+      out = chassis_cmd;
     } else {
       Rc_SetChassisRelax();
       out = chassis_cmd;
@@ -1393,19 +1424,8 @@ struct RcPoleDriveRoute {
 
 struct RcPolePcRoute {
   bool operator()(const RcRuntimeInput &, cmd::Context &, Pole_CMD_t &out) const {
-    const PC_PoleCMD_t *pc_pole_cmd = MrlinkPc_GetPoleCMD();
-    if (pc_pole_cmd != NULL) {
-      pole_cmd.mode = (pc_pole_cmd->mode == 0) ? POLE_MODE_RELAX
-                                               : POLE_MODE_ACTIVE;
-      pole_cmd.lift[0] = 0.0f;
-      pole_cmd.lift[1] = 0.0f;
-      pole_cmd.auto_target_enable[0] = (pole_cmd.mode == POLE_MODE_ACTIVE);
-      pole_cmd.auto_target_enable[1] = (pole_cmd.mode == POLE_MODE_ACTIVE);
-      pole_cmd.auto_target_lift[0] = pc_pole_cmd->lift[0];
-      pole_cmd.auto_target_lift[1] = pc_pole_cmd->lift[1];
-      pole_cmd.auto_lift_speed[0] = 0.0f;
-      pole_cmd.auto_lift_speed[1] = 0.0f;
-      pole_cmd.disable_lift_accel = false;
+    if (!Rc_SetPolePcCommand(false)) {
+      Rc_SetPoleHold();
     }
     out = pole_cmd;
     return true;
@@ -1426,6 +1446,13 @@ struct RcPoleAutoCtrlRoute {
 
 struct RcPoleAutoOreRoute {
   bool operator()(const RcRuntimeInput &, cmd::Context &, Pole_CMD_t &out) const {
+    if (auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl) &&
+        auto_ore_ctrl.action == AUTO_ORE_ACTION_RELEASE &&
+        Rc_SetPolePcCommand(true)) {
+      out = pole_cmd;
+      return true;
+    }
+
     const Pole_CMD_t *auto_pole_cmd = AutoOre_GetPoleCommand(&auto_ore_ctrl);
     if (auto_pole_cmd != NULL) {
       out = *auto_pole_cmd;
