@@ -22,7 +22,7 @@ extern "C" {
 #define SERVO_JS6660_DEFAULT_FREQ_HZ (50.0f)       /* 50Hz PWM */
 #define SERVO_JS6660_PULSE_MIN_US (500)            /* 0.5ms */
 #define SERVO_JS6660_PULSE_MAX_US (2500)           /* 2.5ms */
-#define SERVO_JS6660_PULSE_NEUTRAL_US (1500)       /* 1.5ms */
+#define SERVO_JS6660_PULSE_NEUTRAL_US (1437)       /* calibrated J2 center */
 
 /* 吸盘状态 */
 typedef enum {

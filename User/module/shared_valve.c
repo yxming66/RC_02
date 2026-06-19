@@ -3,7 +3,7 @@
 #include <stddef.h>
 
 #ifndef ROD_NEW_GRIPPER_OPEN_LEVEL
-#define ROD_NEW_GRIPPER_OPEN_LEVEL (1u)
+#define ROD_NEW_GRIPPER_OPEN_LEVEL (0u)
 #endif
 
 #define SHARED_VALVE_OPEN_REQUEST false
@@ -27,12 +27,14 @@ static SharedValve_Debug_t shared_valve_debug = {
 
 static bool SharedValve_ResolveOutput(void) {
   return shared_valve_debug.source_request[SHARED_VALVE_SOURCE_ORE_STORE] ||
-         shared_valve_debug.source_request[SHARED_VALVE_SOURCE_ROD];
+         shared_valve_debug.source_request[SHARED_VALVE_SOURCE_ROD] ||
+         shared_valve_debug.source_request[SHARED_VALVE_SOURCE_ARM];
 }
 
 void SharedValve_Init(BSP_GPIO_t gpio) {
   shared_valve_debug.source_request[SHARED_VALVE_SOURCE_ORE_STORE] = false;
   shared_valve_debug.source_request[SHARED_VALVE_SOURCE_ROD] = false;
+  shared_valve_debug.source_request[SHARED_VALVE_SOURCE_ARM] = false;
   shared_valve_debug.output_state = SharedValve_RequestToOutput(
       SHARED_VALVE_OPEN_REQUEST);
   shared_valve_debug.conflict_count = 0u;
@@ -75,6 +77,12 @@ void SharedValve_SetRodRequest(bool grab) {
   SharedValve_SetRequest(SHARED_VALVE_SOURCE_ROD,
                          grab ? SHARED_VALVE_CLOSED_REQUEST
                               : SHARED_VALVE_OPEN_REQUEST);
+}
+
+void SharedValve_SetArmRequest(bool suction_on) {
+  SharedValve_SetRequest(SHARED_VALVE_SOURCE_ARM,
+                         suction_on ? SHARED_VALVE_CLOSED_REQUEST
+                                    : SHARED_VALVE_OPEN_REQUEST);
 }
 
 const SharedValve_Debug_t *SharedValve_GetDebug(void) {

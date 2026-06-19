@@ -59,6 +59,9 @@ void MX_GPIO_Init(void)
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOC, ACCL_CS_Pin|GYRO_CS_Pin, GPIO_PIN_SET);
 
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOA, spearhead_relay_Pin|ore_relay_Pin, GPIO_PIN_RESET);
+
   /*Configure GPIO pins : Power_OUT2_EN_Pin Power_OUT1_EN_Pin Power_5V_EN_Pin valve_arm_Pin
                            valve_rod_Pin */
   GPIO_InitStruct.Pin = Power_OUT2_EN_Pin|Power_OUT1_EN_Pin|Power_5V_EN_Pin|valve_arm_Pin
@@ -75,21 +78,22 @@ void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : photo4_Pin photo3_Pin */
-  GPIO_InitStruct.Pin = photo4_Pin|photo3_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  /*Configure GPIO pins : spearhead_relay_Pin ore_relay_Pin */
+  GPIO_InitStruct.Pin = spearhead_relay_Pin|ore_relay_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-
-  /*Configure GPIO pins : photo2_Pin checkphoto_spear_Pin checkphoto_orelow_Pin checkphoto_orehigh_Pin */
-  GPIO_InitStruct.Pin = photo2_Pin|checkphoto_spear_Pin|checkphoto_orelow_Pin|checkphoto_orehigh_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
 
   /*Configure GPIO pins : ACCL_INT_Pin GYRO_INT_Pin */
   GPIO_InitStruct.Pin = ACCL_INT_Pin|GYRO_INT_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : checkphoto_spear_Pin checkphoto_orelow_Pin checkphoto_orehigh_Pin */
+  GPIO_InitStruct.Pin = checkphoto_spear_Pin|checkphoto_orelow_Pin|checkphoto_orehigh_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
 
@@ -101,6 +105,9 @@ void MX_GPIO_Init(void)
 
   /*AnalogSwitch Config */
   HAL_SYSCFG_AnalogSwitchConfig(SYSCFG_SWITCH_PC3, SYSCFG_SWITCH_PC3_CLOSE);
+
+  /*AnalogSwitch Config */
+  HAL_SYSCFG_AnalogSwitchConfig(SYSCFG_SWITCH_PA0, SYSCFG_SWITCH_PA0_CLOSE);
 
   /* EXTI interrupt init*/
   HAL_NVIC_SetPriority(EXTI15_10_IRQn, 5, 0);

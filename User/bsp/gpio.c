@@ -31,11 +31,13 @@ static const BSP_GPIO_MAP_t GPIO_Map[BSP_GPIO_NUM] = {
     {Power_OUT1_EN_Pin, Power_OUT1_EN_GPIO_Port},
     {Power_5V_EN_Pin, Power_5V_EN_GPIO_Port},
     {GYRO_CS_Pin, GYRO_CS_GPIO_Port},
-  {USER_KEY_Pin, USER_KEY_GPIO_Port},
+    {USER_KEY_Pin, USER_KEY_GPIO_Port},
     {ACCL_INT_Pin, ACCL_INT_GPIO_Port},
     {GYRO_INT_Pin, GYRO_INT_GPIO_Port},
-    {valve_arm_Pin, valve_arm_GPIO_Port},
-    {valve_rod_Pin, valve_rod_GPIO_Port},
+    {ore_relay_Pin, ore_relay_GPIO_Port},
+    {spearhead_relay_Pin, spearhead_relay_GPIO_Port},
+    {ore_relay_Pin, ore_relay_GPIO_Port},
+    {spearhead_relay_Pin, spearhead_relay_GPIO_Port},
     {0, NULL},
 };
 

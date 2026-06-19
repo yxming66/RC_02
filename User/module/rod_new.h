@@ -29,7 +29,7 @@ extern "C" {
 #define ROD_NEW_SERVO_DEFAULT_FREQ_HZ 50U   /* 默认频率 50Hz */
 
 #ifndef ROD_NEW_GRIPPER_OPEN_LEVEL
-#define ROD_NEW_GRIPPER_OPEN_LEVEL (1u)
+#define ROD_NEW_GRIPPER_OPEN_LEVEL (0u)
 #endif
 
 typedef enum {

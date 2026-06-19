@@ -49,19 +49,19 @@ typedef struct {
   uint32_t front_retract_timeout_ms;  /* 前侧动作/光电等待超时，单位 ms。 */
 
   float mid_move_speed;       /* 固定快速靠近/中段移动速度，单位 m/s。 */
-  uint32_t mid_move_ms;       /* 第一段固定快速靠近/中段移动时间，单位 ms。 */
-  float mid_move_wheel_delta_rad;  /* 第一段固定快速靠近/中段移动轮转角阈值，单位 rad；<=0 使用 mid_move_ms。 */
-  float timed_move_yaw_tolerance_rad; /* 中段定时移动的 yaw 容差，单位 rad。 */
+  uint32_t mid_move_ms;       /* 第一段固定快速靠近/中段移动时间，单位 ms；角度阈值>0时作为兜底超时。 */
+  float mid_move_wheel_delta_rad;  /* 第一段固定快速靠近/中段移动轮转角阈值，单位 rad；>0 优先按角度切步，<=0 使用 mid_move_ms 定时切步。 */
+  float timed_move_yaw_tolerance_rad; /* 中段移动切步的 yaw 容差，单位 rad。 */
 
   float rear_retract_move_speed;     /* 后侧动作或第一个边沿慢速捕获 vx，单位 m/s。 */
   uint32_t rear_retract_timeout_ms;  /* 后侧动作/光电等待超时，单位 ms。 */
-  uint32_t rear_retract_move_ms;     /* 第二段固定快速靠近/后侧动作移动时间，单位 ms。 */
-  float rear_retract_move_wheel_delta_rad; /* 第二段固定快速靠近/后侧动作移动轮转角阈值，单位 rad；<=0 使用 rear_retract_move_ms。 */
+  uint32_t rear_retract_move_ms;     /* 第二段固定快速靠近/后侧动作移动时间，单位 ms；角度阈值>0时作为兜底超时。 */
+  float rear_retract_move_wheel_delta_rad; /* 第二段固定快速靠近/后侧动作移动轮转角阈值，单位 rad；>0 优先按角度切步，<=0 使用 rear_retract_move_ms 定时切步。 */
 
   float second_photo_retract_move_speed; /* 第二个光电触发后收杆时可选的 vx 幅值，单位 m/s。 */
   float final_move_speed;     /* 收尾离开速度，或第二光电后收杆 vx 的备用值，单位 m/s。 */
-  uint32_t final_move_ms;     /* 收尾/全收杆后离开时间，单位 ms。 */
-  float final_move_wheel_delta_rad; /* 收尾/全收杆后离开轮转角阈值，单位 rad；<=0 使用 final_move_ms。 */
+  uint32_t final_move_ms;     /* 收尾/全收杆后离开时间，单位 ms；角度阈值>0时作为兜底超时。 */
+  float final_move_wheel_delta_rad; /* 收尾/全收杆后离开轮转角阈值，单位 rad；>0 优先按角度切步，<=0 使用 final_move_ms 定时切步。 */
 
   float pole_all_extend_speed;    /* 四杆全伸速度，单位 rad/s。 */
   float pole_front_extend_speed;  /* 前杆伸出速度，单位 rad/s。 */

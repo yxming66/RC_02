@@ -27,8 +27,8 @@ static uint32_t AutoCtrlTemplate_StepElapsed(const auto_ctrl_t *ctrl,
   return now_ms - ctrl->template_ctx.step_enter_time_ms;
 }
 
-static void AutoCtrlTemplate_NextStep(auto_ctrl_t *ctrl) {
-  ctrl->template_ctx.step_index++;
+static void AutoCtrlTemplate_SetStep(auto_ctrl_t *ctrl, uint8_t step_index) {
+  ctrl->template_ctx.step_index = step_index;
   ctrl->template_ctx.step_entered = false;
   ctrl->template_ctx.pole_target_seen_not_ready = false;
   ctrl->template_ctx.photo_stop_entered = false;
@@ -37,6 +37,10 @@ static void AutoCtrlTemplate_NextStep(auto_ctrl_t *ctrl) {
   ctrl->template_ctx.descend_start_move_time_ms = 0u;
   ctrl->template_ctx.distance_latch_valid = false;
   ctrl->template_ctx.wheel_delta_rad = 0.0f;
+}
+
+static void AutoCtrlTemplate_NextStep(auto_ctrl_t *ctrl) {
+  AutoCtrlTemplate_SetStep(ctrl, (uint8_t)(ctrl->template_ctx.step_index + 1u));
 }
 
 static bool AutoCtrlTemplate_IsYawAligned(const auto_ctrl_t *ctrl) {
@@ -81,6 +85,11 @@ static float AutoCtrlTemplate_AbsFloat(float value) {
   return (value >= 0.0f) ? value : -value;
 }
 
+/*
+ * target_wheel_delta_rad > 0: wheel delta is the primary completion condition,
+ * and fallback_move_ms is only a timeout. target_wheel_delta_rad <= 0: use the
+ * time gate as a fixed-duration move.
+ */
 static bool AutoCtrlTemplate_WheelDeltaMoveReady(
     auto_ctrl_t *ctrl, uint32_t now_ms, float target_wheel_delta_rad,
     uint32_t fallback_move_ms, const AutoCtrl_TemplateParam_t *param,
@@ -553,6 +562,15 @@ static bool AutoCtrlTemplate_RunAscend(auto_ctrl_t *ctrl, uint32_t now_ms,
       return false;
 
     case 3: /* 前杆收回后的中段定时移动。 */
+      if (second_photo_ready) {
+        AutoCtrlPrimitive_CommandFlatMove(ctrl, 0.0f);
+        AutoCtrlTemplate_CommandPole(ctrl, pole.all_retract[0],
+                                     pole.all_retract[1],
+                                     param->pole_front_retract_speed,
+                                     param->pole_rear_retract_speed);
+        AutoCtrlTemplate_SetStep(ctrl, 5u);
+        return false;
+      }
       AutoCtrlPrimitive_ApplyPrealignWithMove(ctrl, param->mid_move_speed,
                                               0.0f);
       AutoCtrlTemplate_CommandPole(ctrl, pole.front_retract[0],
@@ -684,6 +702,15 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
       return false;
 
     case 3: /* 前杆收回后的中段定时移动。 */
+      if (AutoCtrlTemplate_LatchRearPhotoStable(ctrl, false, now_ms)) {
+        AutoCtrlPrimitive_CommandFlatMove(ctrl, 0.0f);
+        AutoCtrlTemplate_CommandPole(ctrl, pole.all_retract[0],
+                                     pole.all_retract[1],
+                                     param->pole_front_retract_speed,
+                                     param->pole_rear_retract_speed);
+        AutoCtrlTemplate_SetStep(ctrl, 5u);
+        return false;
+      }
       AutoCtrlPrimitive_ApplyPrealignWithMove(ctrl, param->mid_move_speed,
                                               0.0f);
       AutoCtrlTemplate_CommandPole(ctrl, pole.front_retract[0],

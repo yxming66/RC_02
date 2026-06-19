@@ -58,6 +58,18 @@
 #ifndef RC_LEFT_DOWN_MAPPING_AUTO_ORE
 #define RC_LEFT_DOWN_MAPPING_AUTO_ORE (0u) // 0单独控制上层，1一键存取
 #endif
+#ifndef RC_AUTO_UP_ASCEND_HEIGHT_MM
+#define RC_AUTO_UP_ASCEND_HEIGHT_MM (200)
+#endif
+
+#if RC_AUTO_UP_ASCEND_HEIGHT_MM == 200
+#define RC_AUTO_UP_ASCEND_TEMPLATE AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD
+#elif RC_AUTO_UP_ASCEND_HEIGHT_MM == 400
+#define RC_AUTO_UP_ASCEND_TEMPLATE AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD
+#else
+#error "RC_AUTO_UP_ASCEND_HEIGHT_MM must be 200 or 400"
+#endif
+
 #ifndef RC_MANUAL_IO_CH_THRESHOLD
 #define RC_MANUAL_IO_CH_THRESHOLD (0.90f)
 
@@ -398,7 +410,7 @@ static RcAutoCtrlStartConfig_t Rc_SelectAutoCtrlStartConfig(void) {
   }
 
   if (dr16.data.sw_r == DR16_SW_UP) {
-    config.template_id = AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD;
+    config.template_id = RC_AUTO_UP_ASCEND_TEMPLATE;
   } else if (dr16.data.sw_r == DR16_SW_DOWN) {
     config.template_id = AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD;
   } 
@@ -409,7 +421,8 @@ static RcAutoCtrlStartConfig_t Rc_SelectAutoCtrlStartConfig(void) {
 static RcControlPage_t Rc_GetAutoCtrlPage(auto_ctrl_template_e template_id) {
   switch (template_id) {
     case AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD:
-      return RC_CONTROL_PAGE_AUTO_200_UP;
+    case AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD:
+      return RC_CONTROL_PAGE_AUTO_200_UP; 
     case AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD:
       return RC_CONTROL_PAGE_AUTO_200_DOWN;
     default:
@@ -902,7 +915,7 @@ static void Rc_SetAutoDryRunCommands(void) {
 }
 #endif
 
-static bool Rc_ShouldExitAutoCtrlBySwitch(void) {
+static bool Rc_ShouldExitAutoActionBySwitch(void) {
   return dr16.header.online &&
          (dr16.data.sw_l == DR16_SW_MID || dr16.data.sw_l == DR16_SW_DOWN) &&
          (last_sw_r == DR16_SW_UP || last_sw_r == DR16_SW_DOWN) &&
@@ -1020,6 +1033,34 @@ static void Rc_AbortAutoCtrlIfBusy(void) {
   }
 }
 
+static void Rc_AbortAutoActionsBySwitch(void) {
+  if (!Rc_ShouldExitAutoActionBySwitch()) {
+    return;
+  }
+
+  g_auto_ore_debug.force_output_enable = false;
+
+  if (auto_ctrl_inited && AutoCtrl_IsBusy(&auto_ctrl)) {
+    Rc_LatchAutoCtrlCurrentTargets();
+    AutoCtrl_Abort(&auto_ctrl);
+  }
+
+  if (auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl)) {
+    Rc_LatchAutoOreCurrentTargets();
+    Task_AutoOreAbort();
+  }
+
+  if (Task_AutoRodSpearheadIsBusy()) {
+    auto_rod_spearhead_hold_after_finish = false;
+    Task_AutoRodSpearheadAbort();
+  }
+
+  if (Task_AutoSickCorrectIsBusy()) {
+    Rc_LatchAutoSickCorrectCurrentTargets();
+    Task_AutoSickCorrectAbort();
+  }
+}
+
 static bool Rc_AutoOreSwitchEdgeFromMid(void) {
   return dr16.header.online && dr16.data.sw_l == DR16_SW_DOWN &&
          last_sw_r == DR16_SW_MID && dr16.data.sw_r != DR16_SW_MID;
@@ -1100,6 +1141,14 @@ static bool Rc_AutoCtrlTemplateIsAscend(auto_ctrl_template_e template_id) {
          template_id == AUTO_CTRL_TEMPLATE_ASCEND_400_TAIL;
 }
 
+static bool Rc_StartAutoUpStepPickStore(void) {
+#if RC_AUTO_UP_ASCEND_HEIGHT_MM == 200
+  return Task_AutoOreStartStepPickStoreAscend200Head();
+#else
+  return Task_AutoOreStartStepPickStoreAscend400Head();
+#endif
+}
+
 static void Rc_TryStartAutoCtrlBySwitch(uint32_t now_ms) {
   if (!dr16.header.online || !auto_ctrl_inited || AutoCtrl_IsBusy(&auto_ctrl) ||
       (auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl)) ||
@@ -1110,13 +1159,12 @@ static void Rc_TryStartAutoCtrlBySwitch(uint32_t now_ms) {
   if (dr16.data.sw_l == DR16_SW_MID && last_sw_r == DR16_SW_MID &&
       dr16.data.sw_r == DR16_SW_UP) {
     g_rc_control_debug.auto_200_start_event = true;
-    g_rc_control_debug.auto_200_template = AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD;
+    g_rc_control_debug.auto_200_template = RC_AUTO_UP_ASCEND_TEMPLATE;
     if (!Rc_PrepareLocalAutoYawFeedback()) {
       g_rc_control_debug.auto_200_start_ok = false;
       return;
     }
-    g_rc_control_debug.auto_200_start_ok =
-        Task_AutoOreStartStepPickStoreAscend200Head();
+    g_rc_control_debug.auto_200_start_ok = Rc_StartAutoUpStepPickStore();
     if (g_rc_control_debug.auto_200_start_ok) {
       g_auto_ore_debug.force_output_enable = true;
     }
@@ -1920,11 +1968,7 @@ void RcCmdCenterApp_Update(uint32_t now_ms) {
 
   Rc_TryStartAutoCtrlBySwitch(now_ms);
 
-  if (auto_ctrl_inited && AutoCtrl_IsBusy(&auto_ctrl) &&
-      Rc_ShouldExitAutoCtrlBySwitch()) {
-    Rc_LatchAutoCtrlCurrentTargets();
-    AutoCtrl_Abort(&auto_ctrl);
-  }
+  Rc_AbortAutoActionsBySwitch();
 
   behavior = Rc_SelectMappedBehavior();
   rc_current_plan = Rc_SelectCommandPlan(behavior);

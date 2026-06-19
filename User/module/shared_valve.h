@@ -12,6 +12,7 @@ extern "C" {
 typedef enum {
   SHARED_VALVE_SOURCE_ORE_STORE = 0,
   SHARED_VALVE_SOURCE_ROD,
+  SHARED_VALVE_SOURCE_ARM,
   SHARED_VALVE_SOURCE_NUM,
 } SharedValve_Source_t;
 
@@ -28,6 +29,7 @@ void SharedValve_SetRequest(SharedValve_Source_t source, bool request);
 void SharedValve_Output(void);
 void SharedValve_SetOreStoreRequest(bool closed);
 void SharedValve_SetRodRequest(bool grab);
+void SharedValve_SetArmRequest(bool suction_on);
 const SharedValve_Debug_t *SharedValve_GetDebug(void);
 
 #ifdef __cplusplus

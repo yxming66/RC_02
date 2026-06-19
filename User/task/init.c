@@ -62,7 +62,7 @@ void Task_Init(void *argument) {
 
   BUZZER_Init(&buzzer, BSP_PWM_BUZZER);
 
-    SharedValve_Init(BSP_GPIO_ROD_SOLENOID);
+    SharedValve_Init(BSP_GPIO_SPEARHEAD_RELAY);
 
   task_runtime.heartbeat.init++;
 

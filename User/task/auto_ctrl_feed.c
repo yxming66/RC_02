@@ -583,6 +583,26 @@ static bool AutoCtrlFeed_StartOreAction(AutoOre_Action_t action) {
   return result;
 }
 
+static bool AutoCtrlFeed_StartOreStoreAtPosition(
+    AutoOre_Position_t position) {
+  if (!auto_ore_inited) {
+    return false;
+  }
+  if (AutoOre_IsBusy(&auto_ore_ctrl)) {
+    return false;
+  }
+  if (Task_AutoSickCorrectIsBusy()) {
+    return false;
+  }
+
+  const bool result = AutoOre_StartStoreAtPosition(
+      &auto_ore_ctrl, position, BSP_TIME_Get_ms());
+  if (result || AutoOre_GetState(&auto_ore_ctrl) == AUTO_ORE_STATE_FAIL) {
+    AutoCtrlFeed_RememberOreAction(AUTO_ORE_ACTION_STORE);
+  }
+  return result;
+}
+
 static bool AutoCtrlFeed_StartSickCorrectAction(
     AutoSickCorrect_Action_t action) {
   if (!auto_sick_correct_inited) {
@@ -1188,7 +1208,8 @@ static void AutoCtrlFeed_HandleAutoOreDebugRequest(void) {
 
   switch (request) {
     case AUTO_ORE_DEBUG_REQUEST_STORE:
-      result = Task_AutoOreStartStore();
+      result = AutoCtrlFeed_StartOreStoreAtPosition(
+          AUTO_ORE_POSITION_TRANSFORM_LOW);
       break;
     case AUTO_ORE_DEBUG_REQUEST_RELEASE:
       result = Task_AutoOreStartRelease();

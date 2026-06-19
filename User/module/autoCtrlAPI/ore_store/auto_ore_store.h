@@ -138,6 +138,7 @@ typedef struct {
   AutoOre_Action_t pick_action;
   float precontact_vx_mps;
   float precontact_wheel_delta_rad;
+  uint32_t precontact_timeout_ms;
   float step_start_vx_mps;
   float step_start_wheel_delta_rad;
   bool use_arm_photo_confirm;
@@ -189,6 +190,7 @@ typedef struct {
   bool fused_step_done;
   bool fused_store_done;
   bool pick_lift_confirmed;
+  bool fused_precontact_timeout_reached;
   bool distance_latch_valid;
   float distance_start_wheel_rad[4];
   float wheel_delta_rad;
@@ -196,6 +198,7 @@ typedef struct {
   uint32_t fused_arm_photo_since_ms;
   uint8_t fused_store_step_index;
   uint8_t fused_store_step_phase;
+  uint8_t fused_step_template_start_step_index;
   AutoOre_Position_t fused_store_position;
   AutoOre_Params_t param;
   AutoOre_Feedback_t feedback;
@@ -206,6 +209,9 @@ void AutoOre_Init(AutoOre_t *ctrl, const AutoOre_Params_t *param,
 AutoOre_Occupancy_t AutoOre_GetOccupancy(const AutoOre_t *ctrl);
 uint8_t AutoOre_GetOccupancyMask(const AutoOre_t *ctrl);
 bool AutoOre_StartStore(AutoOre_t *ctrl, uint32_t now_ms);
+bool AutoOre_StartStoreAtPosition(AutoOre_t *ctrl,
+                                  AutoOre_Position_t position,
+                                  uint32_t now_ms);
 bool AutoOre_StartRelease(AutoOre_t *ctrl, uint32_t now_ms);
 bool AutoOre_StartChamber(AutoOre_t *ctrl, uint32_t now_ms);
 bool AutoOre_StartPickPos400(AutoOre_t *ctrl, uint32_t now_ms);
