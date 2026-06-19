@@ -83,6 +83,8 @@ typedef enum {
     AUTO_ORE_DEBUG_REQUEST_SICK_CORRECT_ORE_RELEASE = 10,
     AUTO_ORE_DEBUG_REQUEST_ROD_DOCK_WAIT = 11,
     AUTO_ORE_DEBUG_REQUEST_STEP_PICK_STORE_ASCEND_200_HEAD = 12,
+    AUTO_ORE_DEBUG_REQUEST_STEP_PICK_STORE_DESCEND_200_HEAD = 13,
+    AUTO_ORE_DEBUG_REQUEST_STEP_PICK_STORE_ASCEND_400_HEAD = 14,
 } AutoOre_DebugRequest_t;
 
 typedef struct {
@@ -109,13 +111,18 @@ typedef struct {
     volatile bool checkphoto_spear_triggered;
     volatile bool checkphoto_orelow_triggered;
     volatile bool checkphoto_orehigh_triggered;
+    volatile bool photo_transfer_valid;
+    volatile uint16_t photo_transfer_raw_mask;
+    volatile uint32_t photo_transfer_age_ms;
+    volatile uint32_t photo_transfer_rx_count;
+    volatile uint32_t photo_transfer_timeout_count;
     volatile bool arm_cmd_valid;
     volatile bool ore_store_cmd_valid;
     volatile bool pole_cmd_valid;
     volatile bool chassis_cmd_valid;
     volatile bool pick_lift_confirmed;
-    volatile float fused_wheel_distance_m;
-    volatile float fused_target_distance_m;
+    volatile float fused_wheel_delta_rad;
+    volatile float fused_target_wheel_delta_rad;
     volatile bool fused_step_done;
     volatile bool fused_store_done;
     volatile bool arm_at_target;
@@ -356,6 +363,8 @@ bool Task_AutoOreStartPickPos400(void);
 bool Task_AutoOreStartPickPos200(void);
 bool Task_AutoOreStartPickNeg200(void);
 bool Task_AutoOreStartStepPickStoreAscend200Head(void);
+bool Task_AutoOreStartStepPickStoreDescend200Head(void);
+bool Task_AutoOreStartStepPickStoreAscend400Head(void);
 void Task_AutoOreAbort(void);
 bool Task_AutoRodSpearheadStart(void);
 bool Task_AutoRodSpearheadStartDockWait(void);

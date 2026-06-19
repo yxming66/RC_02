@@ -76,6 +76,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     User/device/buzzer.c
     User/device/dr16.c
     User/device/sick.c
+    User/device/photo_transfer.c
     User/device/motor.c
     User/device/motor_rm.c
     User/device/motor_dm.c

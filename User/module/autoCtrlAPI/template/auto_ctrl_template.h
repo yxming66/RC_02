@@ -48,7 +48,7 @@ typedef struct {
   bool pole_target_seen_not_ready; /* 当前 step 已检测到支撑杆目标未到位。 */
   bool distance_latch_valid;        /* 轮编码器距离门控已锁存起点位置。 */
   float distance_start_wheel_rad[4]; /* 当前距离门控 step 入口的四轮位置。 */
-  float distance_travel_m;          /* 当前距离门控 step 的行进距离估算，单位 m。 */
+  float wheel_delta_rad;            /* 当前距离门控 step 的四轮平均转角，单位 rad。 */
 } auto_ctrl_template_ctx_t;
 
 #ifdef __cplusplus

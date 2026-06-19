@@ -105,6 +105,10 @@ static AutoOre_DebugRequest_t PcComm_MapAutoAction(uint8_t action) {
             return AUTO_ORE_DEBUG_REQUEST_ROD_DOCK_WAIT;
         case PC_AUTO_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD:
             return AUTO_ORE_DEBUG_REQUEST_STEP_PICK_STORE_ASCEND_200_HEAD;
+        case PC_AUTO_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD:
+            return AUTO_ORE_DEBUG_REQUEST_STEP_PICK_STORE_DESCEND_200_HEAD;
+        case PC_AUTO_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD:
+            return AUTO_ORE_DEBUG_REQUEST_STEP_PICK_STORE_ASCEND_400_HEAD;
         case PC_AUTO_ACTION_ABORT:
             return AUTO_ORE_DEBUG_REQUEST_ABORT;
         case PC_AUTO_ACTION_NONE:
@@ -130,6 +134,10 @@ static bool PcComm_ProcessAutoActionCommand(void) {
         return true;
     }
 
+    if (request != AUTO_ORE_DEBUG_REQUEST_ABORT) {
+        AutoCtrl_SetYawSource(&auto_ctrl, AUTO_CTRL_YAW_SOURCE_PC);
+        AutoCtrl_SetYawZeroOffset(&auto_ctrl, 0.0f);
+    }
     g_auto_ore_debug.request = request;
     MrlinkPc_ClearAutoActionCommand();
     return true;

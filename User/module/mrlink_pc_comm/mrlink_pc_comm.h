@@ -190,6 +190,8 @@ typedef enum {
     PC_AUTO_ACTION_SICK_CORRECT_ORE_RELEASE = 10,  /* 放矿前 SICK 一键校正，当前预留/不支持 */
     PC_AUTO_ACTION_ROD_DOCK_WAIT = 11,   /* 取矛头机构等待对接 */
     PC_AUTO_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD = 12, /* 融合取矿存矿并头向上 200mm 台阶 */
+    PC_AUTO_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD = 13, /* 融合取矿存矿并头向下 200mm 台阶 */
+    PC_AUTO_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD = 14, /* 融合取矿存矿并头向上 400mm 台阶 */
 } PC_AutoAction_t;
 
 typedef enum {

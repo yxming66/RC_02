@@ -111,7 +111,7 @@ void AutoCtrlPrimitive_CommandFlatMove(auto_ctrl_t *ctrl, float vx_mps) {
   ctrl->chassis_cmd.mode = CHASSIS_MODE_INDEPENDENT;
   ctrl->chassis_cmd.ctrl_vec.vx = vx_mps;
   ctrl->chassis_cmd.ctrl_vec.vy = 0.0f;
-  ctrl->chassis_cmd.ctrl_vec.wz = 0.0f;
+  ctrl->chassis_cmd.ctrl_vec.wz = AutoCtrlPrimitive_GetActiveYawRateCommand(ctrl);
 }
 
 /* Send a flat move while carrying the external yaw-rate command. */

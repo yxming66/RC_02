@@ -9,6 +9,7 @@
 #include "main.h"
 #include "device/dr16.h"
 #include "device/ir_dock/ir_dock.h"
+#include "device/photo_transfer.h"
 #include "module/autoCtrlAPI/api/auto_ctrl_api.h"
 #include "module/autoCtrlAPI/ore_store/auto_ore_store.h"
 #include "module/autoCtrlAPI/rod/auto_rod_spearhead.h"
@@ -48,11 +49,8 @@ static PC_AutoAction_t auto_action_last_action = PC_AUTO_ACTION_NONE;
 static PC_AutoActionSubsystem_t auto_action_last_subsystem =
     PC_AUTO_ACTION_SUBSYSTEM_NONE;
 static AutoOre_Action_t auto_ore_last_action = AUTO_ORE_ACTION_NONE;
-static const GPIO_PinState photo1_active_state = GPIO_PIN_RESET;
-static const GPIO_PinState photo2_active_state = GPIO_PIN_RESET;
-static const GPIO_PinState photo3_active_state = GPIO_PIN_RESET;
-static const GPIO_PinState photo4_active_state = GPIO_PIN_RESET;
-static const GPIO_PinState checkphoto_ore_has_ore_state = GPIO_PIN_RESET;
+static PhotoTransfer_Snapshot_t photo_transfer_snapshot = {0};
+static bool photo_transfer_inited = false;
 
 #ifndef AUTO_CTRL_POLE_TARGET_THRESHOLD_RAD
 #define AUTO_CTRL_POLE_TARGET_THRESHOLD_RAD (0.30f)
@@ -62,38 +60,9 @@ static const GPIO_PinState checkphoto_ore_has_ore_state = GPIO_PIN_RESET;
 #define AUTO_CTRL_POLE_TARGET_STABLE_CYCLES (5u)
 #endif
 
-#ifndef AUTO_ORE_PHOTO_STABLE_MS
-#define AUTO_ORE_PHOTO_STABLE_MS (500u)
-#endif
-
-#ifndef AUTO_ROD_SPEARHEAD_PHOTO_GPIO_PORT
-#define AUTO_ROD_SPEARHEAD_PHOTO_GPIO_PORT checkphoto_spear_GPIO_Port
-#endif
-
-#ifndef AUTO_ROD_SPEARHEAD_PHOTO_PIN
-#define AUTO_ROD_SPEARHEAD_PHOTO_PIN checkphoto_spear_Pin
-#endif
-
-#ifndef AUTO_ROD_SPEARHEAD_PHOTO_ACTIVE_STATE
-#define AUTO_ROD_SPEARHEAD_PHOTO_ACTIVE_STATE GPIO_PIN_RESET
-#endif
-
-#if defined(AUTO_ROD_SPEARHEAD_PHOTO_GPIO_PORT) && \
-  defined(AUTO_ROD_SPEARHEAD_PHOTO_PIN)
-#define AUTO_ROD_SPEARHEAD_PHOTO_CONFIGURED (1u)
-#else
-#define AUTO_ROD_SPEARHEAD_PHOTO_CONFIGURED (0u)
-#endif
-
 static uint8_t pole_front_at_target_stable_count = 0u;
 static uint8_t pole_rear_at_target_stable_count = 0u;
 static uint8_t pole_all_at_target_stable_count = 0u;
-static bool checkphoto_orelow_has_ore = false;
-static bool checkphoto_orehigh_has_ore = false;
-static GPIO_PinState checkphoto_orelow_candidate_state = GPIO_PIN_RESET;
-static GPIO_PinState checkphoto_orehigh_candidate_state = GPIO_PIN_RESET;
-static uint32_t checkphoto_orelow_candidate_start_ms = 0u;
-static uint32_t checkphoto_orehigh_candidate_start_ms = 0u;
 /* USER STRUCT END */
 
 /* Private function --------------------------------------------------------- */
@@ -151,59 +120,24 @@ static bool AutoCtrlFeed_DebouncePoleReady(bool raw_ready,
   return *stable_count >= AUTO_CTRL_POLE_TARGET_STABLE_CYCLES;
 }
 
+static bool AutoCtrlFeed_ReadPhotoTransferBit(PhotoTransfer_Bit_t bit) {
+  return PhotoTransfer_IsBitTriggered(&photo_transfer_snapshot, bit);
+}
+
 static bool AutoCtrlFeed_ReadRodSpearheadPhoto(void) {
-#if AUTO_ROD_SPEARHEAD_PHOTO_CONFIGURED
-  return HAL_GPIO_ReadPin(AUTO_ROD_SPEARHEAD_PHOTO_GPIO_PORT,
-                         AUTO_ROD_SPEARHEAD_PHOTO_PIN) ==
-         AUTO_ROD_SPEARHEAD_PHOTO_ACTIVE_STATE;
-#else
-  return false;
-#endif
+  return AutoCtrlFeed_ReadPhotoTransferBit(PHOTO_TRANSFER_BIT_SPEARHEAD);
 }
 
-static bool AutoCtrlFeed_DebounceOrePhoto(GPIO_PinState raw_state,
-                                          bool *stable_has_ore,
-                                          GPIO_PinState *candidate_state,
-                                          uint32_t *candidate_start_ms,
-                                          uint32_t now_ms) {
-  if (stable_has_ore == NULL || candidate_state == NULL ||
-      candidate_start_ms == NULL) {
-    return false;
-  }
-
-  if (raw_state != *candidate_state) {
-    *candidate_state = raw_state;
-    *candidate_start_ms = now_ms;
-    return *stable_has_ore;
-  }
-
-  if ((now_ms - *candidate_start_ms) >= AUTO_ORE_PHOTO_STABLE_MS) {
-    if (raw_state == checkphoto_ore_has_ore_state) {
-      *stable_has_ore = true;
-    } else {
-      *stable_has_ore = false;
-    }
-  }
-
-  return *stable_has_ore;
+static bool AutoCtrlFeed_ReadOreLowPhoto(void) {
+  return AutoCtrlFeed_ReadPhotoTransferBit(PHOTO_TRANSFER_BIT_ORE_LOW);
 }
 
-static bool AutoCtrlFeed_ReadOreLowPhoto(uint32_t now_ms) {
-  const GPIO_PinState raw_state = HAL_GPIO_ReadPin(checkphoto_orelow_GPIO_Port,
-                                                  checkphoto_orelow_Pin);
-  return AutoCtrlFeed_DebounceOrePhoto(raw_state, &checkphoto_orelow_has_ore,
-                                       &checkphoto_orelow_candidate_state,
-                                       &checkphoto_orelow_candidate_start_ms,
-                                       now_ms);
+static bool AutoCtrlFeed_ReadOreHighPhoto(void) {
+  return AutoCtrlFeed_ReadPhotoTransferBit(PHOTO_TRANSFER_BIT_ORE_HIGH);
 }
 
-static bool AutoCtrlFeed_ReadOreHighPhoto(uint32_t now_ms) {
-  const GPIO_PinState raw_state = HAL_GPIO_ReadPin(checkphoto_orehigh_GPIO_Port,
-                                                  checkphoto_orehigh_Pin);
-  return AutoCtrlFeed_DebounceOrePhoto(raw_state, &checkphoto_orehigh_has_ore,
-                                       &checkphoto_orehigh_candidate_state,
-                                       &checkphoto_orehigh_candidate_start_ms,
-                                       now_ms);
+static bool AutoCtrlFeed_ReadArmOrePhoto(void) {
+  return AutoCtrlFeed_ReadPhotoTransferBit(PHOTO_TRANSFER_BIT_ARM_ORE);
 }
 
 static PC_AutoAction_t AutoCtrlFeed_MapOreAction(AutoOre_Action_t action) {
@@ -222,6 +156,10 @@ static PC_AutoAction_t AutoCtrlFeed_MapOreAction(AutoOre_Action_t action) {
       return PC_AUTO_ACTION_PICK_NEG_200;
     case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD:
       return PC_AUTO_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD;
+    case AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD:
+      return PC_AUTO_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD;
+    case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD:
+      return PC_AUTO_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD;
     case AUTO_ORE_ACTION_NONE:
     default:
       return PC_AUTO_ACTION_NONE;
@@ -619,6 +557,14 @@ static bool AutoCtrlFeed_StartOreAction(AutoOre_Action_t action) {
       result = AutoOre_StartStepPickStoreAscend200Head(&auto_ore_ctrl,
                                                        now_ms);
       break;
+    case AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD:
+      result = AutoOre_StartStepPickStoreDescend200Head(&auto_ore_ctrl,
+                                                        now_ms);
+      break;
+    case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD:
+      result = AutoOre_StartStepPickStoreAscend400Head(&auto_ore_ctrl,
+                                                       now_ms);
+      break;
     case AUTO_ORE_ACTION_NONE:
     default:
       result = false;
@@ -901,8 +847,9 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms) {
         &auto_ore_ctrl.ore_store_cmd,
         auto_ore_ctrl.param.ore_store_arrive_threshold_rad);
   }
-  const bool ore_low_photo_triggered = AutoCtrlFeed_ReadOreLowPhoto(now_ms);
-  const bool ore_high_photo_triggered = AutoCtrlFeed_ReadOreHighPhoto(now_ms);
+  const bool ore_low_photo_triggered = AutoCtrlFeed_ReadOreLowPhoto();
+  const bool ore_high_photo_triggered = AutoCtrlFeed_ReadOreHighPhoto();
+  const bool arm_ore_photo_triggered = AutoCtrlFeed_ReadArmOrePhoto();
   const bool spear_photo_triggered = AutoCtrlFeed_ReadRodSpearheadPhoto();
   const Chassis_Feedback_t *chassis_feedback = Task_ChassisGetFeedback();
 
@@ -914,12 +861,13 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms) {
         auto_ore_ctrl.param.pole_arrive_threshold_rad),
       .pole_front_at_target = feedback.pole_front_at_target,
       .pole_rear_at_target = feedback.pole_rear_at_target,
-      .arm_photo_has_ore = ore_low_photo_triggered || ore_high_photo_triggered,
+      .arm_photo_has_ore = arm_ore_photo_triggered,
       .precontact_front_photo_triggered = feedback.pe13_photo1_triggered,
       .pe13_photo1_triggered = feedback.pe13_photo1_triggered,
       .pe9_photo2_triggered = feedback.pe9_photo2_triggered,
       .pa2_photo3_triggered = feedback.pa2_photo3_triggered,
       .pa0_photo4_triggered = feedback.pa0_photo4_triggered,
+      .yaw_source = AutoCtrl_GetYawSource(&auto_ctrl),
       .yaw_auto_rad = feedback.yaw_auto_rad,
       .yaw_rate_cmd_rad_s = auto_ctrl.yaw_rate_cmd_rad_s,
       .pole_front_lift_rad = feedback.pole_front_lift_rad,
@@ -928,7 +876,7 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms) {
       .photoelectric_occupancy = {
           .transform_low_has_ore = ore_low_photo_triggered,
           .transform_high_has_ore = ore_high_photo_triggered,
-          .arm_has_ore = false,
+          .arm_has_ore = arm_ore_photo_triggered,
       },
   };
   if (chassis_feedback != NULL) {
@@ -958,12 +906,19 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms) {
   g_auto_ore_debug.checkphoto_spear_triggered = spear_photo_triggered;
   g_auto_ore_debug.checkphoto_orelow_triggered = ore_low_photo_triggered;
   g_auto_ore_debug.checkphoto_orehigh_triggered = ore_high_photo_triggered;
+  g_auto_ore_debug.photo_transfer_valid = photo_transfer_snapshot.valid;
+  g_auto_ore_debug.photo_transfer_raw_mask = photo_transfer_snapshot.raw_mask;
+  g_auto_ore_debug.photo_transfer_age_ms = photo_transfer_snapshot.age_ms;
+  g_auto_ore_debug.photo_transfer_rx_count = photo_transfer_snapshot.rx_count;
+  g_auto_ore_debug.photo_transfer_timeout_count =
+      photo_transfer_snapshot.timeout_count;
   g_auto_ore_debug.arm_cmd_valid = auto_ore_ctrl.arm_cmd_valid;
   g_auto_ore_debug.ore_store_cmd_valid = auto_ore_ctrl.ore_store_cmd_valid;
   g_auto_ore_debug.arm_at_target = auto_ore_feedback.arm_at_target;
   g_auto_ore_debug.pick_lift_confirmed = auto_ore_ctrl.pick_lift_confirmed;
-  g_auto_ore_debug.fused_wheel_distance_m = auto_ore_ctrl.distance_travel_m;
-  g_auto_ore_debug.fused_target_distance_m = auto_ore_ctrl.distance_target_m;
+  g_auto_ore_debug.fused_wheel_delta_rad = auto_ore_ctrl.wheel_delta_rad;
+  g_auto_ore_debug.fused_target_wheel_delta_rad =
+      auto_ore_ctrl.target_wheel_delta_rad;
   g_auto_ore_debug.fused_step_done = auto_ore_ctrl.fused_step_done;
   g_auto_ore_debug.fused_store_done = auto_ore_ctrl.fused_store_done;
   const ArmSimple_Feedback_t *arm_fb = Task_ArmSimpleGetFeedback();
@@ -1189,6 +1144,16 @@ bool Task_AutoOreStartStepPickStoreAscend200Head(void) {
       AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD);
 }
 
+bool Task_AutoOreStartStepPickStoreDescend200Head(void) {
+  return AutoCtrlFeed_StartOreAction(
+      AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD);
+}
+
+bool Task_AutoOreStartStepPickStoreAscend400Head(void) {
+  return AutoCtrlFeed_StartOreAction(
+      AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD);
+}
+
 void Task_AutoOreAbort(void) {
   if (auto_ore_inited) {
     if (AutoOre_IsBusy(&auto_ore_ctrl)) {
@@ -1231,6 +1196,12 @@ static void AutoCtrlFeed_HandleAutoOreDebugRequest(void) {
       break;
     case AUTO_ORE_DEBUG_REQUEST_STEP_PICK_STORE_ASCEND_200_HEAD:
       result = Task_AutoOreStartStepPickStoreAscend200Head();
+      break;
+    case AUTO_ORE_DEBUG_REQUEST_STEP_PICK_STORE_DESCEND_200_HEAD:
+      result = Task_AutoOreStartStepPickStoreDescend200Head();
+      break;
+    case AUTO_ORE_DEBUG_REQUEST_STEP_PICK_STORE_ASCEND_400_HEAD:
+      result = Task_AutoOreStartStepPickStoreAscend400Head();
       break;
     case AUTO_ORE_DEBUG_REQUEST_ROD_SPEARHEAD:
       result = Task_AutoRodSpearheadStart();
@@ -1401,6 +1372,7 @@ void Task_auto_ctrl(void *argument) {
 
   AutoCtrl_Init(&auto_ctrl);
   auto_ctrl_inited = true;
+  photo_transfer_inited = PhotoTransfer_Init() == DEVICE_OK;
   AutoCtrlFeed_InitAutoOre();
   AutoCtrlFeed_InitAutoRodSpearhead();
   AutoCtrlFeed_InitAutoSickCorrect();
@@ -1412,6 +1384,12 @@ void Task_auto_ctrl(void *argument) {
 
     if (auto_ctrl_inited) {
       now_ms = BSP_TIME_Get_ms();
+      if (photo_transfer_inited) {
+        PhotoTransfer_Update(now_ms);
+        photo_transfer_snapshot = PhotoTransfer_GetSnapshot(now_ms);
+      } else {
+        photo_transfer_snapshot = PhotoTransfer_GetSnapshot(now_ms);
+      }
 
       AutoCtrlFeed_CacheLocalYawZero();
 
@@ -1425,15 +1403,16 @@ void Task_auto_ctrl(void *argument) {
                     : -1.0f;
       feedback.sick_front_right_cm = -1.0f;
 
-      GPIO_PinState photo1_state = HAL_GPIO_ReadPin(GPIOE, GPIO_PIN_13);
-      GPIO_PinState photo2_state = HAL_GPIO_ReadPin(GPIOE, GPIO_PIN_9);
-      GPIO_PinState photo3_state = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_2);
-      GPIO_PinState photo4_state = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0);
-
-      feedback.pe13_photo1_triggered = (photo1_state == photo1_active_state);
-      feedback.pe9_photo2_triggered = (photo2_state == photo2_active_state);
-      feedback.pa2_photo3_triggered = (photo3_state == photo3_active_state);
-      feedback.pa0_photo4_triggered = (photo4_state == photo4_active_state);
+      feedback.pe13_photo1_triggered =
+          AutoCtrlFeed_ReadPhotoTransferBit(PHOTO_TRANSFER_BIT_PHOTO1_FRONT);
+      feedback.pe9_photo2_triggered =
+          AutoCtrlFeed_ReadPhotoTransferBit(
+              PHOTO_TRANSFER_BIT_PHOTO2_THIRD_LAST);
+      feedback.pa2_photo3_triggered =
+          AutoCtrlFeed_ReadPhotoTransferBit(
+              PHOTO_TRANSFER_BIT_PHOTO3_SECOND_LAST);
+      feedback.pa0_photo4_triggered =
+          AutoCtrlFeed_ReadPhotoTransferBit(PHOTO_TRANSFER_BIT_PHOTO4_LAST);
       float pole_front_lift_rad = 0.0f;
       float pole_rear_lift_rad = 0.0f;
       (void)Task_PoleMainGetSupportLift(&pole_front_lift_rad,

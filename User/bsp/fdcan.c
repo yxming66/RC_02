@@ -492,6 +492,7 @@ static void BSP_FDCAN_RxFifo0Callback(void) {
           msg.frame_type = frame_type;
           msg.original_id = original_id;
           msg.parsed_id = parsed_id;
+          msg.timestamp = (uint32_t)(start_us / 1000ULL);
           uint8_t real_len = fdcan_dlc2len[rx_header.DataLength & 0xF];
           msg.dlc = real_len;
           if (msg.dlc > BSP_FDCAN_MAX_DLC) msg.dlc = BSP_FDCAN_MAX_DLC;
@@ -549,6 +550,7 @@ static void BSP_FDCAN_RxFifo1Callback(void) {
           msg.frame_type = frame_type;
           msg.original_id = original_id;
           msg.parsed_id = parsed_id;
+          msg.timestamp = (uint32_t)(start_us / 1000ULL);
           uint8_t real_len = fdcan_dlc2len[rx_header.DataLength & 0xF];
           msg.dlc = real_len; 
           if (msg.dlc > BSP_FDCAN_MAX_DLC) msg.dlc = BSP_FDCAN_MAX_DLC;

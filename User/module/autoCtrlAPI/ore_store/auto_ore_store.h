@@ -22,6 +22,8 @@ typedef enum {
   AUTO_ORE_ACTION_PICK_POS_200,
   AUTO_ORE_ACTION_PICK_NEG_200,
   AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD,
+  AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD,
+  AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD,
 } AutoOre_Action_t;
 
 typedef enum {
@@ -81,6 +83,7 @@ typedef struct {
   bool pe9_photo2_triggered;
   bool pa2_photo3_triggered;
   bool pa0_photo4_triggered;
+  auto_ctrl_yaw_source_e yaw_source;
   float yaw_auto_rad;
   float yaw_rate_cmd_rad_s;
   float pole_front_lift_rad;
@@ -132,13 +135,10 @@ typedef struct {
 typedef struct {
   auto_ctrl_template_e step_template;
   AutoOre_Action_t pick_action;
-  float target_yaw_rad;
-  float yaw_tolerance_rad;
   float precontact_vx_mps;
-  float precontact_distance_m;
+  float precontact_wheel_delta_rad;
   float step_start_vx_mps;
-  float step_start_distance_m;
-  float step_mid_distance_m;
+  float step_start_wheel_delta_rad;
   bool use_arm_photo_confirm;
   bool fail_on_precontact_front_photo;
 } AutoOre_FusedParam_t;
@@ -155,8 +155,9 @@ typedef struct {
   float pole_arrive_threshold_rad;
   float fetch_chassis_vx_mps;
   float fetch_neg_200_chassis_vx_mps;
-  float wheel_radius_m;
   AutoOre_FusedParam_t fused_step_pick_store_ascend_200_head;
+  AutoOre_FusedParam_t fused_step_pick_store_descend_200_head;
+  AutoOre_FusedParam_t fused_step_pick_store_ascend_400_head;
 } AutoOre_Params_t;
 
 typedef struct {
@@ -188,14 +189,12 @@ typedef struct {
   bool pick_lift_confirmed;
   bool distance_latch_valid;
   float distance_start_wheel_rad[4];
-  float distance_travel_m;
-  float distance_target_m;
-  uint32_t fused_yaw_stable_since_ms;
+  float wheel_delta_rad;
+  float target_wheel_delta_rad;
   uint32_t fused_arm_photo_since_ms;
   uint8_t fused_store_step_index;
   uint8_t fused_store_step_phase;
   AutoOre_Position_t fused_store_position;
-  float fused_target_yaw_rad;
   AutoOre_Params_t param;
   AutoOre_Feedback_t feedback;
 } AutoOre_t;
@@ -211,6 +210,8 @@ bool AutoOre_StartPickPos400(AutoOre_t *ctrl, uint32_t now_ms);
 bool AutoOre_StartPickPos200(AutoOre_t *ctrl, uint32_t now_ms);
 bool AutoOre_StartPickNeg200(AutoOre_t *ctrl, uint32_t now_ms);
 bool AutoOre_StartStepPickStoreAscend200Head(AutoOre_t *ctrl, uint32_t now_ms);
+bool AutoOre_StartStepPickStoreDescend200Head(AutoOre_t *ctrl, uint32_t now_ms);
+bool AutoOre_StartStepPickStoreAscend400Head(AutoOre_t *ctrl, uint32_t now_ms);
 void AutoOre_Update(AutoOre_t *ctrl, const AutoOre_Feedback_t *feedback,
                     uint32_t now_ms);
 void AutoOre_Abort(AutoOre_t *ctrl);

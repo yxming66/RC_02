@@ -1111,6 +1111,10 @@ static void Rc_TryStartAutoCtrlBySwitch(uint32_t now_ms) {
       dr16.data.sw_r == DR16_SW_UP) {
     g_rc_control_debug.auto_200_start_event = true;
     g_rc_control_debug.auto_200_template = AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD;
+    if (!Rc_PrepareLocalAutoYawFeedback()) {
+      g_rc_control_debug.auto_200_start_ok = false;
+      return;
+    }
     g_rc_control_debug.auto_200_start_ok =
         Task_AutoOreStartStepPickStoreAscend200Head();
     if (g_rc_control_debug.auto_200_start_ok) {

@@ -36,7 +36,7 @@ static void AutoCtrlTemplate_NextStep(auto_ctrl_t *ctrl) {
   ctrl->template_ctx.descend_start_move_entered = false;
   ctrl->template_ctx.descend_start_move_time_ms = 0u;
   ctrl->template_ctx.distance_latch_valid = false;
-  ctrl->template_ctx.distance_travel_m = 0.0f;
+  ctrl->template_ctx.wheel_delta_rad = 0.0f;
 }
 
 static bool AutoCtrlTemplate_IsYawAligned(const auto_ctrl_t *ctrl) {
@@ -81,22 +81,14 @@ static float AutoCtrlTemplate_AbsFloat(float value) {
   return (value >= 0.0f) ? value : -value;
 }
 
-static float AutoCtrlTemplate_WheelRadiusM(
-    const Config_RobotParam_t *robot_param) {
-  if (robot_param != 0 &&
-      robot_param->chassis_param.physical.wheel_radius_m > 0.0f) {
-    return robot_param->chassis_param.physical.wheel_radius_m;
-  }
-  return 0.076f;
-}
-
-static bool AutoCtrlTemplate_DistanceMoveReady(
-    auto_ctrl_t *ctrl, uint32_t now_ms, float target_distance_m,
+static bool AutoCtrlTemplate_WheelDeltaMoveReady(
+    auto_ctrl_t *ctrl, uint32_t now_ms, float target_wheel_delta_rad,
     uint32_t fallback_move_ms, const AutoCtrl_TemplateParam_t *param,
     const Config_RobotParam_t *robot_param) {
+  (void)robot_param;
   AutoCtrlTemplate_EnterStep(ctrl, now_ms);
 
-  if (target_distance_m <= 0.0f) {
+  if (target_wheel_delta_rad <= 0.0f) {
     return AutoCtrlTemplate_TimedMoveReady(ctrl, now_ms, fallback_move_ms,
                                            param);
   }
@@ -106,7 +98,7 @@ static bool AutoCtrlTemplate_DistanceMoveReady(
       ctrl->template_ctx.distance_start_wheel_rad[i] =
           ctrl->feedback.wheel_position_rad[i];
     }
-    ctrl->template_ctx.distance_travel_m = 0.0f;
+    ctrl->template_ctx.wheel_delta_rad = 0.0f;
     ctrl->template_ctx.distance_latch_valid = true;
     return false;
   }
@@ -117,12 +109,10 @@ static bool AutoCtrlTemplate_DistanceMoveReady(
         ctrl->feedback.wheel_position_rad[i] -
         ctrl->template_ctx.distance_start_wheel_rad[i]);
   }
-  ctrl->template_ctx.distance_travel_m =
-      (wheel_delta_abs_sum_rad * 0.25f) *
-      AutoCtrlTemplate_WheelRadiusM(robot_param);
+  ctrl->template_ctx.wheel_delta_rad = wheel_delta_abs_sum_rad * 0.25f;
 
   const bool distance_ready =
-      ctrl->template_ctx.distance_travel_m >= target_distance_m;
+      ctrl->template_ctx.wheel_delta_rad >= target_wheel_delta_rad;
   const bool fallback_timeout =
       fallback_move_ms > 0u &&
       AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >= fallback_move_ms;
@@ -569,8 +559,9 @@ static bool AutoCtrlTemplate_RunAscend(auto_ctrl_t *ctrl, uint32_t now_ms,
                                    pole.front_retract[1],
                                    param->pole_front_retract_speed,
                                    param->pole_rear_extend_speed);
-      if (AutoCtrlTemplate_DistanceMoveReady(
-              ctrl, now_ms, param->mid_move_distance_m, param->mid_move_ms,
+      if (AutoCtrlTemplate_WheelDeltaMoveReady(
+              ctrl, now_ms, param->mid_move_wheel_delta_rad,
+              param->mid_move_ms,
               param, robot_param)) {
         AutoCtrlTemplate_NextStep(ctrl);
       }
@@ -615,8 +606,8 @@ static bool AutoCtrlTemplate_RunAscend(auto_ctrl_t *ctrl, uint32_t now_ms,
                                    pole.all_retract[1],
                                    param->pole_front_retract_speed,
                                    param->pole_rear_retract_speed);
-      if (AutoCtrlTemplate_DistanceMoveReady(
-              ctrl, now_ms, param->final_move_distance_m,
+      if (AutoCtrlTemplate_WheelDeltaMoveReady(
+              ctrl, now_ms, param->final_move_wheel_delta_rad,
               param->final_move_ms, param, robot_param)) {
         AutoCtrlTemplate_NextStep(ctrl);
       }
@@ -699,8 +690,9 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
                                    pole.front_retract[1],
                                    param->pole_front_retract_speed,
                                    param->pole_rear_extend_speed);
-      if (AutoCtrlTemplate_DistanceMoveReady(
-              ctrl, now_ms, param->mid_move_distance_m, param->mid_move_ms,
+      if (AutoCtrlTemplate_WheelDeltaMoveReady(
+              ctrl, now_ms, param->mid_move_wheel_delta_rad,
+              param->mid_move_ms,
               param, robot_param)) {
         AutoCtrlTemplate_NextStep(ctrl);
       }
@@ -752,8 +744,8 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
                                    pole.all_retract[1],
                                    param->pole_front_retract_speed,
                                    param->pole_rear_retract_speed);
-      if (AutoCtrlTemplate_DistanceMoveReady(
-              ctrl, now_ms, param->final_move_distance_m,
+      if (AutoCtrlTemplate_WheelDeltaMoveReady(
+              ctrl, now_ms, param->final_move_wheel_delta_rad,
               param->final_move_ms, param, robot_param)) {
         AutoCtrlTemplate_NextStep(ctrl);
       }
@@ -879,8 +871,9 @@ static bool AutoCtrlTemplate_RunTailDescendOptimized(
                                    pole.all_extend[1],
                                    param->pole_front_retract_speed,
                                    param->pole_rear_extend_speed);
-      if (AutoCtrlTemplate_TimedMoveReady(
-              ctrl, now_ms, param->rear_retract_move_ms, param)) {
+      if (AutoCtrlTemplate_WheelDeltaMoveReady(
+              ctrl, now_ms, param->rear_retract_move_wheel_delta_rad,
+              param->rear_retract_move_ms, param, robot_param)) {
         AutoCtrlTemplate_NextStep(ctrl);
       }
       return false;
@@ -1041,8 +1034,9 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
                                              : pole.all_retract[1],
                                    param->pole_front_extend_speed,
                                    param->pole_rear_retract_speed);
-      if (AutoCtrlTemplate_TimedMoveReady(
-              ctrl, now_ms, param->rear_retract_move_ms, param)) {
+      if (AutoCtrlTemplate_WheelDeltaMoveReady(
+              ctrl, now_ms, param->rear_retract_move_wheel_delta_rad,
+              param->rear_retract_move_ms, param, robot_param)) {
         AutoCtrlTemplate_NextStep(ctrl);
       }
       return false;
