@@ -392,22 +392,20 @@ Config_RobotParam_t robot_config = {
             .pick_action = AUTO_ORE_ACTION_PICK_POS_200,         /* 融合动作取正 200mm 矿。 */
             .precontact_vx_mps = 0.20f,                          /* 取矿前低速靠近速度，单位 m/s。 */
             .precontact_wheel_delta_rad = 4.5f,                 /* 取矿前低速靠近轮转角阈值，单位 rad。 */
-            .precontact_timeout_ms = 3500u,                     /* 取矿前低速靠近兜底超时，单位 ms。 */
+            .precontact_timeout_ms = 3000u,                     /* 取矿前低速靠近兜底超时，单位 ms。 */
             .step_start_vx_mps = 0.40f,                          /* 存矿后进入台阶模板前的起步冲刺速度，单位 m/s。 */
             .step_start_wheel_delta_rad = 2.36f,                 /* 存矿后进入台阶模板前的起步冲刺轮转角阈值，单位 rad。 */
             .use_arm_photo_confirm = false,                      /* false=机械臂到位加延时确认，true=机械臂取矿传感器确认。 */
-            .fail_on_precontact_front_photo = true,              /* true=低速靠近取矿时前光电触发立即判失败。 */
         },
         .fused_step_pick_store_descend_200_head = {
             .step_template = AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD, /* 取矿存矿后执行的头向 200mm 下台阶模板。 */
             .pick_action = AUTO_ORE_ACTION_PICK_POS_200,          /* 融合动作取正 200mm 矿。 */
             .precontact_vx_mps = 0.20f,                           /* 取矿前低速靠近速度，单位 m/s。 */
             .precontact_wheel_delta_rad = 4.0f,                  /* 取矿前低速靠近轮转角阈值，单位 rad。 */
-            .precontact_timeout_ms = 1800u,                      /* 取矿前低速靠近兜底超时，单位 ms。 */
+            .precontact_timeout_ms = 20000u,                      /* 取矿前低速靠近兜底超时，单位 ms。 */
             .step_start_vx_mps = 0.20f,                           /* 存矿后进入台阶模板前的起步冲刺速度，单位 m/s。 */
             .step_start_wheel_delta_rad = 0.0f,                   /* 头向下台阶默认不额外起步冲刺；>0 时按轮转角门控冲刺。 */
             .use_arm_photo_confirm = false,                       /* false=机械臂到位加延时确认，true=机械臂取矿传感器确认。 */
-            .fail_on_precontact_front_photo = true,               /* true=低速靠近取矿时前光电触发立即判失败。 */
         },
         .fused_step_pick_store_ascend_400_head = {
             .step_template = AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD, /* 取矿存矿后执行的头向 400mm 上台阶模板。 */
@@ -418,7 +416,6 @@ Config_RobotParam_t robot_config = {
             .step_start_vx_mps = 0.40f,                          /* 存矿后进入台阶模板前的起步冲刺速度，单位 m/s。 */
             .step_start_wheel_delta_rad = 2.36f,                 /* 存矿后进入台阶模板前的起步冲刺轮转角阈值，单位 rad。 */
             .use_arm_photo_confirm = false,                      /* false=机械臂到位加延时确认，true=机械臂取矿传感器确认。 */
-            .fail_on_precontact_front_photo = true,              /* true=低速靠近取矿时前光电触发立即判失败。 */
         },
         .fused_step_pick_store_descend_400_head = {
             .step_template = AUTO_CTRL_TEMPLATE_DESCEND_400_HEAD, /* 取矿存矿后执行的头向 400mm 下台阶模板。 */
@@ -429,7 +426,6 @@ Config_RobotParam_t robot_config = {
             .step_start_vx_mps = 0.20f,                           /* 存矿后进入台阶模板前的起步冲刺速度，单位 m/s。 */
             .step_start_wheel_delta_rad = 0.0f,                   /* 头向下台阶默认不额外起步冲刺；>0 时按轮转角门控冲刺。 */
             .use_arm_photo_confirm = false,                       /* false=机械臂到位加延时确认，true=机械臂取矿传感器确认。 */
-            .fail_on_precontact_front_photo = true,               /* true=低速靠近取矿时前光电触发立即判失败。 */
         },
     },
     /* 模块参数：一键取矛头 auto_rod_spearhead_param，取矛头机构动作时序和检测。 */

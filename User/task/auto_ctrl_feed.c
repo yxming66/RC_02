@@ -66,6 +66,8 @@ static uint8_t pole_all_at_target_stable_count = 0u;
 /* USER STRUCT END */
 
 /* Private function --------------------------------------------------------- */
+static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms);
+
 static float AutoCtrlFeed_SelectYawRad(void) {
   if (AutoCtrl_GetYawSource(&auto_ctrl) == AUTO_CTRL_YAW_SOURCE_PC &&
       MrlinkPc_IsHeartbeatValid()) {
@@ -536,6 +538,7 @@ static bool AutoCtrlFeed_StartOreAction(AutoOre_Action_t action) {
 
   bool result = false;
   const uint32_t now_ms = BSP_TIME_Get_ms();
+  AutoCtrlFeed_UpdateAutoOre(now_ms);
   switch (action) {
     case AUTO_ORE_ACTION_STORE:
       result = AutoOre_StartStore(&auto_ore_ctrl, now_ms);
@@ -579,26 +582,6 @@ static bool AutoCtrlFeed_StartOreAction(AutoOre_Action_t action) {
 
   if (result || AutoOre_GetState(&auto_ore_ctrl) == AUTO_ORE_STATE_FAIL) {
     AutoCtrlFeed_RememberOreAction(action);
-  }
-  return result;
-}
-
-static bool AutoCtrlFeed_StartOreStoreAtPosition(
-    AutoOre_Position_t position) {
-  if (!auto_ore_inited) {
-    return false;
-  }
-  if (AutoOre_IsBusy(&auto_ore_ctrl)) {
-    return false;
-  }
-  if (Task_AutoSickCorrectIsBusy()) {
-    return false;
-  }
-
-  const bool result = AutoOre_StartStoreAtPosition(
-      &auto_ore_ctrl, position, BSP_TIME_Get_ms());
-  if (result || AutoOre_GetState(&auto_ore_ctrl) == AUTO_ORE_STATE_FAIL) {
-    AutoCtrlFeed_RememberOreAction(AUTO_ORE_ACTION_STORE);
   }
   return result;
 }
@@ -877,6 +860,7 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms) {
   const bool ore_high_photo_triggered = AutoCtrlFeed_ReadOreHighPhoto();
   const bool arm_ore_photo_triggered = AutoCtrlFeed_ReadArmOrePhoto();
   const bool spear_photo_triggered = AutoCtrlFeed_ReadRodSpearheadPhoto();
+  const ArmSimple_Feedback_t *arm_fb = Task_ArmSimpleGetFeedback();
   const Chassis_Feedback_t *chassis_feedback = Task_ChassisGetFeedback();
 
   AutoOre_Feedback_t auto_ore_feedback = {
@@ -888,7 +872,6 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms) {
       .pole_front_at_target = feedback.pole_front_at_target,
       .pole_rear_at_target = feedback.pole_rear_at_target,
       .arm_photo_has_ore = arm_ore_photo_triggered,
-      .precontact_front_photo_triggered = feedback.pe13_photo1_triggered,
       .pe13_photo1_triggered = feedback.pe13_photo1_triggered,
       .pe9_photo2_triggered = feedback.pe9_photo2_triggered,
       .pa2_photo3_triggered = feedback.pa2_photo3_triggered,
@@ -896,6 +879,7 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms) {
       .yaw_source = AutoCtrl_GetYawSource(&auto_ctrl),
       .yaw_auto_rad = feedback.yaw_auto_rad,
       .yaw_rate_cmd_rad_s = auto_ctrl.yaw_rate_cmd_rad_s,
+      .arm_joint1_rad = (arm_fb != NULL) ? arm_fb->joint1_angle_rad : 0.0f,
       .pole_front_lift_rad = feedback.pole_front_lift_rad,
       .pole_rear_lift_rad = feedback.pole_rear_lift_rad,
       .ore_store_platform_error_rad = ore_store_platform_error_rad,
@@ -947,7 +931,6 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms) {
       auto_ore_ctrl.target_wheel_delta_rad;
   g_auto_ore_debug.fused_step_done = auto_ore_ctrl.fused_step_done;
   g_auto_ore_debug.fused_store_done = auto_ore_ctrl.fused_store_done;
-  const ArmSimple_Feedback_t *arm_fb = Task_ArmSimpleGetFeedback();
   if (arm_fb != NULL) {
     g_auto_ore_debug.arm_feedback_joint1_rad = arm_fb->joint1_angle_rad;
     g_auto_ore_debug.arm_feedback_joint2_rad = arm_fb->joint2_angle_rad;
@@ -1208,8 +1191,7 @@ static void AutoCtrlFeed_HandleAutoOreDebugRequest(void) {
 
   switch (request) {
     case AUTO_ORE_DEBUG_REQUEST_STORE:
-      result = AutoCtrlFeed_StartOreStoreAtPosition(
-          AUTO_ORE_POSITION_TRANSFORM_LOW);
+      result = Task_AutoOreStartStore();
       break;
     case AUTO_ORE_DEBUG_REQUEST_RELEASE:
       result = Task_AutoOreStartRelease();

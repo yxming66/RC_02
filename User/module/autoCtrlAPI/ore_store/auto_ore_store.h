@@ -79,7 +79,6 @@ typedef struct {
   bool pole_front_at_target;
   bool pole_rear_at_target;
   bool arm_photo_has_ore;
-  bool precontact_front_photo_triggered;
   bool pe13_photo1_triggered;
   bool pe9_photo2_triggered;
   bool pa2_photo3_triggered;
@@ -87,6 +86,7 @@ typedef struct {
   auto_ctrl_yaw_source_e yaw_source;
   float yaw_auto_rad;
   float yaw_rate_cmd_rad_s;
+  float arm_joint1_rad;
   float pole_front_lift_rad;
   float pole_rear_lift_rad;
   float wheel_position_rad[4];
@@ -142,7 +142,6 @@ typedef struct {
   float step_start_vx_mps;
   float step_start_wheel_delta_rad;
   bool use_arm_photo_confirm;
-  bool fail_on_precontact_front_photo;
 } AutoOre_FusedParam_t;
 
 typedef struct {
@@ -190,7 +189,6 @@ typedef struct {
   bool fused_step_done;
   bool fused_store_done;
   bool pick_lift_confirmed;
-  bool fused_precontact_timeout_reached;
   bool distance_latch_valid;
   float distance_start_wheel_rad[4];
   float wheel_delta_rad;
