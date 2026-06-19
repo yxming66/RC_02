@@ -24,6 +24,7 @@ typedef enum {
   AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD,
   AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD,
   AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD,
+  AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_400_HEAD,
 } AutoOre_Action_t;
 
 typedef enum {
@@ -158,6 +159,7 @@ typedef struct {
   AutoOre_FusedParam_t fused_step_pick_store_ascend_200_head;
   AutoOre_FusedParam_t fused_step_pick_store_descend_200_head;
   AutoOre_FusedParam_t fused_step_pick_store_ascend_400_head;
+  AutoOre_FusedParam_t fused_step_pick_store_descend_400_head;
 } AutoOre_Params_t;
 
 typedef struct {
@@ -212,6 +214,7 @@ bool AutoOre_StartPickNeg200(AutoOre_t *ctrl, uint32_t now_ms);
 bool AutoOre_StartStepPickStoreAscend200Head(AutoOre_t *ctrl, uint32_t now_ms);
 bool AutoOre_StartStepPickStoreDescend200Head(AutoOre_t *ctrl, uint32_t now_ms);
 bool AutoOre_StartStepPickStoreAscend400Head(AutoOre_t *ctrl, uint32_t now_ms);
+bool AutoOre_StartStepPickStoreDescend400Head(AutoOre_t *ctrl, uint32_t now_ms);
 void AutoOre_Update(AutoOre_t *ctrl, const AutoOre_Feedback_t *feedback,
                     uint32_t now_ms);
 void AutoOre_Abort(AutoOre_t *ctrl);

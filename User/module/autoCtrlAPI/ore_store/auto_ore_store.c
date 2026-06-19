@@ -850,7 +850,8 @@ static bool AutoOre_ActionIsPick(AutoOre_Action_t action) {
 static bool AutoOre_ActionIsFused(AutoOre_Action_t action) {
   return action == AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD ||
          action == AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD ||
-         action == AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD;
+         action == AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD ||
+         action == AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_400_HEAD;
 }
 
 static const AutoOre_FusedParam_t *AutoOre_FusedParam(const AutoOre_t *ctrl) {
@@ -864,6 +865,8 @@ static const AutoOre_FusedParam_t *AutoOre_FusedParam(const AutoOre_t *ctrl) {
       return &ctrl->param.fused_step_pick_store_descend_200_head;
     case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD:
       return &ctrl->param.fused_step_pick_store_ascend_400_head;
+    case AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_400_HEAD:
+      return &ctrl->param.fused_step_pick_store_descend_400_head;
     default:
       return 0;
   }
@@ -892,6 +895,7 @@ static ArmSimple_BehaviorPoint_t AutoOre_PickArmPoint(
     case AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD:
       return ARM_SIMPLE_BEHAVIOR_PICK_POS_200;
     case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD:
+    case AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_400_HEAD:
       return ARM_SIMPLE_BEHAVIOR_PICK_POS_400;
     case AUTO_ORE_ACTION_PICK_POS_400:
       return ARM_SIMPLE_BEHAVIOR_PICK_POS_400;
@@ -910,6 +914,7 @@ static const float *AutoOre_FusedStepStartPoleTarget(const AutoOre_t *ctrl) {
   }
   switch (ctrl->action) {
     case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD:
+    case AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_400_HEAD:
       return ctrl->param.pole_param->preset.step_400_all_extend;
     case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD:
     case AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD:
@@ -917,6 +922,10 @@ static const float *AutoOre_FusedStepStartPoleTarget(const AutoOre_t *ctrl) {
     default:
       return 0;
   }
+}
+
+static bool AutoOre_CommandFusedStepStartPoleTarget(AutoOre_t *ctrl) {
+  return AutoOre_CommandPoleTarget(ctrl, AutoOre_FusedStepStartPoleTarget(ctrl));
 }
 
 static auto_ctrl_template_e AutoOre_FusedDefaultTemplate(
@@ -928,6 +937,8 @@ static auto_ctrl_template_e AutoOre_FusedDefaultTemplate(
       return AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD;
     case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD:
       return AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD;
+    case AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_400_HEAD:
+      return AUTO_CTRL_TEMPLATE_DESCEND_400_HEAD;
     default:
       return AUTO_CTRL_TEMPLATE_NONE;
   }
@@ -937,6 +948,7 @@ static AutoOre_Action_t AutoOre_FusedDefaultPickAction(
     AutoOre_Action_t action) {
   switch (action) {
     case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD:
+    case AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_400_HEAD:
       return AUTO_ORE_ACTION_PICK_POS_400;
     case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD:
     case AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD:
@@ -1193,12 +1205,19 @@ static void AutoOre_CopyFeedbackToStepCtrl(AutoOre_t *ctrl) {
                              ctrl->feedback.yaw_rate_cmd_rad_s);
 }
 
-static void AutoOre_CopyStepCtrlOutputs(AutoOre_t *ctrl) {
+static bool AutoOre_CopyStepCtrlOutputs(AutoOre_t *ctrl,
+                                        bool keep_fused_pole_target) {
   ctrl->chassis_cmd = ctrl->step_ctrl.chassis_cmd;
-  ctrl->pole_cmd = ctrl->step_ctrl.pole_cmd;
   ctrl->chassis_cmd_valid =
       ctrl->step_ctrl.chassis_cmd.mode != CHASSIS_MODE_RELAX;
+
+  if (keep_fused_pole_target) {
+    return AutoOre_CommandFusedStepStartPoleTarget(ctrl);
+  }
+
+  ctrl->pole_cmd = ctrl->step_ctrl.pole_cmd;
   ctrl->pole_cmd_valid = ctrl->step_ctrl.pole_cmd.mode != POLE_MODE_RELAX;
+  return true;
 }
 
 static void AutoOre_RunFusedStepTemplate(AutoOre_t *ctrl, uint32_t now_ms) {
@@ -1239,8 +1258,14 @@ static void AutoOre_RunFusedStepTemplate(AutoOre_t *ctrl, uint32_t now_ms) {
   }
 
   AutoOre_CopyFeedbackToStepCtrl(ctrl);
+  const auto_ctrl_run_state_e state_before_update =
+      AutoCtrl_GetState(&ctrl->step_ctrl);
   AutoCtrl_Update(&ctrl->step_ctrl, now_ms);
-  AutoOre_CopyStepCtrlOutputs(ctrl);
+  if (!AutoOre_CopyStepCtrlOutputs(
+          ctrl, state_before_update == AUTO_CTRL_STATE_PREALIGN)) {
+    AutoOre_FailInvalidParam(ctrl);
+    return;
+  }
 
   if (AutoCtrl_GetState(&ctrl->step_ctrl) == AUTO_CTRL_STATE_SUCCESS) {
     ctrl->fused_step_done = true;
@@ -1273,18 +1298,17 @@ static void AutoOre_RunFusedStepSide(AutoOre_t *ctrl, uint32_t now_ms,
 
   switch (ctrl->step_phase) {
     case 0:
+      if (!AutoOre_CommandFusedStepStartPoleTarget(ctrl)) {
+        AutoOre_FailInvalidParam(ctrl);
+        return;
+      }
+
       if (fused->step_start_wheel_delta_rad <= 0.0f) {
         AutoOre_CommandChassisHold(ctrl);
         AutoOre_SetFusedStepSidePhase(ctrl, 1u);
         return;
       }
 
-      const float *step_start_pole_target =
-          AutoOre_FusedStepStartPoleTarget(ctrl);
-      if (!AutoOre_CommandPoleTarget(ctrl, step_start_pole_target)) {
-        AutoOre_FailInvalidParam(ctrl);
-        return;
-      }
       AutoOre_CommandChassisMoveYawRate(ctrl, fused->step_start_vx_mps,
                                         ctrl->feedback.yaw_rate_cmd_rad_s);
       if (AutoOre_WheelDeltaMoveReached(
@@ -1666,6 +1690,12 @@ bool AutoOre_StartStepPickStoreDescend200Head(AutoOre_t *ctrl,
 bool AutoOre_StartStepPickStoreAscend400Head(AutoOre_t *ctrl,
                                              uint32_t now_ms) {
   return AutoOre_Start(ctrl, AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD,
+                       now_ms);
+}
+
+bool AutoOre_StartStepPickStoreDescend400Head(AutoOre_t *ctrl,
+                                              uint32_t now_ms) {
+  return AutoOre_Start(ctrl, AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_400_HEAD,
                        now_ms);
 }
 

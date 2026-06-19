@@ -160,6 +160,8 @@ static PC_AutoAction_t AutoCtrlFeed_MapOreAction(AutoOre_Action_t action) {
       return PC_AUTO_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD;
     case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD:
       return PC_AUTO_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD;
+    case AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_400_HEAD:
+      return PC_AUTO_ACTION_STEP_PICK_STORE_DESCEND_400_HEAD;
     case AUTO_ORE_ACTION_NONE:
     default:
       return PC_AUTO_ACTION_NONE;
@@ -564,6 +566,10 @@ static bool AutoCtrlFeed_StartOreAction(AutoOre_Action_t action) {
     case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD:
       result = AutoOre_StartStepPickStoreAscend400Head(&auto_ore_ctrl,
                                                        now_ms);
+      break;
+    case AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_400_HEAD:
+      result = AutoOre_StartStepPickStoreDescend400Head(&auto_ore_ctrl,
+                                                        now_ms);
       break;
     case AUTO_ORE_ACTION_NONE:
     default:
@@ -1154,6 +1160,11 @@ bool Task_AutoOreStartStepPickStoreAscend400Head(void) {
       AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD);
 }
 
+bool Task_AutoOreStartStepPickStoreDescend400Head(void) {
+  return AutoCtrlFeed_StartOreAction(
+      AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_400_HEAD);
+}
+
 void Task_AutoOreAbort(void) {
   if (auto_ore_inited) {
     if (AutoOre_IsBusy(&auto_ore_ctrl)) {
@@ -1202,6 +1213,9 @@ static void AutoCtrlFeed_HandleAutoOreDebugRequest(void) {
       break;
     case AUTO_ORE_DEBUG_REQUEST_STEP_PICK_STORE_ASCEND_400_HEAD:
       result = Task_AutoOreStartStepPickStoreAscend400Head();
+      break;
+    case AUTO_ORE_DEBUG_REQUEST_STEP_PICK_STORE_DESCEND_400_HEAD:
+      result = Task_AutoOreStartStepPickStoreDescend400Head();
       break;
     case AUTO_ORE_DEBUG_REQUEST_ROD_SPEARHEAD:
       result = Task_AutoRodSpearheadStart();
