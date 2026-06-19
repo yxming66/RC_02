@@ -183,6 +183,23 @@ static bool AutoOre_CheckTimeout(AutoOre_t *ctrl, uint32_t now_ms) {
   return true;
 }
 
+static uint32_t AutoOre_FusedParallelTimeoutMs(const AutoOre_t *ctrl) {
+  const uint32_t timeout_ms = AutoOre_StepTimeoutMs(ctrl) * 4u;
+  return (timeout_ms < 15000u) ? 15000u : timeout_ms;
+}
+
+static bool AutoOre_CheckFusedParallelTimeout(AutoOre_t *ctrl,
+                                              uint32_t now_ms) {
+  if (AutoOre_StepElapsed(ctrl, now_ms) <
+      AutoOre_FusedParallelTimeoutMs(ctrl)) {
+    return false;
+  }
+  ctrl->state = AUTO_ORE_STATE_FAIL;
+  ctrl->result = AUTO_ORE_RESULT_FAIL;
+  ctrl->fault = AUTO_ORE_FAULT_TIMEOUT;
+  return true;
+}
+
 static bool AutoOre_WaitConditionThenDelay(AutoOre_t *ctrl, uint32_t now_ms,
                                            bool condition,
                                            uint32_t delay_ms) {
@@ -234,6 +251,13 @@ static void AutoOre_SetStepPhase(AutoOre_t *ctrl, uint8_t phase,
   ctrl->step_phase = phase;
   ctrl->step_condition_met = false;
   ctrl->step_condition_time_ms = now_ms;
+}
+
+static void AutoOre_SetFusedStepSidePhase(AutoOre_t *ctrl, uint8_t phase) {
+  ctrl->step_phase = phase;
+  ctrl->distance_latch_valid = false;
+  ctrl->wheel_delta_rad = 0.0f;
+  ctrl->target_wheel_delta_rad = 0.0f;
 }
 
 static void AutoOre_ClearOutputs(AutoOre_t *ctrl) {
@@ -1221,7 +1245,6 @@ static void AutoOre_RunFusedStepTemplate(AutoOre_t *ctrl, uint32_t now_ms) {
   if (AutoCtrl_GetState(&ctrl->step_ctrl) == AUTO_CTRL_STATE_SUCCESS) {
     ctrl->fused_step_done = true;
     ctrl->step_ctrl_active = false;
-    AutoOre_NextStep(ctrl);
     return;
   }
 
@@ -1233,6 +1256,84 @@ static void AutoOre_RunFusedStepTemplate(AutoOre_t *ctrl, uint32_t now_ms) {
                    AUTO_CTRL_FAULT_TEMPLATE_TIMEOUT)
                       ? AUTO_ORE_FAULT_TIMEOUT
                       : AUTO_ORE_FAULT_SENSOR_INVALID;
+  }
+}
+
+static void AutoOre_FinishFusedStepSide(AutoOre_t *ctrl) {
+  ctrl->fused_step_done = true;
+  ctrl->step_ctrl_active = false;
+  AutoOre_CommandChassisHold(ctrl);
+}
+
+static void AutoOre_RunFusedStepSide(AutoOre_t *ctrl, uint32_t now_ms,
+                                     const AutoOre_FusedParam_t *fused) {
+  if (ctrl == 0 || fused == 0 || ctrl->fused_step_done) {
+    return;
+  }
+
+  switch (ctrl->step_phase) {
+    case 0:
+      if (fused->step_start_wheel_delta_rad <= 0.0f) {
+        AutoOre_CommandChassisHold(ctrl);
+        AutoOre_SetFusedStepSidePhase(ctrl, 1u);
+        return;
+      }
+
+      const float *step_start_pole_target =
+          AutoOre_FusedStepStartPoleTarget(ctrl);
+      if (!AutoOre_CommandPoleTarget(ctrl, step_start_pole_target)) {
+        AutoOre_FailInvalidParam(ctrl);
+        return;
+      }
+      AutoOre_CommandChassisMoveYawRate(ctrl, fused->step_start_vx_mps,
+                                        ctrl->feedback.yaw_rate_cmd_rad_s);
+      if (AutoOre_WheelDeltaMoveReached(
+              ctrl, fused->step_start_wheel_delta_rad)) {
+        AutoOre_CommandChassisHold(ctrl);
+        AutoOre_SetFusedStepSidePhase(ctrl, 1u);
+      }
+      return;
+
+    case 1:
+      AutoOre_RunFusedStepTemplate(ctrl, now_ms);
+      if (ctrl->fused_step_done) {
+        AutoOre_FinishFusedStepSide(ctrl);
+      }
+      return;
+
+    default:
+      AutoOre_FinishFusedStepSide(ctrl);
+      return;
+  }
+}
+
+static void AutoOre_RunFusedStoreAndStepParallel(AutoOre_t *ctrl,
+                                                uint32_t now_ms,
+                                                const AutoOre_FusedParam_t *fused) {
+  AutoOre_EnterStep(ctrl, now_ms);
+
+  if (!ctrl->fused_store_done) {
+    AutoOre_RunFusedStore(ctrl, now_ms);
+  }
+
+  if (ctrl->state != AUTO_ORE_STATE_RUNNING) {
+    return;
+  }
+
+  if (!ctrl->fused_step_done) {
+    AutoOre_RunFusedStepSide(ctrl, now_ms, fused);
+  } else {
+    AutoOre_CommandChassisHold(ctrl);
+  }
+
+  if (ctrl->state != AUTO_ORE_STATE_RUNNING) {
+    return;
+  }
+
+  if (ctrl->fused_store_done && ctrl->fused_step_done) {
+    AutoOre_NextStep(ctrl);
+  } else {
+    (void)AutoOre_CheckFusedParallelTimeout(ctrl, now_ms);
   }
 }
 
@@ -1337,42 +1438,9 @@ static void AutoOre_RunStepPickStoreFused(AutoOre_t *ctrl, uint32_t now_ms) {
       }
       return;
     case 5:
-      AutoOre_EnterStep(ctrl, now_ms);
-      AutoOre_CommandChassisHold(ctrl);
-      AutoOre_RunFusedStore(ctrl, now_ms);
-      if (ctrl->fused_store_done) {
-        AutoOre_NextStep(ctrl);
-      } else {
-        (void)AutoOre_CheckTimeout(ctrl, now_ms);
-      }
+      AutoOre_RunFusedStoreAndStepParallel(ctrl, now_ms, fused);
       return;
     case 6:
-      AutoOre_EnterStep(ctrl, now_ms);
-      if (fused->step_start_wheel_delta_rad <= 0.0f) {
-        AutoOre_NextStep(ctrl);
-        return;
-      }
-      const float *step_start_pole_target =
-          AutoOre_FusedStepStartPoleTarget(ctrl);
-      if (!AutoOre_CommandPoleTarget(ctrl, step_start_pole_target)) {
-        AutoOre_FailInvalidParam(ctrl);
-        return;
-      }
-      AutoOre_CommandChassisMoveYawRate(ctrl, fused->step_start_vx_mps,
-                                        ctrl->feedback.yaw_rate_cmd_rad_s);
-      if (AutoOre_WheelDeltaMoveReached(
-              ctrl, fused->step_start_wheel_delta_rad)) {
-        AutoOre_CommandChassisHold(ctrl);
-        AutoOre_NextStep(ctrl);
-      } else {
-        (void)AutoOre_CheckTimeout(ctrl, now_ms);
-      }
-      return;
-    case 7:
-      AutoOre_EnterStep(ctrl, now_ms);
-      AutoOre_RunFusedStepTemplate(ctrl, now_ms);
-      return;
-    case 8:
       AutoOre_FinishSuccess(ctrl);
       return;
     default:
