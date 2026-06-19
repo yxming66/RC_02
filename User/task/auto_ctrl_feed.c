@@ -170,6 +170,47 @@ static PC_AutoAction_t AutoCtrlFeed_MapOreAction(AutoOre_Action_t action) {
   }
 }
 
+static AutoOre_Action_t AutoCtrlFeed_RequestToOreAction(
+    AutoOre_DebugRequest_t request) {
+  switch (request) {
+    case AUTO_ORE_DEBUG_REQUEST_STORE:
+      return AUTO_ORE_ACTION_STORE;
+    case AUTO_ORE_DEBUG_REQUEST_RELEASE:
+      return AUTO_ORE_ACTION_RELEASE;
+    case AUTO_ORE_DEBUG_REQUEST_CHAMBER:
+      return AUTO_ORE_ACTION_CHAMBER;
+    case AUTO_ORE_DEBUG_REQUEST_PICK_POS_400:
+      return AUTO_ORE_ACTION_PICK_POS_400;
+    case AUTO_ORE_DEBUG_REQUEST_PICK_POS_200:
+      return AUTO_ORE_ACTION_PICK_POS_200;
+    case AUTO_ORE_DEBUG_REQUEST_PICK_NEG_200:
+      return AUTO_ORE_ACTION_PICK_NEG_200;
+    case AUTO_ORE_DEBUG_REQUEST_STEP_PICK_STORE_ASCEND_200_HEAD:
+      return AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD;
+    case AUTO_ORE_DEBUG_REQUEST_STEP_PICK_STORE_DESCEND_200_HEAD:
+      return AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD;
+    case AUTO_ORE_DEBUG_REQUEST_STEP_PICK_STORE_ASCEND_400_HEAD:
+      return AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD;
+    case AUTO_ORE_DEBUG_REQUEST_STEP_PICK_STORE_DESCEND_400_HEAD:
+      return AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_400_HEAD;
+    case AUTO_ORE_DEBUG_REQUEST_NONE:
+    case AUTO_ORE_DEBUG_REQUEST_ABORT:
+    case AUTO_ORE_DEBUG_REQUEST_ROD_SPEARHEAD:
+    case AUTO_ORE_DEBUG_REQUEST_SICK_CORRECT_ROD_SPEARHEAD:
+    case AUTO_ORE_DEBUG_REQUEST_SICK_CORRECT_ORE_RELEASE:
+    case AUTO_ORE_DEBUG_REQUEST_ROD_DOCK_WAIT:
+    default:
+      return AUTO_ORE_ACTION_NONE;
+  }
+}
+
+static bool AutoCtrlFeed_RequestMatchesRunningOreAction(
+    AutoOre_DebugRequest_t request) {
+  const AutoOre_Action_t action = AutoCtrlFeed_RequestToOreAction(request);
+  return action != AUTO_ORE_ACTION_NONE && auto_ore_inited &&
+         AutoOre_IsBusy(&auto_ore_ctrl) && auto_ore_ctrl.action == action;
+}
+
 static PC_AutoAction_t AutoCtrlFeed_MapRodAction(
     AutoRodSpearhead_Action_t action) {
   switch (action) {
@@ -1188,6 +1229,14 @@ static void AutoCtrlFeed_HandleAutoOreDebugRequest(void) {
   g_auto_ore_debug.request = AUTO_ORE_DEBUG_REQUEST_NONE;
   g_auto_ore_debug.last_request = request;
   g_auto_ore_debug.request_count++;
+
+  if (AutoCtrlFeed_RequestMatchesRunningOreAction(request)) {
+    AutoCtrlFeed_RememberOreAction(auto_ore_ctrl.action);
+    g_auto_ore_debug.last_result = true;
+    g_auto_ore_debug.accept_count++;
+    g_auto_ore_debug.force_output_enable = true;
+    return;
+  }
 
   switch (request) {
     case AUTO_ORE_DEBUG_REQUEST_STORE:

@@ -1156,8 +1156,8 @@ static void Rc_TryStartAutoCtrlBySwitch(uint32_t now_ms) {
     return;
   }
 
-  if (dr16.data.sw_l == DR16_SW_MID && last_sw_r == DR16_SW_MID &&
-      dr16.data.sw_r == DR16_SW_UP) {
+  if (last_sw_l == DR16_SW_MID && last_sw_r == DR16_SW_MID &&
+      dr16.data.sw_l == DR16_SW_MID && dr16.data.sw_r == DR16_SW_UP) {
     g_rc_control_debug.auto_200_start_event = true;
     g_rc_control_debug.auto_200_template = RC_AUTO_UP_ASCEND_TEMPLATE;
     if (!Rc_PrepareLocalAutoYawFeedback()) {
@@ -1165,6 +1165,22 @@ static void Rc_TryStartAutoCtrlBySwitch(uint32_t now_ms) {
       return;
     }
     g_rc_control_debug.auto_200_start_ok = Rc_StartAutoUpStepPickStore();
+    if (g_rc_control_debug.auto_200_start_ok) {
+      g_auto_ore_debug.force_output_enable = true;
+    }
+    return;
+  }
+
+  if (last_sw_l == DR16_SW_MID && last_sw_r == DR16_SW_MID &&
+      dr16.data.sw_l == DR16_SW_MID && dr16.data.sw_r == DR16_SW_DOWN) {
+    g_rc_control_debug.auto_200_start_event = true;
+    g_rc_control_debug.auto_200_template = AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD;
+    if (!Rc_PrepareLocalAutoYawFeedback()) {
+      g_rc_control_debug.auto_200_start_ok = false;
+      return;
+    }
+    g_rc_control_debug.auto_200_start_ok =
+        Task_AutoOreStartStepPickStoreDescend200Head();
     if (g_rc_control_debug.auto_200_start_ok) {
       g_auto_ore_debug.force_output_enable = true;
     }

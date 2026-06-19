@@ -97,6 +97,7 @@ typedef struct {
 typedef struct {
   uint32_t store_arm_settle_ms;
   uint32_t store_cylinder_close_ms;
+  uint32_t store_arm_suction_off_ms;
   uint32_t store_cylinder_open_ms;
   uint32_t release_wait_ms;
   uint32_t release_arm_settle_ms;
@@ -141,6 +142,10 @@ typedef struct {
   uint32_t precontact_timeout_ms;
   float step_start_vx_mps;
   float step_start_wheel_delta_rad;
+  bool override_descend_move;
+  uint32_t descend_mid_move_ms;
+  uint32_t descend_rear_retract_move_ms;
+  float descend_rear_retract_move_wheel_delta_rad;
   bool use_arm_photo_confirm;
 } AutoOre_FusedParam_t;
 

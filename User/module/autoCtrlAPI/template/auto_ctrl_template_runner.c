@@ -12,7 +12,7 @@ typedef struct {
   const float *small;
 } auto_ctrl_pole_targets_t;
 
-#define AUTO_CTRL_PHOTO_STABLE_MS (100u) /* 光电稳定触发时间，单位 ms。 */
+#define AUTO_CTRL_PHOTO_STABLE_MS (20u) /* 光电稳定触发时间，单位 ms。 */
 #define AUTO_CTRL_TIMED_MOVE_YAW_TOLERANCE_DEFAULT_RAD (0.1745329252f)
 
 static void AutoCtrlTemplate_EnterStep(auto_ctrl_t *ctrl, uint32_t now_ms) {
@@ -79,6 +79,30 @@ static bool AutoCtrlTemplate_TimedMoveReady(auto_ctrl_t *ctrl,
   AutoCtrlTemplate_EnterStep(ctrl, now_ms);
   return AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >= move_ms &&
          AutoCtrlTemplate_IsTimedMoveYawAligned(ctrl, param);
+}
+
+static uint32_t AutoCtrlTemplate_DescendMidMoveMs(
+    const auto_ctrl_t *ctrl, const AutoCtrl_TemplateParam_t *param) {
+  if (ctrl != 0 && ctrl->template_ctx.descend_move_override_enabled) {
+    return ctrl->template_ctx.descend_mid_move_ms;
+  }
+  return (param == 0) ? 0u : param->mid_move_ms;
+}
+
+static uint32_t AutoCtrlTemplate_DescendRearRetractMoveMs(
+    const auto_ctrl_t *ctrl, const AutoCtrl_TemplateParam_t *param) {
+  if (ctrl != 0 && ctrl->template_ctx.descend_move_override_enabled) {
+    return ctrl->template_ctx.descend_rear_retract_move_ms;
+  }
+  return (param == 0) ? 0u : param->rear_retract_move_ms;
+}
+
+static float AutoCtrlTemplate_DescendRearRetractWheelDeltaRad(
+    const auto_ctrl_t *ctrl, const AutoCtrl_TemplateParam_t *param) {
+  if (ctrl != 0 && ctrl->template_ctx.descend_move_override_enabled) {
+    return ctrl->template_ctx.descend_rear_retract_move_wheel_delta_rad;
+  }
+  return (param == 0) ? 0.0f : param->rear_retract_move_wheel_delta_rad;
 }
 
 static float AutoCtrlTemplate_AbsFloat(float value) {
@@ -227,9 +251,15 @@ static bool AutoCtrlTemplate_RunDescendStartSprint(
     ctrl->template_ctx.descend_start_move_time_ms = now_ms;
   }
 
-  AutoCtrlPrimitive_ApplyPrealignWithMove(ctrl, vx_mps, 0.0f);
+  const uint32_t move_ms =
+      AutoCtrlTemplate_DescendMidMoveMs(ctrl, param);
+  if (move_ms > 0u) {
+    AutoCtrlPrimitive_ApplyPrealignWithMove(ctrl, vx_mps, 0.0f);
+  } else {
+    AutoCtrlPrimitive_CommandFlatMoveWithYawRate(ctrl, 0.0f);
+  }
   return (now_ms - ctrl->template_ctx.descend_start_move_time_ms) >=
-             param->mid_move_ms &&
+             move_ms &&
          AutoCtrlTemplate_IsTimedMoveYawAligned(ctrl, param);
 }
 
@@ -277,6 +307,7 @@ static void AutoCtrlTemplate_ResetPhotoDetection(auto_ctrl_t *ctrl) {
   ctrl->template_ctx.pe9_photo2_stable_release_latched = false;
   ctrl->template_ctx.pa2_photo3_stable_release_latched = false;
   ctrl->template_ctx.pa0_photo4_stable_release_latched = false;
+  ctrl->template_ctx.pa0_photo4_stable_low_seen = false;
   ctrl->template_ctx.pe13_photo1_released_since_ms = 0u;
   ctrl->template_ctx.pe9_photo2_released_since_ms = 0u;
   ctrl->template_ctx.pa2_photo3_released_since_ms = 0u;
@@ -355,6 +386,53 @@ static bool AutoCtrlTemplate_LatchPhotoStableFalling(
     *stable_release_latched = true;
   }
   return *stable_release_latched;
+}
+
+static bool AutoCtrlTemplate_LatchPhotoStableRisingAfterLow(
+    bool triggered, bool *stable_low_seen, bool *stable_trigger_latched,
+    uint32_t *triggered_since_ms, uint32_t *released_since_ms,
+    uint32_t now_ms) {
+  if (stable_low_seen == 0 || stable_trigger_latched == 0 ||
+      triggered_since_ms == 0 || released_since_ms == 0) {
+    return false;
+  }
+
+  if (*stable_trigger_latched) {
+    return true;
+  }
+
+  if (!*stable_low_seen) {
+    if (triggered) {
+      *released_since_ms = 0u;
+      return false;
+    }
+
+    if (*released_since_ms == 0u) {
+      *released_since_ms = now_ms;
+      return false;
+    }
+
+    if ((now_ms - *released_since_ms) >= AUTO_CTRL_PHOTO_STABLE_MS) {
+      *stable_low_seen = true;
+      *triggered_since_ms = 0u;
+    }
+    return false;
+  }
+
+  if (!triggered) {
+    *triggered_since_ms = 0u;
+    return false;
+  }
+
+  if (*triggered_since_ms == 0u) {
+    *triggered_since_ms = now_ms;
+    return false;
+  }
+
+  if ((now_ms - *triggered_since_ms) >= AUTO_CTRL_PHOTO_STABLE_MS) {
+    *stable_trigger_latched = true;
+  }
+  return *stable_trigger_latched;
 }
 
 static bool AutoCtrlTemplate_LatchFrontPhotoStable(auto_ctrl_t *ctrl,
@@ -443,6 +521,23 @@ static bool AutoCtrlTemplate_DescendSecondPhotoFallingStable(auto_ctrl_t *ctrl,
       &ctrl->template_ctx.pa0_photo4_stable_release_latched,
       &ctrl->template_ctx.pa0_photo4_triggered_since_ms,
       &ctrl->template_ctx.pa0_photo4_released_since_ms, now_ms);
+}
+
+static bool AutoCtrlTemplate_Photo4RisingAfterLowStable(auto_ctrl_t *ctrl,
+                                                        uint32_t now_ms) {
+  return AutoCtrlTemplate_LatchPhotoStableRisingAfterLow(
+      ctrl->feedback.pa0_photo4_triggered,
+      &ctrl->template_ctx.pa0_photo4_stable_low_seen,
+      &ctrl->template_ctx.pa0_photo4_triggered_latched,
+      &ctrl->template_ctx.pa0_photo4_triggered_since_ms,
+      &ctrl->template_ctx.pa0_photo4_released_since_ms, now_ms);
+}
+
+static void AutoCtrlTemplate_ResetPhoto4RisingAfterLow(auto_ctrl_t *ctrl) {
+  ctrl->template_ctx.pa0_photo4_triggered_latched = false;
+  ctrl->template_ctx.pa0_photo4_triggered_since_ms = 0u;
+  ctrl->template_ctx.pa0_photo4_released_since_ms = 0u;
+  ctrl->template_ctx.pa0_photo4_stable_low_seen = false;
 }
 
 static bool AutoCtrlTemplate_PhotoStopSettled(auto_ctrl_t *ctrl,
@@ -618,16 +713,22 @@ static bool AutoCtrlTemplate_RunAscend(auto_ctrl_t *ctrl, uint32_t now_ms,
       return false;
 
     case 5: /* 四杆全收后的离开移动。 */
+      if (!ctrl->template_ctx.step_entered) {
+        AutoCtrlTemplate_ResetPhoto4RisingAfterLow(ctrl);
+      }
+      AutoCtrlTemplate_EnterStep(ctrl, now_ms);
       AutoCtrlPrimitive_CommandFlatMoveWithYawRate(ctrl,
                                                    param->final_move_speed);
       AutoCtrlTemplate_CommandPole(ctrl, pole.all_retract[0],
                                    pole.all_retract[1],
                                    param->pole_front_retract_speed,
                                    param->pole_rear_retract_speed);
-      if (AutoCtrlTemplate_WheelDeltaMoveReady(
-              ctrl, now_ms, param->final_move_wheel_delta_rad,
-              param->final_move_ms, param, robot_param)) {
+      if (AutoCtrlTemplate_Photo4RisingAfterLowStable(ctrl, now_ms)) {
         AutoCtrlTemplate_NextStep(ctrl);
+      } else if (param->final_move_ms > 0u &&
+                 AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
+                     param->final_move_ms) {
+        ctrl->fault = AUTO_CTRL_FAULT_SENSOR_INVALID;
       }
       return false;
 
@@ -702,15 +803,6 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
       return false;
 
     case 3: /* 前杆收回后的中段定时移动。 */
-      if (AutoCtrlTemplate_LatchRearPhotoStable(ctrl, false, now_ms)) {
-        AutoCtrlPrimitive_CommandFlatMove(ctrl, 0.0f);
-        AutoCtrlTemplate_CommandPole(ctrl, pole.all_retract[0],
-                                     pole.all_retract[1],
-                                     param->pole_front_retract_speed,
-                                     param->pole_rear_retract_speed);
-        AutoCtrlTemplate_SetStep(ctrl, 5u);
-        return false;
-      }
       AutoCtrlPrimitive_ApplyPrealignWithMove(ctrl, param->mid_move_speed,
                                               0.0f);
       AutoCtrlTemplate_CommandPole(ctrl, pole.front_retract[0],
@@ -765,16 +857,22 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
       return false;
 
     case 6: /* 四杆全收后的离开移动。 */
+      if (!ctrl->template_ctx.step_entered) {
+        AutoCtrlTemplate_ResetPhoto4RisingAfterLow(ctrl);
+      }
+      AutoCtrlTemplate_EnterStep(ctrl, now_ms);
       AutoCtrlPrimitive_ApplyPrealignWithMove(ctrl, param->final_move_speed,
                                               0.0f);
       AutoCtrlTemplate_CommandPole(ctrl, pole.all_retract[0],
-                                   pole.all_retract[1],
+                                   pole.all_retract[1]+0.5f,
                                    param->pole_front_retract_speed,
                                    param->pole_rear_retract_speed);
-      if (AutoCtrlTemplate_WheelDeltaMoveReady(
-              ctrl, now_ms, param->final_move_wheel_delta_rad,
-              param->final_move_ms, param, robot_param)) {
+      if (AutoCtrlTemplate_Photo4RisingAfterLowStable(ctrl, now_ms)) {
         AutoCtrlTemplate_NextStep(ctrl);
+      } else if (param->final_move_ms > 0u &&
+                 AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
+                     param->final_move_ms) {
+        ctrl->fault = AUTO_CTRL_FAULT_SENSOR_INVALID;
       }
       return false;
 
@@ -1052,8 +1150,16 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
 
     case 3: /* 前杆支撑后的第二段定时接近。 */
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      AutoCtrlPrimitive_ApplyPrealignWithMove(ctrl, param->mid_move_speed,
-                                              0.0f);
+      const uint32_t rear_retract_move_ms =
+          AutoCtrlTemplate_DescendRearRetractMoveMs(ctrl, param);
+      const float rear_retract_wheel_delta_rad =
+          AutoCtrlTemplate_DescendRearRetractWheelDeltaRad(ctrl, param);
+      if (rear_retract_move_ms > 0u || rear_retract_wheel_delta_rad > 0.0f) {
+        AutoCtrlPrimitive_ApplyPrealignWithMove(ctrl, param->mid_move_speed,
+                                                0.0f);
+      } else {
+        AutoCtrlPrimitive_CommandFlatMoveWithYawRate(ctrl, 0.0f);
+      }
       AutoCtrlTemplate_CommandPole(ctrl,
                                    use_400mm ? pole.all_extend[0]
                                              : pole.all_extend[0],
@@ -1062,8 +1168,8 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
                                    param->pole_front_extend_speed,
                                    param->pole_rear_retract_speed);
       if (AutoCtrlTemplate_WheelDeltaMoveReady(
-              ctrl, now_ms, param->rear_retract_move_wheel_delta_rad,
-              param->rear_retract_move_ms, param, robot_param)) {
+              ctrl, now_ms, rear_retract_wheel_delta_rad,
+              rear_retract_move_ms, param, robot_param)) {
         AutoCtrlTemplate_NextStep(ctrl);
       }
       return false;

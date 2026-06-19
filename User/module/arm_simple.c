@@ -10,7 +10,6 @@
 #include "device/motor/core/motor_instance_config.hpp"
 #include "device/motor/core/motor_state.hpp"
 #include "device/motor/factory/motor_factory.hpp"
-#include "module/shared_valve.h"
 #include <string.h>
 #include <math.h>
 
@@ -215,7 +214,6 @@ int8_t ArmSimple_Init(ArmSimple_t *a, ArmSimple_Params_t *param, float target_fr
 
     /* 初始化吸盘GPIO（默认关闭） */
     BSP_GPIO_WritePin(param->suction_param.gpio, false);
-    SharedValve_SetArmRequest(false);
 
     /* 默认预设姿态（可后续修改） */
     a->point2point[ARM_SIMPLE_POINT_SLEEP].joint1_pos = 0.0f;
@@ -380,7 +378,6 @@ void ArmSimple_SetSuction(ArmSimple_t *a, Suction_State_t state)
 
     a->suction = state;
     BSP_GPIO_WritePin(a->param->suction_param.gpio, state == SUCTION_ON);
-    SharedValve_SetArmRequest(state == SUCTION_ON);
 }
 
 bool ArmSimple_Joint1AtTarget(ArmSimple_t *a, float threshold_rad)

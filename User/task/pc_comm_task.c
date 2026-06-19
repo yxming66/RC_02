@@ -26,13 +26,13 @@ static volatile bool s_tx_dma_busy = false;
 static volatile uint32_t s_tx_dma_start_tick = 0;
 static const uint8_t s_feedback_cmds[] = {
     PC_FEEDBACK_HEARTBEAT,
+    PC_FEEDBACK_AUTO_ACTION,
     PC_FEEDBACK_CHASSIS,
     PC_FEEDBACK_POLE,
     PC_FEEDBACK_ARM_SIMPLE,
     PC_FEEDBACK_ROD_NEW,
     PC_FEEDBACK_ORE_STORE,
     PC_FEEDBACK_CAMERA_YAW,
-    PC_FEEDBACK_AUTO_ACTION,
     PC_FEEDBACK_STEP,
     PC_FEEDBACK_STATUS,
     /* PC_FEEDBACK_IR_ORE 不在自动循环里：由 PcComm_TryUpdateIrOreFeedback
@@ -133,6 +133,7 @@ static bool PcComm_ProcessAutoActionCommand(void) {
 
     if (g_auto_ore_debug.request != AUTO_ORE_DEBUG_REQUEST_NONE &&
         request != AUTO_ORE_DEBUG_REQUEST_ABORT) {
+        MrlinkPc_ClearAutoActionCommand();
         return true;
     }
 

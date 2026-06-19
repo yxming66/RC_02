@@ -41,6 +41,7 @@ typedef struct {
   bool pe9_photo2_stable_release_latched;
   bool pa2_photo3_stable_release_latched;
   bool pa0_photo4_stable_release_latched;
+  bool pa0_photo4_stable_low_seen;
   uint32_t pe13_photo1_released_since_ms;
   uint32_t pe9_photo2_released_since_ms;
   uint32_t pa2_photo3_released_since_ms;
@@ -49,6 +50,10 @@ typedef struct {
   bool distance_latch_valid;        /* 轮编码器距离门控已锁存起点位置。 */
   float distance_start_wheel_rad[4]; /* 当前距离门控 step 入口的四轮位置。 */
   float wheel_delta_rad;            /* 当前距离门控 step 的四轮平均转角，单位 rad。 */
+  bool descend_move_override_enabled;
+  uint32_t descend_mid_move_ms;
+  uint32_t descend_rear_retract_move_ms;
+  float descend_rear_retract_move_wheel_delta_rad;
 } auto_ctrl_template_ctx_t;
 
 #ifdef __cplusplus

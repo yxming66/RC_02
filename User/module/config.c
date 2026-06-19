@@ -128,19 +128,19 @@ Config_RobotParam_t robot_config = {
         },
         .preset = {
             /* 200mm 台阶四杆全伸位；一键取矿 PICK_POS_200 也使用该撑杆高度。 */
-            .step_200_all_extend = {13.8f, 13.8f},//13.3f
+            .step_200_all_extend = {14.2f, 14.2f},//13.3f
             /* 200mm 台阶前杆收回、后杆保持支撑位。 */
-            .step_200_front_retract = {0.0f, 13.8f},
+            .step_200_front_retract = {0.8f, 13.8f},
             /* 200mm 台阶四杆全收位。 */
-            .step_200_all_retract = {0.0f, 0.0f},
+            .step_200_all_retract = {0.8f, 0.8f},
             /* 200mm 小抬升位；一键取矿 PICK_NEG_200 使用该撑杆高度。 */
             .step_200_small = {3.0f, 3.0f},
             /* 400mm 台阶四杆全伸位；一键取矿 PICK_POS_400 也使用该撑杆高度。 */
             .step_400_all_extend = {27.3f, 27.3f},
             /* 400mm 台阶前杆收回、后杆保持支撑位。 */
-            .step_400_front_retract = {0.0f, 27.3f},
+            .step_400_front_retract = {0.8f, 27.3f},
                /* 400mm 台阶四杆全收位。 */
-            .step_400_all_retract = {0.0f, 0.0f},
+            .step_400_all_retract = {0.8f, 0.8f},
         },
         .limit = {
             .max_current = 1.0f,
@@ -291,7 +291,7 @@ Config_RobotParam_t robot_config = {
         },
         .soft_limit = {
             .joint1_min = -0.239599289f,
-            .joint1_max = 1.82628715f,
+            .joint1_max = 1.92628715f,
             .joint2_min = -2.356194f,   /* 舵机中心0点向负方向最大约-135° */
             .joint2_max = 2.356194f,    /* 舵机中心0点向正方向最大约+135° */
         },
@@ -318,7 +318,7 @@ Config_RobotParam_t robot_config = {
                 /* ArmSimple 正向 200mm 取矿位，配合 pole 的 step_200_all_extend 使用。 */
                 [ARM_SIMPLE_BEHAVIOR_PICK_POS_200] = {.joint1_pos = 1.53361797f, .joint2_pos = 0.0f},
                 /* ArmSimple 反向/负向 200mm 取矿位，配合 pole 的 step_200_small 使用。 */
-                [ARM_SIMPLE_BEHAVIOR_PICK_NEG_200] = {.joint1_pos = 1.79958475f, .joint2_pos = -0.41113618f},
+                [ARM_SIMPLE_BEHAVIOR_PICK_NEG_200] = {.joint1_pos = 1.92628717f, .joint2_pos = -0.39897722f},
                 /* 融合取矿：抬矿检测/安全携带位，实车确认矿石离地间隙后再标定。 */
                 [ARM_SIMPLE_BEHAVIOR_PICK_LIFT_DETECT] = {.joint1_pos = 1.20f, .joint2_pos = -0.35f},
             },
@@ -352,6 +352,7 @@ Config_RobotParam_t robot_config = {
             /* 存矿：arm 到存矿位后的稳定等待、固矿气缸关闭等待、气缸重新打开等待。 */
             .store_arm_settle_ms = 400u,
             .store_cylinder_close_ms = 200u,
+            .store_arm_suction_off_ms = 300u,
             .store_cylinder_open_ms = 200u, 
             /* 放矿：放矿前等待、到放矿位后短暂停稳、吸盘关闭后矿石脱离等待。 */
             .release_wait_ms = 400u,
@@ -399,20 +400,24 @@ Config_RobotParam_t robot_config = {
         },
         .fused_step_pick_store_descend_200_head = {
             .step_template = AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD, /* 取矿存矿后执行的头向 200mm 下台阶模板。 */
-            .pick_action = AUTO_ORE_ACTION_PICK_POS_200,          /* 融合动作取正 200mm 矿。 */
+            .pick_action = AUTO_ORE_ACTION_PICK_NEG_200,          /* 融合动作取负 200mm 矿。 */
             .precontact_vx_mps = 0.20f,                           /* 取矿前低速靠近速度，单位 m/s。 */
             .precontact_wheel_delta_rad = 4.0f,                  /* 取矿前低速靠近轮转角阈值，单位 rad。 */
-            .precontact_timeout_ms = 20000u,                      /* 取矿前低速靠近兜底超时，单位 ms。 */
+            .precontact_timeout_ms = 2000u,                      /* 取矿前低速靠近兜底超时，单位 ms。 */
             .step_start_vx_mps = 0.20f,                           /* 存矿后进入台阶模板前的起步冲刺速度，单位 m/s。 */
             .step_start_wheel_delta_rad = 0.0f,                   /* 头向下台阶默认不额外起步冲刺；>0 时按轮转角门控冲刺。 */
+            .override_descend_move = true,
+            .descend_mid_move_ms = 0u,
+            .descend_rear_retract_move_ms = 0u,
+            .descend_rear_retract_move_wheel_delta_rad = 0.0f,
             .use_arm_photo_confirm = false,                       /* false=机械臂到位加延时确认，true=机械臂取矿传感器确认。 */
         },
         .fused_step_pick_store_ascend_400_head = {
             .step_template = AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD, /* 取矿存矿后执行的头向 400mm 上台阶模板。 */
             .pick_action = AUTO_ORE_ACTION_PICK_POS_400,         /* 融合动作取正 400mm 矿。 */
             .precontact_vx_mps = 0.20f,                          /* 取矿前低速靠近速度，单位 m/s。 */
-            .precontact_wheel_delta_rad = 4.0f,                 /* 取矿前低速靠近轮转角阈值，单位 rad。 */
-            .precontact_timeout_ms = 1800u,                     /* 取矿前低速靠近兜底超时，单位 ms。 */
+            .precontact_wheel_delta_rad = 4.5f,                 /* 取矿前低速靠近轮转角阈值，单位 rad。 */
+            .precontact_timeout_ms = 2500u,                     /* 取矿前低速靠近兜底超时，单位 ms。 */
             .step_start_vx_mps = 0.40f,                          /* 存矿后进入台阶模板前的起步冲刺速度，单位 m/s。 */
             .step_start_wheel_delta_rad = 2.36f,                 /* 存矿后进入台阶模板前的起步冲刺轮转角阈值，单位 rad。 */
             .use_arm_photo_confirm = false,                      /* false=机械臂到位加延时确认，true=机械臂取矿传感器确认。 */
@@ -421,8 +426,8 @@ Config_RobotParam_t robot_config = {
             .step_template = AUTO_CTRL_TEMPLATE_DESCEND_400_HEAD, /* 取矿存矿后执行的头向 400mm 下台阶模板。 */
             .pick_action = AUTO_ORE_ACTION_PICK_POS_400,          /* 融合动作取正 400mm 矿。 */
             .precontact_vx_mps = 0.20f,                           /* 取矿前低速靠近速度，单位 m/s。 */
-            .precontact_wheel_delta_rad = 2.5f,                   /* 取矿前低速靠近轮转角阈值，单位 rad。 */
-            .precontact_timeout_ms = 1200u,                       /* 取矿前低速靠近兜底超时，单位 ms。 */
+            .precontact_wheel_delta_rad = 4.0f,                   /* 取矿前低速靠近轮转角阈值，单位 rad。 */
+            .precontact_timeout_ms = 2000u,                       /* 取矿前低速靠近兜底超时，单位 ms。 */
             .step_start_vx_mps = 0.20f,                           /* 存矿后进入台阶模板前的起步冲刺速度，单位 m/s。 */
             .step_start_wheel_delta_rad = 0.0f,                   /* 头向下台阶默认不额外起步冲刺；>0 时按轮转角门控冲刺。 */
             .use_arm_photo_confirm = false,                       /* false=机械臂到位加延时确认，true=机械臂取矿传感器确认。 */
@@ -538,8 +543,8 @@ Config_RobotParam_t robot_config = {
             .rear_retract_move_ms = 300u,       /* 后光电触发后，全收腿移动持续时间，单位 ms。 */
             .second_photo_retract_move_speed = 0.50f, /* 后一个光电触发收腿时向头向移动 vx，单位 m/s。 */
             .final_move_speed = 1.0f,          /* 收尾离开台阶 vx，单位 m/s。 */
-            .final_move_ms = 500u,              /* 收尾离开台阶角度门控兜底超时，单位 ms。 */
-            .final_move_wheel_delta_rad = 7.87f, /* 编码器门控的收尾离开轮转角阈值，单位 rad；>0 优先按角度切步，<=0 使用 final_move_ms。 */
+            .final_move_ms = 800u,              /* 收尾离开台阶角度门控兜底超时，单位 ms。 */
+            .final_move_wheel_delta_rad = 0.0f, /* 编码器门控的收尾离开轮转角阈值，单位 rad；>0 优先按角度切步，<=0 使用 final_move_ms。 */
             .pole_all_extend_speed = 65.0f,     /* 四杆全伸目标跟随速度，单位 rad/s。 */
             .pole_front_extend_speed = 20.0f,   /* 前杆伸出目标跟随速度，单位 rad/s。 */
             .pole_front_retract_speed = 60.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
@@ -602,21 +607,21 @@ Config_RobotParam_t robot_config = {
              */
             /* AutoCtrlTemplate_RunHeadDescend200Optimized 使用的有效字段。 */
             .prealign_move_speed = 0.20f,       /* PREALIGN yaw 对正时叠加的前进 vx，单位 m/s。 */
-            .front_retract_move_speed = 0.03f,  /* step4 等待 PE13/photo1 下降沿的慢速 vx，单位 m/s。 */
+            .front_retract_move_speed = 0.1f,  /* step4 等待 PE13/photo1 下降沿的慢速 vx，单位 m/s。 */
             .mid_move_speed = 1.5f,            /* step0/step3 两段固定快跑 vx，单位 m/s。 */
-            .mid_move_ms = 100u,                /* step0 第一次固定快跑持续时间，单位 ms。 */ 
+            .mid_move_ms = 150u,                /* step0 第一次固定快跑持续时间，单位 ms。 */ 
             .timed_move_yaw_tolerance_rad = 0.35f, /* 中段定时移动切步 yaw 容差，约 10 deg。 */
-            .rear_retract_move_speed = 0.03f,   /* step1 等待 PA2/photo3 下降沿的慢速 vx，单位 m/s。 */
-            .rear_retract_move_ms = 300u,       /* step3 第二次固定快跑持续时间，单位 ms。 */
-            .rear_retract_move_wheel_delta_rad = 0.0f, /* step3 第二次固定快跑轮转角阈值，单位 rad；0 表示按时间切步。 */
+            .rear_retract_move_speed = 0.1f,   /* step1 等待 PA2/photo3 下降沿的慢速 vx，单位 m/s。 */
+            .rear_retract_move_ms = 250u,       /* step3 第二次固定快跑持续时间，单位 ms。 */
+            .rear_retract_move_wheel_delta_rad = 8.66f, /* step3 第二次固定快跑轮转角阈值，单位 rad；0 表示按时间切步。 */
             .second_photo_retract_move_speed = 0.50f, /* step7 第二个下降沿后全收杆离开 vx，单位 m/s。 */
-            .final_move_speed = 0.05f,          /* step7 离开 vx 的备用值；second_photo_retract_move_speed <= 0 时使用。 */
-            .final_move_ms = 100u,              /* step7 全收杆离开持续时间，单位 ms。 */
+            .final_move_speed = 0.5f,          /* step7 离开 vx 的备用值；second_photo_retract_move_speed <= 0 时使用。 */
+            .final_move_ms = 200u,              /* step7 全收杆离开持续时间，单位 ms。 */
             .pole_front_extend_speed = 65.0f,   /* step2 前杆伸出、step5/6 四杆全伸时的前杆速度，单位 rad/s。 */
             .pole_front_retract_speed = 40.0f,  /* step0/1/7 前杆保持或回收到全收目标的速度，单位 rad/s。 */
-            .pole_rear_extend_speed = 50.0f,    /* step5/6 四杆全伸时的后杆速度，单位 rad/s。 */
+            .pole_rear_extend_speed = 65.0f,    /* step5/6 四杆全伸时的后杆速度，单位 rad/s。 */
             .pole_rear_retract_speed = 40.0f,   /* step0-4/7 后杆保持或回收到全收目标的速度，单位 rad/s。 */
-            .pole_lift_accel = 250.0f,          /* 当前模板撑杆加速度限幅，单位 rad/s^2。 */
+            .pole_lift_accel = 300.0f,          /* 当前模板撑杆加速度限幅，单位 rad/s^2。 */
             .front_photo_timeout_ms = 5000u,    /* step4 等待 PE13/photo1 下降沿超时，单位 ms。 */
             .rear_photo_timeout_ms = 5000u,     /* step1 等待 PA2/photo3 下降沿超时，单位 ms。 */
             .pole_extend_move_speed = 1.5f,    /* step6 四杆全伸行走 vx，单位 m/s。 */
