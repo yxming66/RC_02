@@ -404,7 +404,10 @@ static bool AutoOre_RunPickPrealign(AutoOre_t *ctrl, uint32_t now_ms) {
     return false;
   }
   if (!ctrl->prealign_yaw_target_valid) {
-    ctrl->prealign_target_yaw_rad = ctrl->feedback.yaw_auto_rad;
+    ctrl->prealign_target_yaw_rad =
+        (ctrl->feedback.yaw_source == AUTO_CTRL_YAW_SOURCE_PC)
+            ? ctrl->feedback.yaw_auto_rad
+            : AutoCtrlMath_NearestCardinalYawRad(ctrl->feedback.yaw_auto_rad);
     ctrl->prealign_yaw_target_valid = true;
   }
 
@@ -1436,7 +1439,9 @@ static void AutoOre_RunFusedStepTemplate(AutoOre_t *ctrl, uint32_t now_ms) {
     AutoCtrl_SetYawZeroOffset(&ctrl->step_ctrl, 0.0f);
     AutoOre_CopyFeedbackToStepCtrl(ctrl);
     const auto_ctrl_template_e template_id = AutoOre_FusedStepTemplateId(ctrl);
-    const float target_yaw_rad = ctrl->feedback.yaw_auto_rad;
+    const float target_yaw_rad = ctrl->prealign_yaw_target_valid
+                                     ? ctrl->prealign_target_yaw_rad
+                                     : ctrl->feedback.yaw_auto_rad;
     const float yaw_tolerance = AutoOre_PrealignYawToleranceRad(ctrl);
     const auto_ctrl_sensor_mode_e sensor_mode =
         (yaw_source == AUTO_CTRL_YAW_SOURCE_PC) ? AUTO_CTRL_SENSOR_MODE_NONE
