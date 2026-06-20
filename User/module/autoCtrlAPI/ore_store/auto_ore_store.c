@@ -19,6 +19,7 @@
 #define AUTO_ORE_DEFAULT_FUSED_PICK_PRECONTACT_TIMEOUT_MS (2000u)
 #define AUTO_ORE_DEFAULT_FUSED_PICK_LIFT_DETECT_MS (200u)
 #define AUTO_ORE_DEFAULT_FUSED_ARM_PHOTO_STABLE_MS (120u)
+#define AUTO_ORE_FUSED_STEP_YAW_TOLERANCE_RAD (0.0872664626f)
 #define AUTO_ORE_FUSED_HEAD_ASCEND_FRONT_RETRACT_STEP_INDEX (2u)
 #define AUTO_ORE_FUSED_ARM_PHOTO_ENABLE_JOINT1_RAD (0.6981317f)
 
@@ -1367,8 +1368,7 @@ static void AutoOre_RunFusedStepTemplate(AutoOre_t *ctrl, uint32_t now_ms) {
     AutoOre_CopyFeedbackToStepCtrl(ctrl);
     const auto_ctrl_template_e template_id = AutoOre_FusedStepTemplateId(ctrl);
     const float target_yaw_rad = ctrl->feedback.yaw_auto_rad;
-    const float yaw_tolerance =
-        (yaw_source == AUTO_CTRL_YAW_SOURCE_PC) ? 0.0f : 0.35f;
+    const float yaw_tolerance = AUTO_ORE_FUSED_STEP_YAW_TOLERANCE_RAD;
     const auto_ctrl_sensor_mode_e sensor_mode =
         (yaw_source == AUTO_CTRL_YAW_SOURCE_PC) ? AUTO_CTRL_SENSOR_MODE_NONE
                                                 : AUTO_CTRL_SENSOR_MODE_YAW_ONLY;
