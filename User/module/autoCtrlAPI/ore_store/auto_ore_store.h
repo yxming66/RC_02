@@ -159,6 +159,7 @@ typedef struct {
   float arm_arrive_threshold_rad;
   float ore_store_arrive_threshold_rad;
   float pole_arrive_threshold_rad;
+  float prealign_yaw_tolerance_rad;
   float fetch_chassis_vx_mps;
   float fetch_neg_200_chassis_vx_mps;
   AutoOre_FusedParam_t fused_step_pick_store_ascend_200_head;
@@ -194,7 +195,10 @@ typedef struct {
   bool fused_step_done;
   bool fused_store_done;
   bool pick_lift_confirmed;
+  bool prealign_yaw_target_valid;
   bool distance_latch_valid;
+  float prealign_target_yaw_rad;
+  float prealign_yaw_error_rad;
   float distance_start_wheel_rad[4];
   float wheel_delta_rad;
   float target_wheel_delta_rad;

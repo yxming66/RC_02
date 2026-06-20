@@ -1,5 +1,8 @@
 #include "module/autoCtrlAPI/ore_store/auto_ore_store.h"
 
+#include "module/autoCtrlAPI/core/auto_ctrl_math.h"
+#include "module/config.h"
+
 #include <string.h>
 
 #define AUTO_ORE_DEFAULT_STORE_ARM_SETTLE_MS (100u)
@@ -19,7 +22,6 @@
 #define AUTO_ORE_DEFAULT_FUSED_PICK_PRECONTACT_TIMEOUT_MS (2000u)
 #define AUTO_ORE_DEFAULT_FUSED_PICK_LIFT_DETECT_MS (200u)
 #define AUTO_ORE_DEFAULT_FUSED_ARM_PHOTO_STABLE_MS (120u)
-#define AUTO_ORE_FUSED_STEP_YAW_TOLERANCE_RAD (0.0872664626f)
 #define AUTO_ORE_FUSED_HEAD_ASCEND_FRONT_RETRACT_STEP_INDEX (2u)
 #define AUTO_ORE_FUSED_ARM_PHOTO_ENABLE_JOINT1_RAD (0.6981317f)
 
@@ -53,6 +55,7 @@ static float AutoOre_AbsFloat(float value) {
 }
 
 static bool AutoOre_ActionIsFused(AutoOre_Action_t action);
+static float AutoOre_SelectPrealignWz(AutoOre_t *ctrl);
 
 static void AutoOre_EnterStep(AutoOre_t *ctrl, uint32_t now_ms) {
   if (!ctrl->step_entered) {
@@ -334,18 +337,84 @@ static void AutoOre_CommandChassisMove(AutoOre_t *ctrl, float vx_mps) {
   ctrl->chassis_cmd.mode = CHASSIS_MODE_INDEPENDENT;
   ctrl->chassis_cmd.ctrl_vec.vx = vx_mps;
   ctrl->chassis_cmd.ctrl_vec.vy = 0.0f;
-  ctrl->chassis_cmd.ctrl_vec.wz = 0.0f;
+  ctrl->chassis_cmd.ctrl_vec.wz = AutoOre_SelectPrealignWz(ctrl);
   ctrl->chassis_cmd_valid = true;
 }
 
 static void AutoOre_CommandChassisMoveYawRate(AutoOre_t *ctrl, float vx_mps,
                                               float wz_rad_s) {
   AutoOre_CommandChassisMove(ctrl, vx_mps);
-  ctrl->chassis_cmd.ctrl_vec.wz = wz_rad_s;
+  if (!ctrl->prealign_yaw_target_valid) {
+    ctrl->chassis_cmd.ctrl_vec.wz = wz_rad_s;
+  }
 }
 
 static void AutoOre_CommandChassisHold(AutoOre_t *ctrl) {
   AutoOre_CommandChassisMove(ctrl, 0.0f);
+}
+
+static float AutoOre_PrealignYawToleranceRad(const AutoOre_t *ctrl) {
+  return (ctrl != 0 && ctrl->param.prealign_yaw_tolerance_rad > 0.0f)
+             ? ctrl->param.prealign_yaw_tolerance_rad
+             : 0.0f;
+}
+
+static void AutoOre_UpdatePrealignYawError(AutoOre_t *ctrl) {
+  if (ctrl == 0 || !ctrl->prealign_yaw_target_valid) {
+    return;
+  }
+  ctrl->prealign_yaw_error_rad =
+      AutoCtrlMath_GetYawErrorRad(ctrl->prealign_target_yaw_rad,
+                                  ctrl->feedback.yaw_auto_rad);
+}
+
+static float AutoOre_SelectPrealignWz(AutoOre_t *ctrl) {
+  if (ctrl == 0) {
+    return 0.0f;
+  }
+  if (!ctrl->prealign_yaw_target_valid) {
+    ctrl->prealign_yaw_error_rad = 0.0f;
+    return 0.0f;
+  }
+  AutoOre_UpdatePrealignYawError(ctrl);
+  if (ctrl->feedback.yaw_source == AUTO_CTRL_YAW_SOURCE_PC) {
+    return ctrl->feedback.yaw_rate_cmd_rad_s;
+  }
+
+  Config_RobotParam_t *robot_param = Config_GetRobotParam();
+  if (robot_param == 0) {
+    return 0.0f;
+  }
+
+  const float kp = robot_param->auto_ctrl_param.common.prealign_kp;
+  const float limit = robot_param->auto_ctrl_param.common.prealign_wz_limit;
+  float wz = ctrl->prealign_yaw_error_rad * kp;
+  if (limit > 0.0f) {
+    if (wz > limit) {
+      wz = limit;
+    } else if (wz < -limit) {
+      wz = -limit;
+    }
+  }
+  return wz;
+}
+
+static bool AutoOre_RunPickPrealign(AutoOre_t *ctrl, uint32_t now_ms) {
+  if (ctrl == 0) {
+    return false;
+  }
+  if (!ctrl->prealign_yaw_target_valid) {
+    ctrl->prealign_target_yaw_rad = ctrl->feedback.yaw_auto_rad;
+    ctrl->prealign_yaw_target_valid = true;
+  }
+
+  AutoOre_CommandChassisMoveYawRate(ctrl, 0.0f, AutoOre_SelectPrealignWz(ctrl));
+
+  const bool yaw_ready =
+      AutoOre_AbsFloat(ctrl->prealign_yaw_error_rad) <=
+      AutoOre_PrealignYawToleranceRad(ctrl);
+  return AutoOre_WaitConditionThenDelay(
+      ctrl, now_ms, yaw_ready, AutoOre_FusedPrealignStableMs(ctrl));
 }
 
 static void AutoOre_ResetDistanceGate(AutoOre_t *ctrl) {
@@ -1368,7 +1437,7 @@ static void AutoOre_RunFusedStepTemplate(AutoOre_t *ctrl, uint32_t now_ms) {
     AutoOre_CopyFeedbackToStepCtrl(ctrl);
     const auto_ctrl_template_e template_id = AutoOre_FusedStepTemplateId(ctrl);
     const float target_yaw_rad = ctrl->feedback.yaw_auto_rad;
-    const float yaw_tolerance = AUTO_ORE_FUSED_STEP_YAW_TOLERANCE_RAD;
+    const float yaw_tolerance = AutoOre_PrealignYawToleranceRad(ctrl);
     const auto_ctrl_sensor_mode_e sensor_mode =
         (yaw_source == AUTO_CTRL_YAW_SOURCE_PC) ? AUTO_CTRL_SENSOR_MODE_NONE
                                                 : AUTO_CTRL_SENSOR_MODE_YAW_ONLY;
@@ -1536,9 +1605,7 @@ static void AutoOre_RunStepPickStoreFused(AutoOre_t *ctrl, uint32_t now_ms) {
   switch (ctrl->step_index) {
     case 0:
       AutoOre_EnterStep(ctrl, now_ms);
-      AutoOre_CommandChassisHold(ctrl);
-      if (AutoOre_WaitConditionThenDelay(ctrl, now_ms, true,
-                                         AutoOre_FusedPrealignStableMs(ctrl))) {
+      if (AutoOre_RunPickPrealign(ctrl, now_ms)) {
         AutoOre_NextStep(ctrl);
       } else {
         (void)AutoOre_CheckTimeout(ctrl, now_ms);
@@ -1638,6 +1705,7 @@ static void AutoOre_RunPickOre(AutoOre_t *ctrl, uint32_t now_ms) {
   switch (ctrl->step_index) {
     case 0:
       AutoOre_EnterStep(ctrl, now_ms);
+      const bool prealign_ready = AutoOre_RunPickPrealign(ctrl, now_ms);
       if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_STANDBY,
                               SUCTION_ON,
                               &ctrl->param.arm_speed.pick_standby) ||
@@ -1645,7 +1713,7 @@ static void AutoOre_RunPickOre(AutoOre_t *ctrl, uint32_t now_ms) {
         AutoOre_FailInvalidParam(ctrl);
         return;
       }
-      if (ctrl->feedback.pole_all_at_target) {
+      if (ctrl->feedback.pole_all_at_target && prealign_ready) {
         AutoOre_NextStep(ctrl);
       } else {
         (void)AutoOre_CheckTimeout(ctrl, now_ms);
@@ -1760,6 +1828,9 @@ static bool AutoOre_StartResolved(AutoOre_t *ctrl, AutoOre_Action_t action,
   ctrl->fused_step_done = false;
   ctrl->fused_store_done = false;
   ctrl->pick_lift_confirmed = false;
+  ctrl->prealign_yaw_target_valid = false;
+  ctrl->prealign_target_yaw_rad = 0.0f;
+  ctrl->prealign_yaw_error_rad = 0.0f;
   ctrl->fused_arm_photo_since_ms = 0u;
   ctrl->fused_store_step_index = 0u;
   ctrl->fused_store_step_phase = 0u;

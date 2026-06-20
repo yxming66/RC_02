@@ -12,6 +12,8 @@
 #include "device/motor_rm.h"
 #include "device/sick.h"
 
+#define CONFIG_AUTO_ORE_PREALIGN_YAW_TOLERANCE_RAD (0.0872664626f)
+
 Config_RobotParam_t robot_config = {
     /* 模块参数：底盘 chassis_param，电机、PID、底盘几何、速度/力矩限幅。 */
     .chassis_param = {
@@ -378,6 +380,8 @@ Config_RobotParam_t robot_config = {
         .arm_arrive_threshold_rad = 0.1f,
         .ore_store_arrive_threshold_rad = 0.05f,
         .pole_arrive_threshold_rad = 0.30f,
+        .prealign_yaw_tolerance_rad =
+            CONFIG_AUTO_ORE_PREALIGN_YAW_TOLERANCE_RAD,
         /* 取矿流程中正向 200/400 取矿的底盘前进速度，单位 m/s。 */
         .fetch_chassis_vx_mps = 0.50f,
         /* 取 -200 矿时底盘前进速度，单位 m/s；可设为 0 禁止底盘前进。 */
