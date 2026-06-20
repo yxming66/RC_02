@@ -206,6 +206,12 @@ static AutoOre_Action_t AutoCtrlFeed_RequestToOreAction(
 
 static bool AutoCtrlFeed_RequestMatchesRunningOreAction(
     AutoOre_DebugRequest_t request) {
+  if (request == AUTO_ORE_DEBUG_REQUEST_STEP_PICK_STORE_DESCEND_200_HEAD &&
+      auto_ctrl_inited && AutoCtrl_IsBusy(&auto_ctrl) &&
+      AutoCtrl_GetTemplate(&auto_ctrl) == AUTO_CTRL_TEMPLATE_DESCEND_400_HEAD) {
+    return true;
+  }
+
   const AutoOre_Action_t action = AutoCtrlFeed_RequestToOreAction(request);
   return action != AUTO_ORE_ACTION_NONE && auto_ore_inited &&
          AutoOre_IsBusy(&auto_ore_ctrl) && auto_ore_ctrl.action == action;
@@ -625,6 +631,34 @@ static bool AutoCtrlFeed_StartOreAction(AutoOre_Action_t action) {
     AutoCtrlFeed_RememberOreAction(action);
   }
   return result;
+}
+
+static bool AutoCtrlFeed_StartHeadDescend400Template(void) {
+  if (!auto_ctrl_inited) {
+    return false;
+  }
+  if (AutoCtrl_IsBusy(&auto_ctrl)) {
+    return false;
+  }
+  if (auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl)) {
+    return false;
+  }
+  if (Task_AutoRodSpearheadIsBusy() || Task_AutoSickCorrectIsBusy()) {
+    return false;
+  }
+
+  const uint32_t now_ms = BSP_TIME_Get_ms();
+  if (AutoCtrl_GetYawSource(&auto_ctrl) != AUTO_CTRL_YAW_SOURCE_PC) {
+    AutoCtrl_SetYawSource(&auto_ctrl, AUTO_CTRL_YAW_SOURCE_STM32);
+  }
+  AutoCtrl_SetYawZeroOffset(&auto_ctrl, 0.0f);
+  feedback.yaw_auto_rad = AutoCtrlFeed_SelectYawRad();
+  AutoCtrl_SetFeedback(&auto_ctrl, &feedback);
+  return AutoCtrl_StartTemplate(&auto_ctrl, AUTO_CTRL_TEMPLATE_DESCEND_400_HEAD,
+                                AUTO_CTRL_TRAVEL_DIR_HEAD_FORWARD,
+                                feedback.yaw_auto_rad, 0.35f,
+                                AUTO_CTRL_SENSOR_MODE_SICK_FRONT_AND_BOTTOM,
+                                now_ms);
 }
 
 static bool AutoCtrlFeed_StartSickCorrectAction(
@@ -1191,12 +1225,11 @@ bool Task_AutoOreStartPickNeg200(void) {
 
 bool Task_AutoOreStartStepPickStoreAscend200Head(void) {
   return AutoCtrlFeed_StartOreAction(
-      AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD);
+      AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD);
 }
 
 bool Task_AutoOreStartStepPickStoreDescend200Head(void) {
-  return AutoCtrlFeed_StartOreAction(
-      AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD);
+  return AutoCtrlFeed_StartHeadDescend400Template();
 }
 
 bool Task_AutoOreStartStepPickStoreAscend400Head(void) {
