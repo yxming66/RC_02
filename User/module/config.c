@@ -140,9 +140,9 @@ Config_RobotParam_t robot_config = {
             /* 400mm 台阶四杆全伸位；一键取矿 PICK_POS_400 也使用该撑杆高度。 */
             .step_400_all_extend = {27.3f, 27.3f},
             /* 400mm 台阶前杆收回、后杆保持支撑位。 */
-            .step_400_front_retract = {0.8f, 27.3f},
+            .step_400_front_retract = {0.5f, 27.3f},
                /* 400mm 台阶四杆全收位。 */
-            .step_400_all_retract = {0.8f, 0.8f},
+            .step_400_all_retract = {0.5f, 0.8f},
         },
         .limit = {
             .max_current = 1.0f,
@@ -574,10 +574,10 @@ Config_RobotParam_t robot_config = {
             .front_retract_move_speed = 0.30f,  /* 前杆动作阶段 vx，单位 m/s。 */
             .front_retract_timeout_ms = 5000u,  /* 前光电触发后，等待前杆收回到位超时，单位 ms。 */
             .mid_move_speed = 1.5f,             /* 前杆收回到位后的中段平移 vx，单位 m/s。 */
-            .mid_move_ms = 280u,                /* 中段平移持续时间，单位 ms。 */
+            .mid_move_ms = 200u,                /* 中段平移持续时间，单位 ms。 */
             .mid_move_wheel_delta_rad = 8.66f,   /* 0 表示该模板继续按时间切步。 */
             .timed_move_yaw_tolerance_rad = 0.35f, /* 中段定时移动切步 yaw 容差，约 10 deg。 */
-            .rear_retract_move_speed = 0.40f,   /* 等待后光电触发的低速 vx，单位 m/s。 */
+            .rear_retract_move_speed = 0.20f,   /* 等待后光电触发的低速 vx，单位 m/s。 */
             .rear_retract_timeout_ms = 5000u,   /* 后光电触发后，全收腿动作超时，单位 ms。 */
             .rear_retract_move_ms = 300u,       /* 后光电触发后，全收腿移动持续时间，单位 ms。 */
             .second_photo_retract_move_speed = 0.50f, /* 后一个光电触发收腿时向头向移动 vx，单位 m/s。 */
