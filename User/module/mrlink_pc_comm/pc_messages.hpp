@@ -63,8 +63,7 @@ struct __attribute__((packed)) OreStoreCmd {
 
 struct __attribute__((packed)) CameraYawCmd {
   uint8_t mode[PC_CAMERA_YAW_COUNT];              /* [0]=左云台，[1]=右云台 */
-  float target_yaw_rad[PC_CAMERA_YAW_COUNT];      /* 世界系目标 yaw，单位 rad */
-  float feedback_yaw_rad[PC_CAMERA_YAW_COUNT];    /* PC/视觉反馈 yaw，单位 rad */
+  float target_yaw_rad[PC_CAMERA_YAW_COUNT];      /* 车身系目标 yaw，单位 rad */
 };
 
 struct __attribute__((packed)) AutoActionCmd {

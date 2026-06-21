@@ -246,7 +246,6 @@ void OnCameraYaw(const wire::CameraYawCmd &cmd) {
   for (uint8_t yaw = 0u; yaw < PC_CAMERA_YAW_COUNT; ++yaw) {
     s_state.cmd.camera_yaw.mode[yaw] = cmd.mode[yaw];
     s_state.cmd.camera_yaw.target_yaw_rad[yaw] = cmd.target_yaw_rad[yaw];
-    s_state.cmd.camera_yaw.feedback_yaw_rad[yaw] = cmd.feedback_yaw_rad[yaw];
   }
   MarkRxFrame(PC_CMD_CAMERA_YAW, sizeof(cmd), MRLINK_OK);
   TouchOnline(PC_CMD_CAMERA_YAW);

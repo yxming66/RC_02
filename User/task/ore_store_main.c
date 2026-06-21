@@ -144,8 +144,7 @@ static void OreStoreTask_SanitizeCameraYawCommand(CameraYaw_CMD_t *cmd) {
   const bool mode_valid =
       cmd->mode == CAMERA_YAW_MODE_RELAX ||
       cmd->mode == CAMERA_YAW_MODE_ACTIVE;
-  if (!mode_valid || !isfinite(cmd->target_yaw_rad) ||
-      !isfinite(cmd->feedback_yaw_rad)) {
+  if (!mode_valid || !isfinite(cmd->target_yaw_rad)) {
     OreStoreTask_SetDefaultCameraYawCommand(cmd);
   }
 }
