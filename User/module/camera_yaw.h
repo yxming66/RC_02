@@ -1,5 +1,5 @@
 /*
- * Camera yaw module: 6020 yaw motor closed loop in world frame.
+ * Camera yaw module: 6020 yaw motor closed loop in chassis body frame.
  */
 #pragma once
 
@@ -31,6 +31,7 @@ typedef enum {
 
 typedef struct {
   MOTOR_RM_Param_t motor_param;
+  float encoder_zero_offset_rad;
   struct {
     KPID_Params_t yaw_pid;
   } pid;

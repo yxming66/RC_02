@@ -1,5 +1,5 @@
 /*
- * Camera yaw module: 6020 yaw motor closed loop in world frame.
+ * Camera yaw module: 6020 yaw motor closed loop in chassis body frame.
  */
 
 #include "module/camera_yaw.h"
@@ -24,6 +24,31 @@ static float CameraYaw_ClampSymmetric(float value, float limit) {
     return -limit;
   }
   return value;
+}
+
+static float CameraYaw_WrapAngleRad(float angle_rad) {
+  if (!isfinite(angle_rad)) {
+    return 0.0f;
+  }
+  angle_rad = fmodf(angle_rad, M_2PI);
+  if (angle_rad < 0.0f) {
+    angle_rad += M_2PI;
+  }
+  return angle_rad;
+}
+
+static float CameraYaw_EncoderZeroOffsetRad(const CameraYaw_t *c) {
+  if (c == NULL || c->param == NULL ||
+      !isfinite(c->param->encoder_zero_offset_rad)) {
+    return 0.0f;
+  }
+  return c->param->encoder_zero_offset_rad;
+}
+
+static float CameraYaw_BodyYawFromEncoder(const CameraYaw_t *c,
+                                          float encoder_angle_rad) {
+  return CameraYaw_WrapAngleRad(encoder_angle_rad -
+                                CameraYaw_EncoderZeroOffsetRad(c));
 }
 
 static bool CameraYaw_ModeIsValid(CameraYaw_Mode_t mode) {
@@ -57,7 +82,7 @@ static bool CameraYaw_CommandFresh(const CameraYaw_t *c,
   if (c == NULL || c->param == NULL || cmd == NULL || !cmd->feedback_valid) {
     return false;
   }
-  if (!isfinite(cmd->target_yaw_rad) || !isfinite(cmd->feedback_yaw_rad)) {
+  if (!isfinite(cmd->target_yaw_rad)) {
     return false;
   }
 
@@ -117,6 +142,8 @@ int8_t CameraYaw_UpdateFeedback(CameraYaw_t *c) {
   c->feedback.motor_angle_rad = c->motor->feedback.rotor_total_angle;
   c->feedback.motor_velocity_rad_s = c->motor->feedback.rotor_speed;
   c->feedback.temperature_c = c->motor->feedback.temp;
+  c->feedback.feedback_yaw_rad =
+      CameraYaw_BodyYawFromEncoder(c, c->feedback.motor_angle_rad);
 
   return update_ret == DEVICE_OK ? CAMERA_YAW_OK : CAMERA_YAW_ERR;
 }
@@ -140,8 +167,9 @@ int8_t CameraYaw_Control(CameraYaw_t *c, const CameraYaw_CMD_t *cmd,
 
   c->feedback.feedback_age_ms = feedback_age_ms;
   c->feedback.feedback_valid = feedback_valid;
-  c->feedback.target_yaw_rad = c->cmd.target_yaw_rad;
-  c->feedback.feedback_yaw_rad = c->cmd.feedback_yaw_rad;
+  const float target_yaw_rad = CameraYaw_WrapAngleRad(c->cmd.target_yaw_rad);
+  const float feedback_yaw_rad = c->feedback.feedback_yaw_rad;
+  c->feedback.target_yaw_rad = target_yaw_rad;
   c->mode = c->cmd.mode;
   c->feedback.mode = c->mode;
 
@@ -155,9 +183,9 @@ int8_t CameraYaw_Control(CameraYaw_t *c, const CameraYaw_CMD_t *cmd,
   }
 
   c->feedback.error_yaw_rad =
-      CircleError(c->cmd.target_yaw_rad, c->cmd.feedback_yaw_rad, M_2PI);
+      CircleError(target_yaw_rad, feedback_yaw_rad, M_2PI);
   c->output =
-      PID_Calc(&c->yaw_pid, c->cmd.target_yaw_rad, c->cmd.feedback_yaw_rad,
+      PID_Calc(&c->yaw_pid, target_yaw_rad, feedback_yaw_rad,
                0.0f, c->dt);
   c->output = CameraYaw_ClampSymmetric(c->output, c->param->limit.max_output);
   c->feedback.output = c->output;

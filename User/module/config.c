@@ -606,7 +606,7 @@ Config_RobotParam_t robot_config = {
             .rear_retract_move_speed = 0.1f,   /* step1 等待 PA2/photo3 下降沿的慢速 vx，单位 m/s。 */
             .rear_retract_move_ms = 250u,       /* step3 第二次固定快跑持续时间，单位 ms。 */
             .rear_retract_move_wheel_delta_rad = 8.66f, /* step3 第二次固定快跑轮转角阈值，单位 rad；0 表示按时间切步。 */
-            .second_photo_retract_move_speed = 0.50f, /* step7 第二个下降沿后全收杆离开 vx，单位 m/s。 */
+            .second_photo_retract_move_speed = 1.0f, /* step7 第二个下降沿后全收杆离开 vx，单位 m/s。 */
             .final_move_speed = 0.5f,          /* step7 离开 vx 的备用值；second_photo_retract_move_speed <= 0 时使用。 */
             .final_move_ms = 200u,              /* step7 全收杆离开持续时间，单位 ms。 */
             .pole_front_extend_speed = 65.0f,   /* step2 前杆伸出、step5/6 四杆全伸时的前杆速度，单位 rad/s。 */
@@ -808,11 +808,12 @@ Config_RobotParam_t robot_config = {
         [CAMERA_YAW_LEFT] = {
             .motor_param = {
                 .can = BSP_CAN_2,
-                .id = 0x205,
+                .id = 0x209,
                 .module = MOTOR_GM6020,
                 .reverse = false,
                 .gear = false,
             },
+            .encoder_zero_offset_rad = 0.562970936f,
             .pid = {
                 .yaw_pid = {
                     .k = 1.0f,
@@ -820,13 +821,13 @@ Config_RobotParam_t robot_config = {
                     .i = 0.0f,
                     .d = 0.0f,
                     .i_limit = 0.0f,
-                    .out_limit = 0.30f,
+                    .out_limit = 0.80f,
                     .d_cutoff_freq = -1.0f,
                     .range = M_2PI,
                 },
             },
             .limit = {
-                .max_output = 0.30f,
+                .max_output = 0.80f,
                 .arrive_threshold_rad = 0.02f,
                 .feedback_timeout_ms = 200u,
             },
@@ -834,11 +835,12 @@ Config_RobotParam_t robot_config = {
         [CAMERA_YAW_RIGHT] = {
             .motor_param = {
                 .can = BSP_CAN_2,
-                .id = 0x209,
+                .id = 0x20A,
                 .module = MOTOR_GM6020,
                 .reverse = false,
                 .gear = false,
             },
+            .encoder_zero_offset_rad = 1.61221385f,
             .pid = {
                 .yaw_pid = {
                     .k = 1.0f,
@@ -846,13 +848,13 @@ Config_RobotParam_t robot_config = {
                     .i = 0.0f,
                     .d = 0.0f,
                     .i_limit = 0.0f,
-                    .out_limit = 0.30f,
+                    .out_limit = 0.80f,
                     .d_cutoff_freq = -1.0f,
                     .range = M_2PI,
                 },
             },
             .limit = {
-                .max_output = 0.30f,
+                .max_output = 0.80f,
                 .arrive_threshold_rad = 0.02f,
                 .feedback_timeout_ms = 200u,
             },
