@@ -21,6 +21,7 @@ inline constexpr Topic kCmdAutoAction = PC_CMD_AUTO_ACTION;
 inline constexpr Topic kCmdCameraYaw = PC_CMD_CAMERA_YAW;
 inline constexpr Topic kCmdAbstractPosition = PC_CMD_ABSTRACT_POSITION;
 inline constexpr Topic kCmdImu = PC_CMD_IMU;
+inline constexpr Topic kCmdIrOreAck = PC_CMD_IR_ORE_ACK;
 
 inline constexpr Topic kFeedbackHeartbeat = PC_FEEDBACK_HEARTBEAT;
 inline constexpr Topic kFeedbackChassis = PC_FEEDBACK_CHASSIS;
@@ -31,6 +32,7 @@ inline constexpr Topic kFeedbackRodNew = PC_FEEDBACK_ROD_NEW;
 inline constexpr Topic kFeedbackOreStore = PC_FEEDBACK_ORE_STORE;
 inline constexpr Topic kFeedbackAutoAction = PC_FEEDBACK_AUTO_ACTION;
 inline constexpr Topic kFeedbackIrOre = PC_FEEDBACK_IR_ORE;
+inline constexpr Topic kFeedbackIrOreBridge = PC_FEEDBACK_IR_ORE_BRIDGE;
 inline constexpr Topic kFeedbackCameraYaw = PC_FEEDBACK_CAMERA_YAW;
 inline constexpr Topic kFeedbackStatus = PC_FEEDBACK_STATUS;
 
@@ -135,6 +137,7 @@ constexpr bool IsValidWirePayload() {
 
 static_assert(IsValidWirePayload<PC_ChassisCMD_t>(), "PC_ChassisCMD_t payload is invalid");
 static_assert(IsValidWirePayload<PC_ImuCMD_t>(), "PC_ImuCMD_t payload is invalid");
+static_assert(IsValidWirePayload<PC_IrOreAckCMD_t>(), "PC_IrOreAckCMD_t payload is invalid");
 static_assert(IsValidWirePayload<PoleCmd>(), "PoleCmd payload is invalid");
 static_assert(IsValidWirePayload<ArmSimpleCmd>(), "ArmSimpleCmd payload is invalid");
 static_assert(IsValidWirePayload<RodNewCmd>(), "RodNewCmd payload is invalid");
@@ -147,6 +150,7 @@ static_assert(IsValidWirePayload<PC_ChassisFeedback_t>(), "PC_ChassisFeedback_t 
 static_assert(IsValidWirePayload<PC_PoleFeedback_t>(), "PC_PoleFeedback_t payload is invalid");
 static_assert(IsValidWirePayload<PC_AutoActionFeedback_t>(), "PC_AutoActionFeedback_t payload is invalid");
 static_assert(IsValidWirePayload<PC_IrOreFeedback_t>(), "PC_IrOreFeedback_t payload is invalid");
+static_assert(IsValidWirePayload<PC_IrOreBridgeFeedback_t>(), "PC_IrOreBridgeFeedback_t payload is invalid");
 static_assert(IsValidWirePayload<PC_CameraYawFeedback_t>(), "PC_CameraYawFeedback_t payload is invalid");
 static_assert(IsValidWirePayload<ArmSimpleFeedback>(), "ArmSimpleFeedback payload is invalid");
 static_assert(IsValidWirePayload<RodNewFeedback>(), "RodNewFeedback payload is invalid");
@@ -166,6 +170,7 @@ namespace mr::link {
 
 MRLINK_PC_MESSAGE_TRAIT(PC_ChassisCMD_t, PC_CMD_CHASSIS);
 MRLINK_PC_MESSAGE_TRAIT(PC_ImuCMD_t, PC_CMD_IMU);
+MRLINK_PC_MESSAGE_TRAIT(PC_IrOreAckCMD_t, PC_CMD_IR_ORE_ACK);
 MRLINK_PC_MESSAGE_TRAIT(pc_comm::wire::PoleCmd, PC_CMD_POLE);
 MRLINK_PC_MESSAGE_TRAIT(pc_comm::wire::ArmSimpleCmd, PC_CMD_ARM_SIMPLE);
 MRLINK_PC_MESSAGE_TRAIT(pc_comm::wire::RodNewCmd, PC_CMD_ROD_NEW);
@@ -178,6 +183,7 @@ MRLINK_PC_MESSAGE_TRAIT(PC_ChassisFeedback_t, PC_FEEDBACK_CHASSIS);
 MRLINK_PC_MESSAGE_TRAIT(PC_PoleFeedback_t, PC_FEEDBACK_POLE);
 MRLINK_PC_MESSAGE_TRAIT(PC_AutoActionFeedback_t, PC_FEEDBACK_AUTO_ACTION);
 MRLINK_PC_MESSAGE_TRAIT(PC_IrOreFeedback_t, PC_FEEDBACK_IR_ORE);
+MRLINK_PC_MESSAGE_TRAIT(PC_IrOreBridgeFeedback_t, PC_FEEDBACK_IR_ORE_BRIDGE);
 MRLINK_PC_MESSAGE_TRAIT(PC_CameraYawFeedback_t, PC_FEEDBACK_CAMERA_YAW);
 MRLINK_PC_MESSAGE_TRAIT(pc_comm::wire::ArmSimpleFeedback, PC_FEEDBACK_ARM_SIMPLE);
 MRLINK_PC_MESSAGE_TRAIT(pc_comm::wire::RodNewFeedback, PC_FEEDBACK_ROD_NEW);

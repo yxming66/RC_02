@@ -52,11 +52,13 @@ static PC_AutoActionFeedback_t s_auto_action_feedback{};
 static uint8_t s_auto_action_rx_latch = PC_AUTO_ACTION_NONE;
 static uint32_t s_auto_action_rx_latch_tick = 0u;
 static PC_IrOreFeedback_t s_ir_ore_feedback{};
+static PC_IrOreBridgeFeedback_t s_ir_ore_bridge_feedback{};
 static MrlinkPc_TxCallback_t s_tx_done_callback = nullptr;
 static MrlinkPc_TxCallback_t s_tx_error_callback = nullptr;
 static BSP_UART_t s_channel_uart = BSP_UART_PC;
 static bool s_comm_initialized = false;
 static bool s_pole_cmd_received = false;
+static bool s_ir_ore_ack_pending = false;
 
 uint16_t DebugCopyRaw(volatile uint8_t *dst, uint16_t dst_size,
                       const uint8_t *src, uint16_t src_len) {
@@ -157,6 +159,9 @@ void TouchOnline(uint8_t cmd) {
       break;
     case PC_CMD_IMU:
       g_pc_comm_debug.rx_imu_count++;
+      break;
+    case PC_CMD_IR_ORE_ACK:
+      g_pc_comm_debug.rx_ir_ore_ack_count++;
       break;
     default:
       break;
@@ -275,6 +280,13 @@ void OnImu(const PC_ImuCMD_t &cmd) {
   TouchOnline(PC_CMD_IMU);
 }
 
+void OnIrOreAck(const PC_IrOreAckCMD_t &cmd) {
+  s_state.cmd.ir_ore_ack = cmd;
+  s_ir_ore_ack_pending = true;
+  MarkRxFrame(PC_CMD_IR_ORE_ACK, sizeof(cmd), MRLINK_OK);
+  TouchOnline(PC_CMD_IR_ORE_ACK);
+}
+
 void OnMrlinkError(const MrLink_ErrorInfo_t &err) {
   g_pc_comm_debug.mrlink_error_count++;
   g_pc_comm_debug.mrlink_last_error_code = static_cast<uint8_t>(err.code);
@@ -303,7 +315,8 @@ bool RegisterHandlers() {
          s_bus.SubscribeLatest<PC_AbstractPositionCMD_t>(OnAbstractPosition) ==
              MRLINK_OK &&
          s_bus.SubscribeLatest<wire::StepCmd>(OnStep) == MRLINK_OK &&
-         s_bus.SubscribeLatest<PC_ImuCMD_t>(OnImu) == MRLINK_OK;
+         s_bus.SubscribeLatest<PC_ImuCMD_t>(OnImu) == MRLINK_OK &&
+         s_bus.Subscribe<PC_IrOreAckCMD_t>(OnIrOreAck) == MRLINK_OK;
 }
 
 void RxReadyCallback(void *ctx) {
@@ -461,6 +474,7 @@ extern "C" bool MrlinkPc_CommInit(void) {
 
   std::memset(&s_state, 0, sizeof(s_state));
   s_pole_cmd_received = false;
+  s_ir_ore_ack_pending = false;
   s_state.control_mode = PC_MODE_RC;
   s_state.feedback.status.command_source = PC_COMMAND_SOURCE_RC;
 
@@ -570,6 +584,8 @@ extern "C" void MrlinkPc_DebugUpdate(void) {
                       &s_state.cmd.auto_action);
   CopyPlainToVolatile(&g_pc_comm_debug.rx_step, &s_state.cmd.step);
   CopyPlainToVolatile(&g_pc_comm_debug.rx_imu, &s_state.cmd.imu);
+  CopyPlainToVolatile(&g_pc_comm_debug.rx_ir_ore_ack,
+                      &s_state.cmd.ir_ore_ack);
   const MrLink_Stats_t *stats = s_bus.GetStats();
   if (stats != nullptr) {
     CopyPlainToVolatile(&g_pc_comm_debug.mrlink_stats, stats);
@@ -637,6 +653,10 @@ extern "C" const PC_ImuCMD_t *MrlinkPc_GetImuCMD(void) {
   return &s_state.cmd.imu;
 }
 
+extern "C" const PC_IrOreAckCMD_t *MrlinkPc_GetIrOreAckCMD(void) {
+  return s_ir_ore_ack_pending ? &s_state.cmd.ir_ore_ack : nullptr;
+}
+
 extern "C" bool MrlinkPc_PublishFeedback(uint8_t topic,
                                            const void *feedback) {
   if (feedback == nullptr) {
@@ -691,6 +711,13 @@ extern "C" bool MrlinkPc_PublishFeedback(uint8_t topic,
       s_ir_ore_feedback = *typed;
       return s_bus.StoreLatest(*typed);
     }
+    case PC_FEEDBACK_IR_ORE_BRIDGE: {
+      const auto *typed =
+          static_cast<const PC_IrOreBridgeFeedback_t *>(feedback);
+      s_ir_ore_bridge_feedback = *typed;
+      s_state.feedback.ir_ore_bridge = *typed;
+      return s_bus.StoreLatest(*typed);
+    }
     case PC_FEEDBACK_STEP: {
       const auto *typed = static_cast<const PC_StepFeedback_t *>(feedback);
       s_state.feedback.step = *typed;
@@ -733,6 +760,10 @@ extern "C" void MrlinkPc_ClearAutoActionCommand(void) {
   s_state.cmd.auto_action.action = PC_AUTO_ACTION_NONE;
 }
 
+extern "C" void MrlinkPc_ClearIrOreAckCommand(void) {
+  s_ir_ore_ack_pending = false;
+}
+
 extern "C" uint16_t MrlinkPc_BuildFeedbackFrame(uint8_t cmd, uint8_t *tx_buf,
                                                  uint16_t buf_size) {
   switch (cmd) {
@@ -772,6 +803,9 @@ extern "C" uint16_t MrlinkPc_BuildFeedbackFrame(uint8_t cmd, uint8_t *tx_buf,
     }
     case PC_FEEDBACK_IR_ORE: {
       return BuildLatestOrFallback(s_ir_ore_feedback, tx_buf, buf_size);
+    }
+    case PC_FEEDBACK_IR_ORE_BRIDGE: {
+      return BuildLatestOrFallback(s_ir_ore_bridge_feedback, tx_buf, buf_size);
     }
     case PC_FEEDBACK_STEP: {
       const wire::StepFeedback fallback =

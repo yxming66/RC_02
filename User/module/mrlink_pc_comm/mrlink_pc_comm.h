@@ -35,6 +35,7 @@ typedef enum {
     PC_CMD_CAMERA_YAW = 0x17,    /* 相机云台 yaw 保持命令 */
     PC_CMD_ABSTRACT_POSITION = 0x18, /* 抽象位置命令 */
     PC_CMD_IMU = 0x20,           /* PC 下发姿态数据命令 */
+    PC_CMD_IR_ORE_ACK = 0x21,
 } PC_CMD_t;
 
 typedef enum {
@@ -49,6 +50,7 @@ typedef enum {
     PC_FEEDBACK_AUTO_ACTION = 0x96,  /* 一键动作总状态反馈，含矿仓/取矛头/SICK 校正子状态 */
     PC_FEEDBACK_IR_ORE = 0x97,       /* 红外对接矿种与对接状态反馈 */
     PC_FEEDBACK_CAMERA_YAW = 0x98,   /* 相机云台 yaw 状态反馈 */
+    PC_FEEDBACK_IR_ORE_BRIDGE = 0x99,
 } PC_FeedbackCMD_t;
 
 #define MRLINK_PC_MAX_PAYLOAD_SIZE (64u)    /* 单帧 payload 最大字节数，上位机结构体不能超过该值 */
@@ -374,6 +376,12 @@ typedef enum {
 } PC_OreType_t;
 
 #define PC_IR_ORE_POSITION_COUNT (12u)
+#define PC_IR_ORE_RAW_FRAME_SIZE (18u)
+#define PC_IR_ORE_ACK_FRAME_SIZE (6u)
+
+typedef struct {
+    uint8_t frame[PC_IR_ORE_ACK_FRAME_SIZE];
+} PC_IrOreAckCMD_t;
 
 /* 红外对接反馈帧：把 UART7 收到的 IR 命令（1 字节状态 + 12 字节矿种）
  * 透传给 PC 上位机，由 pc_comm_task 通过 MrlinkPc_PublishFeedback(PC_FEEDBACK_IR_ORE, …) 周期上报。
@@ -387,6 +395,23 @@ typedef struct {
     uint32_t age_ms;                                         /* 距最近一次成功接收 12 字节矿种包的时间，单位 ms；未收到过为 0 */
     uint32_t rx_count;                                       /* 12 字节矿种包累计成功接收次数，CRC/格式错误不会计入；可用于观察对接链路健康度 */
 } PC_IrOreFeedback_t;
+
+typedef struct {
+    uint8_t valid;
+    uint8_t fresh;
+    uint8_t status;
+    uint8_t count;
+    uint8_t msg_id;
+    uint8_t side;
+    uint8_t ack_pending;
+    uint8_t parse_status;
+    uint8_t ore_type[PC_IR_ORE_POSITION_COUNT];
+    uint8_t raw_frame[PC_IR_ORE_RAW_FRAME_SIZE];
+    uint32_t age_ms;
+    uint32_t rx_count;
+    uint32_t frame_rx_count;
+    uint32_t ack_tx_count;
+} PC_IrOreBridgeFeedback_t;
 
 typedef enum {
     PC_STEP_STATE_IDLE = 0,       /* 空闲 */
@@ -443,6 +468,7 @@ typedef struct {
     PC_AutoActionCMD_t auto_action;      /* 待消费的一键动作命令，消费后清零 */
     PC_StepCMD_t step;                   /* 待执行/最近一次自动台阶命令 */
     PC_ImuCMD_t imu;                     /* 最近一次 PC 姿态数据 */
+    PC_IrOreAckCMD_t ir_ore_ack;
 } MrlinkPc_CMD_Data_t;
 
 typedef struct {
@@ -454,6 +480,7 @@ typedef struct {
     PC_CameraYawFeedback_t camera_yaw;     /* 相机云台 yaw 反馈缓存 */
     PC_StepFeedback_t step;                /* 自动台阶反馈缓存 */
     PC_StatusFeedback_t status;            /* 通信/系统状态反馈缓存 */
+    PC_IrOreBridgeFeedback_t ir_ore_bridge;
 } MrlinkPc_FeedbackData_t;
 
 typedef struct {
@@ -551,6 +578,11 @@ typedef struct {
     uint8_t tx_raw[PC_COMM_DEBUG_TX_RAW_SIZE];          /* 最近一次原始发送数据 */
 
     MrLink_Stats_t mrlink_stats;      /* mrlink 协议层统计快照 */
+    uint32_t rx_ir_ore_ack_count;
+    uint32_t ir_ore_ack_submit_count;
+    uint32_t ir_ore_ack_submit_error_count;
+    uint8_t ir_ore_ack_submit_result;
+    PC_IrOreAckCMD_t rx_ir_ore_ack;
 } PC_CommDebug_t;
 
 typedef struct {
@@ -623,6 +655,8 @@ const PC_StepCMD_t *MrlinkPc_GetStepCMD(void);
 /* 获取最近一次 PC 姿态/IMU 命令。 */
 const PC_ImuCMD_t *MrlinkPc_GetImuCMD(void);
 
+const PC_IrOreAckCMD_t *MrlinkPc_GetIrOreAckCMD(void);
+
 /* 发布某个反馈 topic 的最新数据；topic 见 PC_FeedbackCMD_t，feedback 指向对应反馈结构体。 */
 bool MrlinkPc_PublishFeedback(uint8_t topic, const void *feedback);
 
@@ -634,6 +668,8 @@ void MrlinkPc_ClearStepCommand(void);
 
 /* 清除待消费一键动作命令，通常在 pc_comm_task 分发后调用。 */
 void MrlinkPc_ClearAutoActionCommand(void);
+
+void MrlinkPc_ClearIrOreAckCommand(void);
 
 /* 构造指定反馈 cmd 的 mrlink 帧；tx_buf 为输出缓存，buf_size 为缓存字节数，返回帧长度。 */
 uint16_t MrlinkPc_BuildFeedbackFrame(uint8_t cmd, uint8_t *tx_buf,
