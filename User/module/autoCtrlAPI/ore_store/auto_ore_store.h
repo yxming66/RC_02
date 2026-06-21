@@ -135,17 +135,11 @@ typedef struct {
 } AutoOre_ArmSpeedParam_t;
 
 typedef struct {
-  auto_ctrl_template_e step_template;
   AutoOre_Action_t pick_action;
-  float precontact_vx_mps;
   float precontact_wheel_delta_rad;
   uint32_t precontact_timeout_ms;
   float step_start_vx_mps;
   float step_start_wheel_delta_rad;
-  bool override_descend_move;
-  uint32_t descend_mid_move_ms;
-  uint32_t descend_rear_retract_move_ms;
-  float descend_rear_retract_move_wheel_delta_rad;
   bool use_arm_photo_confirm;
 } AutoOre_FusedParam_t;
 
@@ -189,10 +183,8 @@ typedef struct {
   OreStore_CMD_t ore_store_cmd;
   Pole_CMD_t pole_cmd;
   Chassis_CMD_t chassis_cmd;
-  auto_ctrl_t step_ctrl;
-  bool step_ctrl_active;
-  bool step_ctrl_started;
   bool fused_step_done;
+  bool fused_pick_done;
   bool fused_store_done;
   bool pick_lift_confirmed;
   bool prealign_yaw_target_valid;
@@ -202,10 +194,21 @@ typedef struct {
   float distance_start_wheel_rad[4];
   float wheel_delta_rad;
   float target_wheel_delta_rad;
+  bool fused_step_distance_latch_valid;
+  bool fused_step_photo_seen;
+  float fused_step_distance_start_wheel_rad[4];
+  float fused_step_wheel_delta_rad;
+  float fused_step_target_wheel_delta_rad;
+  uint32_t fused_step_phase_enter_time_ms;
+  bool fused_step_condition_met;
+  uint32_t fused_step_condition_time_ms;
   uint32_t fused_arm_photo_since_ms;
+  uint8_t fused_pick_store_step_index;
+  bool fused_pick_store_condition_met;
+  uint32_t fused_pick_store_condition_time_ms;
   uint8_t fused_store_step_index;
   uint8_t fused_store_step_phase;
-  uint8_t fused_step_template_start_step_index;
+  uint8_t fused_step_phase;
   AutoOre_Position_t fused_store_position;
   AutoOre_Params_t param;
   AutoOre_Feedback_t feedback;

@@ -122,6 +122,7 @@ typedef struct {
     volatile bool pole_cmd_valid;
     volatile bool chassis_cmd_valid;
     volatile bool pick_lift_confirmed;
+    volatile bool fused_pick_done;
     volatile float fused_wheel_delta_rad;
     volatile float fused_target_wheel_delta_rad;
     volatile bool fused_step_done;

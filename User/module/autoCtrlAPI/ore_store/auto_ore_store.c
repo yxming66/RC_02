@@ -22,7 +22,6 @@
 #define AUTO_ORE_DEFAULT_FUSED_PICK_PRECONTACT_TIMEOUT_MS (2000u)
 #define AUTO_ORE_DEFAULT_FUSED_PICK_LIFT_DETECT_MS (200u)
 #define AUTO_ORE_DEFAULT_FUSED_ARM_PHOTO_STABLE_MS (120u)
-#define AUTO_ORE_FUSED_HEAD_ASCEND_FRONT_RETRACT_STEP_INDEX (2u)
 #define AUTO_ORE_FUSED_ARM_PHOTO_ENABLE_JOINT1_RAD (0.6981317f)
 
 #define AUTO_ORE_OCCUPANCY_SOURCE_STATE_MACHINE_VALUE (0u)
@@ -273,11 +272,90 @@ static void AutoOre_SetStepPhase(AutoOre_t *ctrl, uint8_t phase,
   ctrl->step_condition_time_ms = now_ms;
 }
 
-static void AutoOre_SetFusedStepSidePhase(AutoOre_t *ctrl, uint8_t phase) {
-  ctrl->step_phase = phase;
+static void AutoOre_SetFusedStepSidePhase(AutoOre_t *ctrl, uint8_t phase,
+                                          uint32_t now_ms) {
+  ctrl->fused_step_phase = phase;
+  ctrl->fused_step_distance_latch_valid = false;
+  ctrl->fused_step_photo_seen = false;
+  ctrl->fused_step_wheel_delta_rad = 0.0f;
+  ctrl->fused_step_target_wheel_delta_rad = 0.0f;
+  ctrl->fused_step_phase_enter_time_ms = now_ms;
+  ctrl->fused_step_condition_met = false;
+  ctrl->fused_step_condition_time_ms = 0u;
+}
+
+static bool AutoOre_FusedStepWaitPoleTarget(AutoOre_t *ctrl, uint32_t now_ms,
+                                            bool at_target) {
+  if (!ctrl->fused_step_condition_met) {
+    ctrl->fused_step_condition_met = true;
+    ctrl->fused_step_condition_time_ms = now_ms;
+    return false;
+  }
+  if (now_ms == ctrl->fused_step_condition_time_ms) {
+    return false;
+  }
+  return at_target;
+}
+
+static void AutoOre_FusedPickStoreNextStep(AutoOre_t *ctrl) {
+  ctrl->fused_pick_store_step_index++;
+  ctrl->fused_pick_store_condition_met = false;
+  ctrl->fused_pick_store_condition_time_ms = 0u;
   ctrl->distance_latch_valid = false;
   ctrl->wheel_delta_rad = 0.0f;
   ctrl->target_wheel_delta_rad = 0.0f;
+}
+
+static bool AutoOre_FusedPickStoreWaitConditionThenDelay(AutoOre_t *ctrl,
+                                                         uint32_t now_ms,
+                                                         bool condition,
+                                                         uint32_t delay_ms) {
+  if (!condition) {
+    ctrl->fused_pick_store_condition_met = false;
+    return false;
+  }
+  if (!ctrl->fused_pick_store_condition_met) {
+    ctrl->fused_pick_store_condition_met = true;
+    ctrl->fused_pick_store_condition_time_ms = now_ms;
+    return false;
+  }
+  return (now_ms - ctrl->fused_pick_store_condition_time_ms) >= delay_ms;
+}
+
+static bool AutoOre_FusedPickStoreWaitArmCommandTarget(AutoOre_t *ctrl,
+                                                       uint32_t now_ms) {
+  if (!ctrl->fused_pick_store_condition_met) {
+    ctrl->fused_pick_store_condition_met = true;
+    ctrl->fused_pick_store_condition_time_ms = now_ms;
+    return false;
+  }
+  if (now_ms == ctrl->fused_pick_store_condition_time_ms) {
+    return false;
+  }
+  return ctrl->feedback.arm_at_target;
+}
+
+static bool AutoOre_FusedPickStoreWaitOreStoreCommandTarget(
+    AutoOre_t *ctrl, uint32_t now_ms) {
+  if (!ctrl->fused_pick_store_condition_met) {
+    ctrl->fused_pick_store_condition_met = true;
+    ctrl->fused_pick_store_condition_time_ms = now_ms;
+    return false;
+  }
+  if (now_ms == ctrl->fused_pick_store_condition_time_ms) {
+    return false;
+  }
+  return ctrl->feedback.ore_store_all_at_target;
+}
+
+static uint32_t AutoOre_FusedPickStoreStepElapsed(AutoOre_t *ctrl,
+                                                  uint32_t now_ms) {
+  if (!ctrl->fused_pick_store_condition_met) {
+    ctrl->fused_pick_store_condition_met = true;
+    ctrl->fused_pick_store_condition_time_ms = now_ms;
+    return 0u;
+  }
+  return now_ms - ctrl->fused_pick_store_condition_time_ms;
 }
 
 static void AutoOre_ClearOutputs(AutoOre_t *ctrl) {
@@ -309,20 +387,17 @@ static bool AutoOre_CommandOreStore(AutoOre_t *ctrl,
   return ctrl->ore_store_cmd_valid;
 }
 
-static bool AutoOre_CommandPoleTarget(AutoOre_t *ctrl,
-                                      const float target_lift[2]) {
-  if (target_lift == 0) {
-    ctrl->pole_cmd_valid = false;
-    return false;
-  }
+static bool AutoOre_CommandPoleTargetValues(AutoOre_t *ctrl,
+                                            float front_lift,
+                                            float rear_lift) {
   memset(&ctrl->pole_cmd, 0, sizeof(ctrl->pole_cmd));
   ctrl->pole_cmd.mode = POLE_MODE_ACTIVE;
   ctrl->pole_cmd.lift[0] = 0.0f;
   ctrl->pole_cmd.lift[1] = 0.0f;
   ctrl->pole_cmd.auto_target_enable[0] = true;
   ctrl->pole_cmd.auto_target_enable[1] = true;
-  ctrl->pole_cmd.auto_target_lift[0] = target_lift[0];
-  ctrl->pole_cmd.auto_target_lift[1] = target_lift[1];
+  ctrl->pole_cmd.auto_target_lift[0] = front_lift;
+  ctrl->pole_cmd.auto_target_lift[1] = rear_lift;
   ctrl->pole_cmd.auto_lift_speed[0] = 0.0f;
   ctrl->pole_cmd.auto_lift_speed[1] = 0.0f;
   ctrl->pole_cmd.auto_lift_accel[0] = 0.0f;
@@ -330,6 +405,16 @@ static bool AutoOre_CommandPoleTarget(AutoOre_t *ctrl,
   ctrl->pole_cmd.disable_lift_accel = false;
   ctrl->pole_cmd_valid = true;
   return true;
+}
+
+static bool AutoOre_CommandPoleTarget(AutoOre_t *ctrl,
+                                      const float target_lift[2]) {
+  if (target_lift == 0) {
+    ctrl->pole_cmd_valid = false;
+    return false;
+  }
+  return AutoOre_CommandPoleTargetValues(ctrl, target_lift[0],
+                                         target_lift[1]);
 }
 
 static void AutoOre_CommandChassisMove(AutoOre_t *ctrl, float vx_mps) {
@@ -455,6 +540,65 @@ static bool AutoOre_WheelDeltaMoveReached(AutoOre_t *ctrl,
   return ctrl->wheel_delta_rad >= target_wheel_delta_rad;
 }
 
+static bool AutoOre_FusedStepWheelDeltaMoveReached(
+    AutoOre_t *ctrl, float target_wheel_delta_rad) {
+  if (ctrl == 0 || target_wheel_delta_rad <= 0.0f) {
+    return false;
+  }
+  ctrl->fused_step_target_wheel_delta_rad = target_wheel_delta_rad;
+
+  if (!ctrl->fused_step_distance_latch_valid) {
+    for (uint8_t i = 0u; i < 4u; ++i) {
+      ctrl->fused_step_distance_start_wheel_rad[i] =
+          ctrl->feedback.wheel_position_rad[i];
+    }
+    ctrl->fused_step_wheel_delta_rad = 0.0f;
+    ctrl->fused_step_distance_latch_valid = true;
+    return false;
+  }
+
+  float wheel_delta_abs_sum_rad = 0.0f;
+  for (uint8_t i = 0u; i < 4u; ++i) {
+    wheel_delta_abs_sum_rad += AutoOre_AbsFloat(
+        ctrl->feedback.wheel_position_rad[i] -
+        ctrl->fused_step_distance_start_wheel_rad[i]);
+  }
+  ctrl->fused_step_wheel_delta_rad = wheel_delta_abs_sum_rad * 0.25f;
+  return ctrl->fused_step_wheel_delta_rad >= target_wheel_delta_rad;
+}
+
+static uint32_t AutoOre_FusedStepPhaseElapsed(const AutoOre_t *ctrl,
+                                              uint32_t now_ms) {
+  if (ctrl == 0 || ctrl->fused_step_phase_enter_time_ms == 0u) {
+    return 0u;
+  }
+  return now_ms - ctrl->fused_step_phase_enter_time_ms;
+}
+
+static bool AutoOre_FusedStepMoveGateReady(AutoOre_t *ctrl, uint32_t now_ms,
+                                           float wheel_delta_rad,
+                                           uint32_t timeout_ms) {
+  const bool distance_ready =
+      AutoOre_FusedStepWheelDeltaMoveReached(ctrl, wheel_delta_rad);
+  const bool timeout_ready =
+      timeout_ms > 0u && AutoOre_FusedStepPhaseElapsed(ctrl, now_ms) >=
+                             timeout_ms;
+  return wheel_delta_rad <= 0.0f || distance_ready || timeout_ready;
+}
+
+static bool AutoOre_FusedPhotoFallingEdge(AutoOre_t *ctrl, bool triggered) {
+  if (ctrl == 0) {
+    return false;
+  }
+  if (!ctrl->fused_step_photo_seen) {
+    if (triggered) {
+      ctrl->fused_step_photo_seen = true;
+    }
+    return false;
+  }
+  return !triggered;
+}
+
 static void AutoOre_FailInvalidParam(AutoOre_t *ctrl) {
   ctrl->state = AUTO_ORE_STATE_FAIL;
   ctrl->result = AUTO_ORE_RESULT_FAIL;
@@ -562,9 +706,6 @@ static void AutoOre_FinishSuccess(AutoOre_t *ctrl) {
              ctrl->action == AUTO_ORE_ACTION_PICK_POS_200 ||
              ctrl->action == AUTO_ORE_ACTION_PICK_NEG_200) {
     AutoOre_SetArmHasOre(ctrl, true);
-  } else if (AutoOre_ActionIsFused(ctrl->action)) {
-    ctrl->step_ctrl_active = false;
-    ctrl->step_ctrl_started = false;
   }
   ctrl->state = AUTO_ORE_STATE_SUCCESS;
   ctrl->result = AUTO_ORE_RESULT_SUCCESS;
@@ -573,7 +714,6 @@ static void AutoOre_FinishSuccess(AutoOre_t *ctrl) {
                     : AUTO_ORE_FAULT_NONE;
   ctrl->action = AUTO_ORE_ACTION_NONE;
   ctrl->active_position = AUTO_ORE_POSITION_NONE;
-  ctrl->step_ctrl_active = false;
 }
 
 static bool AutoOre_WaitAll(AutoOre_t *ctrl, uint32_t now_ms) {
@@ -970,6 +1110,16 @@ static bool AutoOre_ActionIsFused(AutoOre_Action_t action) {
          action == AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_400_HEAD;
 }
 
+static bool AutoOre_FusedActionIsAscend(AutoOre_Action_t action) {
+  return action == AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD ||
+         action == AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD;
+}
+
+static bool AutoOre_FusedActionUses400(AutoOre_Action_t action) {
+  return action == AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD ||
+         action == AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_400_HEAD;
+}
+
 static const AutoOre_FusedParam_t *AutoOre_FusedParam(const AutoOre_t *ctrl) {
   if (ctrl == 0) {
     return 0;
@@ -1041,55 +1191,46 @@ static const float *AutoOre_FusedStepStartPoleTarget(const AutoOre_t *ctrl) {
   }
 }
 
-static bool AutoOre_CommandFusedStepStartPoleTarget(AutoOre_t *ctrl) {
-  return AutoOre_CommandPoleTarget(ctrl, AutoOre_FusedStepStartPoleTarget(ctrl));
-}
-
-static auto_ctrl_template_e AutoOre_FusedDefaultTemplate(
-    AutoOre_Action_t action) {
-  switch (action) {
-    case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD:
-      return AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD;
-    case AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD:
-      return AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD;
+static const float *AutoOre_FusedFrontRetractPoleTarget(const AutoOre_t *ctrl) {
+  if (ctrl == 0 || ctrl->param.pole_param == 0) {
+    return 0;
+  }
+  switch (ctrl->action) {
     case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD:
-      return AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD;
     case AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_400_HEAD:
-      return AUTO_CTRL_TEMPLATE_DESCEND_400_HEAD;
+      return ctrl->param.pole_param->preset.step_400_front_retract;
+    case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD:
+    case AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD:
+      return ctrl->param.pole_param->preset.step_200_front_retract;
     default:
-      return AUTO_CTRL_TEMPLATE_NONE;
+      return 0;
   }
 }
 
-static auto_ctrl_template_e AutoOre_FusedStepTemplateId(
-    const AutoOre_t *ctrl) {
-  const AutoOre_FusedParam_t *param = AutoOre_FusedParam(ctrl);
-  if (param != 0 && param->step_template != AUTO_CTRL_TEMPLATE_NONE) {
-    return param->step_template;
+static const float *AutoOre_FusedAllRetractPoleTarget(const AutoOre_t *ctrl) {
+  if (ctrl == 0 || ctrl->param.pole_param == 0) {
+    return 0;
   }
-  return (ctrl == 0) ? AUTO_CTRL_TEMPLATE_NONE
-                     : AutoOre_FusedDefaultTemplate(ctrl->action);
+  switch (ctrl->action) {
+    case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD:
+    case AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_400_HEAD:
+      return ctrl->param.pole_param->preset.step_400_all_retract;
+    case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD:
+    case AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD:
+      return ctrl->param.pole_param->preset.step_200_all_retract;
+    default:
+      return 0;
+  }
 }
 
-static bool AutoOre_FusedTemplateStartsAtHeldPoleTarget(
-    auto_ctrl_template_e template_id) {
-  return template_id == AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD ||
-         template_id == AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD;
-}
-
-static bool AutoOre_FusedStepStartFrontPhotoTriggered(
-    const AutoOre_t *ctrl) {
-  if (ctrl == 0) {
+static bool AutoOre_CommandFusedPolePair(AutoOre_t *ctrl,
+                                         const float front_target[2],
+                                         const float rear_target[2]) {
+  if (front_target == 0 || rear_target == 0) {
     return false;
   }
-
-  switch (AutoOre_FusedStepTemplateId(ctrl)) {
-    case AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD:
-    case AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD:
-      return ctrl->feedback.pe13_photo1_triggered;
-    default:
-      return false;
-  }
+  return AutoOre_CommandPoleTargetValues(ctrl, front_target[0],
+                                         rear_target[1]);
 }
 
 static AutoOre_Action_t AutoOre_FusedDefaultPickAction(
@@ -1104,30 +1245,6 @@ static AutoOre_Action_t AutoOre_FusedDefaultPickAction(
       return AUTO_ORE_ACTION_PICK_NEG_200;
     default:
       return AUTO_ORE_ACTION_PICK_POS_200;
-  }
-}
-
-static const float *AutoOre_FusedPickPoleTarget(const AutoOre_t *ctrl) {
-  if (ctrl == 0 || ctrl->param.pole_param == 0) {
-    return 0;
-  }
-  const AutoOre_FusedParam_t *param = AutoOre_FusedParam(ctrl);
-  AutoOre_Action_t pick_action = (param != 0)
-                                     ? param->pick_action
-                                     : AUTO_ORE_ACTION_NONE;
-  if (!AutoOre_ActionIsPick(pick_action)) {
-    pick_action = AutoOre_FusedDefaultPickAction(ctrl->action);
-  }
-
-  switch (pick_action) {
-    case AUTO_ORE_ACTION_PICK_POS_400:
-      return ctrl->param.pole_param->preset.step_400_all_extend;
-    case AUTO_ORE_ACTION_PICK_POS_200:
-      return ctrl->param.pole_param->preset.step_200_all_extend;
-    case AUTO_ORE_ACTION_PICK_NEG_200:
-      return ctrl->param.pole_param->preset.step_200_small;
-    default:
-      return 0;
   }
 }
 
@@ -1186,8 +1303,8 @@ static AutoOre_Position_t AutoOre_FusedSelectStorePosition(AutoOre_t *ctrl) {
 static void AutoOre_FusedStoreNextStep(AutoOre_t *ctrl) {
   ctrl->fused_store_step_index++;
   ctrl->fused_store_step_phase = 0u;
-  ctrl->step_condition_met = false;
-  ctrl->step_condition_time_ms = 0u;
+  ctrl->fused_pick_store_condition_met = false;
+  ctrl->fused_pick_store_condition_time_ms = 0u;
 }
 
 static void AutoOre_FusedStoreMarkDone(AutoOre_t *ctrl) {
@@ -1214,7 +1331,11 @@ static void AutoOre_RunFusedStoreLow(AutoOre_t *ctrl, uint32_t now_ms) {
         AutoOre_FailInvalidParam(ctrl);
         return;
       }
-      if (ctrl->feedback.arm_at_target && ctrl->feedback.ore_store_all_at_target) {
+      if (AutoOre_FusedPickStoreWaitConditionThenDelay(
+              ctrl, now_ms,
+              ctrl->feedback.arm_at_target &&
+                  ctrl->feedback.ore_store_all_at_target,
+              0u)) {
         AutoOre_FusedStoreNextStep(ctrl);
       }
       return;
@@ -1225,7 +1346,7 @@ static void AutoOre_RunFusedStoreLow(AutoOre_t *ctrl, uint32_t now_ms) {
         AutoOre_FailInvalidParam(ctrl);
         return;
       }
-      if (AutoOre_WaitConditionThenDelay(
+      if (AutoOre_FusedPickStoreWaitConditionThenDelay(
               ctrl, now_ms, ctrl->feedback.arm_at_target,
               AutoOre_StoreArmSettleMs(ctrl))) {
         AutoOre_FusedStoreNextStep(ctrl);
@@ -1238,8 +1359,8 @@ static void AutoOre_RunFusedStoreLow(AutoOre_t *ctrl, uint32_t now_ms) {
         AutoOre_FailInvalidParam(ctrl);
         return;
       }
-      if (AutoOre_WaitConditionThenDelay(ctrl, now_ms, true,
-                                         AutoOre_StoreCylinderCloseMs(ctrl))) {
+      if (AutoOre_FusedPickStoreWaitConditionThenDelay(
+              ctrl, now_ms, true, AutoOre_StoreCylinderCloseMs(ctrl))) {
         AutoOre_FusedStoreNextStep(ctrl);
       }
       return;
@@ -1250,8 +1371,8 @@ static void AutoOre_RunFusedStoreLow(AutoOre_t *ctrl, uint32_t now_ms) {
         AutoOre_FailInvalidParam(ctrl);
         return;
       }
-      if (AutoOre_WaitOreStoreCommandTarget(ctrl, now_ms) &&
-          AutoOre_StepElapsed(ctrl, now_ms) >=
+      if (AutoOre_FusedPickStoreWaitOreStoreCommandTarget(ctrl, now_ms) &&
+          AutoOre_FusedPickStoreStepElapsed(ctrl, now_ms) >=
               AutoOre_StoreArmSuctionOffMs(ctrl)) {
         AutoOre_FusedStoreNextStep(ctrl);
       }
@@ -1263,8 +1384,8 @@ static void AutoOre_RunFusedStoreLow(AutoOre_t *ctrl, uint32_t now_ms) {
         AutoOre_FailInvalidParam(ctrl);
         return;
       }
-      if (AutoOre_WaitConditionThenDelay(ctrl, now_ms, true,
-                                         AutoOre_StoreCylinderOpenMs(ctrl))) {
+      if (AutoOre_FusedPickStoreWaitConditionThenDelay(
+              ctrl, now_ms, true, AutoOre_StoreCylinderOpenMs(ctrl))) {
         AutoOre_FusedStoreNextStep(ctrl);
       }
       return;
@@ -1275,7 +1396,7 @@ static void AutoOre_RunFusedStoreLow(AutoOre_t *ctrl, uint32_t now_ms) {
         AutoOre_FailInvalidParam(ctrl);
         return;
       }
-      if (AutoOre_WaitOreStoreCommandTarget(ctrl, now_ms)) {
+      if (AutoOre_FusedPickStoreWaitOreStoreCommandTarget(ctrl, now_ms)) {
         AutoOre_FusedStoreMarkDone(ctrl);
       }
       return;
@@ -1295,7 +1416,7 @@ static void AutoOre_RunFusedStoreHigh(AutoOre_t *ctrl, uint32_t now_ms) {
         AutoOre_FailInvalidParam(ctrl);
         return;
       }
-      if (AutoOre_WaitConditionThenDelay(
+      if (AutoOre_FusedPickStoreWaitConditionThenDelay(
               ctrl, now_ms, ctrl->feedback.arm_at_target,
               AutoOre_StoreArmSettleMs(ctrl))) {
         AutoOre_FusedStoreNextStep(ctrl);
@@ -1309,8 +1430,8 @@ static void AutoOre_RunFusedStoreHigh(AutoOre_t *ctrl, uint32_t now_ms) {
         AutoOre_FailInvalidParam(ctrl);
         return;
       }
-      if (AutoOre_WaitConditionThenDelay(ctrl, now_ms, true,
-                                         AutoOre_StoreCylinderCloseMs(ctrl))) {
+      if (AutoOre_FusedPickStoreWaitConditionThenDelay(
+              ctrl, now_ms, true, AutoOre_StoreCylinderCloseMs(ctrl))) {
         AutoOre_FusedStoreMarkDone(ctrl);
       }
       return;
@@ -1337,7 +1458,8 @@ static void AutoOre_RunFusedStore(AutoOre_t *ctrl, uint32_t now_ms) {
     ctrl->fused_store_position = AutoOre_FusedSelectStorePosition(ctrl);
     ctrl->fused_store_step_index = 0u;
     ctrl->fused_store_step_phase = 0u;
-    ctrl->step_condition_met = false;
+    ctrl->fused_pick_store_condition_met = false;
+    ctrl->fused_pick_store_condition_time_ms = 0u;
   }
 
   switch (ctrl->fused_store_position) {
@@ -1356,206 +1478,80 @@ static void AutoOre_RunFusedStore(AutoOre_t *ctrl, uint32_t now_ms) {
   }
 }
 
-static void AutoOre_CopyFeedbackToStepCtrl(AutoOre_t *ctrl) {
-  auto_ctrl_feedback_t step_feedback = {0};
-  step_feedback.yaw_auto_rad = ctrl->feedback.yaw_auto_rad;
-  step_feedback.pe13_photo1_triggered = ctrl->feedback.pe13_photo1_triggered;
-  step_feedback.pe9_photo2_triggered = ctrl->feedback.pe9_photo2_triggered;
-  step_feedback.pa2_photo3_triggered = ctrl->feedback.pa2_photo3_triggered;
-  step_feedback.pa0_photo4_triggered = ctrl->feedback.pa0_photo4_triggered;
-  step_feedback.pole_front_lift_rad = ctrl->feedback.pole_front_lift_rad;
-  step_feedback.pole_rear_lift_rad = ctrl->feedback.pole_rear_lift_rad;
-  step_feedback.pole_front_at_target = ctrl->feedback.pole_front_at_target;
-  step_feedback.pole_rear_at_target = ctrl->feedback.pole_rear_at_target;
-  step_feedback.pole_all_at_target = ctrl->feedback.pole_all_at_target;
-  for (uint8_t i = 0u; i < 4u; ++i) {
-    step_feedback.wheel_position_rad[i] = ctrl->feedback.wheel_position_rad[i];
-  }
-  AutoCtrl_SetFeedback(&ctrl->step_ctrl, &step_feedback);
-  AutoCtrl_SetYawRateCommand(&ctrl->step_ctrl,
-                             ctrl->feedback.yaw_rate_cmd_rad_s);
-}
-
-static bool AutoOre_CopyStepCtrlOutputs(AutoOre_t *ctrl,
-                                        bool keep_fused_pole_target) {
-  ctrl->chassis_cmd = ctrl->step_ctrl.chassis_cmd;
-  ctrl->chassis_cmd_valid =
-      ctrl->step_ctrl.chassis_cmd.mode != CHASSIS_MODE_RELAX;
-
-  if (keep_fused_pole_target) {
-    return AutoOre_CommandFusedStepStartPoleTarget(ctrl);
-  }
-
-  ctrl->pole_cmd = ctrl->step_ctrl.pole_cmd;
-  ctrl->pole_cmd_valid = ctrl->step_ctrl.pole_cmd.mode != POLE_MODE_RELAX;
-  return true;
-}
-
-static bool AutoOre_ShouldKeepFusedPoleDuringStepCtrl(
-    auto_ctrl_run_state_e state_before_update,
-    auto_ctrl_run_state_e state_after_update) {
-  return state_before_update == AUTO_CTRL_STATE_PREALIGN &&
-         (state_after_update == AUTO_CTRL_STATE_PREALIGN ||
-          state_after_update == AUTO_CTRL_STATE_RUN_TEMPLATE);
-}
-
-static void AutoOre_ResetFusedStepTemplateCtx(AutoOre_t *ctrl,
-                                              uint8_t step_index) {
-  memset(&ctrl->step_ctrl.template_ctx, 0,
-         sizeof(ctrl->step_ctrl.template_ctx));
-  ctrl->step_ctrl.template_ctx.step_index = step_index;
-}
-
-static void AutoOre_ApplyFusedStepTemplateOverrides(
-    AutoOre_t *ctrl, const AutoOre_FusedParam_t *param) {
-  if (ctrl == 0 || param == 0) {
-    return;
-  }
-
-  ctrl->step_ctrl.template_ctx.descend_move_override_enabled =
-      param->override_descend_move;
-  ctrl->step_ctrl.template_ctx.descend_mid_move_ms =
-      param->descend_mid_move_ms;
-  ctrl->step_ctrl.template_ctx.descend_rear_retract_move_ms =
-      param->descend_rear_retract_move_ms;
-  ctrl->step_ctrl.template_ctx.descend_rear_retract_move_wheel_delta_rad =
-      param->descend_rear_retract_move_wheel_delta_rad;
-}
-
-static void AutoOre_RunFusedStepTemplate(AutoOre_t *ctrl, uint32_t now_ms) {
-  const AutoOre_FusedParam_t *param = AutoOre_FusedParam(ctrl);
-  if (param == 0) {
-    AutoOre_FailInvalidParam(ctrl);
-    return;
-  }
-
-  if (!ctrl->step_ctrl_started) {
-    AutoCtrl_Init(&ctrl->step_ctrl);
-    const auto_ctrl_yaw_source_e yaw_source =
-        (ctrl->feedback.yaw_source == AUTO_CTRL_YAW_SOURCE_PC)
-            ? AUTO_CTRL_YAW_SOURCE_PC
-            : AUTO_CTRL_YAW_SOURCE_STM32;
-    AutoCtrl_SetYawSource(&ctrl->step_ctrl, yaw_source);
-    AutoCtrl_SetYawZeroOffset(&ctrl->step_ctrl, 0.0f);
-    AutoOre_CopyFeedbackToStepCtrl(ctrl);
-    const auto_ctrl_template_e template_id = AutoOre_FusedStepTemplateId(ctrl);
-    const float target_yaw_rad = ctrl->prealign_yaw_target_valid
-                                     ? ctrl->prealign_target_yaw_rad
-                                     : ctrl->feedback.yaw_auto_rad;
-    const float yaw_tolerance = AutoOre_PrealignYawToleranceRad(ctrl);
-    const auto_ctrl_sensor_mode_e sensor_mode =
-        (yaw_source == AUTO_CTRL_YAW_SOURCE_PC) ? AUTO_CTRL_SENSOR_MODE_NONE
-                                                : AUTO_CTRL_SENSOR_MODE_YAW_ONLY;
-    if (!AutoCtrl_StartTemplate(&ctrl->step_ctrl, template_id,
-                                AUTO_CTRL_TRAVEL_DIR_HEAD_FORWARD,
-                                target_yaw_rad, yaw_tolerance,
-                                sensor_mode, now_ms)) {
-      AutoOre_FailInvalidParam(ctrl);
-      return;
-    }
-    ctrl->step_ctrl_started = true;
-    ctrl->step_ctrl_active = true;
-  }
-
-  AutoOre_CopyFeedbackToStepCtrl(ctrl);
-  const auto_ctrl_run_state_e state_before_update =
-      AutoCtrl_GetState(&ctrl->step_ctrl);
-  AutoOre_ApplyFusedStepTemplateOverrides(ctrl, param);
-  AutoCtrl_Update(&ctrl->step_ctrl, now_ms);
-  const auto_ctrl_run_state_e state_after_update =
-      AutoCtrl_GetState(&ctrl->step_ctrl);
-  bool template_skip_applied = false;
-  if (state_after_update == AUTO_CTRL_STATE_RUN_TEMPLATE &&
-      ctrl->fused_step_template_start_step_index != 0u) {
-    AutoOre_ResetFusedStepTemplateCtx(
-        ctrl, ctrl->fused_step_template_start_step_index);
-    AutoOre_ApplyFusedStepTemplateOverrides(ctrl, param);
-    ctrl->fused_step_template_start_step_index = 0u;
-    template_skip_applied = true;
-  }
-  AutoOre_ApplyFusedStepTemplateOverrides(ctrl, param);
-  if (state_before_update == AUTO_CTRL_STATE_PREALIGN &&
-      state_after_update == AUTO_CTRL_STATE_RUN_TEMPLATE &&
-      !template_skip_applied &&
-      AutoOre_FusedTemplateStartsAtHeldPoleTarget(
-          AutoCtrl_GetTemplate(&ctrl->step_ctrl))) {
-    ctrl->step_ctrl.template_ctx.pole_target_seen_not_ready = true;
-  }
-  if (!AutoOre_CopyStepCtrlOutputs(
-          ctrl, AutoOre_ShouldKeepFusedPoleDuringStepCtrl(
-                    state_before_update, state_after_update))) {
-    AutoOre_FailInvalidParam(ctrl);
-    return;
-  }
-
-  if (state_after_update == AUTO_CTRL_STATE_SUCCESS) {
-    ctrl->fused_step_done = true;
-    ctrl->step_ctrl_active = false;
-    return;
-  }
-
-  if (state_after_update == AUTO_CTRL_STATE_FAIL ||
-      state_after_update == AUTO_CTRL_STATE_ABORT) {
-    ctrl->state = AUTO_ORE_STATE_FAIL;
-    ctrl->result = AUTO_ORE_RESULT_FAIL;
-    ctrl->fault = (AutoCtrl_GetFault(&ctrl->step_ctrl) ==
-                   AUTO_CTRL_FAULT_TEMPLATE_TIMEOUT)
-                      ? AUTO_ORE_FAULT_TIMEOUT
-                      : AUTO_ORE_FAULT_SENSOR_INVALID;
-  }
-}
-
 static void AutoOre_FinishFusedStepSide(AutoOre_t *ctrl) {
   ctrl->fused_step_done = true;
-  ctrl->step_ctrl_active = false;
-  ctrl->fused_step_template_start_step_index = 0u;
   AutoOre_CommandChassisHold(ctrl);
 }
 
-static void AutoOre_RunFusedStepSide(AutoOre_t *ctrl, uint32_t now_ms,
-                                     const AutoOre_FusedParam_t *fused) {
-  if (ctrl == 0 || fused == 0 || ctrl->fused_step_done) {
+static void AutoOre_RunFusedAscendStepSide(AutoOre_t *ctrl, uint32_t now_ms,
+                                           const AutoOre_FusedParam_t *fused) {
+  const float *start_target = AutoOre_FusedStepStartPoleTarget(ctrl);
+  const float *front_retract_target = AutoOre_FusedFrontRetractPoleTarget(ctrl);
+  const float *all_retract_target = AutoOre_FusedAllRetractPoleTarget(ctrl);
+  if (start_target == 0 || front_retract_target == 0 ||
+      all_retract_target == 0) {
+    AutoOre_FailInvalidParam(ctrl);
     return;
   }
 
-  switch (ctrl->step_phase) {
+  switch (ctrl->fused_step_phase) {
     case 0:
-      if (!AutoOre_CommandFusedStepStartPoleTarget(ctrl)) {
+      if (!AutoOre_CommandPoleTarget(ctrl, start_target)) {
         AutoOre_FailInvalidParam(ctrl);
         return;
       }
-
-      if (AutoOre_FusedStepStartFrontPhotoTriggered(ctrl)) {
-        AutoOre_CommandChassisHold(ctrl);
-        ctrl->fused_step_template_start_step_index =
-            AUTO_ORE_FUSED_HEAD_ASCEND_FRONT_RETRACT_STEP_INDEX;
-        AutoOre_SetFusedStepSidePhase(ctrl, 1u);
-        return;
-      }
-
-      if (fused->step_start_wheel_delta_rad <= 0.0f) {
-        AutoOre_CommandChassisHold(ctrl);
-        AutoOre_SetFusedStepSidePhase(ctrl, 1u);
-        return;
-      }
-
       AutoOre_CommandChassisMoveYawRate(ctrl, fused->step_start_vx_mps,
                                         ctrl->feedback.yaw_rate_cmd_rad_s);
-      const bool step_start_distance_ready =
-          AutoOre_WheelDeltaMoveReached(ctrl, fused->step_start_wheel_delta_rad);
-      const bool step_start_timeout_ready =
-          AutoOre_StepElapsed(ctrl, now_ms) >=
-          AutoOre_FusedPrecontactTimeoutMs(ctrl, fused);
-      if (step_start_distance_ready || step_start_timeout_ready) {
-        AutoOre_CommandChassisHold(ctrl);
-        AutoOre_SetFusedStepSidePhase(ctrl, 1u);
+      if (ctrl->feedback.pe13_photo1_triggered ||
+          AutoOre_FusedStepMoveGateReady(
+              ctrl, now_ms, fused->step_start_wheel_delta_rad,
+              AutoOre_FusedPrecontactTimeoutMs(ctrl, fused))) {
+        AutoOre_SetFusedStepSidePhase(ctrl, 1u, now_ms);
       }
       return;
 
     case 1:
-      AutoOre_RunFusedStepTemplate(ctrl, now_ms);
-      if (ctrl->fused_step_done) {
+      if (!AutoOre_CommandPoleTarget(ctrl, front_retract_target)) {
+        AutoOre_FailInvalidParam(ctrl);
+        return;
+      }
+      AutoOre_CommandChassisMoveYawRate(ctrl, fused->step_start_vx_mps,
+                                        ctrl->feedback.yaw_rate_cmd_rad_s);
+      if (AutoOre_FusedStepWaitPoleTarget(
+              ctrl, now_ms, ctrl->feedback.pole_front_at_target)) {
+        AutoOre_SetFusedStepSidePhase(ctrl, 2u, now_ms);
+      } else {
+        (void)AutoOre_CheckFusedParallelTimeout(ctrl, now_ms);
+      }
+      return;
+
+    case 2:
+      if (!AutoOre_CommandPoleTarget(ctrl, front_retract_target)) {
+        AutoOre_FailInvalidParam(ctrl);
+        return;
+      }
+      AutoOre_CommandChassisMoveYawRate(ctrl, fused->step_start_vx_mps,
+                                        ctrl->feedback.yaw_rate_cmd_rad_s);
+      if (ctrl->feedback.pa2_photo3_triggered ||
+          ctrl->feedback.pa0_photo4_triggered) {
+        AutoOre_SetFusedStepSidePhase(ctrl, 3u, now_ms);
+      } else {
+        (void)AutoOre_CheckFusedParallelTimeout(ctrl, now_ms);
+      }
+      return;
+
+    case 3:
+      if (!AutoOre_CommandPoleTarget(ctrl, all_retract_target)) {
+        AutoOre_FailInvalidParam(ctrl);
+        return;
+      }
+      AutoOre_CommandChassisMoveYawRate(ctrl, fused->step_start_vx_mps,
+                                        ctrl->feedback.yaw_rate_cmd_rad_s);
+      if (AutoOre_FusedStepWaitPoleTarget(
+              ctrl, now_ms, ctrl->feedback.pole_all_at_target)) {
         AutoOre_FinishFusedStepSide(ctrl);
+      } else {
+        (void)AutoOre_CheckFusedParallelTimeout(ctrl, now_ms);
       }
       return;
 
@@ -1565,23 +1561,225 @@ static void AutoOre_RunFusedStepSide(AutoOre_t *ctrl, uint32_t now_ms,
   }
 }
 
-static void AutoOre_RunFusedStoreAndStepParallel(AutoOre_t *ctrl,
-                                                uint32_t now_ms,
-                                                const AutoOre_FusedParam_t *fused) {
-  AutoOre_EnterStep(ctrl, now_ms);
+static void AutoOre_RunFusedDescendStepSide(AutoOre_t *ctrl, uint32_t now_ms,
+                                            const AutoOre_FusedParam_t *fused) {
+  if (ctrl->param.pole_param == 0) {
+    AutoOre_FailInvalidParam(ctrl);
+    return;
+  }
+  const float *start_target = AutoOre_FusedStepStartPoleTarget(ctrl);
+  const float *all_extend_target = AutoOre_FusedActionUses400(ctrl->action)
+                                       ? ctrl->param.pole_param->preset
+                                             .step_400_all_extend
+                                       : ctrl->param.pole_param->preset
+                                             .step_200_all_extend;
+  const float *all_retract_target = AutoOre_FusedAllRetractPoleTarget(ctrl);
+  if (start_target == 0 || all_extend_target == 0 ||
+      all_retract_target == 0) {
+    AutoOre_FailInvalidParam(ctrl);
+    return;
+  }
 
-  if (!ctrl->fused_store_done) {
-    AutoOre_RunFusedStore(ctrl, now_ms);
+  switch (ctrl->fused_step_phase) {
+    case 0:
+      if (!AutoOre_CommandPoleTarget(ctrl, start_target)) {
+        AutoOre_FailInvalidParam(ctrl);
+        return;
+      }
+      AutoOre_CommandChassisMoveYawRate(ctrl, fused->step_start_vx_mps,
+                                        ctrl->feedback.yaw_rate_cmd_rad_s);
+      if (AutoOre_FusedPhotoFallingEdge(ctrl,
+                                        ctrl->feedback.pe9_photo2_triggered) ||
+          AutoOre_FusedStepMoveGateReady(
+              ctrl, now_ms, fused->step_start_wheel_delta_rad,
+              AutoOre_FusedPrecontactTimeoutMs(ctrl, fused))) {
+        AutoOre_SetFusedStepSidePhase(ctrl, 1u, now_ms);
+      }
+      return;
+
+    case 1:
+      if (!AutoOre_CommandFusedPolePair(ctrl, all_extend_target,
+                                        all_retract_target)) {
+        AutoOre_FailInvalidParam(ctrl);
+        return;
+      }
+      AutoOre_CommandChassisMoveYawRate(ctrl, fused->step_start_vx_mps,
+                                        ctrl->feedback.yaw_rate_cmd_rad_s);
+      if (AutoOre_FusedStepWaitPoleTarget(
+              ctrl, now_ms, ctrl->feedback.pole_front_at_target)) {
+        AutoOre_SetFusedStepSidePhase(ctrl, 2u, now_ms);
+      } else {
+        (void)AutoOre_CheckFusedParallelTimeout(ctrl, now_ms);
+      }
+      return;
+
+    case 2:
+      if (!AutoOre_CommandFusedPolePair(ctrl, all_extend_target,
+                                        all_retract_target)) {
+        AutoOre_FailInvalidParam(ctrl);
+        return;
+      }
+      AutoOre_CommandChassisMoveYawRate(ctrl, fused->step_start_vx_mps,
+                                        ctrl->feedback.yaw_rate_cmd_rad_s);
+      if (AutoOre_FusedPhotoFallingEdge(ctrl,
+                                        ctrl->feedback.pa0_photo4_triggered)) {
+        AutoOre_SetFusedStepSidePhase(ctrl, 3u, now_ms);
+      } else {
+        (void)AutoOre_CheckFusedParallelTimeout(ctrl, now_ms);
+      }
+      return;
+
+    case 3:
+      if (!AutoOre_CommandPoleTarget(ctrl, all_extend_target)) {
+        AutoOre_FailInvalidParam(ctrl);
+        return;
+      }
+      AutoOre_CommandChassisMoveYawRate(ctrl, fused->step_start_vx_mps,
+                                        ctrl->feedback.yaw_rate_cmd_rad_s);
+      if (AutoOre_FusedStepWaitPoleTarget(
+              ctrl, now_ms, ctrl->feedback.pole_all_at_target)) {
+        AutoOre_SetFusedStepSidePhase(ctrl, 4u, now_ms);
+      } else {
+        (void)AutoOre_CheckFusedParallelTimeout(ctrl, now_ms);
+      }
+      return;
+
+    case 4:
+      if (!AutoOre_CommandPoleTarget(ctrl, all_retract_target)) {
+        AutoOre_FailInvalidParam(ctrl);
+        return;
+      }
+      AutoOre_CommandChassisMoveYawRate(ctrl, fused->step_start_vx_mps,
+                                        ctrl->feedback.yaw_rate_cmd_rad_s);
+      if (AutoOre_FusedStepWaitPoleTarget(
+              ctrl, now_ms, ctrl->feedback.pole_all_at_target)) {
+        AutoOre_FinishFusedStepSide(ctrl);
+      } else {
+        (void)AutoOre_CheckFusedParallelTimeout(ctrl, now_ms);
+      }
+      return;
+
+    default:
+      AutoOre_FinishFusedStepSide(ctrl);
+      return;
+  }
+}
+
+static void AutoOre_RunFusedStepSide(AutoOre_t *ctrl, uint32_t now_ms,
+                                     const AutoOre_FusedParam_t *fused) {
+  if (ctrl == 0 || fused == 0 || ctrl->fused_step_done) {
+    return;
+  }
+  if (ctrl->fused_step_phase_enter_time_ms == 0u) {
+    ctrl->fused_step_phase_enter_time_ms = now_ms;
+  }
+
+  if (AutoOre_FusedActionIsAscend(ctrl->action)) {
+    AutoOre_RunFusedAscendStepSide(ctrl, now_ms, fused);
+  } else {
+    AutoOre_RunFusedDescendStepSide(ctrl, now_ms, fused);
+  }
+}
+
+static void AutoOre_RunFusedPickStoreSide(AutoOre_t *ctrl, uint32_t now_ms,
+                                          const AutoOre_FusedParam_t *fused) {
+  if (ctrl == 0 || fused == 0 || ctrl->fused_store_done) {
+    return;
+  }
+
+  switch (ctrl->fused_pick_store_step_index) {
+    case 0:
+      if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_STANDBY, SUCTION_ON,
+                              &ctrl->param.arm_speed.pick_standby)) {
+        AutoOre_FailInvalidParam(ctrl);
+        return;
+      }
+      if (AutoOre_FusedPickStoreWaitConditionThenDelay(
+              ctrl, now_ms,
+              ctrl->feedback.arm_at_target && ctrl->feedback.pole_all_at_target,
+              0u)) {
+        AutoOre_FusedPickStoreNextStep(ctrl);
+      }
+      return;
+
+    case 1:
+      if (!AutoOre_CommandArm(ctrl, AutoOre_FusedPickArmPoint(ctrl),
+                              SUCTION_ON,
+                              &ctrl->param.arm_speed.pick_place)) {
+        AutoOre_FailInvalidParam(ctrl);
+        return;
+      }
+      if (AutoOre_FusedPickStoreWaitArmCommandTarget(ctrl, now_ms)) {
+        AutoOre_FusedPickStoreNextStep(ctrl);
+      }
+      return;
+
+    case 2:
+      if (!AutoOre_CommandArm(ctrl, AutoOre_FusedPickArmPoint(ctrl),
+                              SUCTION_ON,
+                              &ctrl->param.arm_speed.pick_fetch)) {
+        AutoOre_FailInvalidParam(ctrl);
+        return;
+      }
+      const bool precontact_distance_ready =
+          AutoOre_WheelDeltaMoveReached(ctrl,
+                                        fused->precontact_wheel_delta_rad);
+      const bool precontact_timeout_ready =
+          AutoOre_FusedPickStoreStepElapsed(ctrl, now_ms) >=
+          AutoOre_FusedPrecontactTimeoutMs(ctrl, fused);
+      if (precontact_distance_ready || precontact_timeout_ready) {
+        AutoOre_FusedPickStoreNextStep(ctrl);
+      }
+      return;
+
+    case 3:
+      if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_PICK_LIFT_DETECT,
+                              SUCTION_ON,
+                              &ctrl->param.arm_speed.pick_lift_detect)) {
+        AutoOre_FailInvalidParam(ctrl);
+        return;
+      }
+      if (AutoOre_FusedPickStoreWaitConditionThenDelay(
+              ctrl, now_ms, ctrl->feedback.arm_at_target,
+              AutoOre_FusedPickLiftDetectMs(ctrl)) &&
+          AutoOre_FusedArmPhotoConfirmed(ctrl, now_ms)) {
+        AutoOre_SetArmHasOre(ctrl, true);
+        ctrl->fused_pick_done = true;
+        AutoOre_FusedPickStoreNextStep(ctrl);
+      }
+      return;
+
+    case 4:
+      if (!ctrl->fused_store_done) {
+        AutoOre_RunFusedStore(ctrl, now_ms);
+      }
+      return;
+
+    default:
+      ctrl->fused_store_done = true;
+      return;
+  }
+}
+
+static void AutoOre_RunFusedDedicatedParallel(AutoOre_t *ctrl,
+                                              uint32_t now_ms,
+                                              const AutoOre_FusedParam_t *fused) {
+  AutoOre_EnterStep(ctrl, now_ms);
+  ctrl->step_phase = ctrl->fused_step_phase;
+
+  if (!ctrl->fused_step_done) {
+    AutoOre_RunFusedStepSide(ctrl, now_ms, fused);
+    ctrl->step_phase = ctrl->fused_step_phase;
+  } else {
+    AutoOre_CommandChassisHold(ctrl);
   }
 
   if (ctrl->state != AUTO_ORE_STATE_RUNNING) {
     return;
   }
 
-  if (!ctrl->fused_step_done) {
-    AutoOre_RunFusedStepSide(ctrl, now_ms, fused);
-  } else {
-    AutoOre_CommandChassisHold(ctrl);
+  if (!ctrl->fused_store_done) {
+    AutoOre_RunFusedPickStoreSide(ctrl, now_ms, fused);
   }
 
   if (ctrl->state != AUTO_ORE_STATE_RUNNING) {
@@ -1597,12 +1795,7 @@ static void AutoOre_RunFusedStoreAndStepParallel(AutoOre_t *ctrl,
 
 static void AutoOre_RunStepPickStoreFused(AutoOre_t *ctrl, uint32_t now_ms) {
   const AutoOre_FusedParam_t *fused = AutoOre_FusedParam(ctrl);
-  if (fused == 0) {
-    AutoOre_FailInvalidParam(ctrl);
-    return;
-  }
-  const float *pole_target = AutoOre_FusedPickPoleTarget(ctrl);
-  if (pole_target == 0) {
+  if (fused == 0 || AutoOre_FusedStepStartPoleTarget(ctrl) == 0) {
     AutoOre_FailInvalidParam(ctrl);
     return;
   }
@@ -1617,81 +1810,9 @@ static void AutoOre_RunStepPickStoreFused(AutoOre_t *ctrl, uint32_t now_ms) {
       }
       return;
     case 1:
-      AutoOre_EnterStep(ctrl, now_ms);
-      AutoOre_CommandChassisHold(ctrl);
-      if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_STANDBY, SUCTION_ON,
-                              &ctrl->param.arm_speed.pick_standby) ||
-          !AutoOre_CommandPoleTarget(ctrl, pole_target)) {
-        AutoOre_FailInvalidParam(ctrl);
-        return;
-      }
-      if (ctrl->feedback.pole_all_at_target) {
-        AutoOre_NextStep(ctrl);
-      } else {
-        (void)AutoOre_CheckTimeout(ctrl, now_ms);
-      }
+      AutoOre_RunFusedDedicatedParallel(ctrl, now_ms, fused);
       return;
     case 2:
-      AutoOre_EnterStep(ctrl, now_ms);
-      AutoOre_CommandChassisHold(ctrl);
-      if (!AutoOre_CommandArm(ctrl, AutoOre_FusedPickArmPoint(ctrl),
-                              SUCTION_ON,
-                              &ctrl->param.arm_speed.pick_place) ||
-          !AutoOre_CommandPoleTarget(ctrl, pole_target)) {
-        AutoOre_FailInvalidParam(ctrl);
-        return;
-      }
-      if (AutoOre_WaitArmCommandTarget(ctrl, now_ms)) {
-        AutoOre_NextStep(ctrl);
-      } else {
-        (void)AutoOre_CheckTimeout(ctrl, now_ms);
-      }
-      return;
-    case 3:
-      AutoOre_EnterStep(ctrl, now_ms);
-      if (!AutoOre_CommandArm(ctrl, AutoOre_FusedPickArmPoint(ctrl),
-                              SUCTION_ON,
-                              &ctrl->param.arm_speed.pick_fetch) ||
-          !AutoOre_CommandPoleTarget(ctrl, pole_target)) {
-        AutoOre_FailInvalidParam(ctrl);
-        return;
-      }
-      AutoOre_CommandChassisMoveYawRate(ctrl, fused->precontact_vx_mps,
-                                        ctrl->feedback.yaw_rate_cmd_rad_s);
-      const bool precontact_distance_ready =
-          AutoOre_WheelDeltaMoveReached(ctrl, fused->precontact_wheel_delta_rad);
-      const bool precontact_timeout_ready =
-          AutoOre_StepElapsed(ctrl, now_ms) >=
-          AutoOre_FusedPrecontactTimeoutMs(ctrl, fused);
-      if (precontact_distance_ready || precontact_timeout_ready) {
-        AutoOre_CommandChassisHold(ctrl);
-        AutoOre_NextStep(ctrl);
-      }
-      return;
-    case 4:
-      AutoOre_EnterStep(ctrl, now_ms);
-      AutoOre_CommandChassisHold(ctrl);
-      if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_PICK_LIFT_DETECT,
-                              SUCTION_ON,
-                              &ctrl->param.arm_speed.pick_lift_detect) ||
-          !AutoOre_CommandPoleTarget(ctrl, pole_target)) {
-        AutoOre_FailInvalidParam(ctrl);
-        return;
-      }
-      if (AutoOre_WaitConditionThenDelay(
-              ctrl, now_ms, ctrl->feedback.arm_at_target,
-              AutoOre_FusedPickLiftDetectMs(ctrl)) &&
-          AutoOre_FusedArmPhotoConfirmed(ctrl, now_ms)) {
-        AutoOre_SetArmHasOre(ctrl, true);
-        AutoOre_NextStep(ctrl);
-      } else {
-        (void)AutoOre_CheckTimeout(ctrl, now_ms);
-      }
-      return;
-    case 5:
-      AutoOre_RunFusedStoreAndStepParallel(ctrl, now_ms, fused);
-      return;
-    case 6:
       AutoOre_FinishSuccess(ctrl);
       return;
     default:
@@ -1828,18 +1949,27 @@ static bool AutoOre_StartResolved(AutoOre_t *ctrl, AutoOre_Action_t action,
   ctrl->step_condition_met = false;
   ctrl->step_condition_time_ms = now_ms;
   ctrl->step_enter_time_ms = now_ms;
-  ctrl->step_ctrl_active = false;
-  ctrl->step_ctrl_started = false;
   ctrl->fused_step_done = false;
+  ctrl->fused_pick_done = false;
   ctrl->fused_store_done = false;
   ctrl->pick_lift_confirmed = false;
   ctrl->prealign_yaw_target_valid = false;
   ctrl->prealign_target_yaw_rad = 0.0f;
   ctrl->prealign_yaw_error_rad = 0.0f;
   ctrl->fused_arm_photo_since_ms = 0u;
+  ctrl->fused_pick_store_step_index = 0u;
+  ctrl->fused_pick_store_condition_met = false;
+  ctrl->fused_pick_store_condition_time_ms = 0u;
   ctrl->fused_store_step_index = 0u;
   ctrl->fused_store_step_phase = 0u;
-  ctrl->fused_step_template_start_step_index = 0u;
+  ctrl->fused_step_phase = 0u;
+  ctrl->fused_step_distance_latch_valid = false;
+  ctrl->fused_step_photo_seen = false;
+  ctrl->fused_step_wheel_delta_rad = 0.0f;
+  ctrl->fused_step_target_wheel_delta_rad = 0.0f;
+  ctrl->fused_step_phase_enter_time_ms = 0u;
+  ctrl->fused_step_condition_met = false;
+  ctrl->fused_step_condition_time_ms = 0u;
   ctrl->fused_store_position = AUTO_ORE_POSITION_NONE;
   AutoOre_ResetDistanceGate(ctrl);
   AutoOre_ClearOutputs(ctrl);
@@ -2009,13 +2139,8 @@ void AutoOre_Abort(AutoOre_t *ctrl) {
   ctrl->state = AUTO_ORE_STATE_ABORT;
   ctrl->result = AUTO_ORE_RESULT_ABORTED;
   ctrl->fault = AUTO_ORE_FAULT_ABORTED;
-  if (ctrl->step_ctrl_active || ctrl->step_ctrl_started) {
-    AutoCtrl_Abort(&ctrl->step_ctrl);
-  }
   ctrl->action = AUTO_ORE_ACTION_NONE;
   ctrl->active_position = AUTO_ORE_POSITION_NONE;
-  ctrl->step_ctrl_active = false;
-  ctrl->step_ctrl_started = false;
   AutoOre_ClearOutputs(ctrl);
 }
 

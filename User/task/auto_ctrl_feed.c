@@ -967,9 +967,11 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms) {
   g_auto_ore_debug.ore_store_cmd_valid = auto_ore_ctrl.ore_store_cmd_valid;
   g_auto_ore_debug.arm_at_target = auto_ore_feedback.arm_at_target;
   g_auto_ore_debug.pick_lift_confirmed = auto_ore_ctrl.pick_lift_confirmed;
-  g_auto_ore_debug.fused_wheel_delta_rad = auto_ore_ctrl.wheel_delta_rad;
+  g_auto_ore_debug.fused_pick_done = auto_ore_ctrl.fused_pick_done;
+  g_auto_ore_debug.fused_wheel_delta_rad =
+      auto_ore_ctrl.fused_step_wheel_delta_rad;
   g_auto_ore_debug.fused_target_wheel_delta_rad =
-      auto_ore_ctrl.target_wheel_delta_rad;
+      auto_ore_ctrl.fused_step_target_wheel_delta_rad;
   g_auto_ore_debug.fused_step_done = auto_ore_ctrl.fused_step_done;
   g_auto_ore_debug.fused_store_done = auto_ore_ctrl.fused_store_done;
   if (arm_fb != NULL) {
