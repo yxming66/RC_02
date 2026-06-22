@@ -353,6 +353,46 @@ bool WaitRecvComplete(uint32_t timeout_ms) {
   return (flags & kRxCompleteFlag) != 0u;
 }
 
+uint32_t MrlinkErrorTotal(const MrLink_Stats_t *stats) {
+  if (stats == nullptr) {
+    return 0u;
+  }
+  return stats->frame_rx_crc_err + stats->frame_rx_oversize +
+         stats->frame_rx_header_skip + stats->frame_rx_truncated +
+         stats->frame_rx_unknown_cmd + stats->frame_rx_size_mismatch +
+         stats->feed_bytes_dropped;
+}
+
+void DispatchPendingRxFrames() {
+  while (true) {
+    const MrLink_Stats_t *before = s_bus.GetStats();
+    if (before == nullptr) {
+      return;
+    }
+
+    const uint32_t prev_ok = before->frame_rx_ok;
+    const uint32_t prev_error_total = MrlinkErrorTotal(before);
+    const int8_t dispatch_ret = s_bus.Dispatch();
+
+    const MrLink_Stats_t *after = s_bus.GetStats();
+    if (after == nullptr) {
+      return;
+    }
+
+    const bool frame_dispatched = after->frame_rx_ok != prev_ok;
+    const bool error_reported =
+        MrlinkErrorTotal(after) != prev_error_total;
+    if (error_reported) {
+      s_state.error_count++;
+      g_pc_comm_debug.last_rx_result = MRLINK_ERR;
+    }
+
+    if (dispatch_ret != MRLINK_OK || !frame_dispatched) {
+      break;
+    }
+  }
+}
+
 auto_ctrl_template_e MapTemplate(PC_StepTemplate_t pc_template) {
   switch (pc_template) {
     case PC_STEP_TEMPLATE_ASCEND_200_HEAD:
@@ -542,13 +582,7 @@ extern "C" void MrlinkPc_CommProcess(uint32_t now_ms) {
         g_pc_comm_debug.last_rx_raw, MRLINK_PC_MAX_FRAME_SIZE,
         s_rx_parse_buf, rx_len);
 
-    const uint32_t prev_ok = s_bus.GetStats()->frame_rx_ok;
-    const int8_t dispatch_ret = s_bus.Dispatch();
-    const MrLink_Stats_t *stats = s_bus.GetStats();
-    if (dispatch_ret != MRLINK_OK && stats->frame_rx_ok == prev_ok) {
-      s_state.error_count++;
-      g_pc_comm_debug.last_rx_result = MRLINK_ERR;
-    }
+    DispatchPendingRxFrames();
   }
 
   MrlinkPc_DebugUpdate();
