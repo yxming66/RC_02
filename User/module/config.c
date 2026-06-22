@@ -400,6 +400,7 @@ Config_RobotParam_t robot_config = {
             .precontact_timeout_ms = 3000u,                     /* 取矿前低速靠近兜底超时，单位 ms。 */
             .step_start_vx_mps = 0.40f,                          /* 存矿后进入台阶模板前的起步冲刺速度，单位 m/s。 */
             .step_start_wheel_delta_rad = 2.36f,                 /* 存矿后进入台阶模板前的起步冲刺轮转角阈值，单位 rad。 */
+            .fast_pick_on_front_photo = true,                    /* true=前光电触发即认为取矿完成，跳过停顿抬矿检测并直接并行存矿/上台阶。 */
             .use_arm_photo_confirm = false,                      /* false=机械臂到位加延时确认，true=机械臂取矿传感器确认。 */
         },
         .fused_step_pick_store_descend_200_head = {
@@ -424,6 +425,7 @@ Config_RobotParam_t robot_config = {
             .precontact_timeout_ms = 2500u,                     /* 取矿前低速靠近兜底超时，单位 ms。 */
             .step_start_vx_mps = 0.40f,                          /* 存矿后进入台阶模板前的起步冲刺速度，单位 m/s。 */
             .step_start_wheel_delta_rad = 2.36f,                 /* 存矿后进入台阶模板前的起步冲刺轮转角阈值，单位 rad。 */
+            .fast_pick_on_front_photo = true,                    /* true=前光电触发即认为取矿完成，跳过停顿抬矿检测并直接并行存矿/上台阶。 */
             .use_arm_photo_confirm = false,                      /* false=机械臂到位加延时确认，true=机械臂取矿传感器确认。 */
         },
         .fused_step_pick_store_descend_400_head = {

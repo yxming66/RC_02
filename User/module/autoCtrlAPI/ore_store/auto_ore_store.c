@@ -74,6 +74,16 @@ static void AutoOre_NextStep(AutoOre_t *ctrl) {
   ctrl->target_wheel_delta_rad = 0.0f;
 }
 
+static void AutoOre_JumpToStep(AutoOre_t *ctrl, uint8_t step_index) {
+  ctrl->step_index = step_index;
+  ctrl->step_phase = 0u;
+  ctrl->step_entered = false;
+  ctrl->step_condition_met = false;
+  ctrl->distance_latch_valid = false;
+  ctrl->wheel_delta_rad = 0.0f;
+  ctrl->target_wheel_delta_rad = 0.0f;
+}
+
 static uint32_t AutoOre_StepTimeoutMs(const AutoOre_t *ctrl) {
   return (ctrl->param.default_step_timeout_ms > 0u)
              ? ctrl->param.default_step_timeout_ms
@@ -1142,6 +1152,21 @@ static bool AutoOre_FusedStepStartFrontPhotoTriggered(
   }
 }
 
+static bool AutoOre_FusedFastPickOnFrontPhotoEnabled(
+    const AutoOre_t *ctrl, const AutoOre_FusedParam_t *fused) {
+  if (ctrl == 0 || fused == 0 || !fused->fast_pick_on_front_photo) {
+    return false;
+  }
+
+  switch (AutoOre_FusedStepTemplateId(ctrl)) {
+    case AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD:
+    case AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD:
+      return true;
+    default:
+      return false;
+  }
+}
+
 static AutoOre_Action_t AutoOre_FusedDefaultPickAction(
     AutoOre_Action_t action) {
   switch (action) {
@@ -1712,6 +1737,25 @@ static void AutoOre_RunStepPickStoreFused(AutoOre_t *ctrl, uint32_t now_ms) {
       }
       AutoOre_CommandChassisMoveYawRate(ctrl, fused->precontact_vx_mps,
                                         ctrl->feedback.yaw_rate_cmd_rad_s);
+      if (AutoOre_FusedFastPickOnFrontPhotoEnabled(ctrl, fused)) {
+        if (AutoOre_FusedStepStartFrontPhotoTriggered(ctrl)) {
+          ctrl->pick_lift_confirmed = true;
+          AutoOre_SetArmHasOre(ctrl, true);
+          ctrl->fused_step_template_start_step_index =
+              AUTO_ORE_FUSED_HEAD_ASCEND_FRONT_RETRACT_STEP_INDEX;
+          AutoOre_JumpToStep(ctrl, 5u);
+          ctrl->step_phase = 1u;
+          AutoOre_RunFusedStoreAndStepParallel(ctrl, now_ms, fused);
+          return;
+        }
+
+        if (AutoOre_StepElapsed(ctrl, now_ms) >=
+            AutoOre_FusedPrecontactTimeoutMs(ctrl, fused)) {
+          AutoOre_CommandChassisHold(ctrl);
+          AutoOre_NextStep(ctrl);
+        }
+        return;
+      }
       const bool precontact_distance_ready =
           AutoOre_WheelDeltaMoveReached(ctrl, fused->precontact_wheel_delta_rad);
       const bool precontact_timeout_ready =
