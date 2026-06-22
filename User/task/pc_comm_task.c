@@ -253,7 +253,7 @@ static void PcComm_UpdateCameraYawCommand(uint32_t now_ms) {
                                         ? CAMERA_YAW_MODE_RELAX
                                         : CAMERA_YAW_MODE_ACTIVE;
                 cmd.yaw[yaw].target_yaw_rad = pc_cmd->target_yaw_rad[yaw];
-                cmd.yaw[yaw].feedback_tick_ms = state->camera_yaw_cmd_tick;
+                cmd.yaw[yaw].feedback_tick_ms = now_ms;
                 cmd.yaw[yaw].feedback_valid =
                     (state->camera_yaw_cmd_tick != 0u);
             }

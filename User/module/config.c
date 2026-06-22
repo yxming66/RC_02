@@ -269,8 +269,8 @@ Config_RobotParam_t robot_config = {
     .arm_simple_param = {
         .dm4340_param = {
             .can = BSP_CAN_3,
-            .master_id = 0x12,
-            .can_id = 0x02,
+            .master_id = 0x11,
+            .can_id = 0x01,
             .module = MOTOR_DM_J4340,
             .reverse = true,
         },
@@ -829,17 +829,17 @@ Config_RobotParam_t robot_config = {
             .pid = {
                 .yaw_pid = {
                     .k = 1.0f,
-                    .p = 0.40f,
-                    .i = 0.0f,
+                    .p = 5.0f,
+                    .i = 0.5f,
                     .d = 0.0f,
-                    .i_limit = 0.0f,
-                    .out_limit = 0.80f,
+                    .i_limit = 0.1f,
+                    .out_limit = 1.0f,
                     .d_cutoff_freq = -1.0f,
                     .range = M_2PI,
                 },
             },
             .limit = {
-                .max_output = 0.80f,
+                .max_output = 1.0f,
                 .arrive_threshold_rad = 0.02f,
                 .feedback_timeout_ms = 200u,
             },
@@ -856,17 +856,17 @@ Config_RobotParam_t robot_config = {
             .pid = {
                 .yaw_pid = {
                     .k = 1.0f,
-                    .p = 0.40f,
-                    .i = 0.0f,
+                    .p = 5.0f,
+                    .i = 0.5f,
                     .d = 0.0f,
-                    .i_limit = 0.0f,
-                    .out_limit = 0.80f,
+                    .i_limit = 0.1f,
+                    .out_limit = 1.0f,
                     .d_cutoff_freq = -1.0f,
                     .range = M_2PI,
                 },
             },
             .limit = {
-                .max_output = 0.80f,
+                .max_output = 1.0f,
                 .arrive_threshold_rad = 0.02f,
                 .feedback_timeout_ms = 200u,
             },
