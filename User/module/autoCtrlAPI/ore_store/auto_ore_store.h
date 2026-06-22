@@ -54,6 +54,17 @@ typedef enum {
 } AutoOre_Fault_t;
 
 typedef enum {
+  AUTO_ORE_FAILURE_NONE = 0u,
+  AUTO_ORE_FAILURE_SETUP = (1u << 0),
+  AUTO_ORE_FAILURE_PICK_ORE = (1u << 1),
+  AUTO_ORE_FAILURE_STORE_ORE = (1u << 2),
+  AUTO_ORE_FAILURE_RELEASE_ORE = (1u << 3),
+  AUTO_ORE_FAILURE_CHAMBER = (1u << 4),
+  AUTO_ORE_FAILURE_STEP = (1u << 5),
+  AUTO_ORE_FAILURE_ABORTED = (1u << 9),
+} AutoOre_FailureMask_t;
+
+typedef enum {
   AUTO_ORE_POSITION_NONE = 0,
   AUTO_ORE_POSITION_TRANSFORM_LOW,
   AUTO_ORE_POSITION_TRANSFORM_HIGH,
@@ -172,6 +183,7 @@ typedef struct {
   AutoOre_State_t state;
   AutoOre_Result_t result;
   AutoOre_Fault_t fault;
+  uint16_t failure_mask;
   AutoOre_Action_t action;
   AutoOre_Position_t active_position;
   AutoOre_Occupancy_t occupancy;
@@ -235,6 +247,7 @@ bool AutoOre_IsBusy(const AutoOre_t *ctrl);
 AutoOre_State_t AutoOre_GetState(const AutoOre_t *ctrl);
 AutoOre_Result_t AutoOre_GetResult(const AutoOre_t *ctrl);
 AutoOre_Fault_t AutoOre_GetFault(const AutoOre_t *ctrl);
+uint16_t AutoOre_GetFailureMask(const AutoOre_t *ctrl);
 AutoOre_Position_t AutoOre_GetActivePosition(const AutoOre_t *ctrl);
 uint8_t AutoOre_GetStepIndex(const AutoOre_t *ctrl);
 const ArmSimple_CMD_t *AutoOre_GetArmCommand(const AutoOre_t *ctrl);

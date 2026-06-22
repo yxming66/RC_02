@@ -46,8 +46,6 @@ float auto_ctrl_local_yaw_zero_rad = 0.0f;
 auto_ctrl_feedback_t feedback = {0};
 static Sick_Output_t auto_ctrl_sick_output = {0};
 static PC_AutoAction_t auto_action_last_action = PC_AUTO_ACTION_NONE;
-static PC_AutoActionSubsystem_t auto_action_last_subsystem =
-    PC_AUTO_ACTION_SUBSYSTEM_NONE;
 static AutoOre_Action_t auto_ore_last_action = AUTO_ORE_ACTION_NONE;
 static PhotoTransfer_Snapshot_t photo_transfer_snapshot = {0};
 static bool photo_transfer_inited = false;
@@ -224,108 +222,6 @@ static PC_AutoAction_t AutoCtrlFeed_MapRodAction(
   }
 }
 
-static PC_AutoActionState_t AutoCtrlFeed_MapOreState(AutoOre_State_t state) {
-  switch (state) {
-    case AUTO_ORE_STATE_RUNNING:
-      return PC_AUTO_ACTION_STATE_RUNNING;
-    case AUTO_ORE_STATE_SUCCESS:
-      return PC_AUTO_ACTION_STATE_SUCCESS;
-    case AUTO_ORE_STATE_FAIL:
-      return PC_AUTO_ACTION_STATE_FAIL;
-    case AUTO_ORE_STATE_ABORT:
-      return PC_AUTO_ACTION_STATE_ABORT;
-    case AUTO_ORE_STATE_IDLE:
-    default:
-      return PC_AUTO_ACTION_STATE_IDLE;
-  }
-}
-
-static PC_AutoActionResult_t AutoCtrlFeed_MapOreResult(
-    AutoOre_Result_t result) {
-  switch (result) {
-    case AUTO_ORE_RESULT_RUNNING:
-      return PC_AUTO_ACTION_RESULT_RUNNING;
-    case AUTO_ORE_RESULT_SUCCESS:
-      return PC_AUTO_ACTION_RESULT_SUCCESS;
-    case AUTO_ORE_RESULT_FAIL:
-      return PC_AUTO_ACTION_RESULT_FAIL;
-    case AUTO_ORE_RESULT_ABORTED:
-      return PC_AUTO_ACTION_RESULT_ABORTED;
-    case AUTO_ORE_RESULT_NONE:
-    default:
-      return PC_AUTO_ACTION_RESULT_NONE;
-  }
-}
-
-static PC_AutoActionFault_t AutoCtrlFeed_MapOreFault(AutoOre_Fault_t fault) {
-  switch (fault) {
-    case AUTO_ORE_FAULT_INVALID_OCCUPANCY:
-      return PC_AUTO_ACTION_FAULT_INVALID_OCCUPANCY;
-    case AUTO_ORE_FAULT_INVALID_PARAM:
-      return PC_AUTO_ACTION_FAULT_INVALID_PARAM;
-    case AUTO_ORE_FAULT_NOT_HOMED:
-      return PC_AUTO_ACTION_FAULT_NOT_HOMED;
-    case AUTO_ORE_FAULT_TIMEOUT:
-      return PC_AUTO_ACTION_FAULT_TIMEOUT;
-    case AUTO_ORE_FAULT_ABORTED:
-      return PC_AUTO_ACTION_FAULT_ABORTED;
-    case AUTO_ORE_FAULT_NONE:
-    default:
-      return PC_AUTO_ACTION_FAULT_NONE;
-  }
-}
-
-static PC_AutoActionState_t AutoCtrlFeed_MapRodState(
-    AutoRodSpearhead_State_t state) {
-  switch (state) {
-    case AUTO_ROD_SPEARHEAD_STATE_RUNNING:
-      return PC_AUTO_ACTION_STATE_RUNNING;
-    case AUTO_ROD_SPEARHEAD_STATE_SUCCESS:
-      return PC_AUTO_ACTION_STATE_SUCCESS;
-    case AUTO_ROD_SPEARHEAD_STATE_FAIL:
-      return PC_AUTO_ACTION_STATE_FAIL;
-    case AUTO_ROD_SPEARHEAD_STATE_ABORT:
-      return PC_AUTO_ACTION_STATE_ABORT;
-    case AUTO_ROD_SPEARHEAD_STATE_IDLE:
-    default:
-      return PC_AUTO_ACTION_STATE_IDLE;
-  }
-}
-
-static PC_AutoActionResult_t AutoCtrlFeed_MapRodResult(
-    AutoRodSpearhead_Result_t result) {
-  switch (result) {
-    case AUTO_ROD_SPEARHEAD_RESULT_RUNNING:
-      return PC_AUTO_ACTION_RESULT_RUNNING;
-    case AUTO_ROD_SPEARHEAD_RESULT_SUCCESS:
-      return PC_AUTO_ACTION_RESULT_SUCCESS;
-    case AUTO_ROD_SPEARHEAD_RESULT_FAIL:
-      return PC_AUTO_ACTION_RESULT_FAIL;
-    case AUTO_ROD_SPEARHEAD_RESULT_ABORTED:
-      return PC_AUTO_ACTION_RESULT_ABORTED;
-    case AUTO_ROD_SPEARHEAD_RESULT_NONE:
-    default:
-      return PC_AUTO_ACTION_RESULT_NONE;
-  }
-}
-
-static PC_AutoActionFault_t AutoCtrlFeed_MapRodFault(
-    AutoRodSpearhead_Fault_t fault) {
-  switch (fault) {
-    case AUTO_ROD_SPEARHEAD_FAULT_TIMEOUT:
-      return PC_AUTO_ACTION_FAULT_TIMEOUT;
-    case AUTO_ROD_SPEARHEAD_FAULT_INVALID_PARAM:
-      return PC_AUTO_ACTION_FAULT_INVALID_PARAM;
-    case AUTO_ROD_SPEARHEAD_FAULT_ABORTED:
-      return PC_AUTO_ACTION_FAULT_ABORTED;
-    case AUTO_ROD_SPEARHEAD_FAULT_NO_SPEARHEAD:
-      return PC_AUTO_ACTION_FAULT_NO_SPEARHEAD;
-    case AUTO_ROD_SPEARHEAD_FAULT_NONE:
-    default:
-      return PC_AUTO_ACTION_FAULT_NONE;
-  }
-}
-
 static PC_AutoAction_t AutoCtrlFeed_MapSickCorrectAction(
     AutoSickCorrect_Action_t action) {
   switch (action) {
@@ -339,59 +235,6 @@ static PC_AutoAction_t AutoCtrlFeed_MapSickCorrectAction(
   }
 }
 
-static PC_AutoActionState_t AutoCtrlFeed_MapSickCorrectState(
-    AutoSickCorrect_State_t state) {
-  switch (state) {
-    case AUTO_SICK_CORRECT_STATE_RUNNING:
-      return PC_AUTO_ACTION_STATE_RUNNING;
-    case AUTO_SICK_CORRECT_STATE_SUCCESS:
-      return PC_AUTO_ACTION_STATE_SUCCESS;
-    case AUTO_SICK_CORRECT_STATE_FAIL:
-      return PC_AUTO_ACTION_STATE_FAIL;
-    case AUTO_SICK_CORRECT_STATE_ABORT:
-      return PC_AUTO_ACTION_STATE_ABORT;
-    case AUTO_SICK_CORRECT_STATE_IDLE:
-    default:
-      return PC_AUTO_ACTION_STATE_IDLE;
-  }
-}
-
-static PC_AutoActionResult_t AutoCtrlFeed_MapSickCorrectResult(
-    AutoSickCorrect_Result_t result) {
-  switch (result) {
-    case AUTO_SICK_CORRECT_RESULT_RUNNING:
-      return PC_AUTO_ACTION_RESULT_RUNNING;
-    case AUTO_SICK_CORRECT_RESULT_SUCCESS:
-      return PC_AUTO_ACTION_RESULT_SUCCESS;
-    case AUTO_SICK_CORRECT_RESULT_FAIL:
-      return PC_AUTO_ACTION_RESULT_FAIL;
-    case AUTO_SICK_CORRECT_RESULT_ABORTED:
-      return PC_AUTO_ACTION_RESULT_ABORTED;
-    case AUTO_SICK_CORRECT_RESULT_NONE:
-    default:
-      return PC_AUTO_ACTION_RESULT_NONE;
-  }
-}
-
-static PC_AutoActionFault_t AutoCtrlFeed_MapSickCorrectFault(
-    AutoSickCorrect_Fault_t fault) {
-  switch (fault) {
-    case AUTO_SICK_CORRECT_FAULT_TIMEOUT:
-      return PC_AUTO_ACTION_FAULT_TIMEOUT;
-    case AUTO_SICK_CORRECT_FAULT_INVALID_PARAM:
-      return PC_AUTO_ACTION_FAULT_INVALID_PARAM;
-    case AUTO_SICK_CORRECT_FAULT_SENSOR_INVALID:
-      return PC_AUTO_ACTION_FAULT_SENSOR_INVALID;
-    case AUTO_SICK_CORRECT_FAULT_UNSUPPORTED:
-      return PC_AUTO_ACTION_FAULT_UNSUPPORTED;
-    case AUTO_SICK_CORRECT_FAULT_ABORTED:
-      return PC_AUTO_ACTION_FAULT_ABORTED;
-    case AUTO_SICK_CORRECT_FAULT_NONE:
-    default:
-      return PC_AUTO_ACTION_FAULT_NONE;
-  }
-}
-
 static void AutoCtrlFeed_RememberOreAction(AutoOre_Action_t action) {
   const PC_AutoAction_t pc_action = AutoCtrlFeed_MapOreAction(action);
   if (pc_action == PC_AUTO_ACTION_NONE) {
@@ -400,7 +243,6 @@ static void AutoCtrlFeed_RememberOreAction(AutoOre_Action_t action) {
 
   auto_ore_last_action = action;
   auto_action_last_action = pc_action;
-  auto_action_last_subsystem = PC_AUTO_ACTION_SUBSYSTEM_ORE;
 }
 
 static void AutoCtrlFeed_RememberRodSpearheadAction(
@@ -411,7 +253,6 @@ static void AutoCtrlFeed_RememberRodSpearheadAction(
   }
 
   auto_action_last_action = pc_action;
-  auto_action_last_subsystem = PC_AUTO_ACTION_SUBSYSTEM_ROD_SPEARHEAD;
 }
 
 static void AutoCtrlFeed_RememberSickCorrectAction(
@@ -422,7 +263,6 @@ static void AutoCtrlFeed_RememberSickCorrectAction(
   }
 
   auto_action_last_action = pc_action;
-  auto_action_last_subsystem = PC_AUTO_ACTION_SUBSYSTEM_SICK_CORRECT;
 }
 
 static AutoSickCorrect_PointParams_t *AutoCtrlFeed_SickCorrectParamsForAction(
@@ -546,11 +386,51 @@ static PC_AutoAction_t AutoCtrlFeed_GetOreFeedbackAction(void) {
   return action;
 }
 
+static bool AutoCtrlFeed_IsOreAction(PC_AutoAction_t action) {
+  switch (action) {
+    case PC_AUTO_ACTION_STORE:
+    case PC_AUTO_ACTION_RELEASE:
+    case PC_AUTO_ACTION_CHAMBER:
+    case PC_AUTO_ACTION_PICK_POS_400:
+    case PC_AUTO_ACTION_PICK_POS_200:
+    case PC_AUTO_ACTION_PICK_NEG_200:
+    case PC_AUTO_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD:
+    case PC_AUTO_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD:
+    case PC_AUTO_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD:
+    case PC_AUTO_ACTION_STEP_PICK_STORE_DESCEND_400_HEAD:
+      return true;
+    default:
+      return false;
+  }
+}
+
+static bool AutoCtrlFeed_IsFusedOreAction(AutoOre_Action_t action) {
+  switch (action) {
+    case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD:
+    case AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD:
+    case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD:
+    case AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_400_HEAD:
+      return true;
+    default:
+      return false;
+  }
+}
+
+static bool AutoCtrlFeed_IsRodSpearheadAction(PC_AutoAction_t action) {
+  return action == PC_AUTO_ACTION_ROD_SPEARHEAD ||
+         action == PC_AUTO_ACTION_ROD_DOCK_WAIT;
+}
+
+static bool AutoCtrlFeed_IsSickCorrectAction(PC_AutoAction_t action) {
+  return action == PC_AUTO_ACTION_SICK_CORRECT_ROD_SPEARHEAD ||
+         action == PC_AUTO_ACTION_SICK_CORRECT_ORE_RELEASE;
+}
+
 static PC_AutoAction_t AutoCtrlFeed_GetRodSpearheadFeedbackAction(void) {
   PC_AutoAction_t action = AutoCtrlFeed_MapRodAction(
       AutoRodSpearhead_GetAction(&auto_rod_spearhead_ctrl));
   if (action == PC_AUTO_ACTION_NONE &&
-      auto_action_last_subsystem == PC_AUTO_ACTION_SUBSYSTEM_ROD_SPEARHEAD) {
+      AutoCtrlFeed_IsRodSpearheadAction(auto_action_last_action)) {
     action = auto_action_last_action;
   }
   return action;
@@ -560,10 +440,61 @@ static PC_AutoAction_t AutoCtrlFeed_GetSickCorrectFeedbackAction(void) {
   PC_AutoAction_t action = AutoCtrlFeed_MapSickCorrectAction(
       AutoSickCorrect_GetAction(&auto_sick_correct_ctrl));
   if (action == PC_AUTO_ACTION_NONE &&
-      auto_action_last_subsystem == PC_AUTO_ACTION_SUBSYSTEM_SICK_CORRECT) {
+      AutoCtrlFeed_IsSickCorrectAction(auto_action_last_action)) {
     action = auto_action_last_action;
   }
   return action;
+}
+
+static uint16_t AutoCtrlFeed_OreActionFailureMask(AutoOre_Action_t action) {
+  switch (action) {
+    case AUTO_ORE_ACTION_STORE:
+      return PC_AUTO_ACTION_FAILURE_STORE_ORE;
+    case AUTO_ORE_ACTION_RELEASE:
+      return PC_AUTO_ACTION_FAILURE_RELEASE_ORE;
+    case AUTO_ORE_ACTION_CHAMBER:
+      return PC_AUTO_ACTION_FAILURE_CHAMBER;
+    case AUTO_ORE_ACTION_PICK_POS_400:
+    case AUTO_ORE_ACTION_PICK_POS_200:
+    case AUTO_ORE_ACTION_PICK_NEG_200:
+      return PC_AUTO_ACTION_FAILURE_PICK_ORE;
+    case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD:
+    case AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD:
+    case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD:
+    case AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_400_HEAD:
+      return PC_AUTO_ACTION_FAILURE_SETUP;
+    case AUTO_ORE_ACTION_NONE:
+    default:
+      return PC_AUTO_ACTION_FAILURE_SETUP;
+  }
+}
+
+static uint16_t AutoCtrlFeed_OreFailureMask(AutoOre_Action_t action) {
+  if (AutoCtrlFeed_IsFusedOreAction(action)) {
+    const uint16_t fused_failure = AutoOre_GetFailureMask(&auto_ore_ctrl);
+    return (fused_failure != 0u) ? fused_failure : PC_AUTO_ACTION_FAILURE_SETUP;
+  }
+  return AutoCtrlFeed_OreActionFailureMask(action);
+}
+
+static uint16_t AutoCtrlFeed_RodFailureMask(PC_AutoAction_t action) {
+  return (action == PC_AUTO_ACTION_ROD_DOCK_WAIT)
+             ? PC_AUTO_ACTION_FAILURE_ROD_DOCK_WAIT
+             : PC_AUTO_ACTION_FAILURE_ROD_SPEARHEAD;
+}
+
+static void AutoCtrlFeed_SetFeedbackSuccess(
+    PC_AutoActionFeedback_t *feedback) {
+  feedback->finished = 1u;
+  feedback->result = (uint8_t)PC_AUTO_ACTION_RESULT_SUCCESS;
+  feedback->failure_mask = 0u;
+}
+
+static void AutoCtrlFeed_SetFeedbackFail(PC_AutoActionFeedback_t *feedback,
+                                         uint16_t failure_mask) {
+  feedback->finished = 1u;
+  feedback->result = (uint8_t)PC_AUTO_ACTION_RESULT_FAIL;
+  feedback->failure_mask = failure_mask;
 }
 
 static bool AutoCtrlFeed_StartOreAction(AutoOre_Action_t action) {
@@ -677,125 +608,76 @@ static void AutoCtrlFeed_PublishAutoActionFeedback(void) {
   const bool sick_busy = auto_sick_correct_inited &&
                          AutoSickCorrect_IsBusy(&auto_sick_correct_ctrl);
 
-  if (auto_ore_inited) {
-    pc_feedback.flags |= PC_AUTO_ACTION_FLAG_ORE_INITED;
-    if (ore_busy) {
-      pc_feedback.flags |= PC_AUTO_ACTION_FLAG_ORE_BUSY;
-      AutoCtrlFeed_RememberOreAction(auto_ore_ctrl.action);
-    }
-
-    pc_feedback.ore_action =
-        (uint8_t)AutoCtrlFeed_GetOreFeedbackAction();
-    pc_feedback.ore_state =
-        (uint8_t)AutoCtrlFeed_MapOreState(AutoOre_GetState(&auto_ore_ctrl));
-    pc_feedback.ore_result =
-        (uint8_t)AutoCtrlFeed_MapOreResult(AutoOre_GetResult(&auto_ore_ctrl));
-    pc_feedback.ore_fault =
-        (uint8_t)AutoCtrlFeed_MapOreFault(AutoOre_GetFault(&auto_ore_ctrl));
-    pc_feedback.ore_step_index = AutoOre_GetStepIndex(&auto_ore_ctrl);
-    pc_feedback.ore_step_phase = auto_ore_ctrl.step_phase;
-    pc_feedback.ore_active_position =
-        (uint8_t)AutoOre_GetActivePosition(&auto_ore_ctrl);
-    pc_feedback.ore_occupancy_mask = AutoOre_GetOccupancyMask(&auto_ore_ctrl);
+  if (ore_busy) {
+    AutoCtrlFeed_RememberOreAction(auto_ore_ctrl.action);
   }
 
-  if (auto_rod_spearhead_inited) {
-    pc_feedback.flags |= PC_AUTO_ACTION_FLAG_ROD_INITED;
-    if (rod_busy) {
-      pc_feedback.flags |= PC_AUTO_ACTION_FLAG_ROD_BUSY;
-      AutoCtrlFeed_RememberRodSpearheadAction(
-          AutoRodSpearhead_GetAction(&auto_rod_spearhead_ctrl));
-    }
-
-    pc_feedback.rod_action =
-        (uint8_t)AutoCtrlFeed_GetRodSpearheadFeedbackAction();
-    pc_feedback.rod_state = (uint8_t)AutoCtrlFeed_MapRodState(
-        AutoRodSpearhead_GetState(&auto_rod_spearhead_ctrl));
-    pc_feedback.rod_result = (uint8_t)AutoCtrlFeed_MapRodResult(
-        AutoRodSpearhead_GetResult(&auto_rod_spearhead_ctrl));
-    pc_feedback.rod_fault = (uint8_t)AutoCtrlFeed_MapRodFault(
-        AutoRodSpearhead_GetFault(&auto_rod_spearhead_ctrl));
-    pc_feedback.rod_step_index =
-        AutoRodSpearhead_GetStepIndex(&auto_rod_spearhead_ctrl);
+  if (rod_busy) {
+    AutoCtrlFeed_RememberRodSpearheadAction(
+        AutoRodSpearhead_GetAction(&auto_rod_spearhead_ctrl));
   }
 
-  if (auto_sick_correct_inited) {
-    pc_feedback.flags |= PC_AUTO_ACTION_FLAG_SICK_CORRECT_INITED;
-    if (sick_busy) {
-      pc_feedback.flags |= PC_AUTO_ACTION_FLAG_SICK_CORRECT_BUSY;
-      AutoCtrlFeed_RememberSickCorrectAction(
-          AutoSickCorrect_GetAction(&auto_sick_correct_ctrl));
-    }
-    if (g_auto_ore_debug.auto_sick_correct_pole_all_at_target) {
-      pc_feedback.flags |= PC_AUTO_ACTION_FLAG_SICK_CORRECT_POLE_AT_TARGET;
-    }
-
-    pc_feedback.sick_action =
-        (uint8_t)AutoCtrlFeed_GetSickCorrectFeedbackAction();
-    pc_feedback.sick_state = (uint8_t)AutoCtrlFeed_MapSickCorrectState(
-        AutoSickCorrect_GetState(&auto_sick_correct_ctrl));
-    pc_feedback.sick_result = (uint8_t)AutoCtrlFeed_MapSickCorrectResult(
-        AutoSickCorrect_GetResult(&auto_sick_correct_ctrl));
-    pc_feedback.sick_fault = (uint8_t)AutoCtrlFeed_MapSickCorrectFault(
-        AutoSickCorrect_GetFault(&auto_sick_correct_ctrl));
-    pc_feedback.sick_step_index =
-        AutoSickCorrect_GetStepIndex(&auto_sick_correct_ctrl);
-  }
-
-  PC_AutoActionSubsystem_t active_subsystem = PC_AUTO_ACTION_SUBSYSTEM_NONE;
-  if ((ore_busy && rod_busy) || (ore_busy && sick_busy) ||
-      (rod_busy && sick_busy)) {
-    active_subsystem =
-        (auto_action_last_subsystem != PC_AUTO_ACTION_SUBSYSTEM_NONE)
-            ? auto_action_last_subsystem
-            : PC_AUTO_ACTION_SUBSYSTEM_ORE;
-  } else if (ore_busy) {
-    active_subsystem = PC_AUTO_ACTION_SUBSYSTEM_ORE;
-  } else if (rod_busy) {
-    active_subsystem = PC_AUTO_ACTION_SUBSYSTEM_ROD_SPEARHEAD;
-  } else if (sick_busy) {
-    active_subsystem = PC_AUTO_ACTION_SUBSYSTEM_SICK_CORRECT;
-  } else {
-    active_subsystem = auto_action_last_subsystem;
+  if (sick_busy) {
+    AutoCtrlFeed_RememberSickCorrectAction(
+        AutoSickCorrect_GetAction(&auto_sick_correct_ctrl));
   }
 
   pc_feedback.busy = (ore_busy || rod_busy || sick_busy) ? 1u : 0u;
-  pc_feedback.subsystem = (uint8_t)active_subsystem;
   pc_feedback.action = (uint8_t)auto_action_last_action;
 
-  if (active_subsystem == PC_AUTO_ACTION_SUBSYSTEM_ORE && auto_ore_inited) {
-    pc_feedback.action = (uint8_t)AutoCtrlFeed_GetOreFeedbackAction();
-    pc_feedback.state = pc_feedback.ore_state;
-    pc_feedback.result = pc_feedback.ore_result;
-    pc_feedback.fault = pc_feedback.ore_fault;
-    pc_feedback.step_index = pc_feedback.ore_step_index;
-    pc_feedback.step_phase = pc_feedback.ore_step_phase;
-    pc_feedback.active_position = pc_feedback.ore_active_position;
-    pc_feedback.occupancy_mask = pc_feedback.ore_occupancy_mask;
-  } else if (active_subsystem ==
-             PC_AUTO_ACTION_SUBSYSTEM_ROD_SPEARHEAD &&
-             auto_rod_spearhead_inited) {
-    pc_feedback.action = (uint8_t)pc_feedback.rod_action;
-    pc_feedback.state = pc_feedback.rod_state;
-    pc_feedback.result = pc_feedback.rod_result;
-    pc_feedback.fault = pc_feedback.rod_fault;
-    pc_feedback.step_index = pc_feedback.rod_step_index;
-    pc_feedback.step_phase = 0u;
-    pc_feedback.active_position = 0u;
-    pc_feedback.occupancy_mask = 0u;
-  } else if (active_subsystem == PC_AUTO_ACTION_SUBSYSTEM_SICK_CORRECT &&
-             auto_sick_correct_inited) {
-    pc_feedback.action = (uint8_t)pc_feedback.sick_action;
-    pc_feedback.state = pc_feedback.sick_state;
-    pc_feedback.result = pc_feedback.sick_result;
-    pc_feedback.fault = pc_feedback.sick_fault;
-    pc_feedback.step_index = pc_feedback.sick_step_index;
-    pc_feedback.step_phase = 0u;
-    pc_feedback.active_position = 0u;
-    pc_feedback.occupancy_mask = 0u;
+  if (pc_feedback.busy != 0u || auto_action_last_action == PC_AUTO_ACTION_NONE) {
+    (void)MrlinkPc_PublishFeedback(PC_FEEDBACK_AUTO_ACTION, &pc_feedback);
+    return;
   }
 
-  pc_feedback.reserved = 0u;
+  if (auto_action_last_action == PC_AUTO_ACTION_ABORT) {
+    AutoCtrlFeed_SetFeedbackFail(&pc_feedback, PC_AUTO_ACTION_FAILURE_ABORTED);
+  } else if (AutoCtrlFeed_IsOreAction(auto_action_last_action) &&
+             auto_ore_inited) {
+    pc_feedback.action = (uint8_t)AutoCtrlFeed_GetOreFeedbackAction();
+    const AutoOre_Result_t result = AutoOre_GetResult(&auto_ore_ctrl);
+    if (result == AUTO_ORE_RESULT_SUCCESS) {
+      AutoCtrlFeed_SetFeedbackSuccess(&pc_feedback);
+    } else if (result == AUTO_ORE_RESULT_FAIL) {
+      AutoCtrlFeed_SetFeedbackFail(
+          &pc_feedback, AutoCtrlFeed_OreFailureMask(auto_ore_last_action));
+    } else if (result == AUTO_ORE_RESULT_ABORTED) {
+      AutoCtrlFeed_SetFeedbackFail(&pc_feedback,
+                                   PC_AUTO_ACTION_FAILURE_ABORTED);
+    }
+  } else if (AutoCtrlFeed_IsRodSpearheadAction(auto_action_last_action) &&
+             auto_rod_spearhead_inited) {
+    pc_feedback.action =
+        (uint8_t)AutoCtrlFeed_GetRodSpearheadFeedbackAction();
+    const AutoRodSpearhead_Result_t result =
+        AutoRodSpearhead_GetResult(&auto_rod_spearhead_ctrl);
+    if (result == AUTO_ROD_SPEARHEAD_RESULT_SUCCESS) {
+      AutoCtrlFeed_SetFeedbackSuccess(&pc_feedback);
+    } else if (result == AUTO_ROD_SPEARHEAD_RESULT_FAIL) {
+      AutoCtrlFeed_SetFeedbackFail(
+          &pc_feedback,
+          AutoCtrlFeed_RodFailureMask((PC_AutoAction_t)pc_feedback.action));
+    } else if (result == AUTO_ROD_SPEARHEAD_RESULT_ABORTED) {
+      AutoCtrlFeed_SetFeedbackFail(&pc_feedback,
+                                   PC_AUTO_ACTION_FAILURE_ABORTED);
+    }
+  } else if (AutoCtrlFeed_IsSickCorrectAction(auto_action_last_action) &&
+             auto_sick_correct_inited) {
+    pc_feedback.action =
+        (uint8_t)AutoCtrlFeed_GetSickCorrectFeedbackAction();
+    const AutoSickCorrect_Result_t result =
+        AutoSickCorrect_GetResult(&auto_sick_correct_ctrl);
+    if (result == AUTO_SICK_CORRECT_RESULT_SUCCESS) {
+      AutoCtrlFeed_SetFeedbackSuccess(&pc_feedback);
+    } else if (result == AUTO_SICK_CORRECT_RESULT_FAIL) {
+      AutoCtrlFeed_SetFeedbackFail(&pc_feedback,
+                                   PC_AUTO_ACTION_FAILURE_SICK_CORRECT);
+    } else if (result == AUTO_SICK_CORRECT_RESULT_ABORTED) {
+      AutoCtrlFeed_SetFeedbackFail(&pc_feedback,
+                                   PC_AUTO_ACTION_FAILURE_ABORTED);
+    }
+  }
+
   (void)MrlinkPc_PublishFeedback(PC_FEEDBACK_AUTO_ACTION, &pc_feedback);
 }
 
@@ -1281,12 +1163,22 @@ static void AutoCtrlFeed_HandleAutoOreDebugRequest(void) {
     case AUTO_ORE_DEBUG_REQUEST_SICK_CORRECT_ORE_RELEASE:
       result = Task_AutoSickCorrectStartOreRelease();
       break;
-    case AUTO_ORE_DEBUG_REQUEST_ABORT:
+    case AUTO_ORE_DEBUG_REQUEST_ABORT: {
+      const bool any_auto_busy =
+          (auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl)) ||
+          (auto_rod_spearhead_inited &&
+           AutoRodSpearhead_IsBusy(&auto_rod_spearhead_ctrl)) ||
+          (auto_sick_correct_inited &&
+           AutoSickCorrect_IsBusy(&auto_sick_correct_ctrl));
       Task_AutoOreAbort();
       Task_AutoRodSpearheadAbort();
       Task_AutoSickCorrectAbort();
+      if (!any_auto_busy) {
+        auto_action_last_action = PC_AUTO_ACTION_ABORT;
+      }
       result = true;
       break;
+    }
     case AUTO_ORE_DEBUG_REQUEST_NONE:
     default:
       result = false;

@@ -118,6 +118,9 @@ void MarkLastRxFrame(uint8_t cmd, uint16_t payload_len, int8_t result,
 }
 
 void TouchOnline(uint8_t cmd) {
+  /* Any valid PC frame keeps the PC link alive. PC_CMD_HEARTBEAT is the
+   * recommended low-cost keepalive, but high-rate command frames also refresh
+   * last_heartbeat_tick and keep control_mode in PC_MODE_PC. */
   const uint32_t now_ms = BSP_TIME_Get_ms();
   s_state.last_heartbeat_tick = now_ms;
   s_state.last_recv_time = now_ms;
@@ -229,6 +232,11 @@ void OnAutoAction(const wire::AutoActionCmd &cmd) {
       s_auto_action_rx_latch != PC_AUTO_ACTION_NONE &&
       (now_ms - s_auto_action_rx_latch_tick) >= kAutoActionRepeatReleaseMs;
 
+  /* Auto action is edge/latch based rather than a continuous setpoint:
+   * - action=NONE clears the latch.
+   * - a different non-zero action is accepted immediately.
+   * - the same non-zero action is accepted again only after 300 ms, which
+   *   prevents a 50 Hz host stream from repeatedly restarting one-shot flows. */
   if (cmd.action == PC_AUTO_ACTION_NONE) {
     s_auto_action_rx_latch = PC_AUTO_ACTION_NONE;
     s_auto_action_rx_latch_tick = now_ms;

@@ -23,7 +23,7 @@
 ## 特性
 
 - **帧头** `{0x4D, 0x52}` = ASCII "MR"（项目标识）
-- **CRC16-CCITT-FALSE** 可选（`MrLink_Config.use_crc16`）
+- **mrlink CRC16** 可选（`MrLink_Config.use_crc16`）：反射式 0x1021 查表算法，init=0xFFFF，无 xorout，小端写；以 `User/component/crc16.c` 为准
 - **32 槽** cmd 派发表，O(N) 线性扫描
 - **零 OS 依赖**（除 `cmsis_compiler.h` 用于 ISR 临界区）
 - **加新命令 = 0 库代码修改**：写 handler + 1 行 `MrLink_RegisterHandler`
@@ -51,7 +51,7 @@ use_crc16 = false: [0x4D][0x52][len][cmd][payload...]
 | length | 1B | payload 字节数 (0~max_payload_size) |
 | cmd | 1B | 命令字，库不解释 |
 | payload | 0~max_payload_size（默认 64B） | 业务数据 |
-| CRC16 | 0 或 2B | CCITT-FALSE, init=0xFFFF, poly=0x1021, 小端写 |
+| CRC16 | 0 或 2B | mrlink CRC16，反射式 0x1021 查表算法，init=0xFFFF，无 xorout，小端写 |
 
 **最大帧长**：6 + max_payload（默认 70 字节）
 

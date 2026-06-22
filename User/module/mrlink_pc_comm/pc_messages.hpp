@@ -10,6 +10,21 @@ namespace pc_comm::wire {
 
 using Topic = uint8_t;
 
+/*
+ * PC_COMM wire payload definitions.
+ *
+ * These types are the exact byte layout used on the PC serial link. They are
+ * intentionally packed because several firmware-side C structs contain enum
+ * fields or natural alignment padding that must not leak into the wire format.
+ *
+ * Host-side packing rules:
+ *   - All integer fields are unsigned unless explicitly documented otherwise.
+ *   - float fields are IEEE-754 binary32, little-endian.
+ *   - Multi-byte integer fields are little-endian.
+ *   - Use the sizes asserted below, not sizeof() from a host compiler unless
+ *     the host struct is also packed with the same field order.
+ */
+
 inline constexpr Topic kCmdHeartbeat = PC_CMD_HEARTBEAT;
 inline constexpr Topic kCmdChassis = PC_CMD_CHASSIS;
 inline constexpr Topic kCmdPole = PC_CMD_POLE;
@@ -64,7 +79,7 @@ struct __attribute__((packed)) OreStoreCmd {
 };
 
 struct __attribute__((packed)) CameraYawCmd {
-  uint8_t mode[PC_CAMERA_YAW_COUNT];              /* [0]=左云台，[1]=右云台 */
+  uint8_t mode[PC_CAMERA_YAW_COUNT];              /* [0]=左云台，[1]=右云台；当前接收缓存保留，控制任务固定按 ACTIVE 使用 */
   float target_yaw_rad[PC_CAMERA_YAW_COUNT];      /* 车身系目标 yaw，单位 rad */
 };
 
@@ -156,6 +171,41 @@ static_assert(IsValidWirePayload<RodNewFeedback>(), "RodNewFeedback payload is i
 static_assert(IsValidWirePayload<OreStoreFeedback>(), "OreStoreFeedback payload is invalid");
 static_assert(IsValidWirePayload<StepFeedback>(), "StepFeedback payload is invalid");
 static_assert(IsValidWirePayload<StatusFeedback>(), "StatusFeedback payload is invalid");
+
+static_assert(sizeof(PC_ChassisCMD_t) == 12u, "PC_CMD_CHASSIS wire size changed");
+static_assert(sizeof(PC_ImuCMD_t) == 28u, "PC_CMD_IMU wire size changed");
+static_assert(sizeof(PC_IrOreAckCMD_t) == 6u, "PC_CMD_IR_ORE_ACK wire size changed");
+static_assert(sizeof(PoleCmd) == 9u, "PC_CMD_POLE wire size changed");
+static_assert(sizeof(ArmSimpleCmd) == 11u, "PC_CMD_ARM_SIMPLE wire size changed");
+static_assert(sizeof(RodNewCmd) == 7u, "PC_CMD_ROD_NEW wire size changed");
+static_assert(sizeof(OreStoreCmd) == 6u, "PC_CMD_ORE_STORE wire size changed");
+static_assert(sizeof(AutoActionCmd) == 1u, "PC_CMD_AUTO_ACTION wire size changed");
+static_assert(sizeof(CameraYawCmd) == 10u, "PC_CMD_CAMERA_YAW wire size changed");
+static_assert(sizeof(PC_AbstractPositionCMD_t) == 8u,
+              "PC_CMD_ABSTRACT_POSITION wire size changed");
+static_assert(sizeof(StepCmd) == 10u, "PC_CMD_STEP wire size changed");
+static_assert(sizeof(PC_ChassisFeedback_t) == 12u,
+              "PC_FEEDBACK_CHASSIS wire size changed");
+static_assert(sizeof(PC_PoleFeedback_t) == 24u,
+              "PC_FEEDBACK_POLE wire size changed");
+static_assert(sizeof(PC_AutoActionFeedback_t) == 6u,
+              "PC_FEEDBACK_AUTO_ACTION wire size changed");
+static_assert(sizeof(PC_IrOreFeedback_t) == 24u,
+              "PC_FEEDBACK_IR_ORE wire size changed");
+static_assert(sizeof(PC_IrOreBridgeFeedback_t) == 56u,
+              "PC_FEEDBACK_IR_ORE_BRIDGE wire size changed");
+static_assert(sizeof(PC_CameraYawFeedback_t) == 64u,
+              "PC_FEEDBACK_CAMERA_YAW wire size changed");
+static_assert(sizeof(ArmSimpleFeedback) == 15u,
+              "PC_FEEDBACK_ARM_SIMPLE wire size changed");
+static_assert(sizeof(RodNewFeedback) == 20u,
+              "PC_FEEDBACK_ROD_NEW wire size changed");
+static_assert(sizeof(OreStoreFeedback) == 12u,
+              "PC_FEEDBACK_ORE_STORE wire size changed");
+static_assert(sizeof(StepFeedback) == 10u,
+              "PC_FEEDBACK_STEP wire size changed");
+static_assert(sizeof(StatusFeedback) == 10u,
+              "PC_FEEDBACK_STATUS wire size changed");
 
 }  // namespace pc_comm::wire
 

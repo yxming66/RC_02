@@ -416,7 +416,8 @@ int8_t MrLink_Parse(MrLink_t *p, uint8_t *out_cmd,
  *   2. 计算 total = 2 (header) + 1 (len) + 1 (cmd) + payload_len + [2 (CRC)]
  *   3. 验证 tx_buf_size >= total
  *   4. 写入: configured header → len → cmd → payload
- *   5. (use_crc16) 算 CRC16-CCITT-FALSE (init=0xFFFF, poly=0x1021) → 写 2B 小端
+ *   5. (use_crc16) 算 mrlink CRC16 (反射式 0x1021 查表, init=0xFFFF,
+ *      无 xorout) → 写 2B 小端
  * 返回: 实际写入字节数 (含 header/CRC); 失败返回 0
  */
 uint16_t MrLink_Build(MrLink_t *p, uint8_t cmd,

@@ -239,9 +239,10 @@ static void PcComm_UpdateModuleFeedback(void) {
 
 static bool PcComm_CameraYawCommandFresh(const MrlinkPc_State_t *state,
                                          uint32_t now_ms) {
-    return state != NULL && state->camera_yaw_cmd_tick != 0u &&
-           (now_ms - state->camera_yaw_cmd_tick) <=
-               PC_COMM_CAMERA_YAW_CMD_TIMEOUT_MS;
+                                          return state != NULL && state->camera_yaw_cmd_tick != 0u;
+    // return state != NULL && state->camera_yaw_cmd_tick != 0u &&
+    //        (now_ms - state->camera_yaw_cmd_tick) <=
+    //            PC_COMM_CAMERA_YAW_CMD_TIMEOUT_MS;
 }
 
 static bool PcComm_ShouldRelaxCameraYawByRcSwitch(void) {

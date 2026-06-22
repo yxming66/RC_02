@@ -17,7 +17,8 @@
   *   - header  默认为 {0x4D, 0x52} = ASCII "MR"，可通过 MrLink_Config_t 覆盖
   *   - length  payload 字节数 (0~max_payload_size)
   *   - cmd     单字节，库不解释
-  *   - CRC16   CCITT-FALSE, init=0xFFFF, poly=0x1021, 小端写
+  *   - CRC16   反射式 0x1021 查表算法，init=0xFFFF，无 xorout，小端写；
+  *             上位机实现应以 User/component/crc16.c 或协议文档示例为准
   *
   * Quick start:
   *   ```c
@@ -114,7 +115,7 @@ typedef struct MrLink MrLink_t;
  */
 typedef struct {
   uint16_t max_payload_size;     /**< 单帧 payload 上限，默认 64 */
-  bool use_crc16;                /**< true=启用 CRC16-CCITT-FALSE；默认 true */
+  bool use_crc16;                /**< true=启用 mrlink CRC16，算法见 User/component/crc16.c；默认 true */
   uint8_t header_0;              /**< 帧头第 1 字节；0/0 表示使用默认 "MR" */
   uint8_t header_1;              /**< 帧头第 2 字节；0/0 表示使用默认 "MR" */
 } MrLink_Config_t;
