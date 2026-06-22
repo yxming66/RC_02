@@ -15,6 +15,7 @@
 #define PC_COMM_TX_PERIOD_MS (20u)  /* 50Hz */
 #define PC_COMM_LOOP_PERIOD_MS (1u)
 #define PC_COMM_TX_DMA_TIMEOUT_MS (100u)
+#define PC_COMM_CAMERA_YAW_CMD_TIMEOUT_MS (1000u)
 /* IR_ORE 12 位置矿种类只在对端发来时变一次，正常状态几乎不变。
  * 仅在数据变化或距上次发送超过心跳周期时才发，避免 50Hz 重复刷屏。 */
 #define PC_COMM_IR_ORE_HEARTBEAT_MS (500u)
@@ -233,30 +234,34 @@ static void PcComm_UpdateModuleFeedback(void) {
     }
 }
 
+static bool PcComm_CameraYawCommandFresh(const MrlinkPc_State_t *state,
+                                         uint32_t now_ms) {
+    return state != NULL && state->camera_yaw_cmd_tick != 0u &&
+           (now_ms - state->camera_yaw_cmd_tick) <=
+               PC_COMM_CAMERA_YAW_CMD_TIMEOUT_MS;
+}
+
 static void PcComm_UpdateCameraYawCommand(uint32_t now_ms) {
     CameraYaw_GroupCMD_t cmd = {0};
     for (uint8_t yaw = 0u; yaw < CAMERA_YAW_NUM; ++yaw) {
-        cmd.yaw[yaw].mode = CAMERA_YAW_MODE_RELAX;
+        cmd.yaw[yaw].mode = CAMERA_YAW_MODE_ACTIVE;
+        cmd.yaw[yaw].target_yaw_rad = 0.0f;
         cmd.yaw[yaw].feedback_tick_ms = now_ms;
-        cmd.yaw[yaw].feedback_valid = false;
+        cmd.yaw[yaw].feedback_valid = true;
     }
 
-    if (g_pc_command_source == PC_COMMAND_SOURCE_PC &&
-        MrlinkPc_IsPCControlMode()) {
-        const PC_CameraYawCMD_t *pc_cmd = MrlinkPc_GetCameraYawCMD();
-        const MrlinkPc_State_t *state = MrlinkPc_GetState();
-        if (pc_cmd != NULL && state != NULL) {
-            for (uint8_t yaw = 0u; yaw < CAMERA_YAW_NUM &&
-                                      yaw < PC_CAMERA_YAW_COUNT;
-                 ++yaw) {
-                cmd.yaw[yaw].mode = (pc_cmd->mode[yaw] == 0u)
-                                        ? CAMERA_YAW_MODE_RELAX
-                                        : CAMERA_YAW_MODE_ACTIVE;
-                cmd.yaw[yaw].target_yaw_rad = pc_cmd->target_yaw_rad[yaw];
-                cmd.yaw[yaw].feedback_tick_ms = now_ms;
-                cmd.yaw[yaw].feedback_valid =
-                    (state->camera_yaw_cmd_tick != 0u);
-            }
+    const PC_CameraYawCMD_t *pc_cmd = MrlinkPc_GetCameraYawCMD();
+    const MrlinkPc_State_t *state = MrlinkPc_GetState();
+    if (pc_cmd != NULL && PcComm_CameraYawCommandFresh(state, now_ms)) {
+        for (uint8_t yaw = 0u; yaw < CAMERA_YAW_NUM &&
+                                  yaw < PC_CAMERA_YAW_COUNT;
+             ++yaw) {
+            cmd.yaw[yaw].mode = (pc_cmd->mode[yaw] == 0u)
+                                    ? CAMERA_YAW_MODE_RELAX
+                                    : CAMERA_YAW_MODE_ACTIVE;
+            cmd.yaw[yaw].target_yaw_rad = pc_cmd->target_yaw_rad[yaw];
+            cmd.yaw[yaw].feedback_tick_ms = now_ms;
+            cmd.yaw[yaw].feedback_valid = true;
         }
     }
 
@@ -264,12 +269,14 @@ static void PcComm_UpdateCameraYawCommand(uint32_t now_ms) {
 }
 
 static PC_IrOreFeedback_t s_last_published_ir_ore = {0};
+static PC_IrOreBridgeFeedback_t s_last_published_ir_ore_bridge = {0};
 static bool s_last_published_ir_ore_inited = false;
 static uint32_t s_last_ir_ore_publish_ms = 0u;
 
 static bool PcComm_TryUpdateIrOreFeedback(uint32_t now_ms) {
     IrDock_OreInfo_t ir_info = {0};
     PC_IrOreFeedback_t pc_ir_ore = {0};
+    PC_IrOreBridgeFeedback_t pc_ir_ore_bridge = {0};
 
     (void)IrDock_GetOreInfo(&ir_info, now_ms);
     pc_ir_ore.valid = ir_info.valid ? 1u : 0u;
@@ -282,9 +289,30 @@ static bool PcComm_TryUpdateIrOreFeedback(uint32_t now_ms) {
     pc_ir_ore.age_ms = ir_info.age_ms;
     pc_ir_ore.rx_count = ir_info.rx_count;
 
+    pc_ir_ore_bridge.valid = pc_ir_ore.valid;
+    pc_ir_ore_bridge.fresh = pc_ir_ore.fresh;
+    pc_ir_ore_bridge.status = ir_info.status;
+    pc_ir_ore_bridge.count = PC_IR_ORE_POSITION_COUNT;
+    pc_ir_ore_bridge.msg_id = ir_info.msg_id;
+    pc_ir_ore_bridge.side = ir_info.side;
+    pc_ir_ore_bridge.ack_pending = ir_info.ack_pending;
+    pc_ir_ore_bridge.parse_status = ir_info.parse_status;
+    for (uint8_t i = 0u; i < PC_IR_ORE_POSITION_COUNT; ++i) {
+        pc_ir_ore_bridge.ore_type[i] = ir_info.ore_type[i];
+    }
+    for (uint8_t i = 0u; i < PC_IR_ORE_RAW_FRAME_SIZE; ++i) {
+        pc_ir_ore_bridge.raw_frame[i] = ir_info.raw_frame[i];
+    }
+    pc_ir_ore_bridge.age_ms = ir_info.age_ms;
+    pc_ir_ore_bridge.rx_count = ir_info.rx_count;
+    pc_ir_ore_bridge.frame_rx_count = ir_info.frame_rx_count;
+    pc_ir_ore_bridge.ack_tx_count = ir_info.ack_tx_count;
+
     const bool first_send = !s_last_published_ir_ore_inited;
     const bool changed = first_send ||
-        memcmp(&pc_ir_ore, &s_last_published_ir_ore, sizeof(pc_ir_ore)) != 0;
+        memcmp(&pc_ir_ore, &s_last_published_ir_ore, sizeof(pc_ir_ore)) != 0 ||
+        memcmp(&pc_ir_ore_bridge, &s_last_published_ir_ore_bridge,
+               sizeof(pc_ir_ore_bridge)) != 0;
     const bool heartbeat_due =
         (now_ms - s_last_ir_ore_publish_ms) >= PC_COMM_IR_ORE_HEARTBEAT_MS;
 
@@ -293,9 +321,12 @@ static bool PcComm_TryUpdateIrOreFeedback(uint32_t now_ms) {
     }
 
     s_last_published_ir_ore = pc_ir_ore;
+    s_last_published_ir_ore_bridge = pc_ir_ore_bridge;
     s_last_published_ir_ore_inited = true;
     s_last_ir_ore_publish_ms = now_ms;
     (void)MrlinkPc_PublishFeedback(PC_FEEDBACK_IR_ORE, &pc_ir_ore);
+    (void)MrlinkPc_PublishFeedback(PC_FEEDBACK_IR_ORE_BRIDGE,
+                                   &pc_ir_ore_bridge);
     return true;
 }
 
@@ -307,6 +338,23 @@ static void PcComm_UpdateStatusFeedback(void) {
     status.cpu_temp = task_runtime.status.cpu_temp;
     status.command_source = g_pc_command_source;
     (void)MrlinkPc_PublishFeedback(PC_FEEDBACK_STATUS, &status);
+}
+
+static void PcComm_ProcessIrOreAckCommand(uint32_t now_ms) {
+    const PC_IrOreAckCMD_t *cmd = MrlinkPc_GetIrOreAckCMD();
+    if (cmd == NULL) {
+        return;
+    }
+
+    IrDock_AckSubmitResult_t result = IrDock_SendAckFrame(cmd->frame, now_ms);
+    g_pc_comm_debug.ir_ore_ack_submit_result = (uint8_t)result;
+    if (result == IR_DOCK_ACK_SUBMIT_OK) {
+        g_pc_comm_debug.ir_ore_ack_submit_count++;
+        MrlinkPc_ClearIrOreAckCommand();
+    } else if (result != IR_DOCK_ACK_SUBMIT_BUSY) {
+        g_pc_comm_debug.ir_ore_ack_submit_error_count++;
+        MrlinkPc_ClearIrOreAckCommand();
+    }
 }
 
 static bool PcComm_TransmitFeedback(void) {
@@ -338,6 +386,9 @@ static bool PcComm_TransmitFeedback(void) {
     /* IR_ORE 仅在数据变更或心跳到期时才追加帧，避免 50Hz 重复刷屏。 */
     if (ir_ore_pending) {
         if (PcComm_AppendFeedbackFrame(PC_FEEDBACK_IR_ORE, &tx_len)) {
+            frame_count++;
+        }
+        if (PcComm_AppendFeedbackFrame(PC_FEEDBACK_IR_ORE_BRIDGE, &tx_len)) {
             frame_count++;
         }
     }
@@ -381,6 +432,7 @@ void Task_pc_comm(void *argument) {
         uint32_t now = BSP_TIME_Get_ms();
 
         MrlinkPc_CommProcess(now);
+        PcComm_ProcessIrOreAckCommand(now);
         PcComm_UpdateCameraYawCommand(now);
 
         if ((now - last_tx_tick) >= PC_COMM_TX_PERIOD_MS) {

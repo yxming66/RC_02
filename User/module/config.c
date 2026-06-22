@@ -130,7 +130,7 @@ Config_RobotParam_t robot_config = {
         },
         .preset = {
             /* 200mm 台阶四杆全伸位；一键取矿 PICK_POS_200 也使用该撑杆高度。 */
-            .step_200_all_extend = {14.2f, 14.2f},//13.3f
+            .step_200_all_extend = {13.8f, 13.8f},
             /* 200mm 台阶前杆收回、后杆保持支撑位。 */
             .step_200_front_retract = {0.8f, 13.8f},
             /* 200mm 台阶四杆全收位。 */
@@ -147,8 +147,8 @@ Config_RobotParam_t robot_config = {
         .limit = {
             .max_current = 1.0f,
             .support_total_travel = 26.7f,//26.7//27.3
-            .support_lift_speed = 40.0f,
-            .support_lift_accel = 300.0f,
+            .support_lift_speed = 100.0f,
+            .support_lift_accel = 0.0f,
         },
     },
     /* 模块参数：矿仓 ore_store_param，矿仓平台电机、回零、预设位置和气缸。 */
@@ -269,8 +269,8 @@ Config_RobotParam_t robot_config = {
     .arm_simple_param = {
         .dm4340_param = {
             .can = BSP_CAN_3,
-            .master_id = 0x11,
-            .can_id = 0x01,
+            .master_id = 0x12,
+            .can_id = 0x02,
             .module = MOTOR_DM_J4340,
             .reverse = true,
         },
@@ -554,7 +554,7 @@ Config_RobotParam_t robot_config = {
             .pole_front_retract_speed = 60.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
             .pole_rear_extend_speed = 18.0f,    /* 后杆伸出目标跟随速度，单位 rad/s。 */
             .pole_rear_retract_speed = 60.0f,   /* 后杆回收目标跟随速度，单位 rad/s。 */
-            .pole_lift_accel = 300.0f,          /* 当前模板撑杆加速度限幅，单位 rad/s^2。 */
+            .pole_lift_accel = 0.0f,          /* 当前模板撑杆加速度限幅，单位 rad/s^2。 */
             .front_photo_timeout_ms = 5000u,    /* 等待前光电触发/下降沿超时，单位 ms。 */
             .rear_photo_timeout_ms = 10000u,    /* 等待后光电触发/下降沿超时，单位 ms。 */
         },
@@ -584,9 +584,9 @@ Config_RobotParam_t robot_config = {
             .final_move_speed = 1.0f,           /* 收尾离开台阶 vx，单位 m/s。 */
             .final_move_ms = 1000u,              /* 收尾离开台阶持续时间，单位 ms。 */
             .final_move_wheel_delta_rad = 0.0f, /* 0 表示该模板继续按时间切步。 */
-            .pole_all_extend_speed = 65.0f,     /* 四杆全伸目标跟随速度，单位 rad/s。 */
+            .pole_all_extend_speed = 70.0f,     /* 四杆全伸目标跟随速度，单位 rad/s。 */
             .pole_front_extend_speed = 20.0f,   /* 前杆伸出目标跟随速度，单位 rad/s。 */
-            .pole_front_retract_speed = 65.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
+            .pole_front_retract_speed = 70.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
             .pole_rear_extend_speed = 18.0f,    /* 后杆伸出目标跟随速度，单位 rad/s。 */
             .pole_rear_retract_speed = 60.0f,   /* 后杆回收目标跟随速度，单位 rad/s。 */
             .pole_lift_accel = 500.0f,          /* 当前模板撑杆加速度限幅，单位 rad/s^2。 */
@@ -625,7 +625,7 @@ Config_RobotParam_t robot_config = {
             .pole_front_retract_speed = 40.0f,  /* step0/1/7 前杆保持或回收到全收目标的速度，单位 rad/s。 */
             .pole_rear_extend_speed = 65.0f,    /* step5/6 四杆全伸时的后杆速度，单位 rad/s。 */
             .pole_rear_retract_speed = 40.0f,   /* step0-4/7 后杆保持或回收到全收目标的速度，单位 rad/s。 */
-            .pole_lift_accel = 500.0f,          /* 当前模板撑杆加速度限幅，单位 rad/s^2。 */
+            .pole_lift_accel = 0.0f,          /* 当前模板撑杆加速度限幅，单位 rad/s^2。 */
             .front_photo_timeout_ms = 5000u,    /* step4 等待 PE13/photo1 下降沿超时，单位 ms。 */
             .rear_photo_timeout_ms = 5000u,     /* step1 等待 PA2/photo3 下降沿超时，单位 ms。 */
             .pole_extend_move_speed = 1.5f,    /* step6 四杆全伸行走 vx，单位 m/s。 */
@@ -830,9 +830,9 @@ Config_RobotParam_t robot_config = {
                 .yaw_pid = {
                     .k = 1.0f,
                     .p = 5.0f,
-                    .i = 0.5f,
+                    .i = 0.0f,
                     .d = 0.0f,
-                    .i_limit = 0.1f,
+                    .i_limit = 0.0f,
                     .out_limit = 1.0f,
                     .d_cutoff_freq = -1.0f,
                     .range = M_2PI,
@@ -857,9 +857,9 @@ Config_RobotParam_t robot_config = {
                 .yaw_pid = {
                     .k = 1.0f,
                     .p = 5.0f,
-                    .i = 0.5f,
+                    .i = 0.0f,
                     .d = 0.0f,
-                    .i_limit = 0.1f,
+                    .i_limit = 0.0f,
                     .out_limit = 1.0f,
                     .d_cutoff_freq = -1.0f,
                     .range = M_2PI,
