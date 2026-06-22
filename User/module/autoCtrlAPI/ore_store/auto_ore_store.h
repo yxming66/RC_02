@@ -157,6 +157,7 @@ typedef struct {
   uint32_t descend_mid_move_ms;
   uint32_t descend_rear_retract_move_ms;
   float descend_rear_retract_move_wheel_delta_rad;
+  bool fast_pick_on_front_photo;
   bool use_arm_photo_confirm;
 } AutoOre_FusedParam_t;
 
