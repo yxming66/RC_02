@@ -23,6 +23,7 @@
 #define AUTO_ORE_DEFAULT_FUSED_PICK_LIFT_DETECT_MS (200u)
 #define AUTO_ORE_DEFAULT_FUSED_ARM_PHOTO_STABLE_MS (120u)
 #define AUTO_ORE_FUSED_HEAD_ASCEND_FRONT_RETRACT_STEP_INDEX (2u)
+#define AUTO_ORE_FUSED_HEAD_DESCEND_FIRST_EDGE_STEP_INDEX (2u)
 #define AUTO_ORE_FUSED_ARM_PHOTO_ENABLE_JOINT1_RAD (0.6981317f)
 
 #define AUTO_ORE_OCCUPANCY_SOURCE_STATE_MACHINE_VALUE (0u)
@@ -1147,8 +1148,27 @@ static bool AutoOre_FusedStepStartFrontPhotoTriggered(
     case AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD:
     case AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD:
       return ctrl->feedback.pe13_photo1_triggered;
+    case AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD:
+      return ctrl->feedback.pe9_photo2_triggered;
     default:
       return false;
+  }
+}
+
+static uint8_t AutoOre_FusedFastPickTemplateStartStepIndex(
+    const AutoOre_t *ctrl) {
+  if (ctrl == 0) {
+    return 0u;
+  }
+
+  switch (AutoOre_FusedStepTemplateId(ctrl)) {
+    case AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD:
+    case AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD:
+      return AUTO_ORE_FUSED_HEAD_ASCEND_FRONT_RETRACT_STEP_INDEX;
+    case AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD:
+      return AUTO_ORE_FUSED_HEAD_DESCEND_FIRST_EDGE_STEP_INDEX;
+    default:
+      return 0u;
   }
 }
 
@@ -1161,6 +1181,7 @@ static bool AutoOre_FusedFastPickOnFrontPhotoEnabled(
   switch (AutoOre_FusedStepTemplateId(ctrl)) {
     case AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD:
     case AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD:
+    case AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD:
       return true;
     default:
       return false;
@@ -1604,7 +1625,7 @@ static void AutoOre_RunFusedStepSide(AutoOre_t *ctrl, uint32_t now_ms,
       if (AutoOre_FusedStepStartFrontPhotoTriggered(ctrl)) {
         AutoOre_CommandChassisHold(ctrl);
         ctrl->fused_step_template_start_step_index =
-            AUTO_ORE_FUSED_HEAD_ASCEND_FRONT_RETRACT_STEP_INDEX;
+            AutoOre_FusedFastPickTemplateStartStepIndex(ctrl);
         AutoOre_SetFusedStepSidePhase(ctrl, 1u);
         return;
       }
@@ -1742,7 +1763,7 @@ static void AutoOre_RunStepPickStoreFused(AutoOre_t *ctrl, uint32_t now_ms) {
           ctrl->pick_lift_confirmed = true;
           AutoOre_SetArmHasOre(ctrl, true);
           ctrl->fused_step_template_start_step_index =
-              AUTO_ORE_FUSED_HEAD_ASCEND_FRONT_RETRACT_STEP_INDEX;
+              AutoOre_FusedFastPickTemplateStartStepIndex(ctrl);
           AutoOre_JumpToStep(ctrl, 5u);
           ctrl->step_phase = 1u;
           AutoOre_RunFusedStoreAndStepParallel(ctrl, now_ms, fused);
