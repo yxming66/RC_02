@@ -202,6 +202,32 @@ typedef struct {
     volatile uint32_t ir_dock_error_count;
 } AutoOre_DebugControl_t;
 
+typedef struct {
+    volatile bool override_enable;
+    volatile bool load_from_config_once;
+    volatile bool restore_defaults_once;
+    volatile bool initialized;
+    volatile uint32_t apply_count;
+    volatile uint32_t load_count;
+    volatile uint32_t restore_count;
+    volatile float pos_k;
+    volatile float pos_p;
+    volatile float pos_i;
+    volatile float pos_d;
+    volatile float pos_i_limit;
+    volatile float pos_out_limit;
+    volatile float pos_d_cutoff_freq;
+    volatile float pos_range;
+    volatile float vel_k;
+    volatile float vel_p;
+    volatile float vel_i;
+    volatile float vel_d;
+    volatile float vel_i_limit;
+    volatile float vel_out_limit;
+    volatile float vel_d_cutoff_freq;
+    volatile float vel_range;
+} PolePidDebugControl_t;
+
 /* 任务运行时结构体 */
 typedef struct {
     /* 各任务，也可以叫做线程 */
@@ -312,6 +338,7 @@ extern bool auto_ctrl_inited;
 extern AutoOre_t auto_ore_ctrl;
 extern bool auto_ore_inited;
 extern volatile AutoOre_DebugControl_t g_auto_ore_debug;
+extern volatile PolePidDebugControl_t g_pole_pid_debug;
 extern volatile IrDock_Debug_t g_ir_dock_debug;
 extern AutoRodSpearhead_t auto_rod_spearhead_ctrl;
 extern bool auto_rod_spearhead_inited;

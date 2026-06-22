@@ -1,5 +1,8 @@
 #include "module/mrlink_pc_comm/pc_messages.hpp"
 
+#include <cmath>
+#include <cstring>
+
 #include "task/user_task.h"
 
 #include "module/config.h"
@@ -13,8 +16,139 @@ namespace {
 
 Pole_t pole;
 Pole_CMD_t pole_cmd{};
+KPID_Params_t pole_default_support_pos_pid{};
+KPID_Params_t pole_default_support_vel_pid{};
+KPID_Params_t pole_last_applied_support_pos_pid{};
+KPID_Params_t pole_last_applied_support_vel_pid{};
+bool pole_pid_defaults_saved = false;
+
+float PolePidDebugFiniteOrFallback(float value, float fallback) {
+  return std::isfinite(value) ? value : fallback;
+}
+
+void PolePidDebugCopyToDebug(const KPID_Params_t &pos,
+                             const KPID_Params_t &vel) {
+  g_pole_pid_debug.pos_k = pos.k;
+  g_pole_pid_debug.pos_p = pos.p;
+  g_pole_pid_debug.pos_i = pos.i;
+  g_pole_pid_debug.pos_d = pos.d;
+  g_pole_pid_debug.pos_i_limit = pos.i_limit;
+  g_pole_pid_debug.pos_out_limit = pos.out_limit;
+  g_pole_pid_debug.pos_d_cutoff_freq = pos.d_cutoff_freq;
+  g_pole_pid_debug.pos_range = pos.range;
+
+  g_pole_pid_debug.vel_k = vel.k;
+  g_pole_pid_debug.vel_p = vel.p;
+  g_pole_pid_debug.vel_i = vel.i;
+  g_pole_pid_debug.vel_d = vel.d;
+  g_pole_pid_debug.vel_i_limit = vel.i_limit;
+  g_pole_pid_debug.vel_out_limit = vel.out_limit;
+  g_pole_pid_debug.vel_d_cutoff_freq = vel.d_cutoff_freq;
+  g_pole_pid_debug.vel_range = vel.range;
+}
+
+void PolePidDebugCopyFromDebug(KPID_Params_t *pos, KPID_Params_t *vel) {
+  if (pos == nullptr || vel == nullptr) {
+    return;
+  }
+
+  pos->k = PolePidDebugFiniteOrFallback(g_pole_pid_debug.pos_k, pos->k);
+  pos->p = PolePidDebugFiniteOrFallback(g_pole_pid_debug.pos_p, pos->p);
+  pos->i = PolePidDebugFiniteOrFallback(g_pole_pid_debug.pos_i, pos->i);
+  pos->d = PolePidDebugFiniteOrFallback(g_pole_pid_debug.pos_d, pos->d);
+  pos->i_limit = PolePidDebugFiniteOrFallback(
+      g_pole_pid_debug.pos_i_limit, pos->i_limit);
+  pos->out_limit = PolePidDebugFiniteOrFallback(
+      g_pole_pid_debug.pos_out_limit, pos->out_limit);
+  pos->d_cutoff_freq = PolePidDebugFiniteOrFallback(
+      g_pole_pid_debug.pos_d_cutoff_freq, pos->d_cutoff_freq);
+  pos->range =
+      PolePidDebugFiniteOrFallback(g_pole_pid_debug.pos_range, pos->range);
+
+  vel->k = PolePidDebugFiniteOrFallback(g_pole_pid_debug.vel_k, vel->k);
+  vel->p = PolePidDebugFiniteOrFallback(g_pole_pid_debug.vel_p, vel->p);
+  vel->i = PolePidDebugFiniteOrFallback(g_pole_pid_debug.vel_i, vel->i);
+  vel->d = PolePidDebugFiniteOrFallback(g_pole_pid_debug.vel_d, vel->d);
+  vel->i_limit = PolePidDebugFiniteOrFallback(
+      g_pole_pid_debug.vel_i_limit, vel->i_limit);
+  vel->out_limit = PolePidDebugFiniteOrFallback(
+      g_pole_pid_debug.vel_out_limit, vel->out_limit);
+  vel->d_cutoff_freq = PolePidDebugFiniteOrFallback(
+      g_pole_pid_debug.vel_d_cutoff_freq, vel->d_cutoff_freq);
+  vel->range =
+      PolePidDebugFiniteOrFallback(g_pole_pid_debug.vel_range, vel->range);
+}
+
+bool PolePidDebugPidChanged(const KPID_Params_t &pos,
+                            const KPID_Params_t &vel) {
+  return std::memcmp(&pos, &pole_last_applied_support_pos_pid, sizeof(pos)) !=
+             0 ||
+         std::memcmp(&vel, &pole_last_applied_support_vel_pid, sizeof(vel)) !=
+             0;
+}
+
+void PolePidDebugReinitPolePids(const KPID_Params_t &pos,
+                                const KPID_Params_t &vel) {
+  for (uint8_t i = 0u; i < POLE_SUPPORT_MOTOR_NUM; i++) {
+    (void)PID_Init(&pole.pid.support_pos[i], KPID_MODE_CALC_D,
+                   static_cast<float>(POLE_MAIN_FREQ), &pole.param->pid.support_pos_pid);
+    (void)PID_Init(&pole.pid.support_vel[i], KPID_MODE_NO_D,
+                   static_cast<float>(POLE_MAIN_FREQ), &pole.param->pid.support_vel_pid);
+  }
+  pole_last_applied_support_pos_pid = pos;
+  pole_last_applied_support_vel_pid = vel;
+}
+
+void PolePidDebugInit(Config_RobotParam_t *cfg) {
+  if (cfg == nullptr) {
+    return;
+  }
+
+  pole_default_support_pos_pid = cfg->pole_param.pid.support_pos_pid;
+  pole_default_support_vel_pid = cfg->pole_param.pid.support_vel_pid;
+  pole_last_applied_support_pos_pid = cfg->pole_param.pid.support_pos_pid;
+  pole_last_applied_support_vel_pid = cfg->pole_param.pid.support_vel_pid;
+  pole_pid_defaults_saved = true;
+  PolePidDebugCopyToDebug(cfg->pole_param.pid.support_pos_pid,
+                          cfg->pole_param.pid.support_vel_pid);
+  g_pole_pid_debug.initialized = true;
+}
+
+void PolePidDebugUpdate(Config_RobotParam_t *cfg) {
+  if (cfg == nullptr || !pole_pid_defaults_saved) {
+    return;
+  }
+
+  if (g_pole_pid_debug.load_from_config_once) {
+    PolePidDebugCopyToDebug(cfg->pole_param.pid.support_pos_pid,
+                            cfg->pole_param.pid.support_vel_pid);
+    g_pole_pid_debug.load_from_config_once = false;
+    g_pole_pid_debug.load_count++;
+  }
+
+  if (g_pole_pid_debug.restore_defaults_once) {
+    cfg->pole_param.pid.support_pos_pid = pole_default_support_pos_pid;
+    cfg->pole_param.pid.support_vel_pid = pole_default_support_vel_pid;
+    PolePidDebugCopyToDebug(cfg->pole_param.pid.support_pos_pid,
+                            cfg->pole_param.pid.support_vel_pid);
+    g_pole_pid_debug.restore_defaults_once = false;
+    g_pole_pid_debug.restore_count++;
+  } else if (g_pole_pid_debug.override_enable) {
+    PolePidDebugCopyFromDebug(&cfg->pole_param.pid.support_pos_pid,
+                              &cfg->pole_param.pid.support_vel_pid);
+  }
+
+  if (PolePidDebugPidChanged(cfg->pole_param.pid.support_pos_pid,
+                             cfg->pole_param.pid.support_vel_pid)) {
+    PolePidDebugReinitPolePids(cfg->pole_param.pid.support_pos_pid,
+                               cfg->pole_param.pid.support_vel_pid);
+    g_pole_pid_debug.apply_count++;
+  }
+}
 
 }  // namespace
+
+extern "C" volatile PolePidDebugControl_t g_pole_pid_debug = {0};
 
 extern "C" {
 
@@ -100,6 +234,7 @@ extern "C" void Task_pole_main(void *argument) {
     osThreadTerminate(osThreadGetId());
     return;
   }
+  PolePidDebugInit(cfg);
 
   while (1) {
     tick += delay_tick;
@@ -109,6 +244,7 @@ extern "C" void Task_pole_main(void *argument) {
 
     const uint32_t now_ms = BSP_TIME_Get_ms();
     Task_PoleMainUpdateTemperatureAlarm(now_ms);
+    PolePidDebugUpdate(cfg);
     Pole_Control(&pole, &pole_cmd, now_ms);
     Pole_Output(&pole);
 

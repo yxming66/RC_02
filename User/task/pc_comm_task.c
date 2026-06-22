@@ -3,8 +3,10 @@
  */
 #include <stddef.h>
 #include <string.h>
+#include <math.h>
 
 #include "task/user_task.h"
+#include "device/dr16.h"
 #include "module/mrlink_pc_comm/mrlink_pc_comm.h"
 #include "module/autoCtrlAPI/api/auto_ctrl_api.h"
 #include "module/arm_simple.h"
@@ -21,6 +23,7 @@
 #define PC_COMM_IR_ORE_HEARTBEAT_MS (500u)
 
 extern volatile PC_CommandSource_t g_pc_command_source;
+extern DR16_t dr16;
 
 static uint8_t s_tx_buf[384];
 static volatile bool s_tx_dma_busy = false;
@@ -241,6 +244,12 @@ static bool PcComm_CameraYawCommandFresh(const MrlinkPc_State_t *state,
                PC_COMM_CAMERA_YAW_CMD_TIMEOUT_MS;
 }
 
+static bool PcComm_ShouldRelaxCameraYawByRcSwitch(void) {
+    return dr16.header.online && dr16.data.sw_l == DR16_SW_UP &&
+           (dr16.data.sw_r == DR16_SW_MID ||
+            dr16.data.sw_r == DR16_SW_DOWN);
+}
+
 static void PcComm_UpdateCameraYawCommand(uint32_t now_ms) {
     CameraYaw_GroupCMD_t cmd = {0};
     for (uint8_t yaw = 0u; yaw < CAMERA_YAW_NUM; ++yaw) {
@@ -250,16 +259,28 @@ static void PcComm_UpdateCameraYawCommand(uint32_t now_ms) {
         cmd.yaw[yaw].feedback_valid = true;
     }
 
+    if (PcComm_ShouldRelaxCameraYawByRcSwitch()) {
+        for (uint8_t yaw = 0u; yaw < CAMERA_YAW_NUM; ++yaw) {
+            cmd.yaw[yaw].mode = CAMERA_YAW_MODE_RELAX;
+            cmd.yaw[yaw].target_yaw_rad = 0.0f;
+            cmd.yaw[yaw].feedback_tick_ms = now_ms;
+            cmd.yaw[yaw].feedback_valid = false;
+        }
+        (void)Task_CameraYawPostGroupCommand(&cmd);
+        return;
+    }
+
     const PC_CameraYawCMD_t *pc_cmd = MrlinkPc_GetCameraYawCMD();
     const MrlinkPc_State_t *state = MrlinkPc_GetState();
     if (pc_cmd != NULL && PcComm_CameraYawCommandFresh(state, now_ms)) {
         for (uint8_t yaw = 0u; yaw < CAMERA_YAW_NUM &&
                                   yaw < PC_CAMERA_YAW_COUNT;
              ++yaw) {
-            cmd.yaw[yaw].mode = (pc_cmd->mode[yaw] == 0u)
-                                    ? CAMERA_YAW_MODE_RELAX
-                                    : CAMERA_YAW_MODE_ACTIVE;
-            cmd.yaw[yaw].target_yaw_rad = pc_cmd->target_yaw_rad[yaw];
+            cmd.yaw[yaw].mode = CAMERA_YAW_MODE_ACTIVE;
+            cmd.yaw[yaw].target_yaw_rad =
+                isfinite(pc_cmd->target_yaw_rad[yaw])
+                    ? pc_cmd->target_yaw_rad[yaw]
+                    : 0.0f;
             cmd.yaw[yaw].feedback_tick_ms = now_ms;
             cmd.yaw[yaw].feedback_valid = true;
         }

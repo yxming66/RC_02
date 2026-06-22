@@ -109,17 +109,17 @@ Config_RobotParam_t robot_config = {
         .pid = {
             .support_pos_pid = {
                 .k = 30.0f,
-                .p = 25.0f,
+                .p = 5.0f,
                 .i = 0.0f,
                 .d = 0.0f,
                 .i_limit = 0.15f,
-                .out_limit = 400.0f,
+                .out_limit = 800.0f,
                 .d_cutoff_freq = -1.0f,
                 .range = 0.0f,
             },
             .support_vel_pid = {
                 .k = 0.15f,
-                .p = 0.15f,
+                .p = 0.18f,
                 .i = 0.0f,
                 .d = 0.0f,
                 .i_limit = 0.0f,
@@ -147,8 +147,8 @@ Config_RobotParam_t robot_config = {
         .limit = {
             .max_current = 1.0f,
             .support_total_travel = 26.7f,//26.7//27.3
-            .support_lift_speed = 100.0f,
-            .support_lift_accel = 0.0f,
+            .support_lift_speed = 40.0f,
+            .support_lift_accel = 300.0f,
         },
     },
     /* 模块参数：矿仓 ore_store_param，矿仓平台电机、回零、预设位置和气缸。 */
@@ -549,11 +549,11 @@ Config_RobotParam_t robot_config = {
             .final_move_speed = 1.0f,          /* 收尾离开台阶 vx，单位 m/s。 */
             .final_move_ms = 800u,              /* 收尾离开台阶角度门控兜底超时，单位 ms。 */
             .final_move_wheel_delta_rad = 0.0f, /* 编码器门控的收尾离开轮转角阈值，单位 rad；>0 优先按角度切步，<=0 使用 final_move_ms。 */
-            .pole_all_extend_speed = 65.0f,     /* 四杆全伸目标跟随速度，单位 rad/s。 */
-            .pole_front_extend_speed = 20.0f,   /* 前杆伸出目标跟随速度，单位 rad/s。 */
-            .pole_front_retract_speed = 60.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
-            .pole_rear_extend_speed = 18.0f,    /* 后杆伸出目标跟随速度，单位 rad/s。 */
-            .pole_rear_retract_speed = 60.0f,   /* 后杆回收目标跟随速度，单位 rad/s。 */
+            .pole_all_extend_speed = 0.0f,     /* 四杆全伸目标跟随速度，单位 rad/s。 */
+            .pole_front_extend_speed = 0.0f,   /* 前杆伸出目标跟随速度，单位 rad/s。 */
+            .pole_front_retract_speed = 0.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
+            .pole_rear_extend_speed = 0.0f,    /* 后杆伸出目标跟随速度，单位 rad/s。 */
+            .pole_rear_retract_speed = 0.0f,   /* 后杆回收目标跟随速度，单位 rad/s。 */
             .pole_lift_accel = 0.0f,          /* 当前模板撑杆加速度限幅，单位 rad/s^2。 */
             .front_photo_timeout_ms = 5000u,    /* 等待前光电触发/下降沿超时，单位 ms。 */
             .rear_photo_timeout_ms = 10000u,    /* 等待后光电触发/下降沿超时，单位 ms。 */
@@ -621,10 +621,10 @@ Config_RobotParam_t robot_config = {
             .second_photo_retract_move_speed = 1.0f, /* step7 第二个下降沿后全收杆离开 vx，单位 m/s。 */
             .final_move_speed = 0.5f,          /* step7 离开 vx 的备用值；second_photo_retract_move_speed <= 0 时使用。 */
             .final_move_ms = 200u,              /* step7 全收杆离开持续时间，单位 ms。 */
-            .pole_front_extend_speed = 65.0f,   /* step2 前杆伸出、step5/6 四杆全伸时的前杆速度，单位 rad/s。 */
-            .pole_front_retract_speed = 40.0f,  /* step0/1/7 前杆保持或回收到全收目标的速度，单位 rad/s。 */
-            .pole_rear_extend_speed = 65.0f,    /* step5/6 四杆全伸时的后杆速度，单位 rad/s。 */
-            .pole_rear_retract_speed = 40.0f,   /* step0-4/7 后杆保持或回收到全收目标的速度，单位 rad/s。 */
+            .pole_front_extend_speed = 400.0f,   /* step2 前杆伸出、step5/6 四杆全伸时的前杆速度，单位 rad/s。 */
+            .pole_front_retract_speed = 400.0f,  /* step0/1/7 前杆保持或回收到全收目标的速度，单位 rad/s。 */
+            .pole_rear_extend_speed = 400.0f,    /* step5/6 四杆全伸时的后杆速度，单位 rad/s。 */
+            .pole_rear_retract_speed = 400.0f,   /* step0-4/7 后杆保持或回收到全收目标的速度，单位 rad/s。 */
             .pole_lift_accel = 0.0f,          /* 当前模板撑杆加速度限幅，单位 rad/s^2。 */
             .front_photo_timeout_ms = 5000u,    /* step4 等待 PE13/photo1 下降沿超时，单位 ms。 */
             .rear_photo_timeout_ms = 5000u,     /* step1 等待 PA2/photo3 下降沿超时，单位 ms。 */

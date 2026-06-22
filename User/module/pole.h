@@ -40,8 +40,8 @@ typedef struct {
   float lift[2];   /* [-1, 1], >0 means up */
   bool auto_target_enable[2];
   float auto_target_lift[2];   /* rad, relative to calibrated lower limit */
-  float auto_lift_speed[2];    /* rad/s, <=0 means use default support_lift_speed */
-  float auto_lift_accel[2];    /* rad/s^2, <=0 means use default support_lift_accel */
+  float auto_lift_speed[2];    /* rad/s, >0 custom speed; speed==0 && accel==0 disables target limits; otherwise <=0 uses default */
+  float auto_lift_accel[2];    /* rad/s^2, >0 custom accel; speed==0 && accel==0 disables target limits; otherwise <=0 uses default */
   bool disable_lift_accel;     /* true: 该 cmd 不对 lift 加速度限幅（仅限速） */
 } Pole_CMD_t;
 

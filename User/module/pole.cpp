@@ -316,10 +316,15 @@ int8_t Pole_Control(Pole_t *c, const Pole_CMD_t *c_cmd, uint32_t now) {
     float auto_speed = c_cmd->auto_lift_speed[side];
     float default_accel = c->param->limit.support_lift_accel;
     float auto_accel = c_cmd->auto_lift_accel[side];
-    float speed_limit = (auto_speed > 0.0f) ? auto_speed : default_speed;
-    c->setpoint.lift_accel[side] =
-        (auto_accel > 0.0f) ? auto_accel : default_accel;
     const bool auto_target_enabled = c_cmd->auto_target_enable[side];
+    const bool bypass_target_limit =
+        auto_target_enabled && auto_speed == 0.0f && auto_accel == 0.0f;
+    float speed_limit =
+        bypass_target_limit ? 0.0f
+                            : ((auto_speed > 0.0f) ? auto_speed : default_speed);
+    c->setpoint.lift_accel[side] =
+        bypass_target_limit ? 0.0f
+                            : ((auto_accel > 0.0f) ? auto_accel : default_accel);
 
     if (auto_target_enabled) {
       Pole_ClearSideTargetOffset(c, side);
