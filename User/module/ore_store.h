@@ -157,6 +157,7 @@ typedef struct {
   uint32_t last_wakeup;
   uint64_t last_wakeup_us;
   float dt;
+  float nominal_dt;
 
   const OreStore_Params_t *param;
   OreStore_Mode_t mode;

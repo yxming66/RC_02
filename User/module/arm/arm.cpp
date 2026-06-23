@@ -24,7 +24,6 @@ namespace {
 static_assert(ARM_JOINT_COUNT == 3, "3pit runtime expects exactly 3 joints");
 
 constexpr float kMinLoopDt = 0.0005f;
-constexpr float kMaxLoopDt = 0.05f;
 constexpr const char* kJointNames[ARM_JOINT_COUNT] = {"armj1", "armj2", "armj3"};
 
 }  // namespace
@@ -127,9 +126,14 @@ arm_lib::Link MakeArmLink(const arm_lib::Transform& joint_origin,
   return link;
 }
 
-float ClampDt(float dt_s) {
-  return mr::component::math::sanitize_dt(dt_s, kMinLoopDt, kMinLoopDt,
-                                          kMaxLoopDt);
+float ClampDt(float dt_s, float control_freq_hz) {
+  const float nominal_dt =
+      (control_freq_hz > 0.0f) ? (1.0f / control_freq_hz) : 0.002f;
+  const float min_dt = (nominal_dt * 0.5f > kMinLoopDt)
+                           ? nominal_dt * 0.5f
+                           : kMinLoopDt;
+  return mr::component::math::sanitize_dt(dt_s, nominal_dt, min_dt,
+                                          nominal_dt * 3.0f);
 }
 
 void ClearTransientCommand(Arm_CMD_t* cmd) {
@@ -402,7 +406,7 @@ void Runtime::PollCommand(osMessageQueueId_t cmd_queue) {
 }
 
 void Runtime::Control(float dt_s) {
-  const float clamped_dt = ClampDt(dt_s);
+  const float clamped_dt = ClampDt(dt_s, control_freq_hz_);
 
   robot_.Enable(arm_cmd_.enable);
   if (!arm_cmd_.enable) {

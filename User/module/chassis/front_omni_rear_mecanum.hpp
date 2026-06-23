@@ -85,6 +85,7 @@ class FrontOmniRearMecanumController final {
   std::array<LowPassFilter2p_t, 3U> body_velocity_filter_{};
   uint64_t last_wakeup_us_ = 0U;
   float dt_ = 0.0f;
+  float nominal_dt_ = 0.001f;
   float mech_zero_ = 0.0f;
   float wz_multi_ = 1.0f;
   float yaw_rate_rad_s_ = 0.0f;

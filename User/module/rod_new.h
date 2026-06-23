@@ -130,6 +130,7 @@ typedef struct {
 typedef struct {
   uint32_t last_wakeup;
   float dt;
+  float nominal_dt;
 
   const RodNew_Params_t *param;
   RodNew_Mode_t mode;
@@ -141,7 +142,8 @@ typedef struct {
 } RodNew_t;
 
 /* Exported functions prototypes -------------------------------------------- */
-int8_t RodNew_Init(RodNew_t *r, const RodNew_Params_t *param);
+int8_t RodNew_Init(RodNew_t *r, const RodNew_Params_t *param,
+                   float control_freq_hz);
 int8_t RodNew_Control(RodNew_t *r, RodNew_Mode_t mode, RodNew_Pose_t pose,
                       RodNew_GripState_t grip, float target_angle_rad,
                       uint32_t now);

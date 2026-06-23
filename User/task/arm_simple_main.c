@@ -73,14 +73,17 @@ void Task_arm_simple(void *argument)
         // BSP_GPIO_WritePin(BSP_GPIO_ARM_SOLENOID, true);
         // BSP_GPIO_WritePin(BSP_GPIO_ROD_SOLENOID, true);
         const uint64_t now_us = BSP_TIME_Get_us();
+        const float nominal_dt = 1.0f / (float)ARM_SIMPLE_FREQ;
+        const float min_dt = nominal_dt * 0.5f;
+        const float max_dt = nominal_dt * 3.0f;
         if (arm_simple.timer.last_wakeup_us != 0U &&
             now_us > arm_simple.timer.last_wakeup_us) {
             arm_simple.timer.dt = (float)(now_us - arm_simple.timer.last_wakeup_us) * 0.000001f;
         } else {
-            arm_simple.timer.dt = 1.0f / (float)ARM_SIMPLE_FREQ;
+            arm_simple.timer.dt = nominal_dt;
         }
-        if (arm_simple.timer.dt > 0.05f) {
-            arm_simple.timer.dt = 1.0f / (float)ARM_SIMPLE_FREQ;
+        if (arm_simple.timer.dt < min_dt || arm_simple.timer.dt > max_dt) {
+            arm_simple.timer.dt = nominal_dt;
         }
         arm_simple.timer.now = (float)now_us * 0.000001f;
         arm_simple.timer.last_wakeup_us = now_us;

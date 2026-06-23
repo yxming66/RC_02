@@ -85,6 +85,7 @@ typedef struct {
 typedef struct {
   uint32_t last_wakeup;
   float dt;
+  float nominal_dt;
   const CameraYaw_Params_t *param;
   CameraYaw_Mode_t mode;
   MOTOR_RM_t *motor;
