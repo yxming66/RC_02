@@ -288,8 +288,8 @@ void Task_atti_esti(void *argument) {
     BMI088_GyroStartDmaRecv();
     BMI088_GyroWaitDmaCplt();
 
-    /* 锁住RTOS内核防止数据解析过程中断，造成错误 */
-    osKernelLock();
+    /* DMA is complete; keep AHRS math preemptible. */
+
     /* 接收完所有数据后，把数据从原始字节加工成方便计算的数据 */
     BMI088_ParseAccl(&bmi088);
     BMI088_ParseGyro(&bmi088);
@@ -337,7 +337,6 @@ void Task_atti_esti(void *argument) {
       AHRS_GetEulr(&eulr_chassis, &chassis_ahrs);
     }
     
-    osKernelUnlock();
 
 
 
