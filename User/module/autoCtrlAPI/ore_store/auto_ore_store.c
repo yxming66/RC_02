@@ -22,6 +22,7 @@
 #define AUTO_ORE_DEFAULT_FUSED_PICK_PRECONTACT_TIMEOUT_MS (2000u)
 #define AUTO_ORE_DEFAULT_FUSED_PICK_LIFT_DETECT_MS (200u)
 #define AUTO_ORE_DEFAULT_FUSED_ARM_PHOTO_STABLE_MS (120u)
+#define AUTO_ORE_FUSED_STEP_PHOTO_STABLE_MS (20u)
 #define AUTO_ORE_FUSED_HEAD_ASCEND_FRONT_RETRACT_STEP_INDEX (2u)
 #define AUTO_ORE_FUSED_HEAD_DESCEND_FIRST_EDGE_STEP_INDEX (1u)
 #define AUTO_ORE_FUSED_ARM_PHOTO_ENABLE_JOINT1_RAD (0.6981317f)
@@ -267,6 +268,55 @@ static bool AutoOre_WaitConditionThenDelay(AutoOre_t *ctrl, uint32_t now_ms,
     ctrl->step_condition_time_ms = now_ms;
   }
   return (now_ms - ctrl->step_condition_time_ms) >= delay_ms;
+}
+
+static bool AutoOre_LatchPhotoStableFalling(
+    bool triggered, bool *stable_trigger_seen, bool *stable_release_latched,
+    uint32_t *triggered_since_ms, uint32_t *released_since_ms,
+    uint32_t now_ms) {
+  if (stable_trigger_seen == 0 || stable_release_latched == 0 ||
+      triggered_since_ms == 0 || released_since_ms == 0) {
+    return false;
+  }
+
+  if (*stable_release_latched) {
+    return true;
+  }
+
+  if (!*stable_trigger_seen) {
+    if (!triggered) {
+      *triggered_since_ms = 0u;
+      return false;
+    }
+
+    if (*triggered_since_ms == 0u) {
+      *triggered_since_ms = now_ms;
+      return false;
+    }
+
+    if ((now_ms - *triggered_since_ms) >=
+        AUTO_ORE_FUSED_STEP_PHOTO_STABLE_MS) {
+      *stable_trigger_seen = true;
+      *released_since_ms = 0u;
+    }
+    return false;
+  }
+
+  if (triggered) {
+    *released_since_ms = 0u;
+    return false;
+  }
+
+  if (*released_since_ms == 0u) {
+    *released_since_ms = now_ms;
+    return false;
+  }
+
+  if ((now_ms - *released_since_ms) >=
+      AUTO_ORE_FUSED_STEP_PHOTO_STABLE_MS) {
+    *stable_release_latched = true;
+  }
+  return *stable_release_latched;
 }
 
 static bool AutoOre_ArmCommandAtTarget(const AutoOre_t *ctrl) {
@@ -1176,8 +1226,8 @@ static bool AutoOre_FusedTemplateStartsAtHeldPoleTarget(
          template_id == AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD;
 }
 
-static bool AutoOre_FusedStepStartFrontPhotoTriggered(
-    const AutoOre_t *ctrl) {
+static bool AutoOre_FusedStepStartFrontPhotoReached(AutoOre_t *ctrl,
+                                                    uint32_t now_ms) {
   if (ctrl == 0) {
     return false;
   }
@@ -1187,7 +1237,13 @@ static bool AutoOre_FusedStepStartFrontPhotoTriggered(
     case AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD:
       return ctrl->feedback.pe13_photo1_triggered;
     case AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD:
-      return ctrl->feedback.pe9_photo2_triggered;
+    case AUTO_CTRL_TEMPLATE_DESCEND_400_HEAD:
+      return AutoOre_LatchPhotoStableFalling(
+          ctrl->feedback.pe13_photo1_triggered,
+          &ctrl->fused_photo1_stable_trigger_seen,
+          &ctrl->fused_photo1_stable_release_latched,
+          &ctrl->fused_photo1_triggered_since_ms,
+          &ctrl->fused_photo1_released_since_ms, now_ms);
     default:
       return false;
   }
@@ -1204,6 +1260,7 @@ static uint8_t AutoOre_FusedFastPickTemplateStartStepIndex(
     case AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD:
       return AUTO_ORE_FUSED_HEAD_ASCEND_FRONT_RETRACT_STEP_INDEX;
     case AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD:
+    case AUTO_CTRL_TEMPLATE_DESCEND_400_HEAD:
       return AUTO_ORE_FUSED_HEAD_DESCEND_FIRST_EDGE_STEP_INDEX;
     default:
       return 0u;
@@ -1220,6 +1277,7 @@ static bool AutoOre_FusedFastPickOnFrontPhotoEnabled(
     case AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD:
     case AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD:
     case AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD:
+    case AUTO_CTRL_TEMPLATE_DESCEND_400_HEAD:
       return true;
     default:
       return false;
@@ -1659,7 +1717,7 @@ static void AutoOre_RunFusedStepSide(AutoOre_t *ctrl, uint32_t now_ms,
         return;
       }
 
-      if (AutoOre_FusedStepStartFrontPhotoTriggered(ctrl)) {
+      if (AutoOre_FusedStepStartFrontPhotoReached(ctrl, now_ms)) {
         AutoOre_CommandChassisHold(ctrl);
         ctrl->fused_step_template_start_step_index =
             AutoOre_FusedFastPickTemplateStartStepIndex(ctrl);
@@ -1796,7 +1854,7 @@ static void AutoOre_RunStepPickStoreFused(AutoOre_t *ctrl, uint32_t now_ms) {
       AutoOre_CommandChassisMoveYawRate(ctrl, fused->precontact_vx_mps,
                                         ctrl->feedback.yaw_rate_cmd_rad_s);
       if (AutoOre_FusedFastPickOnFrontPhotoEnabled(ctrl, fused)) {
-        if (AutoOre_FusedStepStartFrontPhotoTriggered(ctrl)) {
+        if (AutoOre_FusedStepStartFrontPhotoReached(ctrl, now_ms)) {
           ctrl->pick_lift_confirmed = true;
           AutoOre_SetArmHasOre(ctrl, true);
           ctrl->fused_step_template_start_step_index =
@@ -1996,6 +2054,10 @@ static bool AutoOre_StartResolved(AutoOre_t *ctrl, AutoOre_Action_t action,
   ctrl->prealign_target_yaw_rad = 0.0f;
   ctrl->prealign_yaw_error_rad = 0.0f;
   ctrl->fused_arm_photo_since_ms = 0u;
+  ctrl->fused_photo1_stable_trigger_seen = false;
+  ctrl->fused_photo1_stable_release_latched = false;
+  ctrl->fused_photo1_triggered_since_ms = 0u;
+  ctrl->fused_photo1_released_since_ms = 0u;
   ctrl->fused_store_step_index = 0u;
   ctrl->fused_store_step_phase = 0u;
   ctrl->fused_step_template_start_step_index = 0u;

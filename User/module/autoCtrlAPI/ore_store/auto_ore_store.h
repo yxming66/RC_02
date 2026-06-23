@@ -218,6 +218,10 @@ typedef struct {
   float wheel_delta_rad;
   float target_wheel_delta_rad;
   uint32_t fused_arm_photo_since_ms;
+  bool fused_photo1_stable_trigger_seen;
+  bool fused_photo1_stable_release_latched;
+  uint32_t fused_photo1_triggered_since_ms;
+  uint32_t fused_photo1_released_since_ms;
   uint8_t fused_store_step_index;
   uint8_t fused_store_step_phase;
   uint8_t fused_step_template_start_step_index;
