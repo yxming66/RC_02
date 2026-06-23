@@ -17,6 +17,7 @@ static OreStore_CMD_t ore_store_cmd;
 static CameraYaw_t camera_yaw[CAMERA_YAW_NUM];
 static CameraYaw_GroupCMD_t camera_yaw_cmd;
 static CameraYaw_GroupFeedback_t camera_yaw_feedback;
+static volatile bool ore_store_init_attempted = false;
 static volatile bool ore_store_inited = false;
 static volatile bool camera_yaw_inited[CAMERA_YAW_NUM] = {false};
 static volatile bool ore_store_rehome_requested = false;
@@ -324,19 +325,20 @@ static void OreStoreTask_UpdateTemperatureAlarm(uint32_t now_tick) {
   }
 }
 
-void Task_ore_store(void *argument) {
-  (void)argument;
+bool Task_OreStoreInitOnce(void) {
+  if (ore_store_inited) {
+    return true;
+  }
+  if (ore_store_init_attempted) {
+    return false;
+  }
+  ore_store_init_attempted = true;
 
-  const uint32_t delay_tick = osKernelGetTickFreq() / ORE_STORE_FREQ;
-  osDelay(ORE_STORE_INIT_DELAY);
-
-  uint32_t tick = osKernelGetTickCount();
   Config_RobotParam_t *cfg = Config_GetRobotParam();
   if (cfg == NULL) {
     g_ore_store_init_ret = ORE_STORE_ERR_NULL;
     g_camera_yaw_init_ret = CAMERA_YAW_ERR_NULL;
-    osThreadTerminate(osThreadGetId());
-    return;
+    return false;
   }
 
   OreStoreTask_SetDefaultCommand(&ore_store_cmd);
@@ -346,8 +348,7 @@ void Task_ore_store(void *argument) {
   g_ore_store_init_ret =
       OreStore_Init(&ore_store, &cfg->ore_store_param, (float)ORE_STORE_FREQ);
   if (g_ore_store_init_ret != ORE_STORE_OK) {
-    osThreadTerminate(osThreadGetId());
-    return;
+    return false;
   }
   ore_store_inited = true;
 
@@ -363,82 +364,105 @@ void Task_ore_store(void *argument) {
     }
   }
 
-  while (1) {
-    const uint32_t profile_start_us =
-        Task_ProfilerLoopBegin(TASK_PROFILE_ORE_STORE,
-                               TASK_PERIOD_US(ORE_STORE_FREQ));
-    tick += delay_tick;
+  return true;
+}
 
-    OreStore_CMD_t next_cmd;
-    if (osMessageQueueGet(task_runtime.msgq.ore_store.cmd, &next_cmd, NULL,
-                          0) == osOK) {
-      OreStoreTask_SanitizeCommand(&next_cmd);
-      ore_store_cmd = next_cmd;
+void Task_OreStoreStep(void) {
+  if (!ore_store_inited) {
+    return;
+  }
+
+  const uint32_t profile_start_us =
+      Task_ProfilerLoopBegin(TASK_PROFILE_ORE_STORE,
+                             TASK_PERIOD_US(ORE_STORE_FREQ));
+
+  OreStore_CMD_t next_cmd;
+  if (osMessageQueueGet(task_runtime.msgq.ore_store.cmd, &next_cmd, NULL,
+                        0) == osOK) {
+    OreStoreTask_SanitizeCommand(&next_cmd);
+    ore_store_cmd = next_cmd;
+  }
+
+  (void)OreStoreTask_TryApplyDebugCommand(&ore_store_cmd);
+
+  if (ore_store_rehome_requested) {
+    OreStore_RequestRehome(&ore_store);
+    ore_store_rehome_requested = false;
+  }
+
+  g_ore_store_update_ret = OreStore_UpdateFeedback(&ore_store);
+  OreStoreTask_ApplyAssumeHomedDebug();
+  const uint32_t now_tick = BSP_TIME_Get_ms();
+
+  CameraYaw_GroupCMD_t next_camera_yaw_cmd;
+  if (osMessageQueueGet(task_runtime.msgq.camera_yaw.cmd,
+                        &next_camera_yaw_cmd, NULL, 0) == osOK) {
+    OreStoreTask_SanitizeCameraYawGroupCommand(&next_camera_yaw_cmd);
+    camera_yaw_cmd = next_camera_yaw_cmd;
+  }
+
+  for (uint8_t yaw = 0u; yaw < CAMERA_YAW_NUM; ++yaw) {
+    if (camera_yaw_inited[yaw]) {
+      (void)OreStoreTask_TryApplyCameraYawDebugCommand(
+          &camera_yaw_cmd.yaw[yaw], now_tick);
     }
+  }
 
-    (void)OreStoreTask_TryApplyDebugCommand(&ore_store_cmd);
-
-    if (ore_store_rehome_requested) {
-      OreStore_RequestRehome(&ore_store);
-      ore_store_rehome_requested = false;
+  bool camera_yaw_any_inited = false;
+  for (uint8_t yaw = 0u; yaw < CAMERA_YAW_NUM; ++yaw) {
+    if (!camera_yaw_inited[yaw]) {
+      continue;
     }
-
-    g_ore_store_update_ret = OreStore_UpdateFeedback(&ore_store);
-    OreStoreTask_ApplyAssumeHomedDebug();
-    const uint32_t now_tick = BSP_TIME_Get_ms();
-
-    CameraYaw_GroupCMD_t next_camera_yaw_cmd;
-    if (osMessageQueueGet(task_runtime.msgq.camera_yaw.cmd,
-                          &next_camera_yaw_cmd, NULL, 0) == osOK) {
-      OreStoreTask_SanitizeCameraYawGroupCommand(&next_camera_yaw_cmd);
-      camera_yaw_cmd = next_camera_yaw_cmd;
-    }
-
+    camera_yaw_any_inited = true;
+    g_camera_yaw_update_ret_by_channel[yaw] =
+        CameraYaw_UpdateFeedback(&camera_yaw[yaw]);
+    g_camera_yaw_control_ret_by_channel[yaw] =
+        CameraYaw_Control(&camera_yaw[yaw], &camera_yaw_cmd.yaw[yaw],
+                          now_tick);
+    CameraYaw_SetOutput(&camera_yaw[yaw]);
+    camera_yaw_feedback.yaw[yaw] = camera_yaw[yaw].feedback;
+  }
+  if (camera_yaw_any_inited) {
     for (uint8_t yaw = 0u; yaw < CAMERA_YAW_NUM; ++yaw) {
       if (camera_yaw_inited[yaw]) {
-        (void)OreStoreTask_TryApplyCameraYawDebugCommand(
-            &camera_yaw_cmd.yaw[yaw], now_tick);
+        CameraYaw_FlushOutput(&camera_yaw[yaw]);
       }
     }
+    g_camera_yaw_update_ret =
+        g_camera_yaw_update_ret_by_channel[CAMERA_YAW_LEFT];
+    g_camera_yaw_control_ret =
+        g_camera_yaw_control_ret_by_channel[CAMERA_YAW_LEFT];
+  }
 
-    bool camera_yaw_any_inited = false;
-    for (uint8_t yaw = 0u; yaw < CAMERA_YAW_NUM; ++yaw) {
-      if (!camera_yaw_inited[yaw]) {
-        continue;
-      }
-      camera_yaw_any_inited = true;
-      g_camera_yaw_update_ret_by_channel[yaw] =
-          CameraYaw_UpdateFeedback(&camera_yaw[yaw]);
-      g_camera_yaw_control_ret_by_channel[yaw] =
-          CameraYaw_Control(&camera_yaw[yaw], &camera_yaw_cmd.yaw[yaw],
-                            now_tick);
-      CameraYaw_SetOutput(&camera_yaw[yaw]);
-      camera_yaw_feedback.yaw[yaw] = camera_yaw[yaw].feedback;
-    }
-    if (camera_yaw_any_inited) {
-      for (uint8_t yaw = 0u; yaw < CAMERA_YAW_NUM; ++yaw) {
-        if (camera_yaw_inited[yaw]) {
-          CameraYaw_FlushOutput(&camera_yaw[yaw]);
-        }
-      }
-      g_camera_yaw_update_ret =
-          g_camera_yaw_update_ret_by_channel[CAMERA_YAW_LEFT];
-      g_camera_yaw_control_ret =
-          g_camera_yaw_control_ret_by_channel[CAMERA_YAW_LEFT];
-    }
+  OreStoreTask_UpdateTemperatureAlarm(now_tick);
+  g_ore_store_control_ret =
+      OreStore_Control(&ore_store, &ore_store_cmd, now_tick);
+  OreStore_Output(&ore_store);
+  OreStoreTask_ApplyDirectDebugOutput();
+  OreStoreTask_UpdateDebugView();
+  ore_store_cmd.force_rehome = false;
 
-    OreStoreTask_UpdateTemperatureAlarm(now_tick);
-    g_ore_store_control_ret =
-        OreStore_Control(&ore_store, &ore_store_cmd, now_tick);
-    OreStore_Output(&ore_store);
-    OreStoreTask_ApplyDirectDebugOutput();
-    OreStoreTask_UpdateDebugView();
-    ore_store_cmd.force_rehome = false;
+  task_runtime.stack_water_mark.ore_store =
+      uxTaskGetStackHighWaterMark(NULL);
+  task_runtime.heartbeat.ore_store++;
+  Task_ProfilerLoopEnd(TASK_PROFILE_ORE_STORE, profile_start_us);
+}
 
-    task_runtime.stack_water_mark.ore_store =
-        uxTaskGetStackHighWaterMark(NULL);
-    task_runtime.heartbeat.ore_store++;
-    Task_ProfilerLoopEnd(TASK_PROFILE_ORE_STORE, profile_start_us);
+void Task_ore_store(void *argument) {
+  (void)argument;
+
+  const uint32_t delay_tick = osKernelGetTickFreq() / ORE_STORE_FREQ;
+  osDelay(ORE_STORE_INIT_DELAY);
+
+  uint32_t tick = osKernelGetTickCount();
+  if (!Task_OreStoreInitOnce()) {
+    osThreadTerminate(osThreadGetId());
+    return;
+  }
+
+  while (1) {
+    tick += delay_tick;
+    Task_OreStoreStep();
     Task_DelayUntil(TASK_PROFILE_ORE_STORE, &tick, delay_tick);
   }
 }

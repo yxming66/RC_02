@@ -71,6 +71,7 @@ typedef enum {
     TASK_PROFILE_PC_COMM,
     TASK_PROFILE_ORE_STORE,
     TASK_PROFILE_IR_DOCK,
+    TASK_PROFILE_CPP_RM_MAIN,
     TASK_PROFILE_COUNT,
 } Task_ProfileId_t;
 
@@ -269,6 +270,7 @@ typedef struct {
         osThreadId_t blink;
         osThreadId_t atti_esti;
         osThreadId_t chassis_main;
+        osThreadId_t cpp_rm_main;
         osThreadId_t pole_main;
         osThreadId_t rc_main;
         osThreadId_t sick;
@@ -344,6 +346,7 @@ typedef struct {
         volatile uint32_t pc_comm;
         volatile uint32_t ore_store;
         volatile uint32_t ir_dock;
+        volatile uint32_t cpp_rm_main;
     } heartbeat;
 
     Task_ProfileStats_t profile[TASK_PROFILE_COUNT];
@@ -362,6 +365,7 @@ typedef struct {
         UBaseType_t pc_comm;
         UBaseType_t ore_store;
         UBaseType_t ir_dock;
+        UBaseType_t cpp_rm_main;
 
     } stack_water_mark;
 
@@ -392,6 +396,7 @@ extern const osThreadAttr_t attr_init;
 extern const osThreadAttr_t attr_blink;
 extern const osThreadAttr_t attr_atti_esti;
 extern const osThreadAttr_t attr_chassis_main;
+extern const osThreadAttr_t attr_cpp_rm_main;
 extern const osThreadAttr_t attr_pole_main;
 extern const osThreadAttr_t attr_rc_main;
 extern const osThreadAttr_t attr_sick;
@@ -406,6 +411,7 @@ void Task_Init(void *argument);
 void Task_blink(void *argument);
 void Task_atti_esti(void *argument);
 void Task_chassis_main(void *argument);
+void Task_cpp_rm_main(void *argument);
 void Task_pole_main(void *argument);
 void Task_rc_main(void *argument);
 void Task_sick(void *argument);
@@ -419,6 +425,10 @@ uint32_t Task_ProfilerLoopBegin(Task_ProfileId_t id, uint32_t target_period_us);
 void Task_ProfilerLoopEnd(Task_ProfileId_t id, uint32_t loop_start_us);
 void Task_DelayUntil(Task_ProfileId_t id, uint32_t *wake_tick,
                      uint32_t delay_tick);
+bool Task_ChassisMainInitOnce(void);
+void Task_ChassisMainStep(void);
+bool Task_OreStoreInitOnce(void);
+void Task_OreStoreStep(void);
 
 const Chassis_Feedback_t *Task_ChassisGetFeedback(void);
 bool Task_PoleMainGroupAtTarget(uint8_t group, float threshold_rad);

@@ -32,7 +32,8 @@ void Task_Init(void *argument) {
 
   task_runtime.thread.blink = osThreadNew(Task_blink, NULL, &attr_blink);
   task_runtime.thread.atti_esti = osThreadNew(Task_atti_esti, NULL, &attr_atti_esti);
-  task_runtime.thread.chassis_main = osThreadNew(Task_chassis_main, NULL, &attr_chassis_main);
+  task_runtime.thread.cpp_rm_main = osThreadNew(Task_cpp_rm_main, NULL, &attr_cpp_rm_main);
+  task_runtime.thread.chassis_main = task_runtime.thread.cpp_rm_main;
   task_runtime.thread.pole_main = osThreadNew(Task_pole_main, NULL, &attr_pole_main);
   task_runtime.thread.rc_main = osThreadNew(Task_rc_main, NULL, &attr_rc_main);
   task_runtime.thread.sick = osThreadNew(Task_sick, NULL, &attr_sick);
@@ -40,7 +41,7 @@ void Task_Init(void *argument) {
     task_runtime.thread.arm_simple = osThreadNew(Task_arm_simple, NULL, &attr_arm_simple);
   task_runtime.thread.pc_comm = osThreadNew(Task_pc_comm, NULL, &attr_pc_comm);
     task_runtime.thread.rod = osThreadNew(Task_rod, NULL, &attr_rod);
-    task_runtime.thread.ore_store = osThreadNew(Task_ore_store, NULL, &attr_ore_store);
+    task_runtime.thread.ore_store = task_runtime.thread.cpp_rm_main;
     // task_runtime.thread.ir_dock = osThreadNew(Task_ir_dock, NULL, &attr_ir_dock);
 
   task_runtime.heartbeat.init++;
