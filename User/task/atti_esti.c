@@ -255,6 +255,9 @@ void Task_atti_esti(void *argument) {
   /* USER CODE INIT END */
   
   while (1) {
+    const uint32_t profile_start_us =
+        Task_ProfilerLoopBegin(TASK_PROFILE_ATTI_ESTI,
+                               TASK_PERIOD_US(ATTI_ESTI_FREQ));
     tick += delay_tick; /* 计算下一个唤醒时刻 */
     /* USER CODE BEGIN */
     if (calib_request_pending) {
@@ -351,6 +354,7 @@ void Task_atti_esti(void *argument) {
     /* USER CODE END */
     task_runtime.stack_water_mark.atti_esti = uxTaskGetStackHighWaterMark(NULL);
     task_runtime.heartbeat.atti_esti++;
+    Task_ProfilerLoopEnd(TASK_PROFILE_ATTI_ESTI, profile_start_us);
     osDelayUntil(tick); /* 运行结束，等待下一次唤醒 */
   }
   

@@ -65,6 +65,9 @@ void Task_arm_simple(void *argument)
     ArmSimple_Control(&arm_simple, &startup_cmd);
 
     while (1) {
+        const uint32_t profile_start_us =
+            Task_ProfilerLoopBegin(TASK_PROFILE_ARM_SIMPLE,
+                                   TASK_PERIOD_US(ARM_SIMPLE_FREQ));
         tick += delay_tick;
 
         // BSP_GPIO_WritePin(BSP_GPIO_ARM_SOLENOID, true);
@@ -135,7 +138,10 @@ void Task_arm_simple(void *argument)
 
         ArmSimple_Output(&arm_simple);
 
+        task_runtime.stack_water_mark.arm_simple =
+            uxTaskGetStackHighWaterMark(NULL);
         task_runtime.heartbeat.arm_simple++;
+        Task_ProfilerLoopEnd(TASK_PROFILE_ARM_SIMPLE, profile_start_us);
 
         osDelayUntil(tick);
     }

@@ -237,6 +237,9 @@ extern "C" void Task_pole_main(void *argument) {
   PolePidDebugInit(cfg);
 
   while (1) {
+    const uint32_t profile_start_us =
+        Task_ProfilerLoopBegin(TASK_PROFILE_POLE_MAIN,
+                               TASK_PERIOD_US(POLE_MAIN_FREQ));
     tick += delay_tick;
 
     osMessageQueueGet(task_runtime.msgq.pole.cmd, &pole_cmd, nullptr, 0);
@@ -259,6 +262,7 @@ extern "C" void Task_pole_main(void *argument) {
     task_runtime.stack_water_mark.pole_main =
         uxTaskGetStackHighWaterMark(nullptr);
     task_runtime.heartbeat.pole_main++;
+    Task_ProfilerLoopEnd(TASK_PROFILE_POLE_MAIN, profile_start_us);
     osDelayUntil(tick);
   }
 }

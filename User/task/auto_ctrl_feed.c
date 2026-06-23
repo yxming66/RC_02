@@ -1340,6 +1340,9 @@ void Task_auto_ctrl(void *argument) {
   AutoCtrlFeed_InitAutoSickCorrect();
 
   while (1) {
+    const uint32_t profile_start_us =
+        Task_ProfilerLoopBegin(TASK_PROFILE_AUTO_CTRL,
+                               TASK_PERIOD_US(AUTO_CTRL_FREQ));
     uint32_t now_ms;
 
     tick += delay_tick;
@@ -1428,6 +1431,7 @@ void Task_auto_ctrl(void *argument) {
 
     task_runtime.stack_water_mark.auto_ctrl = uxTaskGetStackHighWaterMark(NULL);
     task_runtime.heartbeat.auto_ctrl++;
+    Task_ProfilerLoopEnd(TASK_PROFILE_AUTO_CTRL, profile_start_us);
     osDelayUntil(tick);
   }
 }

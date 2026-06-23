@@ -31,6 +31,9 @@ void Task_rc_main(void *argument) {
   RcCmdCenterApp_Init();
 
   while (1) {
+    const uint32_t profile_start_us =
+        Task_ProfilerLoopBegin(TASK_PROFILE_RC_MAIN,
+                               TASK_PERIOD_US(RC_MAIN_FREQ));
     tick += delay_tick;
     if (DR16_WaitDmaCplt(100)) {
       if (DR16_ParseData(&dr16) != DEVICE_OK) {
@@ -53,6 +56,7 @@ void Task_rc_main(void *argument) {
     task_runtime.stack_water_mark.rc_main =
         uxTaskGetStackHighWaterMark(NULL);
     task_runtime.heartbeat.rc_main++;
+    Task_ProfilerLoopEnd(TASK_PROFILE_RC_MAIN, profile_start_us);
     osDelayUntil(tick);
   }
 }

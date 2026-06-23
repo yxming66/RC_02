@@ -47,6 +47,8 @@ void Task_rod(void *argument) {
   rod_new_cmd.grip = ROD_NEW_GRIP_RELEASE;
 
   while (1) {  
+    const uint32_t profile_start_us =
+        Task_ProfilerLoopBegin(TASK_PROFILE_ROD, TASK_PERIOD_US(ROD_FREQ));
     tick += delay_tick;
 
     osMessageQueueGet(task_runtime.msgq.rod.cmd, &rod_new_cmd, NULL, 0);
@@ -70,6 +72,7 @@ void Task_rod(void *argument) {
 
     task_runtime.stack_water_mark.rod = uxTaskGetStackHighWaterMark(NULL);
     task_runtime.heartbeat.rod++;
+    Task_ProfilerLoopEnd(TASK_PROFILE_ROD, profile_start_us);
     osDelayUntil(tick);
   }
 }

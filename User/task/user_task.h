@@ -55,8 +55,38 @@ extern "C" {
 #define ORE_STORE_INIT_DELAY (100u)
 #define IR_DOCK_INIT_DELAY (0)
 /* Exported defines --------------------------------------------------------- */
+#define TASK_PERIOD_US(freq) ((uint32_t)(1000000.0f / (float)(freq)))
 /* Exported macro ----------------------------------------------------------- */
 /* Exported types ----------------------------------------------------------- */
+typedef enum {
+    TASK_PROFILE_BLINK = 0,
+    TASK_PROFILE_ATTI_ESTI,
+    TASK_PROFILE_CHASSIS_MAIN,
+    TASK_PROFILE_POLE_MAIN,
+    TASK_PROFILE_RC_MAIN,
+    TASK_PROFILE_SICK,
+    TASK_PROFILE_AUTO_CTRL,
+    TASK_PROFILE_ARM_SIMPLE,
+    TASK_PROFILE_ROD,
+    TASK_PROFILE_PC_COMM,
+    TASK_PROFILE_ORE_STORE,
+    TASK_PROFILE_IR_DOCK,
+    TASK_PROFILE_COUNT,
+} Task_ProfileId_t;
+
+typedef struct {
+    volatile uint32_t target_period_us;
+    volatile uint32_t last_start_us;
+    volatile uint32_t period_us;
+    volatile uint32_t min_period_us;
+    volatile uint32_t max_period_us;
+    volatile uint32_t exec_us;
+    volatile uint32_t max_exec_us;
+    volatile uint32_t overrun_count;
+    volatile uint32_t long_period_count;
+    volatile uint32_t loop_count;
+} Task_ProfileStats_t;
+
 typedef enum {
     BUZZER_ALARM_NONE = 0,
     BUZZER_ALARM_TEMP_WARNING,
@@ -312,6 +342,8 @@ typedef struct {
         volatile uint32_t ir_dock;
     } heartbeat;
 
+    Task_ProfileStats_t profile[TASK_PROFILE_COUNT];
+
     /* 各任务的stack使用 */
     struct {
         UBaseType_t blink;
@@ -321,6 +353,7 @@ typedef struct {
         UBaseType_t rc_main;
         UBaseType_t sick;
         UBaseType_t auto_ctrl;
+        UBaseType_t arm_simple;
         UBaseType_t rod;
         UBaseType_t pc_comm;
         UBaseType_t ore_store;
@@ -378,6 +411,8 @@ void Task_rod(void *argument);
 void Task_pc_comm(void *argument);
 void Task_ore_store(void *argument);
 void Task_ir_dock(void *argument);
+uint32_t Task_ProfilerLoopBegin(Task_ProfileId_t id, uint32_t target_period_us);
+void Task_ProfilerLoopEnd(Task_ProfileId_t id, uint32_t loop_start_us);
 
 const Chassis_Feedback_t *Task_ChassisGetFeedback(void);
 bool Task_PoleMainGroupAtTarget(uint8_t group, float threshold_rad);

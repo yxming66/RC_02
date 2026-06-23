@@ -294,6 +294,8 @@ void Task_blink(void *argument) {
   /* USER CODE INIT END */
 
   while (1) {
+    const uint32_t profile_start_us =
+        Task_ProfilerLoopBegin(TASK_PROFILE_BLINK, TASK_PERIOD_US(BLINK_FREQ));
     tick += delay_tick;
     /* USER CODE BEGIN */
     const uint32_t now_tick = BSP_TIME_Get_ms();
@@ -306,6 +308,7 @@ void Task_blink(void *argument) {
     /* USER CODE END */
     task_runtime.stack_water_mark.blink = uxTaskGetStackHighWaterMark(NULL);
     task_runtime.heartbeat.blink++;
+    Task_ProfilerLoopEnd(TASK_PROFILE_BLINK, profile_start_us);
     osDelayUntil(tick);
   }
 }

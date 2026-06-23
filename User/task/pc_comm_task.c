@@ -449,6 +449,9 @@ void Task_pc_comm(void *argument) {
     uint32_t last_tx_tick = BSP_TIME_Get_ms();
 
     while (1) {
+        const uint32_t profile_start_us =
+            Task_ProfilerLoopBegin(TASK_PROFILE_PC_COMM,
+                                   PC_COMM_LOOP_PERIOD_MS * 1000U);
         task_runtime.stack_water_mark.pc_comm = uxTaskGetStackHighWaterMark(NULL);
 
         uint32_t now = BSP_TIME_Get_ms();
@@ -490,6 +493,7 @@ void Task_pc_comm(void *argument) {
 
         MrlinkPc_DebugUpdate();
         task_runtime.heartbeat.pc_comm++;
+        Task_ProfilerLoopEnd(TASK_PROFILE_PC_COMM, profile_start_us);
         osDelay(PC_COMM_LOOP_PERIOD_MS);
     }
 }

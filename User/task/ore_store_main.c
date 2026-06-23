@@ -364,6 +364,9 @@ void Task_ore_store(void *argument) {
   }
 
   while (1) {
+    const uint32_t profile_start_us =
+        Task_ProfilerLoopBegin(TASK_PROFILE_ORE_STORE,
+                               TASK_PERIOD_US(ORE_STORE_FREQ));
     tick += delay_tick;
 
     OreStore_CMD_t next_cmd;
@@ -435,6 +438,7 @@ void Task_ore_store(void *argument) {
     task_runtime.stack_water_mark.ore_store =
         uxTaskGetStackHighWaterMark(NULL);
     task_runtime.heartbeat.ore_store++;
+    Task_ProfilerLoopEnd(TASK_PROFILE_ORE_STORE, profile_start_us);
     osDelayUntil(tick);
   }
 }

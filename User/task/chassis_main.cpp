@@ -40,6 +40,9 @@ extern "C" void Task_chassis_main(void *argument) {
   }
 
   while (1) {
+    const uint32_t profile_start_us =
+        Task_ProfilerLoopBegin(TASK_PROFILE_CHASSIS_MAIN,
+                               TASK_PERIOD_US(CHASSIS_MAIN_FREQ));
     tick += delay_tick;
     const uint32_t loop_tick = BSP_TIME_Get_ms();
 
@@ -73,6 +76,7 @@ extern "C" void Task_chassis_main(void *argument) {
     task_runtime.stack_water_mark.chassis_main =
         uxTaskGetStackHighWaterMark(nullptr);
     task_runtime.heartbeat.chassis_main++;
+    Task_ProfilerLoopEnd(TASK_PROFILE_CHASSIS_MAIN, profile_start_us);
     osDelayUntil(tick);
   }
 }
