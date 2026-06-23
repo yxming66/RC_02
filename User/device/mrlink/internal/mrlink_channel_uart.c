@@ -374,7 +374,7 @@ static uint32_t UartGetRxOverflowCount(const void *ctx) {
   const MrLink_UartBackend_t *backend = (const MrLink_UartBackend_t *)ctx;
   return (backend != NULL) ? backend->rx_overflow_count : 0u;
 }
-
+ 
 static uint32_t UartGetRxIrqCount(const void *ctx) {
   const MrLink_UartBackend_t *backend = (const MrLink_UartBackend_t *)ctx;
   return (backend != NULL) ? backend->rx_irq_count : 0u;
