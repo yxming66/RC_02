@@ -128,6 +128,7 @@ typedef struct {
   float travel_rad[ORE_STORE_AXIS_NUM];
   float velocity_setpoint_rad_s[ORE_STORE_AXIS_NUM];
   float seek_velocity_rad_s[ORE_STORE_AXIS_NUM];
+  float seek_travel_rad[ORE_STORE_AXIS_NUM];
   float online_wait_s[ORE_STORE_AXIS_NUM];
   uint8_t soft_limit_state[ORE_STORE_AXIS_NUM];
   uint16_t stall_cycles[ORE_STORE_AXIS_NUM];

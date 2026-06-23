@@ -117,6 +117,17 @@ struct SoftLimitLearningConfig {
     float known_travel_rad = 0.0f;
     float limit_margin_rad = 0.0f;
     float min_range_rad = 0.0f;
+    float stall_velocity_threshold_rad_s =
+        SOFT_LIMIT_LEARNING_STALL_VELOCITY_THRESHOLD_RAD_S;
+    float stall_position_window_rad =
+        SOFT_LIMIT_LEARNING_STALL_POSITION_WINDOW_RAD;
+    uint16_t stall_cycles_required =
+        SOFT_LIMIT_LEARNING_STALL_CYCLES_REQUIRED;
+    float seek_timeout_s = SOFT_LIMIT_LEARNING_SEEK_TIMEOUT_S;
+    float seek_startup_ignore_s = SOFT_LIMIT_LEARNING_SEEK_STARTUP_IGNORE_S;
+    float learned_limit_margin_rad =
+        SOFT_LIMIT_LEARNING_LEARNED_LIMIT_MARGIN_RAD;
+    float min_seek_travel_before_capture_rad = 0.0f;
 };
 
 enum class SoftLimitReturnTarget : uint8_t {
@@ -215,6 +226,7 @@ public:
     uint16_t GetStallCycles() const;
     float GetElapsedSeekS() const;
     float GetStartupIgnoreLeftS() const;
+    float GetSeekTravelRad() const;
 
 private:
     bool StartSeek(float seek_velocity_rad_s, bool upper, SoftLimitLearningWorkflow workflow, float travel_rad);
@@ -239,6 +251,9 @@ private:
     uint16_t stall_cycles_ = 0u;
     float elapsed_seek_s_ = 0.0f;
     float startup_ignore_left_s_ = 0.0f;
+    float seek_start_position_rad_ = 0.0f;
+    float max_seek_travel_rad_ = 0.0f;
+    bool seek_start_position_initialized_ = false;
     SoftLimitLearningWorkflow workflow_ = SoftLimitLearningWorkflow::None;
     SoftLimitReturnTarget post_learn_return_target_ = SoftLimitReturnTarget::None;
     float pending_travel_rad_ = 0.0f;

@@ -27,6 +27,10 @@ float ClampFiniteNonNegative(float value, float fallback) {
     return value;
 }
 
+float PositiveOrDefault(float value, float fallback) {
+    return (scalar::is_finite_scalar(value) && value > 0.0f) ? value : fallback;
+}
+
 float AbsFloat(float value) {
     return scalar::abs_scalar(value);
 }
@@ -77,10 +81,10 @@ mr::component::math::RangeLimits<1> BuildRangeLimits(float lower_rad,
     return limits;
 }
 
-mr::comp::timer::Config BuildObserveTimerConfig() {
+mr::comp::timer::Config BuildObserveTimerConfig(float seek_timeout_s) {
     mr::comp::timer::Config timer_config{};
-    if (kSeekTimeoutS > 0.0f) {
-        timer_config.max_dt_us = mr::comp::timer::SecondsToUs(kSeekTimeoutS);
+    if (seek_timeout_s > 0.0f) {
+        timer_config.max_dt_us = mr::comp::timer::SecondsToUs(seek_timeout_s);
     }
     return timer_config;
 }
@@ -105,7 +109,27 @@ void SoftLimitLearning::Configure(const SoftLimitLearningConfig& config) {
         ClampFiniteNonNegative(config_.limit_margin_rad, 0.0f);
     config_.min_range_rad =
         ClampFiniteNonNegative(config_.min_range_rad, 0.0f);
-    observe_timer_.Configure(BuildObserveTimerConfig());
+    config_.stall_velocity_threshold_rad_s =
+        PositiveOrDefault(config_.stall_velocity_threshold_rad_s,
+                          kStallVelocityThresholdRadS);
+    config_.stall_position_window_rad =
+        PositiveOrDefault(config_.stall_position_window_rad,
+                          kStallPositionWindowRad);
+    if (config_.stall_cycles_required == 0u) {
+        config_.stall_cycles_required = kStallCyclesRequired;
+    }
+    config_.seek_timeout_s =
+        ClampFiniteNonNegative(config_.seek_timeout_s, kSeekTimeoutS);
+    config_.seek_startup_ignore_s =
+        ClampFiniteNonNegative(config_.seek_startup_ignore_s,
+                               kSeekStartupIgnoreS);
+    config_.learned_limit_margin_rad =
+        ClampFiniteNonNegative(config_.learned_limit_margin_rad,
+                               kLearnedLimitMarginRad);
+    config_.min_seek_travel_before_capture_rad =
+        ClampFiniteNonNegative(config_.min_seek_travel_before_capture_rad,
+                               0.0f);
+    observe_timer_.Configure(BuildObserveTimerConfig(config_.seek_timeout_s));
     if (!NormalizeRangeCandidate(range_, config_.min_range_rad)) {
         range_ = {};
         if (!IsSeeking()) {
@@ -162,7 +186,8 @@ void SoftLimitLearning::Observe(const MotorState& state, float dt_s) {
 
     const float dt = ClampFiniteNonNegative(dt_s, 0.0f);
     elapsed_seek_s_ += dt;
-    if (kSeekTimeoutS > 0.0f && elapsed_seek_s_ >= kSeekTimeoutS) {
+    if (config_.seek_timeout_s > 0.0f &&
+        elapsed_seek_s_ >= config_.seek_timeout_s) {
         MarkFailed();
         return;
     }
@@ -181,16 +206,32 @@ void SoftLimitLearning::Observe(const MotorState& state, float dt_s) {
     if (!seek_position_initialized_) {
         last_seek_position_rad_ = state.position_rad;
         seek_position_initialized_ = true;
+        seek_start_position_rad_ = state.position_rad;
+        max_seek_travel_rad_ = 0.0f;
+        seek_start_position_initialized_ = true;
         return;
     }
 
     const float position_delta = AbsFloat(state.position_rad - last_seek_position_rad_);
     last_seek_position_rad_ = state.position_rad;
+    if (!seek_start_position_initialized_) {
+        seek_start_position_rad_ = state.position_rad;
+        max_seek_travel_rad_ = 0.0f;
+        seek_start_position_initialized_ = true;
+    }
+    const float directed_travel =
+        (seek_velocity_rad_s_ >= 0.0f)
+            ? (state.position_rad - seek_start_position_rad_)
+            : (seek_start_position_rad_ - state.position_rad);
+    if (directed_travel > max_seek_travel_rad_) {
+        max_seek_travel_rad_ = directed_travel;
+    }
 
     const bool velocity_small =
-        AbsFloat(state.velocity_rad_s) <= kStallVelocityThresholdRadS;
+        AbsFloat(state.velocity_rad_s) <=
+            config_.stall_velocity_threshold_rad_s;
     const bool position_small =
-        position_delta <= kStallPositionWindowRad;
+        position_delta <= config_.stall_position_window_rad;
 
     if (velocity_small && position_small) {
         if (stall_cycles_ < UINT16_MAX) {
@@ -200,7 +241,10 @@ void SoftLimitLearning::Observe(const MotorState& state, float dt_s) {
         stall_cycles_ = 0u;
     }
 
-    if (stall_cycles_ >= kStallCyclesRequired) {
+    const bool traveled_enough =
+        config_.min_seek_travel_before_capture_rad <= 0.0f ||
+        max_seek_travel_rad_ >= config_.min_seek_travel_before_capture_rad;
+    if (stall_cycles_ >= config_.stall_cycles_required && traveled_enough) {
         FinishSeekAt(state.position_rad);
     }
 }
@@ -320,7 +364,7 @@ bool SoftLimitLearning::SetRangeByLowerAndTravel(float lower_rad, float travel_r
         travel_rad < 0.0f) {
         return false;
     }
-    const float margin = ClampNonNegative(kLearnedLimitMarginRad);
+    const float margin = ClampNonNegative(config_.learned_limit_margin_rad);
     if (travel_rad < 2.0f * margin) {
         return false;
     }
@@ -332,7 +376,7 @@ bool SoftLimitLearning::SetRangeByUpperAndTravel(float upper_rad, float travel_r
         travel_rad < 0.0f) {
         return false;
     }
-    const float margin = ClampNonNegative(kLearnedLimitMarginRad);
+    const float margin = ClampNonNegative(config_.learned_limit_margin_rad);
     if (travel_rad < 2.0f * margin) {
         return false;
     }
@@ -582,6 +626,10 @@ float SoftLimitLearning::GetStartupIgnoreLeftS() const {
     return startup_ignore_left_s_;
 }
 
+float SoftLimitLearning::GetSeekTravelRad() const {
+    return max_seek_travel_rad_;
+}
+
 bool SoftLimitLearning::CommitRange(SoftLimitRange range) {
     if (!NormalizeRangeCandidate(range, config_.min_range_rad)) {
         return false;
@@ -650,7 +698,10 @@ void SoftLimitLearning::ResetSeekTracking() {
     seek_position_initialized_ = false;
     stall_cycles_ = 0u;
     elapsed_seek_s_ = 0.0f;
-    startup_ignore_left_s_ = ClampNonNegative(kSeekStartupIgnoreS);
+    startup_ignore_left_s_ = ClampNonNegative(config_.seek_startup_ignore_s);
+    seek_start_position_rad_ = 0.0f;
+    max_seek_travel_rad_ = 0.0f;
+    seek_start_position_initialized_ = false;
     ResetObserverTimer();
 }
 

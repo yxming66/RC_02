@@ -20,6 +20,10 @@ static CameraYaw_GroupFeedback_t camera_yaw_feedback;
 static volatile bool ore_store_inited = false;
 static volatile bool camera_yaw_inited[CAMERA_YAW_NUM] = {false};
 static volatile bool ore_store_rehome_requested = false;
+static volatile bool ore_store_power_on_home_in_progress = false;
+static volatile bool ore_store_power_on_home_attempt_done = false;
+static volatile bool ore_store_power_on_home_failed = false;
+static uint32_t ore_store_power_on_home_start_ms = 0u;
 volatile int8_t g_ore_store_init_ret = ORE_STORE_ERR_NULL;
 volatile int8_t g_ore_store_update_ret = ORE_STORE_ERR_NULL;
 volatile int8_t g_ore_store_control_ret = ORE_STORE_ERR_NULL;
@@ -49,6 +53,9 @@ typedef struct {
   volatile int8_t platform_commit_ret;
   volatile bool platform_command_pending;
   volatile uint8_t platform_soft_limit_state;
+  volatile uint16_t platform_stall_cycles;
+  volatile float platform_seek_velocity_rad_s;
+  volatile float platform_seek_travel_rad;
   volatile float platform_feedback_torque_nm;
   volatile float platform_filtered_output_torque_nm;
   volatile float platform_velocity_setpoint_rad_s;
@@ -56,6 +63,9 @@ typedef struct {
   volatile float platform_cmd_current_a;
   volatile int16_t platform_rm_output_raw;
   volatile uint16_t platform_rm_tx_frame_id;
+  volatile bool power_on_home_in_progress;
+  volatile bool power_on_home_attempt_done;
+  volatile bool power_on_home_failed;
 } OreStoreTask_DebugView_t;
 
 volatile OreStoreTask_DebugView_t g_ore_store_debug_view = {0};
@@ -79,6 +89,7 @@ volatile CameraYaw_DebugControl_t g_camera_yaw_debug = {
 
 #define ORE_STORE_TEMP_WARNING_ALARM_MS (3000u)
 #define ORE_STORE_TEMP_OVER_LIMIT_ALARM_MS (5000u)
+#define ORE_STORE_POWER_ON_HOME_READY_TIMEOUT_MS (10000u)
 
 static void OreStoreTask_SetDefaultCommand(OreStore_CMD_t *cmd) {
   if (cmd == NULL) {
@@ -87,6 +98,93 @@ static void OreStoreTask_SetDefaultCommand(OreStore_CMD_t *cmd) {
 
   memset(cmd, 0, sizeof(*cmd));
   cmd->mode = ORE_STORE_MODE_RELAX;
+}
+
+static void OreStoreTask_SetPowerOnHomeCommand(OreStore_CMD_t *cmd) {
+  if (cmd == NULL) {
+    return;
+  }
+
+  memset(cmd, 0, sizeof(*cmd));
+  cmd->mode = ORE_STORE_MODE_HOME;
+}
+
+static void OreStoreTask_StartPowerOnHome(void) {
+  ore_store_power_on_home_in_progress = true;
+  ore_store_power_on_home_attempt_done = false;
+  ore_store_power_on_home_failed = false;
+  ore_store_power_on_home_start_ms = BSP_TIME_Get_ms();
+  OreStoreTask_SetPowerOnHomeCommand(&ore_store_cmd);
+}
+
+static bool OreStoreTask_HomeAxisFailed(void) {
+  for (uint8_t axis = 0u; axis < ORE_STORE_AXIS_NUM; ++axis) {
+    if (ore_store.debug.axis_failed[axis]) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool OreStoreTask_FeedbackReadyForPowerOnHome(void) {
+  for (uint8_t axis = 0u; axis < ORE_STORE_AXIS_NUM; ++axis) {
+    if (!ore_store.feedback.online[axis] ||
+        ore_store.debug.controller_update_ret[axis] != DEVICE_OK) {
+      return false;
+    }
+  }
+  return true;
+}
+
+static bool OreStoreTask_PowerOnHomeReadyTimedOut(uint32_t now_ms) {
+  return (uint32_t)(now_ms - ore_store_power_on_home_start_ms) >=
+         ORE_STORE_POWER_ON_HOME_READY_TIMEOUT_MS;
+}
+
+static void OreStoreTask_FinishPowerOnHome(bool failed) {
+  ore_store_power_on_home_in_progress = false;
+  ore_store_power_on_home_attempt_done = true;
+  ore_store_power_on_home_failed = failed;
+  OreStoreTask_SetDefaultCommand(&ore_store_cmd);
+}
+
+static void OreStoreTask_UpdatePowerOnHomeState(int8_t control_ret,
+                                                uint32_t now_ms) {
+  if (!ore_store_power_on_home_in_progress) {
+    return;
+  }
+
+  if (OreStore_IsAllHomed(&ore_store)) {
+    OreStoreTask_FinishPowerOnHome(false);
+    return;
+  }
+
+  if (!OreStoreTask_FeedbackReadyForPowerOnHome()) {
+    if (OreStoreTask_PowerOnHomeReadyTimedOut(now_ms)) {
+      OreStoreTask_FinishPowerOnHome(true);
+    }
+    return;
+  }
+
+  if (control_ret != ORE_STORE_OK && OreStoreTask_HomeAxisFailed()) {
+    OreStoreTask_FinishPowerOnHome(true);
+  }
+}
+
+static void OreStoreTask_SelectControlCommand(OreStore_CMD_t *control_cmd) {
+  if (control_cmd == NULL) {
+    return;
+  }
+
+  if (ore_store_power_on_home_in_progress) {
+    if (OreStoreTask_FeedbackReadyForPowerOnHome()) {
+      OreStoreTask_SetPowerOnHomeCommand(control_cmd);
+    } else {
+      OreStoreTask_SetDefaultCommand(control_cmd);
+    }
+  } else {
+    *control_cmd = ore_store_cmd;
+  }
 }
 
 static void OreStoreTask_SetDefaultCameraYawCommand(CameraYaw_CMD_t *cmd) {
@@ -267,6 +365,12 @@ static void OreStoreTask_UpdateDebugView(void) {
       ore_store.debug.command_pending[ORE_STORE_AXIS_PLATFORM];
   g_ore_store_debug_view.platform_soft_limit_state =
       ore_store.debug.soft_limit_state[ORE_STORE_AXIS_PLATFORM];
+  g_ore_store_debug_view.platform_stall_cycles =
+      ore_store.debug.stall_cycles[ORE_STORE_AXIS_PLATFORM];
+  g_ore_store_debug_view.platform_seek_velocity_rad_s =
+      ore_store.debug.seek_velocity_rad_s[ORE_STORE_AXIS_PLATFORM];
+  g_ore_store_debug_view.platform_seek_travel_rad =
+      ore_store.debug.seek_travel_rad[ORE_STORE_AXIS_PLATFORM];
   g_ore_store_debug_view.platform_feedback_torque_nm =
       ore_store.debug.motor_torque_nm[ORE_STORE_AXIS_PLATFORM];
   g_ore_store_debug_view.platform_filtered_output_torque_nm =
@@ -281,6 +385,12 @@ static void OreStoreTask_UpdateDebugView(void) {
       ore_store.debug.rm_output_raw[ORE_STORE_AXIS_PLATFORM];
   g_ore_store_debug_view.platform_rm_tx_frame_id =
       ore_store.debug.rm_tx_frame_id[ORE_STORE_AXIS_PLATFORM];
+  g_ore_store_debug_view.power_on_home_in_progress =
+      ore_store_power_on_home_in_progress;
+  g_ore_store_debug_view.power_on_home_attempt_done =
+      ore_store_power_on_home_attempt_done;
+  g_ore_store_debug_view.power_on_home_failed =
+      ore_store_power_on_home_failed;
 }
 
 static void OreStoreTask_UpdateTemperatureAlarm(uint32_t now_tick) {
@@ -350,6 +460,7 @@ void Task_ore_store(void *argument) {
     return;
   }
   ore_store_inited = true;
+  OreStoreTask_StartPowerOnHome();
 
   g_camera_yaw_init_ret = CAMERA_YAW_ERR;
   for (uint8_t yaw = 0u; yaw < CAMERA_YAW_NUM; ++yaw) {
@@ -425,8 +536,11 @@ void Task_ore_store(void *argument) {
     }
 
     OreStoreTask_UpdateTemperatureAlarm(now_tick);
+    OreStore_CMD_t control_cmd;
+    OreStoreTask_SelectControlCommand(&control_cmd);
     g_ore_store_control_ret =
-        OreStore_Control(&ore_store, &ore_store_cmd, now_tick);
+        OreStore_Control(&ore_store, &control_cmd, now_tick);
+    OreStoreTask_UpdatePowerOnHomeState(g_ore_store_control_ret, now_tick);
     OreStore_Output(&ore_store);
     OreStoreTask_ApplyDirectDebugOutput();
     OreStoreTask_UpdateDebugView();
@@ -474,15 +588,15 @@ bool Task_OreStoreIsAllHomed(void) {
 }
 
 bool Task_OreStorePowerOnHomeInProgress(void) {
-  return false;
+  return ore_store_power_on_home_in_progress;
 }
 
 bool Task_OreStorePowerOnHomeAttemptDone(void) {
-  return ore_store_inited;
+  return ore_store_power_on_home_attempt_done;
 }
 
 bool Task_OreStorePowerOnHomeFailed(void) {
-  return false;
+  return ore_store_power_on_home_failed;
 }
 
 bool Task_OreStoreIsAxisAtTarget(uint8_t axis, float threshold_rad) {

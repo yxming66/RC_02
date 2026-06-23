@@ -91,6 +91,12 @@ mr::motor::SoftLimitLearningConfig BuildSoftLimitConfig(
   out.known_travel_rad = 0.0f;
   out.limit_margin_rad = config.limit_margin_rad;
   out.min_range_rad = config.min_range_rad;
+  out.stall_velocity_threshold_rad_s =
+      config.stall_velocity_threshold_rad_s;
+  out.stall_position_window_rad = config.stall_position_window_rad;
+  out.stall_cycles_required = config.stall_cycles_required;
+  out.seek_timeout_s = config.seek_timeout_s;
+  out.learned_limit_margin_rad = config.learned_limit_margin_rad;
   return out;
 }
 
@@ -223,6 +229,15 @@ float AxisTravel(const OreStore_Params_t *param, uint8_t axis) {
   return scalar::positive_or_zero(param->limit.travel_rad[axis]);
 }
 
+float AxisMinSeekTravelBeforeCapture(const OreStore_Params_t *param,
+                                     uint8_t axis) {
+  const float travel = AxisTravel(param, axis);
+  if (travel <= 0.0f) {
+    return 0.0f;
+  }
+  return scalar::clamp_scalar(travel * 0.005f, 0.03f, 0.10f);
+}
+
 float AxisMoveVelocity(const OreStore_Params_t *param, uint8_t axis) {
   return PositiveOr(param->limit.move_velocity_rad_s[axis],
                     kDefaultMoveVelocityRadS);
@@ -328,6 +343,8 @@ void RefreshDebugAxis(OreStore_t *store, uint8_t axis) {
           : static_cast<uint8_t>(mr::motor::SoftLimitLearningState::Failed);
   store->debug.stall_cycles[axis] =
       (limit != nullptr) ? limit->GetStallCycles() : 0u;
+  store->debug.seek_travel_rad[axis] =
+      (limit != nullptr) ? limit->GetSeekTravelRad() : 0.0f;
   store->debug.homing_started[axis] = store->homing_started[axis];
   store->debug.axis_failed[axis] = store->axis_failed[axis];
   store->debug.command_pending[axis] =
@@ -448,23 +465,25 @@ int8_t FinishAxisHome(OreStore_t *store, uint8_t axis, float raw_lower_rad) {
   const float travel_rad = AxisTravel(store->param, axis);
   limit->Reset();
   limit->Configure(BuildSoftLimitConfig(store->param->limit.config[axis]));
-  if (!limit->SetRangeByLowerAndTravel(0.0f, travel_rad)) {
+  // Mechanical lower is local zero; ClampPosition() keeps runtime margin.
+  if (!limit->SetRange(0.0f, travel_rad)) {
     store->axis_failed[axis] = true;
     limit->MarkFailed();
     return ORE_STORE_ERR;
   }
 
-  const float learned_lower = limit->GetRange().lower_rad;
+  const float home_position = limit->ClampPosition(0.0f);
   store->learned_lower_raw_rad[axis] = raw_lower_rad;
-  store->zero_offset_rad[axis] = raw_lower_rad - learned_lower;
+  store->zero_offset_rad[axis] = raw_lower_rad;
   store->axis_homed[axis] = true;
   store->homing_started[axis] = false;
   store->axis_failed[axis] = false;
   store->homing_online_wait_s[axis] = 0.0f;
-  store->target_position_rad[axis] = learned_lower;
-  store->tracked_position_rad[axis] = learned_lower;
-  store->command_position_rad[axis] = learned_lower;
-  return ControllerSetPosition(store, axis, store->zero_offset_rad[axis] + learned_lower,
+  store->target_position_rad[axis] = home_position;
+  store->tracked_position_rad[axis] = home_position;
+  store->command_position_rad[axis] = home_position;
+  store->velocity_setpoint_rad_s[axis] = 0.0f;
+  return ControllerSetPosition(store, axis, store->zero_offset_rad[axis] + home_position,
                                AxisMoveVelocity(store->param, axis));
 }
 
@@ -502,10 +521,11 @@ int8_t HomeAxis(OreStore_t *store, uint8_t axis) {
   store->homing_online_wait_s[axis] = 0.0f;
 
   if (AxisHomed(store, axis)) {
-    const float home_position = limit->GetRange().lower_rad;
+    const float home_position = limit->ClampPosition(0.0f);
     store->target_position_rad[axis] = home_position;
     store->tracked_position_rad[axis] = home_position;
     store->command_position_rad[axis] = home_position;
+    store->velocity_setpoint_rad_s[axis] = 0.0f;
     return ControllerSetPosition(store, axis,
                                  store->zero_offset_rad[axis] + home_position,
                                  AxisMoveVelocity(store->param, axis));
@@ -515,6 +535,9 @@ int8_t HomeAxis(OreStore_t *store, uint8_t axis) {
     limit->ClearRange();
     mr::motor::SoftLimitLearningConfig config = limit->GetConfig();
     config.seek_velocity_rad_s = AxisSeekVelocity(store->param, axis);
+    config.known_travel_rad = AxisTravel(store->param, axis);
+    config.min_seek_travel_before_capture_rad =
+        AxisMinSeekTravelBeforeCapture(store->param, axis);
     limit->Configure(config);
     if (!limit->StartSeekLower()) {
       store->axis_failed[axis] = true;
@@ -536,6 +559,7 @@ int8_t HomeAxis(OreStore_t *store, uint8_t axis) {
   store->target_position_rad[axis] = 0.0f;
   store->tracked_position_rad[axis] = 0.0f;
   store->command_position_rad[axis] = 0.0f;
+  store->velocity_setpoint_rad_s[axis] = limit->GetSeekVelocity();
   return ControllerSetVelocity(store, axis, limit->GetSeekVelocity());
 }
 
@@ -566,6 +590,7 @@ int8_t ActiveAxis(OreStore_t *store, const OreStore_CMD_t *cmd, uint8_t axis) {
   const float limited_target = limit->ClampPosition(requested_target);
   store->tracked_position_rad[axis] = limited_target;
   store->command_position_rad[axis] = limited_target;
+  store->velocity_setpoint_rad_s[axis] = 0.0f;
   const float raw_target = store->zero_offset_rad[axis] + store->command_position_rad[axis];
 
   if (store->control_mode == ORE_STORE_CONTROL_MIT_STYLE) {
@@ -861,7 +886,7 @@ int8_t OreStore_AssumeAxisHomedAtCurrent(OreStore_t *store, uint8_t axis,
 
   limit->Reset();
   limit->Configure(BuildSoftLimitConfig(store->param->limit.config[axis]));
-  if (!limit->SetRangeByLowerAndTravel(0.0f, travel_rad)) {
+  if (!limit->SetRange(0.0f, travel_rad)) {
     store->axis_failed[axis] = true;
     limit->MarkFailed();
     RefreshDebugAxis(store, axis);
