@@ -98,6 +98,7 @@ typedef struct {
   float yaw_auto_rad;
   float yaw_rate_cmd_rad_s;
   float arm_joint1_rad;
+  float arm_joint2_rad;
   float pole_front_lift_rad;
   float pole_rear_lift_rad;
   float wheel_position_rad[4];

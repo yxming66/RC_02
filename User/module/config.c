@@ -203,7 +203,7 @@ Config_RobotParam_t robot_config = {
                 /* 平台中间等待位，存高位矿时等待 arm 交接。 */
                 [ORE_STORE_TRANSFORM_MID_WAIT] = 11.0f,
                 /* 平台抬升位/满行程位，用于低位存矿或低位上膛交接。 */
-                [ORE_STORE_TRANSFORM_LIFT] = 21.580307f,
+                [ORE_STORE_TRANSFORM_LIFT] = 18.4731674f,
                 /* 平台缓冲/备用预设位，待实机标定。 */
                 [ORE_STORE_TRANSFORM_BUFFER] = 0.0f,
                 /* 取矛头平台预设位，待实机标定。 */
@@ -307,7 +307,7 @@ Config_RobotParam_t robot_config = {
                 /* ArmSimple 待机/安全收回位，一键动作开始和结束常用位置。 */
                 [ARM_SIMPLE_BEHAVIOR_STANDBY] = {.joint1_pos = 0.0f, .joint2_pos = 0.0f},
                 /* ArmSimple 存矿位，arm 伸到 ore_store 交接处释放矿。 */
-                [ARM_SIMPLE_BEHAVIOR_STORE_ORE] = {.joint1_pos = 0.0f, .joint2_pos = -1.57431853f},
+                [ARM_SIMPLE_BEHAVIOR_STORE_ORE] = {.joint1_pos = 0.0f, .joint2_pos = -1.51068195f},
                 /* ArmSimple 上膛位，arm 伸到 ore_store 上膛交接处吸取矿。 */
                 [ARM_SIMPLE_BEHAVIOR_CHAMBER_ORE] = {.joint1_pos = -0.216335908f, .joint2_pos = -1.64886379f},
                 /* ArmSimple 存矿等待位，等待平台到位后再伸到存矿位。 */

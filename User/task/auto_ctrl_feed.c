@@ -805,6 +805,7 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms) {
       .yaw_auto_rad = feedback.yaw_auto_rad,
       .yaw_rate_cmd_rad_s = auto_ctrl.yaw_rate_cmd_rad_s,
       .arm_joint1_rad = (arm_fb != NULL) ? arm_fb->joint1_angle_rad : 0.0f,
+      .arm_joint2_rad = (arm_fb != NULL) ? arm_fb->joint2_angle_rad : 0.0f,
       .pole_front_lift_rad = feedback.pole_front_lift_rad,
       .pole_rear_lift_rad = feedback.pole_rear_lift_rad,
       .ore_store_platform_position_rad = ore_store_platform_position_rad,
