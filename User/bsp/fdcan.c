@@ -207,9 +207,18 @@ static void BSP_FDCAN_TxQueueInit(BSP_FDCAN_t fdcan) {
   __disable_irq();
   tx_queues[fdcan].head = 0;
   tx_queues[fdcan].tail = 0;
+  g_bsp_fdcan_rx_debug.tx_queue_depth[fdcan] = 0;
   if (primask == 0u) {
     __enable_irq();
   }
+}
+
+static uint32_t BSP_FDCAN_TxQueueDepthUnsafe(const BSP_FDCAN_TxQueue_t *queue) {
+  if (queue == NULL) return 0u;
+  if (queue->head >= queue->tail) {
+    return queue->head - queue->tail;
+  }
+  return BSP_FDCAN_TX_QUEUE_SIZE - queue->tail + queue->head;
 }
 
 static bool BSP_FDCAN_TxQueuePush(BSP_FDCAN_t fdcan, BSP_FDCAN_TxMessage_t *msg) {
@@ -226,6 +235,12 @@ static bool BSP_FDCAN_TxQueuePush(BSP_FDCAN_t fdcan, BSP_FDCAN_TxMessage_t *msg)
   }
   queue->buffer[queue->head] = *msg;
   queue->head = next_head;
+  const uint32_t depth = BSP_FDCAN_TxQueueDepthUnsafe(queue);
+  g_bsp_fdcan_rx_debug.tx_queue_push_count[fdcan]++;
+  g_bsp_fdcan_rx_debug.tx_queue_depth[fdcan] = depth;
+  if (depth > g_bsp_fdcan_rx_debug.tx_queue_max_depth[fdcan]) {
+    g_bsp_fdcan_rx_debug.tx_queue_max_depth[fdcan] = depth;
+  }
   if (primask == 0u) {
     __enable_irq();
   }
@@ -263,6 +278,9 @@ static bool BSP_FDCAN_TxQueuePop(BSP_FDCAN_t fdcan, BSP_FDCAN_TxMessage_t *msg) 
   }
   *msg = queue->buffer[queue->tail];
   queue->tail = (queue->tail + 1) % BSP_FDCAN_TX_QUEUE_SIZE;
+  g_bsp_fdcan_rx_debug.tx_queue_pop_count[fdcan]++;
+  g_bsp_fdcan_rx_debug.tx_queue_depth[fdcan] =
+      BSP_FDCAN_TxQueueDepthUnsafe(queue);
   if (primask == 0u) {
     __enable_irq();
   }
@@ -847,7 +865,11 @@ int8_t BSP_FDCAN_Transmit(BSP_FDCAN_t fdcan, BSP_FDCAN_Format_t format, uint32_t
   if (data != NULL && dlc > 0) {memcpy(tx_msg.data, data, dlc);}
 
   if (HAL_FDCAN_GetTxFifoFreeLevel(hfdcan) > 0) {
-    if (HAL_FDCAN_AddMessageToTxFifoQ(hfdcan, &tx_msg.header, tx_msg.data) == HAL_OK) return BSP_OK;
+    if (HAL_FDCAN_AddMessageToTxFifoQ(hfdcan, &tx_msg.header, tx_msg.data) ==
+        HAL_OK) {
+      ++g_bsp_fdcan_rx_debug.tx_direct_count[fdcan];
+      return BSP_OK;
+    }
     ++g_bsp_fdcan_rx_debug.tx_add_fail_count[fdcan];
     fdcan_recover_pending[fdcan] = true;
   }
