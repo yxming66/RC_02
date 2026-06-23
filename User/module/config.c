@@ -276,8 +276,8 @@ Config_RobotParam_t robot_config = {
             .gpio = BSP_GPIO_ORE_RELAY,
         },
         .mit = {
-            .joint1_kp = 150.0f,
-            .joint1_kd = 10.0f,
+            .joint1_kp = 180.0f,
+            .joint1_kd = 50.0f,
             .joint1_torque_ff = 0.0f,
             .joint1_gravity_mass_kg = -0.10f,
             .joint1_gravity_com_m = 0.12f,
@@ -617,7 +617,7 @@ Config_RobotParam_t robot_config = {
             .rear_retract_move_wheel_delta_rad = 8.66f, /* step3 第二次固定快跑轮转角阈值，单位 rad；0 表示按时间切步。 */
             .second_photo_retract_move_speed = 1.2f, /* step7 第二个下降沿后保持全伸离开 vx，单位 m/s。 */
             .final_move_speed = 0.5f,          /* step7 离开 vx 的备用值；second_photo_retract_move_speed <= 0 时使用。 */
-            .final_move_ms = 250u,              /* step7 保持全伸离开持续时间，单位 ms。 */
+            .final_move_ms = 100u,              /* step7 保持全伸离开持续时间，单位 ms。 */
             .pole_front_extend_speed = 0.0f,   /* step2 前杆伸出、step5-7 四杆全伸时的前杆速度，单位 rad/s。 */
             .pole_front_retract_speed = 0.0f,  /* step0/1 前杆保持或回收到全收目标的速度，单位 rad/s。 */
             .pole_rear_extend_speed = 0.0f,    /* step5-7 四杆全伸时的后杆速度，单位 rad/s。 */
