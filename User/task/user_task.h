@@ -28,7 +28,7 @@ extern "C" {
 #endif
 /* Exported constants ------------------------------------------------------- */
 /* 任务运行频率 */
-#define BLINK_FREQ (500.0)
+#define BLINK_FREQ (100.0)
 #define ATTI_ESTI_FREQ (400.0)
 #define CHASSIS_MAIN_FREQ (250.0)
 #define POLE_MAIN_FREQ (1000.0)

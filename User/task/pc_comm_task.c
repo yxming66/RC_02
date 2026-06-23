@@ -15,7 +15,7 @@
 #include "main.h"
 
 #define PC_COMM_TX_PERIOD_MS (20u)  /* 50Hz */
-#define PC_COMM_LOOP_PERIOD_MS (1u)
+#define PC_COMM_LOOP_PERIOD_MS (2u)
 #define PC_COMM_TX_DMA_TIMEOUT_MS (100u)
 #define PC_COMM_CAMERA_YAW_CMD_TIMEOUT_MS (1000u)
 /* IR_ORE 12 位置矿种类只在对端发来时变一次，正常状态几乎不变。
