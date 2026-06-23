@@ -87,15 +87,7 @@ Config_RobotParam_t robot_config = {
             .wheel_static_friction_deadband_mps = 0.01f,
             .wheel_high_pole_pid_switch_lift = 15.0f,
         },
-        .front_omni_rear_mecanum = {
-            .lateral_vy_to_wz_feedforward = 0.10f,//1.1f不会偏航会有-vx
-            .lateral_heading_hold_enable = true,
-            .lateral_heading_hold_kp = 8.0f,
-            .lateral_heading_hold_kd = 0.8f,
-            .lateral_heading_hold_max_wz = 2.5f,
-            .lateral_heading_hold_wz_deadband = 0.03f,
-            .lateral_heading_hold_error_deadband = 0.005f,
-        },
+
         .type = CHASSIS_TYPE_MECANUM,
     },
     /* 模块参数：撑杆 pole_param，四根撑杆电机、PID、台阶预设高度和行程限幅。 */
@@ -186,7 +178,7 @@ Config_RobotParam_t robot_config = {
             },
             .travel_rad = {24.7f},
             .lower_seek_velocity_rad_s = {0.20f},
-            .move_velocity_rad_s = {400.0f},
+            .move_velocity_rad_s = {150.0f},
             .arrive_threshold_rad = {0.05f},
         }, 
         .power_on = {
@@ -299,8 +291,8 @@ Config_RobotParam_t robot_config = {
             .joint2_max = 2.356194f,    /* 舵机中心0点向正方向最大约+135° */
         },
         .vel_limit = {
-            .joint1_max_vel = 15.5f,
-            .joint2_max_vel = 50.0f,
+            .joint1_max_vel = 10.5f,
+            .joint2_max_vel = 10.0f,
         },
         .preset = {
             .behavior_point = {

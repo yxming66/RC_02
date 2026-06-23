@@ -100,7 +100,7 @@ void Task_chassis_main(void *argument) {
   }
 }
 
-void Task_cpp_rm_main(void *argument) {
+void Task_chassis_ore(void *argument) {
   (void)argument;
 
   uint32_t base_delay_tick = osKernelGetTickFreq() / ORE_STORE_FREQ;
@@ -127,7 +127,7 @@ void Task_cpp_rm_main(void *argument) {
 
   while (1) {
     const uint32_t profile_start_us =
-        Task_ProfilerLoopBegin(TASK_PROFILE_CPP_RM_MAIN,
+        Task_ProfilerLoopBegin(TASK_PROFILE_CHASSIS_ORE,
                                TASK_PERIOD_US(ORE_STORE_FREQ));
     tick += base_delay_tick;
 
@@ -148,11 +148,11 @@ void Task_cpp_rm_main(void *argument) {
       Task_ChassisMainStep();
     }
 
-    task_runtime.stack_water_mark.cpp_rm_main =
+    task_runtime.stack_water_mark.chassis_ore =
         uxTaskGetStackHighWaterMark(nullptr);
-    task_runtime.heartbeat.cpp_rm_main++;
-    Task_ProfilerLoopEnd(TASK_PROFILE_CPP_RM_MAIN, profile_start_us);
-    Task_DelayUntil(TASK_PROFILE_CPP_RM_MAIN, &tick, base_delay_tick);
+    task_runtime.heartbeat.chassis_ore++;
+    Task_ProfilerLoopEnd(TASK_PROFILE_CHASSIS_ORE, profile_start_us);
+    Task_DelayUntil(TASK_PROFILE_CHASSIS_ORE, &tick, base_delay_tick);
   }
 }
 }

@@ -35,11 +35,13 @@ extern "C" {
 #define RC_MAIN_FREQ (500.0)
 #define SICK_FREQ (100.0)
 #define AUTO_CTRL_FREQ (100.0)
+#define CAMERA_YAW_FREQ (500.0)
 #define ARM_SIMPLE_FREQ (500.0)
 #define ROD_FREQ (400.0)
 #define PC_COMM_FREQ (100.0)
 #define ORE_STORE_FREQ (500.0)
 #define IR_DOCK_FREQ (4.0)
+#define TASK_FUSED_LOOP_FREQ (1000.0)
 /* 任务初始化延时ms */
 #define TASK_INIT_DELAY (100u)
 #define BLINK_INIT_DELAY (0)
@@ -49,6 +51,7 @@ extern "C" {
 #define RC_MAIN_INIT_DELAY (0)
 #define SICK_INIT_DELAY (0)
 #define AUTO_CTRL_INIT_DELAY (0)
+#define CAMERA_YAW_INIT_DELAY (0)
 #define ARM_SIMPLE_INIT_DELAY (100u)
 #define ROD_INIT_DELAY (0)
 #define PC_COMM_INIT_DELAY (500u)
@@ -61,17 +64,20 @@ extern "C" {
 typedef enum {
     TASK_PROFILE_BLINK = 0,
     TASK_PROFILE_ATTI_ESTI,
+    TASK_PROFILE_CHASSIS_ORE,
     TASK_PROFILE_CHASSIS_MAIN,
-    TASK_PROFILE_POLE_MAIN,
-    TASK_PROFILE_RC_MAIN,
-    TASK_PROFILE_SICK,
-    TASK_PROFILE_AUTO_CTRL,
+    TASK_PROFILE_ORE_STORE,
+    TASK_PROFILE_UPPER_MECH,
+    TASK_PROFILE_CAMERA_YAW,
     TASK_PROFILE_ARM_SIMPLE,
     TASK_PROFILE_ROD,
+    TASK_PROFILE_POLE_MAIN,
+    TASK_PROFILE_RC_MAIN,
+    TASK_PROFILE_PC_COMM_SICK,
     TASK_PROFILE_PC_COMM,
-    TASK_PROFILE_ORE_STORE,
+    TASK_PROFILE_SICK,
+    TASK_PROFILE_AUTO_CTRL,
     TASK_PROFILE_IR_DOCK,
-    TASK_PROFILE_CPP_RM_MAIN,
     TASK_PROFILE_COUNT,
 } Task_ProfileId_t;
 
@@ -91,6 +97,12 @@ typedef struct {
     volatile uint32_t max_late_tick;
     volatile uint32_t loop_count;
 } Task_ProfileStats_t;
+
+typedef struct {
+    uint32_t period_us;
+    uint32_t next_due_us;
+    bool initialized;
+} Task_SubtaskTimer_t;
 
 typedef enum {
     BUZZER_ALARM_NONE = 0,
@@ -269,16 +281,12 @@ typedef struct {
     struct {
         osThreadId_t blink;
         osThreadId_t atti_esti;
-        osThreadId_t chassis_main;
-        osThreadId_t cpp_rm_main;
+        osThreadId_t chassis_ore;
+        osThreadId_t upper_mech;
         osThreadId_t pole_main;
         osThreadId_t rc_main;
-        osThreadId_t sick;
         osThreadId_t auto_ctrl;
-        osThreadId_t arm_simple;
-        osThreadId_t rod;
-        osThreadId_t pc_comm;
-        osThreadId_t ore_store;
+        osThreadId_t pc_comm_sick;
         osThreadId_t ir_dock;
 
     } thread;
@@ -336,9 +344,13 @@ typedef struct {
         volatile uint32_t init;
         volatile uint32_t blink;
         volatile uint32_t atti_esti;
+        volatile uint32_t chassis_ore;
         volatile uint32_t chassis_main;
+        volatile uint32_t upper_mech;
+        volatile uint32_t camera_yaw;
         volatile uint32_t pole_main;
         volatile uint32_t rc_main;
+        volatile uint32_t pc_comm_sick;
         volatile uint32_t sick;
         volatile uint32_t auto_ctrl;
         volatile uint32_t arm_simple;
@@ -346,7 +358,6 @@ typedef struct {
         volatile uint32_t pc_comm;
         volatile uint32_t ore_store;
         volatile uint32_t ir_dock;
-        volatile uint32_t cpp_rm_main;
     } heartbeat;
 
     Task_ProfileStats_t profile[TASK_PROFILE_COUNT];
@@ -355,9 +366,13 @@ typedef struct {
     struct {
         UBaseType_t blink;
         UBaseType_t atti_esti;
+        UBaseType_t chassis_ore;
         UBaseType_t chassis_main;
+        UBaseType_t upper_mech;
+        UBaseType_t camera_yaw;
         UBaseType_t pole_main;
         UBaseType_t rc_main;
+        UBaseType_t pc_comm_sick;
         UBaseType_t sick;
         UBaseType_t auto_ctrl;
         UBaseType_t arm_simple;
@@ -365,7 +380,6 @@ typedef struct {
         UBaseType_t pc_comm;
         UBaseType_t ore_store;
         UBaseType_t ir_dock;
-        UBaseType_t cpp_rm_main;
 
     } stack_water_mark;
 
@@ -395,23 +409,20 @@ extern Buzzer_AlarmRequest_t g_buzzer_alarm_request;
 extern const osThreadAttr_t attr_init;
 extern const osThreadAttr_t attr_blink;
 extern const osThreadAttr_t attr_atti_esti;
-extern const osThreadAttr_t attr_chassis_main;
-extern const osThreadAttr_t attr_cpp_rm_main;
+extern const osThreadAttr_t attr_chassis_ore;
+extern const osThreadAttr_t attr_upper_mech;
 extern const osThreadAttr_t attr_pole_main;
 extern const osThreadAttr_t attr_rc_main;
-extern const osThreadAttr_t attr_sick;
 extern const osThreadAttr_t attr_auto_ctrl;
-extern const osThreadAttr_t attr_arm_simple;
-extern const osThreadAttr_t attr_rod;
-extern const osThreadAttr_t attr_pc_comm;
-extern const osThreadAttr_t attr_ore_store;
+extern const osThreadAttr_t attr_pc_comm_sick;
 extern const osThreadAttr_t attr_ir_dock;
 /* 任务函数声明 */
 void Task_Init(void *argument);
 void Task_blink(void *argument);
 void Task_atti_esti(void *argument);
+void Task_chassis_ore(void *argument);
 void Task_chassis_main(void *argument);
-void Task_cpp_rm_main(void *argument);
+void Task_upper_mech(void *argument);
 void Task_pole_main(void *argument);
 void Task_rc_main(void *argument);
 void Task_sick(void *argument);
@@ -419,16 +430,30 @@ void Task_auto_ctrl(void *argument);
 void Task_arm_simple(void *argument);
 void Task_rod(void *argument);
 void Task_pc_comm(void *argument);
+void Task_pc_comm_sick(void *argument);
 void Task_ore_store(void *argument);
 void Task_ir_dock(void *argument);
 uint32_t Task_ProfilerLoopBegin(Task_ProfileId_t id, uint32_t target_period_us);
 void Task_ProfilerLoopEnd(Task_ProfileId_t id, uint32_t loop_start_us);
 void Task_DelayUntil(Task_ProfileId_t id, uint32_t *wake_tick,
                      uint32_t delay_tick);
+void Task_SubtaskTimerInit(Task_SubtaskTimer_t *timer, float frequency_hz,
+                           uint32_t now_us);
+bool Task_SubtaskTimerDue(Task_SubtaskTimer_t *timer, uint32_t now_us);
 bool Task_ChassisMainInitOnce(void);
 void Task_ChassisMainStep(void);
 bool Task_OreStoreInitOnce(void);
 void Task_OreStoreStep(void);
+bool Task_CameraYawInitOnce(void);
+void Task_CameraYawStep(void);
+bool Task_ArmSimpleInitOnce(void);
+void Task_ArmSimpleStep(void);
+bool Task_RodNewInitOnce(void);
+void Task_RodNewStep(void);
+bool Task_PcCommInitOnce(void);
+void Task_PcCommStep(void);
+bool Task_SickInitOnce(void);
+void Task_SickStep(void);
 
 const Chassis_Feedback_t *Task_ChassisGetFeedback(void);
 bool Task_PoleMainGroupAtTarget(uint8_t group, float threshold_rad);

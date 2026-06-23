@@ -19,6 +19,7 @@ static CameraYaw_GroupCMD_t camera_yaw_cmd;
 static CameraYaw_GroupFeedback_t camera_yaw_feedback;
 static volatile bool ore_store_init_attempted = false;
 static volatile bool ore_store_inited = false;
+static volatile bool camera_yaw_init_attempted = false;
 static volatile bool camera_yaw_inited[CAMERA_YAW_NUM] = {false};
 static volatile bool ore_store_rehome_requested = false;
 volatile int8_t g_ore_store_init_ret = ORE_STORE_ERR_NULL;
@@ -337,13 +338,10 @@ bool Task_OreStoreInitOnce(void) {
   Config_RobotParam_t *cfg = Config_GetRobotParam();
   if (cfg == NULL) {
     g_ore_store_init_ret = ORE_STORE_ERR_NULL;
-    g_camera_yaw_init_ret = CAMERA_YAW_ERR_NULL;
     return false;
   }
 
   OreStoreTask_SetDefaultCommand(&ore_store_cmd);
-  OreStoreTask_SetDefaultCameraYawGroupCommand(&camera_yaw_cmd);
-  memset(&camera_yaw_feedback, 0, sizeof(camera_yaw_feedback));
 
   g_ore_store_init_ret =
       OreStore_Init(&ore_store, &cfg->ore_store_param, (float)ORE_STORE_FREQ);
@@ -352,19 +350,45 @@ bool Task_OreStoreInitOnce(void) {
   }
   ore_store_inited = true;
 
+  return true;
+}
+
+bool Task_CameraYawInitOnce(void) {
+  bool any_inited = false;
+  for (uint8_t yaw = 0u; yaw < CAMERA_YAW_NUM; ++yaw) {
+    any_inited = any_inited || camera_yaw_inited[yaw];
+  }
+  if (any_inited) {
+    return true;
+  }
+  if (camera_yaw_init_attempted) {
+    return false;
+  }
+  camera_yaw_init_attempted = true;
+
+  Config_RobotParam_t *cfg = Config_GetRobotParam();
+  if (cfg == NULL) {
+    g_camera_yaw_init_ret = CAMERA_YAW_ERR_NULL;
+    return false;
+  }
+
+  OreStoreTask_SetDefaultCameraYawGroupCommand(&camera_yaw_cmd);
+  memset(&camera_yaw_feedback, 0, sizeof(camera_yaw_feedback));
+
   g_camera_yaw_init_ret = CAMERA_YAW_ERR;
   for (uint8_t yaw = 0u; yaw < CAMERA_YAW_NUM; ++yaw) {
     g_camera_yaw_init_ret_by_channel[yaw] =
         CameraYaw_Init(&camera_yaw[yaw], &cfg->camera_yaw_param[yaw],
-                       (float)ORE_STORE_FREQ);
+                       (float)CAMERA_YAW_FREQ);
     camera_yaw_inited[yaw] =
         (g_camera_yaw_init_ret_by_channel[yaw] == CAMERA_YAW_OK);
     if (camera_yaw_inited[yaw]) {
       g_camera_yaw_init_ret = CAMERA_YAW_OK;
+      any_inited = true;
     }
   }
 
-  return true;
+  return any_inited;
 }
 
 void Task_OreStoreStep(void) {
@@ -394,6 +418,34 @@ void Task_OreStoreStep(void) {
   OreStoreTask_ApplyAssumeHomedDebug();
   const uint32_t now_tick = BSP_TIME_Get_ms();
 
+  OreStoreTask_UpdateTemperatureAlarm(now_tick);
+  g_ore_store_control_ret =
+      OreStore_Control(&ore_store, &ore_store_cmd, now_tick);
+  OreStore_Output(&ore_store);
+  OreStoreTask_ApplyDirectDebugOutput();
+  OreStoreTask_UpdateDebugView();
+  ore_store_cmd.force_rehome = false;
+
+  task_runtime.stack_water_mark.ore_store =
+      uxTaskGetStackHighWaterMark(NULL);
+  task_runtime.heartbeat.ore_store++;
+  Task_ProfilerLoopEnd(TASK_PROFILE_ORE_STORE, profile_start_us);
+}
+
+void Task_CameraYawStep(void) {
+  bool any_inited = false;
+  for (uint8_t yaw = 0u; yaw < CAMERA_YAW_NUM; ++yaw) {
+    any_inited = any_inited || camera_yaw_inited[yaw];
+  }
+  if (!any_inited) {
+    return;
+  }
+
+  const uint32_t profile_start_us =
+      Task_ProfilerLoopBegin(TASK_PROFILE_CAMERA_YAW,
+                             TASK_PERIOD_US(CAMERA_YAW_FREQ));
+  const uint32_t now_tick = BSP_TIME_Get_ms();
+
   CameraYaw_GroupCMD_t next_camera_yaw_cmd;
   if (osMessageQueueGet(task_runtime.msgq.camera_yaw.cmd,
                         &next_camera_yaw_cmd, NULL, 0) == osOK) {
@@ -408,12 +460,10 @@ void Task_OreStoreStep(void) {
     }
   }
 
-  bool camera_yaw_any_inited = false;
   for (uint8_t yaw = 0u; yaw < CAMERA_YAW_NUM; ++yaw) {
     if (!camera_yaw_inited[yaw]) {
       continue;
     }
-    camera_yaw_any_inited = true;
     g_camera_yaw_update_ret_by_channel[yaw] =
         CameraYaw_UpdateFeedback(&camera_yaw[yaw]);
     g_camera_yaw_control_ret_by_channel[yaw] =
@@ -422,30 +472,19 @@ void Task_OreStoreStep(void) {
     CameraYaw_SetOutput(&camera_yaw[yaw]);
     camera_yaw_feedback.yaw[yaw] = camera_yaw[yaw].feedback;
   }
-  if (camera_yaw_any_inited) {
-    for (uint8_t yaw = 0u; yaw < CAMERA_YAW_NUM; ++yaw) {
-      if (camera_yaw_inited[yaw]) {
-        CameraYaw_FlushOutput(&camera_yaw[yaw]);
-      }
+  for (uint8_t yaw = 0u; yaw < CAMERA_YAW_NUM; ++yaw) {
+    if (camera_yaw_inited[yaw]) {
+      CameraYaw_FlushOutput(&camera_yaw[yaw]);
     }
-    g_camera_yaw_update_ret =
-        g_camera_yaw_update_ret_by_channel[CAMERA_YAW_LEFT];
-    g_camera_yaw_control_ret =
-        g_camera_yaw_control_ret_by_channel[CAMERA_YAW_LEFT];
   }
 
-  OreStoreTask_UpdateTemperatureAlarm(now_tick);
-  g_ore_store_control_ret =
-      OreStore_Control(&ore_store, &ore_store_cmd, now_tick);
-  OreStore_Output(&ore_store);
-  OreStoreTask_ApplyDirectDebugOutput();
-  OreStoreTask_UpdateDebugView();
-  ore_store_cmd.force_rehome = false;
-
-  task_runtime.stack_water_mark.ore_store =
-      uxTaskGetStackHighWaterMark(NULL);
-  task_runtime.heartbeat.ore_store++;
-  Task_ProfilerLoopEnd(TASK_PROFILE_ORE_STORE, profile_start_us);
+  g_camera_yaw_update_ret =
+      g_camera_yaw_update_ret_by_channel[CAMERA_YAW_LEFT];
+  g_camera_yaw_control_ret =
+      g_camera_yaw_control_ret_by_channel[CAMERA_YAW_LEFT];
+  task_runtime.stack_water_mark.camera_yaw = uxTaskGetStackHighWaterMark(NULL);
+  task_runtime.heartbeat.camera_yaw++;
+  Task_ProfilerLoopEnd(TASK_PROFILE_CAMERA_YAW, profile_start_us);
 }
 
 void Task_ore_store(void *argument) {

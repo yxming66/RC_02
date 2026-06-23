@@ -1,28 +1,56 @@
 - delay: 0
-  description: ''
+  description: buzzer and audio service
   freq_control: true
-  frequency: 50.0
+  frequency: 100.0
   function: Task_blink
   name: blink
   stack: 256
 - delay: 0
-  description: ''
+  description: attitude estimation
+  freq_control: true
+  frequency: 400.0
+  function: Task_atti_esti
+  name: atti_esti
+  stack: 512
+- delay: 0
+  description: fused chassis and ore_store
   freq_control: true
   frequency: 500.0
-  function: Task_chassis_main
-  name: chassis_main
-  stack: 256
+  function: Task_chassis_ore
+  name: chassis_ore
+  stack: 1024
+- delay: 0
+  description: fused camera_yaw, arm_simple, and rod_new
+  freq_control: true
+  frequency: 1000.0
+  function: Task_upper_mech
+  name: upper_mech
+  stack: 1024
 - delay: 1
-  description: ''
+  description: pole
   freq_control: true
   frequency: 500.0
   function: Task_pole_main
   name: pole_main
   stack: 256
 - delay: 0
-  description: ''
+  description: remote control
   freq_control: true
-  frequency: 100.0
+  frequency: 500.0
   function: Task_rc_main
   name: rc_main
-  stack: 256
+  stack: 512
+- delay: 0
+  description: auto control
+  freq_control: true
+  frequency: 100.0
+  function: Task_auto_ctrl
+  name: auto_ctrl
+  stack: 512
+- delay: 0
+  description: fused pc_comm and sick
+  freq_control: true
+  frequency: 1000.0
+  function: Task_pc_comm_sick
+  name: pc_comm_sick
+  stack: 768

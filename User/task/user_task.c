@@ -78,6 +78,36 @@ void Task_DelayUntil(Task_ProfileId_t id, uint32_t *wake_tick,
   (void)osDelayUntil(*wake_tick);
 }
 
+void Task_SubtaskTimerInit(Task_SubtaskTimer_t *timer, float frequency_hz,
+                           uint32_t now_us) {
+  if (timer == NULL) {
+    return;
+  }
+
+  timer->period_us = TASK_PERIOD_US(frequency_hz);
+  if (timer->period_us == 0U) {
+    timer->period_us = 1U;
+  }
+  timer->next_due_us = now_us;
+  timer->initialized = true;
+}
+
+bool Task_SubtaskTimerDue(Task_SubtaskTimer_t *timer, uint32_t now_us) {
+  if (timer == NULL || !timer->initialized) {
+    return false;
+  }
+
+  if ((int32_t)(now_us - timer->next_due_us) < 0) {
+    return false;
+  }
+
+  const uint32_t period_us = (timer->period_us == 0U) ? 1U : timer->period_us;
+  do {
+    timer->next_due_us += period_us;
+  } while ((int32_t)(now_us - timer->next_due_us) >= 0);
+  return true;
+}
+
 const osThreadAttr_t attr_init = {
     .name = "Task_Init",
     .priority = osPriorityRealtime,
@@ -95,13 +125,8 @@ const osThreadAttr_t attr_atti_esti = {
     .priority = osPriorityAboveNormal,
     .stack_size = 512 * 4,
 };
-const osThreadAttr_t attr_chassis_main = {
-    .name = "chassis_main",
-    .priority = osPriorityHigh,
-    .stack_size = 256 * 4,
-};
-const osThreadAttr_t attr_cpp_rm_main = {
-    .name = "cpp_rm_main",
+const osThreadAttr_t attr_chassis_ore = {
+    .name = "chassis_ore",
     .priority = osPriorityHigh,
     .stack_size = 1024 * 4,
 };
@@ -115,35 +140,20 @@ const osThreadAttr_t attr_rc_main = {
     .priority = osPriorityHigh,
     .stack_size = 512 * 4,
 };
-const osThreadAttr_t attr_sick = {
-    .name = "sick",
-    .priority = osPriorityNormal,
-    .stack_size = 256 * 4,
-};
 const osThreadAttr_t attr_auto_ctrl = {
     .name = "auto_ctrl",
     .priority = osPriorityNormal,
     .stack_size = 512 * 4,
 };
-const osThreadAttr_t attr_arm_simple = {
-    .name = "arm_simple",
+const osThreadAttr_t attr_upper_mech = {
+    .name = "upper_mech",
     .priority = osPriorityAboveNormal,
-    .stack_size = 512 * 4,
+    .stack_size = 1024 * 4,
 };
-const osThreadAttr_t attr_rod = {
-    .name = "rod",
-    .priority = osPriorityNormal,
-    .stack_size = 256 * 4,
-};
-const osThreadAttr_t attr_pc_comm = {
-    .name = "pc_comm",
+const osThreadAttr_t attr_pc_comm_sick = {
+    .name = "pc_comm_sick",
     .priority = osPriorityBelowNormal,
-    .stack_size = 512 * 4,
-};
-const osThreadAttr_t attr_ore_store = {
-    .name = "ore_store",
-    .priority = osPriorityAboveNormal,
-    .stack_size = 512 * 4,
+    .stack_size = 768 * 4,
 };
 const osThreadAttr_t attr_ir_dock = {
     .name = "ir_dock",
