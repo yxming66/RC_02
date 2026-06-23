@@ -122,6 +122,7 @@ typedef struct {
         BSP_PWM_Channel_t pwm_channel;
         float freq_hz;
         bool reverse;
+        float center_angle_rad;  /* Raw command angle that places the servo at mechanical center. */
     } servo_param;
 
     /* 吸盘GPIO参数 */

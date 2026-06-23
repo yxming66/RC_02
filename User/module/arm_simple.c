@@ -396,6 +396,10 @@ bool ArmSimple_Joint2AtTarget(ArmSimple_t *a, float threshold_rad)
 
 uint32_t ArmSimple_AngleToPulseUs(float angle_rad, const ArmSimple_Params_t *param)
 {
+    if (param != NULL && isfinite(param->servo_param.center_angle_rad)) {
+        angle_rad += param->servo_param.center_angle_rad;
+    }
+
     if (param != NULL && param->servo_param.reverse) {
         angle_rad = -angle_rad;
     }

@@ -763,16 +763,18 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms) {
   }
   bool ore_store_all_at_target = Task_OreStoreIsAllAtTarget(
       auto_ore_ctrl.param.ore_store_arrive_threshold_rad);
+  float ore_store_platform_position_rad = 0.0f;
   float ore_store_platform_error_rad = 0.0f;
   const OreStore_Feedback_t *ore_store_fb = Task_OreStoreGetFeedback();
   if (ore_store_fb != NULL) {
+    ore_store_platform_position_rad =
+        ore_store_fb->position_rad[ORE_STORE_AXIS_PLATFORM];
     const float ore_store_cmd_target = auto_ore_ctrl.ore_store_cmd_valid
                                           ? auto_ore_ctrl.ore_store_cmd
                                                 .platform_target_rad
                                           : 0.0f;
     ore_store_platform_error_rad =
-        ore_store_cmd_target -
-        ore_store_fb->position_rad[ORE_STORE_AXIS_PLATFORM];
+        ore_store_cmd_target - ore_store_platform_position_rad;
   }
   if (auto_ore_ctrl.ore_store_cmd_valid) {
     ore_store_all_at_target = AutoCtrlFeed_OreStoreAtCommandTarget(
@@ -805,6 +807,7 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms) {
       .arm_joint1_rad = (arm_fb != NULL) ? arm_fb->joint1_angle_rad : 0.0f,
       .pole_front_lift_rad = feedback.pole_front_lift_rad,
       .pole_rear_lift_rad = feedback.pole_rear_lift_rad,
+      .ore_store_platform_position_rad = ore_store_platform_position_rad,
       .ore_store_platform_error_rad = ore_store_platform_error_rad,
       .photoelectric_occupancy = {
           .transform_low_has_ore = ore_low_photo_triggered,

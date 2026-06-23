@@ -278,6 +278,7 @@ Config_RobotParam_t robot_config = {
             .pwm_channel = BSP_PWM_ARM_SERVO,
             .freq_hz = 50.0f,
             .reverse = true,
+            .center_angle_rad = -0.0769318342f,
         },
         .suction_param = {
             .gpio = BSP_GPIO_ORE_RELAY,
@@ -310,7 +311,7 @@ Config_RobotParam_t robot_config = {
                 /* ArmSimple 上膛位，arm 伸到 ore_store 上膛交接处吸取矿。 */
                 [ARM_SIMPLE_BEHAVIOR_CHAMBER_ORE] = {.joint1_pos = -0.216335908f, .joint2_pos = -1.64886379f},
                 /* ArmSimple 存矿等待位，等待平台到位后再伸到存矿位。 */
-                [ARM_SIMPLE_BEHAVIOR_WAIT_STORE_ORE] = {.joint1_pos = 0.174757361f, .joint2_pos = -2.04568338f},
+                [ARM_SIMPLE_BEHAVIOR_WAIT_STORE_ORE] = {.joint1_pos = 0.246562153f, .joint2_pos = -1.82005286f},
                 /* ArmSimple 放矿等待位，放矿动作前的预备/稳定位置。 */
                 [ARM_SIMPLE_BEHAVIOR_WAIT_RELEASE_ORE] = {.joint1_pos = -0.164476007f, .joint2_pos = 1.64204562f},
                 /* ArmSimple 放矿位，吸盘关闭后从该位置把矿释放出去。 */

@@ -101,6 +101,7 @@ typedef struct {
   float pole_front_lift_rad;
   float pole_rear_lift_rad;
   float wheel_position_rad[4];
+  float ore_store_platform_position_rad;
   float ore_store_platform_error_rad;
   AutoOre_Occupancy_t photoelectric_occupancy;
 } AutoOre_Feedback_t;

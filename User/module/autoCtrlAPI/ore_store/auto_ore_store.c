@@ -296,8 +296,9 @@ static bool AutoOre_WaitOreStoreCommandTarget(AutoOre_t *ctrl,
 
 static bool AutoOre_OreStorePlatformAtTarget(const AutoOre_t *ctrl,
                                              float threshold_rad) {
-  return ctrl != 0 &&
-         AutoOre_AbsFloat(ctrl->feedback.ore_store_platform_error_rad) <=
+  return ctrl != 0 && ctrl->ore_store_cmd_valid &&
+         AutoOre_AbsFloat(ctrl->ore_store_cmd.platform_target_rad -
+                          ctrl->feedback.ore_store_platform_position_rad) <=
              threshold_rad;
 }
 
@@ -893,7 +894,13 @@ static void AutoOre_RunChamberHigh(AutoOre_t *ctrl, uint32_t now_ms) {
         AutoOre_FailInvalidParam(ctrl);
         return;
       }
-      (void)AutoOre_WaitAll(ctrl, now_ms);
+      if (AutoOre_WaitArmCommandTarget(ctrl, now_ms) &&
+          AutoOre_OreStorePlatformAtTarget(
+              ctrl, AutoOre_OreStoreArriveThresholdRad(ctrl))) {
+        AutoOre_NextStep(ctrl);
+      } else {
+        (void)AutoOre_CheckTimeout(ctrl, now_ms);
+      }
       return;
     case 1:
       AutoOre_EnterStep(ctrl, now_ms);
@@ -999,10 +1006,25 @@ static void AutoOre_RunChamberLow(AutoOre_t *ctrl, uint32_t now_ms) {
       return;
     case 3:
       AutoOre_EnterStep(ctrl, now_ms);
+      if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_CHAMBER_ORE,
+              SUCTION_ON,
+              &ctrl->param.arm_speed.chamber_place) ||
+          !AutoOre_CommandOreStore(ctrl, ORE_STORE_TRANSFORM_STANDBY, false)) {
+        AutoOre_FailInvalidParam(ctrl);
+        return;
+      }
+      if (AutoOre_WaitOreStoreCommandTarget(ctrl, now_ms)) {
+        AutoOre_NextStep(ctrl);
+      } else {
+        (void)AutoOre_CheckTimeout(ctrl, now_ms);
+      }
+      return;
+    case 4:
+      AutoOre_EnterStep(ctrl, now_ms);
       if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_STANDBY,
               SUCTION_ON,
               &ctrl->param.arm_speed.chamber_standby) ||
-          !AutoOre_CommandOreStore(ctrl, ORE_STORE_TRANSFORM_LIFT, false)) {
+          !AutoOre_CommandOreStore(ctrl, ORE_STORE_TRANSFORM_STANDBY, false)) {
         AutoOre_FailInvalidParam(ctrl);
         return;
       }
