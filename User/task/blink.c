@@ -309,6 +309,6 @@ void Task_blink(void *argument) {
     task_runtime.stack_water_mark.blink = uxTaskGetStackHighWaterMark(NULL);
     task_runtime.heartbeat.blink++;
     Task_ProfilerLoopEnd(TASK_PROFILE_BLINK, profile_start_us);
-    osDelayUntil(tick);
+    Task_DelayUntil(TASK_PROFILE_BLINK, &tick, delay_tick);
   }
 }

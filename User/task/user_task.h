@@ -84,6 +84,10 @@ typedef struct {
     volatile uint32_t max_exec_us;
     volatile uint32_t overrun_count;
     volatile uint32_t long_period_count;
+    volatile uint32_t deadline_miss_count;
+    volatile uint32_t resync_count;
+    volatile uint32_t late_tick;
+    volatile uint32_t max_late_tick;
     volatile uint32_t loop_count;
 } Task_ProfileStats_t;
 
@@ -413,6 +417,8 @@ void Task_ore_store(void *argument);
 void Task_ir_dock(void *argument);
 uint32_t Task_ProfilerLoopBegin(Task_ProfileId_t id, uint32_t target_period_us);
 void Task_ProfilerLoopEnd(Task_ProfileId_t id, uint32_t loop_start_us);
+void Task_DelayUntil(Task_ProfileId_t id, uint32_t *wake_tick,
+                     uint32_t delay_tick);
 
 const Chassis_Feedback_t *Task_ChassisGetFeedback(void);
 bool Task_PoleMainGroupAtTarget(uint8_t group, float threshold_rad);

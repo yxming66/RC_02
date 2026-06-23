@@ -77,6 +77,6 @@ extern "C" void Task_chassis_main(void *argument) {
         uxTaskGetStackHighWaterMark(nullptr);
     task_runtime.heartbeat.chassis_main++;
     Task_ProfilerLoopEnd(TASK_PROFILE_CHASSIS_MAIN, profile_start_us);
-    osDelayUntil(tick);
+    Task_DelayUntil(TASK_PROFILE_CHASSIS_MAIN, &tick, delay_tick);
   }
 }

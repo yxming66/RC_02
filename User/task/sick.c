@@ -23,7 +23,7 @@ void Task_sick(void *argument) {
     task_runtime.stack_water_mark.sick = uxTaskGetStackHighWaterMark(NULL);
     task_runtime.heartbeat.sick++;
     Task_ProfilerLoopEnd(TASK_PROFILE_SICK, profile_start_us);
-    osDelayUntil(tick);
+    Task_DelayUntil(TASK_PROFILE_SICK, &tick, delay_tick);
   }
 }
 

@@ -263,6 +263,6 @@ extern "C" void Task_pole_main(void *argument) {
         uxTaskGetStackHighWaterMark(nullptr);
     task_runtime.heartbeat.pole_main++;
     Task_ProfilerLoopEnd(TASK_PROFILE_POLE_MAIN, profile_start_us);
-    osDelayUntil(tick);
+    Task_DelayUntil(TASK_PROFILE_POLE_MAIN, &tick, delay_tick);
   }
 }

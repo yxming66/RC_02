@@ -439,7 +439,7 @@ void Task_ore_store(void *argument) {
         uxTaskGetStackHighWaterMark(NULL);
     task_runtime.heartbeat.ore_store++;
     Task_ProfilerLoopEnd(TASK_PROFILE_ORE_STORE, profile_start_us);
-    osDelayUntil(tick);
+    Task_DelayUntil(TASK_PROFILE_ORE_STORE, &tick, delay_tick);
   }
 }
 

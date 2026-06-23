@@ -27,6 +27,6 @@ void Task_ir_dock(void *argument) {
     task_runtime.stack_water_mark.ir_dock = uxTaskGetStackHighWaterMark(NULL);
     task_runtime.heartbeat.ir_dock++;
     Task_ProfilerLoopEnd(TASK_PROFILE_IR_DOCK, profile_start_us);
-    osDelayUntil(tick);
+    Task_DelayUntil(TASK_PROFILE_IR_DOCK, &tick, delay_tick);
   }
 }

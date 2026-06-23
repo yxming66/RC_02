@@ -354,7 +354,7 @@ void Task_atti_esti(void *argument) {
     task_runtime.stack_water_mark.atti_esti = uxTaskGetStackHighWaterMark(NULL);
     task_runtime.heartbeat.atti_esti++;
     Task_ProfilerLoopEnd(TASK_PROFILE_ATTI_ESTI, profile_start_us);
-    osDelayUntil(tick); /* 运行结束，等待下一次唤醒 */
+    Task_DelayUntil(TASK_PROFILE_ATTI_ESTI, &tick, delay_tick); /* 运行结束，等待下一次唤醒 */
   }
   
 }

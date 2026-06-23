@@ -143,7 +143,7 @@ void Task_arm_simple(void *argument)
         task_runtime.heartbeat.arm_simple++;
         Task_ProfilerLoopEnd(TASK_PROFILE_ARM_SIMPLE, profile_start_us);
 
-        osDelayUntil(tick);
+        Task_DelayUntil(TASK_PROFILE_ARM_SIMPLE, &tick, delay_tick);
     }
 }
 

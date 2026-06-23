@@ -53,6 +53,31 @@ void Task_ProfilerLoopEnd(Task_ProfileId_t id, uint32_t loop_start_us) {
   }
 }
 
+void Task_DelayUntil(Task_ProfileId_t id, uint32_t *wake_tick,
+                     uint32_t delay_tick) {
+  if (wake_tick == NULL || delay_tick == 0U) {
+    osDelay(1U);
+    return;
+  }
+
+  const uint32_t now_tick = osKernelGetTickCount();
+  if ((int32_t)(now_tick - *wake_tick) >= 0) {
+    const uint32_t late_tick = now_tick - *wake_tick;
+    if (id < TASK_PROFILE_COUNT) {
+      Task_ProfileStats_t *stats = &task_runtime.profile[id];
+      stats->deadline_miss_count++;
+      stats->late_tick = late_tick;
+      if (late_tick > stats->max_late_tick) {
+        stats->max_late_tick = late_tick;
+      }
+      stats->resync_count++;
+    }
+    *wake_tick = now_tick + delay_tick;
+  }
+
+  (void)osDelayUntil(*wake_tick);
+}
+
 const osThreadAttr_t attr_init = {
     .name = "Task_Init",
     .priority = osPriorityRealtime,

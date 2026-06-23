@@ -61,6 +61,6 @@ void Task_rc_main(void *argument) {
         uxTaskGetStackHighWaterMark(NULL);
     task_runtime.heartbeat.rc_main++;
     Task_ProfilerLoopEnd(TASK_PROFILE_RC_MAIN, profile_start_us);
-    osDelayUntil(tick);
+    Task_DelayUntil(TASK_PROFILE_RC_MAIN, &tick, delay_tick);
   }
 }

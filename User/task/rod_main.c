@@ -73,6 +73,6 @@ void Task_rod(void *argument) {
     task_runtime.stack_water_mark.rod = uxTaskGetStackHighWaterMark(NULL);
     task_runtime.heartbeat.rod++;
     Task_ProfilerLoopEnd(TASK_PROFILE_ROD, profile_start_us);
-    osDelayUntil(tick);
+    Task_DelayUntil(TASK_PROFILE_ROD, &tick, delay_tick);
   }
 }
