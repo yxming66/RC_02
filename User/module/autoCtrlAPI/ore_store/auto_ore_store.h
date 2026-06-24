@@ -179,7 +179,6 @@ typedef struct {
   AutoOre_FusedParam_t fused_step_pick_store_ascend_200_head;
   AutoOre_FusedParam_t fused_step_pick_store_descend_200_head;
   AutoOre_FusedParam_t fused_step_pick_store_ascend_400_head;
-  AutoOre_FusedParam_t fused_step_pick_store_descend_400_head;
 } AutoOre_Params_t;
 
 typedef struct {

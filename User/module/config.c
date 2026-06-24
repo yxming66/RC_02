@@ -422,17 +422,6 @@ Config_RobotParam_t robot_config = {
             .fast_pick_on_front_photo = true,                    /* true=前光电触发即认为取矿完成，跳过停顿抬矿检测并直接并行存矿/上台阶。 */
             .use_arm_photo_confirm = false,                      /* false=机械臂到位加延时确认，true=机械臂取矿传感器确认。 */
         },
-        .fused_step_pick_store_descend_400_head = {
-            .step_template = AUTO_CTRL_TEMPLATE_DESCEND_400_HEAD, /* 取矿存矿后执行的头向 400mm 下台阶模板。 */
-            .pick_action = AUTO_ORE_ACTION_PICK_POS_400,          /* 融合动作取正 400mm 矿。 */
-            .precontact_vx_mps = 0.20f,                           /* 取矿前低速靠近速度，单位 m/s。 */
-            .precontact_wheel_delta_rad = 4.0f,                   /* 取矿前低速靠近轮转角阈值，单位 rad。 */
-            .precontact_timeout_ms = 2000u,                       /* 取矿前低速靠近兜底超时，单位 ms。 */
-            .step_start_vx_mps = 0.20f,                           /* 存矿后进入台阶模板前的起步冲刺速度，单位 m/s。 */
-            .step_start_wheel_delta_rad = 0.0f,                   /* 头向下台阶默认不额外起步冲刺；>0 时按轮转角门控冲刺。 */
-            .fast_pick_on_front_photo = true,                     /* true=photo1 稳定下降沿即认为取矿完成，跳过停顿抬矿检测并直接并行存矿/下台阶。 */
-            .use_arm_photo_confirm = false,                       /* false=机械臂到位加延时确认，true=机械臂取矿传感器确认。 */
-        },
     },
     /* 模块参数：一键取矛头 auto_rod_spearhead_param，取矛头机构动作时序和检测。 */
     .auto_rod_spearhead_param = {

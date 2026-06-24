@@ -161,7 +161,7 @@ static PC_AutoAction_t AutoCtrlFeed_MapOreAction(AutoOre_Action_t action) {
     case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD:
       return PC_AUTO_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD;
     case AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_400_HEAD:
-      return PC_AUTO_ACTION_STEP_PICK_STORE_DESCEND_400_HEAD;
+      return PC_AUTO_ACTION_NONE;
     case AUTO_ORE_ACTION_NONE:
     default:
       return PC_AUTO_ACTION_NONE;
@@ -190,7 +190,7 @@ static AutoOre_Action_t AutoCtrlFeed_RequestToOreAction(
     case AUTO_ORE_DEBUG_REQUEST_STEP_PICK_STORE_ASCEND_400_HEAD:
       return AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD;
     case AUTO_ORE_DEBUG_REQUEST_STEP_PICK_STORE_DESCEND_400_HEAD:
-      return AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_400_HEAD;
+      return AUTO_ORE_ACTION_NONE;
     case AUTO_ORE_DEBUG_REQUEST_NONE:
     case AUTO_ORE_DEBUG_REQUEST_ABORT:
     case AUTO_ORE_DEBUG_REQUEST_ROD_SPEARHEAD:
@@ -397,7 +397,6 @@ static bool AutoCtrlFeed_IsOreAction(PC_AutoAction_t action) {
     case PC_AUTO_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD:
     case PC_AUTO_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD:
     case PC_AUTO_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD:
-    case PC_AUTO_ACTION_STEP_PICK_STORE_DESCEND_400_HEAD:
       return true;
     default:
       return false;
@@ -409,7 +408,6 @@ static bool AutoCtrlFeed_IsFusedOreAction(AutoOre_Action_t action) {
     case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD:
     case AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD:
     case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD:
-    case AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_400_HEAD:
       return true;
     default:
       return false;
@@ -543,8 +541,7 @@ static bool AutoCtrlFeed_StartOreAction(AutoOre_Action_t action) {
                                                        now_ms);
       break;
     case AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_400_HEAD:
-      result = AutoOre_StartStepPickStoreDescend400Head(&auto_ore_ctrl,
-                                                        now_ms);
+      result = false;
       break;
     case AUTO_ORE_ACTION_NONE:
     default:
@@ -1091,8 +1088,7 @@ bool Task_AutoOreStartStepPickStoreAscend400Head(void) {
 }
 
 bool Task_AutoOreStartStepPickStoreDescend400Head(void) {
-  return AutoCtrlFeed_StartOreAction(
-      AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_400_HEAD);
+  return false;
 }
 
 void Task_AutoOreAbort(void) {

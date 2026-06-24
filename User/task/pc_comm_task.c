@@ -119,7 +119,7 @@ static AutoOre_DebugRequest_t PcComm_MapAutoAction(uint8_t action) {
         case PC_AUTO_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD:
             return AUTO_ORE_DEBUG_REQUEST_STEP_PICK_STORE_ASCEND_400_HEAD;
         case PC_AUTO_ACTION_STEP_PICK_STORE_DESCEND_400_HEAD:
-            return AUTO_ORE_DEBUG_REQUEST_STEP_PICK_STORE_DESCEND_400_HEAD;
+            return AUTO_ORE_DEBUG_REQUEST_NONE;
         case PC_AUTO_ACTION_ABORT:
             return AUTO_ORE_DEBUG_REQUEST_ABORT;
         case PC_AUTO_ACTION_NONE:
