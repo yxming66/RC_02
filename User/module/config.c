@@ -340,7 +340,7 @@ Config_RobotParam_t robot_config = {
         /* ArmSimple 一键行为速度上限，单位 rad/s；<=0 表示使用 arm_simple_param.vel_limit 默认值。 */
         .arm_speed = {
             /* store_*：一键存矿流程，wait=等待/预备位，place=伸到存矿位，standby=回待机位。 */
-            .store_wait = {.joint1_max_vel_rad_s = 1.0f, .joint2_max_vel_rad_s = 2.0f},
+            .store_wait = {.joint1_max_vel_rad_s = 3.0f, .joint2_max_vel_rad_s = 5.0f},
             .store_place = {.joint1_max_vel_rad_s = 1.0f, .joint2_max_vel_rad_s = 2.0f},
             .store_standby = {.joint1_max_vel_rad_s = 1.0f, .joint2_max_vel_rad_s = 2.0f},
             /* release_*：一键放矿流程，wait=放矿前等待位，place=放矿位，standby=放矿后回待机位。 */
@@ -353,8 +353,8 @@ Config_RobotParam_t robot_config = {
             .chamber_standby = {.joint1_max_vel_rad_s = 1.0f, .joint2_max_vel_rad_s = 2.0f},
             /* pick_*：一键取矿流程，standby=取矿前/后待机位，place=伸到取矿位，fetch=底盘前进取矿时保持取矿位。 */
             .pick_standby = {.joint1_max_vel_rad_s = 2.0f, .joint2_max_vel_rad_s = 2.0f},
-            .pick_place = {.joint1_max_vel_rad_s = 8.0f, .joint2_max_vel_rad_s = 2.0f},
-            .pick_fetch = {.joint1_max_vel_rad_s = 1.0f, .joint2_max_vel_rad_s = 2.0f},
+            .pick_place = {.joint1_max_vel_rad_s = 8.0f, .joint2_max_vel_rad_s = 4.0f},
+            .pick_fetch = {.joint1_max_vel_rad_s = 3.0f, .joint2_max_vel_rad_s = 2.0f},
             .pick_lift_detect = {.joint1_max_vel_rad_s = 2.0f, .joint2_max_vel_rad_s = 2.0f},
         },
         /* 一键存/放/上膛/取矿流程中的动作延时，单位 ms；<=0 时使用状态机内置默认值。 */

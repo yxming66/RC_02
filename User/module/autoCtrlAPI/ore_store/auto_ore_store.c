@@ -22,7 +22,7 @@
 #define AUTO_ORE_DEFAULT_FUSED_PICK_PRECONTACT_TIMEOUT_MS (2000u)
 #define AUTO_ORE_DEFAULT_FUSED_PICK_LIFT_DETECT_MS (200u)
 #define AUTO_ORE_DEFAULT_FUSED_ARM_PHOTO_STABLE_MS (120u)
-#define AUTO_ORE_FUSED_PHOTO1_LIFT_DELAY_MS (50u)
+#define AUTO_ORE_FUSED_PHOTO1_LIFT_DELAY_MS (200u)//检测到光电1逻辑延迟存矿
 #define AUTO_ORE_FUSED_STEP_PHOTO_STABLE_MS (20u)
 #define AUTO_ORE_FUSED_HEAD_ASCEND_FRONT_RETRACT_STEP_INDEX (2u)
 #define AUTO_ORE_FUSED_HEAD_DESCEND_FIRST_EDGE_STEP_INDEX (1u)
@@ -786,8 +786,22 @@ static void AutoOre_RunStoreLow(AutoOre_t *ctrl, uint32_t now_ms) {
       return;
     case 5:
       AutoOre_EnterStep(ctrl, now_ms);
-      if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_STORE_ORE,
-          SUCTION_OFF, &ctrl->param.arm_speed.store_place) ||
+      if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_WAIT_STORE_ORE,
+          SUCTION_OFF, &ctrl->param.arm_speed.store_wait) ||
+          !AutoOre_CommandOreStore(ctrl, ORE_STORE_TRANSFORM_LIFT, false)) {
+        AutoOre_FailInvalidParam(ctrl);
+        return;
+      }
+      if (AutoOre_WaitArmCommandTarget(ctrl, now_ms)) {
+        AutoOre_NextStep(ctrl);
+      } else {
+        (void)AutoOre_CheckTimeout(ctrl, now_ms);
+      }
+      return;
+    case 6:
+      AutoOre_EnterStep(ctrl, now_ms);
+      if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_WAIT_STORE_ORE,
+          SUCTION_OFF, &ctrl->param.arm_speed.store_wait) ||
           !AutoOre_CommandOreStore(ctrl, ORE_STORE_TRANSFORM_STANDBY, false)) {
         AutoOre_FailInvalidParam(ctrl);
         return;
@@ -1462,8 +1476,21 @@ static void AutoOre_RunFusedStoreLow(AutoOre_t *ctrl, uint32_t now_ms) {
       }
       return;
     case 5:
-      if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_STORE_ORE, SUCTION_OFF,
-                              &ctrl->param.arm_speed.store_place) ||
+      if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_WAIT_STORE_ORE,
+                              SUCTION_OFF,
+                              &ctrl->param.arm_speed.store_wait) ||
+          !AutoOre_CommandOreStore(ctrl, ORE_STORE_TRANSFORM_LIFT, false)) {
+        AutoOre_FailStoreInvalidParam(ctrl);
+        return;
+      }
+      if (AutoOre_WaitArmCommandTarget(ctrl, now_ms)) {
+        AutoOre_FusedStoreNextStep(ctrl);
+      }
+      return;
+    case 6:
+      if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_WAIT_STORE_ORE,
+                              SUCTION_OFF,
+                              &ctrl->param.arm_speed.store_wait) ||
           !AutoOre_CommandOreStore(ctrl, ORE_STORE_TRANSFORM_STANDBY, false)) {
         AutoOre_FailStoreInvalidParam(ctrl);
         return;
