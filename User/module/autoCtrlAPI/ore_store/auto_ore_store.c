@@ -1176,12 +1176,13 @@ static const float *AutoOre_FusedStepStartPoleTarget(const AutoOre_t *ctrl) {
   }
   switch (ctrl->action) {
     case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD:
-    case AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_400_HEAD:
       return ctrl->param.pole_param->preset.step_400_all_extend;
+    case AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_400_HEAD:
+      return ctrl->param.pole_param->preset.step_400_descend_all_extend;
     case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD:
       return ctrl->param.pole_param->preset.step_200_all_extend;
     case AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD:
-      return ctrl->param.pole_param->preset.step_200_all_retract;
+      return ctrl->param.pole_param->preset.step_200_descend_all_retract;
     default:
       return 0;
   }
@@ -1301,7 +1302,7 @@ static const float *AutoOre_FusedPickPoleTarget(const AutoOre_t *ctrl) {
     return 0;
   }
   if (ctrl->action == AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD) {
-    return ctrl->param.pole_param->preset.step_200_all_retract;
+    return ctrl->param.pole_param->preset.step_200_descend_all_retract;
   }
   const AutoOre_FusedParam_t *param = AutoOre_FusedParam(ctrl);
   AutoOre_Action_t pick_action = (param != 0)

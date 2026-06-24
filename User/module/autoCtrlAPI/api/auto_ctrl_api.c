@@ -60,6 +60,28 @@ static const AutoCtrl_TemplateParam_t *AutoCtrl_GetTemplateParams(
   }
 }
 
+static const float *AutoCtrl_GetPrealignPoleTarget(
+    const Config_RobotParam_t *robot_param, auto_ctrl_template_e template_id) {
+  if (robot_param == 0) {
+    return 0;
+  }
+
+  switch (template_id) {
+    case AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD:
+    case AUTO_CTRL_TEMPLATE_DESCEND_200_TAIL:
+    case AUTO_CTRL_TEMPLATE_DESCEND_400_HEAD:
+    case AUTO_CTRL_TEMPLATE_DESCEND_400_TAIL:
+      return robot_param->pole_param.preset.step_200_descend_small;
+    case AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD:
+    case AUTO_CTRL_TEMPLATE_ASCEND_200_TAIL:
+    case AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD:
+    case AUTO_CTRL_TEMPLATE_ASCEND_400_TAIL:
+    case AUTO_CTRL_TEMPLATE_NONE:
+    default:
+      return robot_param->pole_param.preset.step_200_small;
+  }
+}
+
 /* SICK 距离值有效性检查。 */
 static bool AutoCtrl_IsSickDistanceValid(float distance_cm,
                 float valid_min_cm,
@@ -407,10 +429,13 @@ void AutoCtrl_Update(auto_ctrl_t *ctrl, uint32_t now_ms) {
       if (robot_param != 0) {
         const float prealign_pole_speed =
             robot_param->pole_param.limit.support_lift_speed;
-        AutoCtrlPrimitive_CommandPoleTargetWithSpeed(
-            ctrl, robot_param->pole_param.preset.step_200_small[0],
-            robot_param->pole_param.preset.step_200_small[1],
-            prealign_pole_speed, prealign_pole_speed);
+        const float *prealign_pole_target =
+            AutoCtrl_GetPrealignPoleTarget(robot_param, ctrl->template_id);
+        if (prealign_pole_target != 0) {
+          AutoCtrlPrimitive_CommandPoleTargetWithSpeed(
+              ctrl, prealign_pole_target[0], prealign_pole_target[1],
+              prealign_pole_speed, prealign_pole_speed);
+        }
       }
 
       if (sick_usable) {

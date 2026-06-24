@@ -12,7 +12,7 @@ typedef struct {
   const float *small;
 } auto_ctrl_pole_targets_t;
 
-#define AUTO_CTRL_PHOTO_STABLE_MS (20u) /* 光电稳定触发时间，单位 ms。 */
+#define AUTO_CTRL_PHOTO_STABLE_MS (5u) /* 光电稳定触发时间，单位 ms。 */
 #define AUTO_CTRL_TIMED_MOVE_YAW_TOLERANCE_DEFAULT_RAD (0.1745329252f)
 
 static void AutoCtrlTemplate_EnterStep(auto_ctrl_t *ctrl, uint32_t now_ms) {
@@ -274,18 +274,42 @@ static float AutoCtrlTemplate_SecondPhotoRetractVx(
 }
 
 static void AutoCtrlTemplate_SelectPoleTargets(
-    const Config_RobotParam_t *robot_param, bool use_400mm,
+    const Config_RobotParam_t *robot_param, bool use_400mm, bool descend,
     auto_ctrl_pole_targets_t *targets) {
+  if (use_400mm && descend) {
+    targets->all_extend =
+        robot_param->pole_param.preset.step_400_descend_all_extend;
+    targets->front_retract =
+        robot_param->pole_param.preset.step_400_descend_front_retract;
+    targets->all_retract =
+        robot_param->pole_param.preset.step_400_descend_all_retract;
+    targets->small = robot_param->pole_param.preset.step_200_descend_small;
+    return;
+  }
+
   if (use_400mm) {
     targets->all_extend = robot_param->pole_param.preset.step_400_all_extend;
-    targets->front_retract = robot_param->pole_param.preset.step_400_front_retract;
+    targets->front_retract =
+        robot_param->pole_param.preset.step_400_front_retract;
     targets->all_retract = robot_param->pole_param.preset.step_400_all_retract;
     targets->small = robot_param->pole_param.preset.step_200_small;
     return;
   }
 
+  if (descend) {
+    targets->all_extend =
+        robot_param->pole_param.preset.step_200_descend_all_extend;
+    targets->front_retract =
+        robot_param->pole_param.preset.step_200_descend_front_retract;
+    targets->all_retract =
+        robot_param->pole_param.preset.step_200_descend_all_retract;
+    targets->small = robot_param->pole_param.preset.step_200_descend_small;
+    return;
+  }
+
   targets->all_extend = robot_param->pole_param.preset.step_200_all_extend;
-  targets->front_retract = robot_param->pole_param.preset.step_200_front_retract;
+  targets->front_retract =
+      robot_param->pole_param.preset.step_200_front_retract;
   targets->all_retract = robot_param->pole_param.preset.step_200_all_retract;
   targets->small = robot_param->pole_param.preset.step_200_small;
 }
@@ -574,7 +598,7 @@ static bool AutoCtrlTemplate_RunAscend(auto_ctrl_t *ctrl, uint32_t now_ms,
                                        const AutoCtrl_TemplateParam_t *param,
                                        bool tail_side, bool use_400mm) {
   auto_ctrl_pole_targets_t pole;
-  AutoCtrlTemplate_SelectPoleTargets(robot_param, use_400mm, &pole);
+  AutoCtrlTemplate_SelectPoleTargets(robot_param, use_400mm, false, &pole);
 
   const bool first_photo_ready =
       tail_side ? AutoCtrlTemplate_LatchRearPhotoStable(ctrl, tail_side, now_ms)
@@ -746,7 +770,7 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
     const Config_RobotParam_t *robot_param,
     const AutoCtrl_TemplateParam_t *param, bool use_400mm) {
   auto_ctrl_pole_targets_t pole;
-  AutoCtrlTemplate_SelectPoleTargets(robot_param, use_400mm, &pole);
+  AutoCtrlTemplate_SelectPoleTargets(robot_param, use_400mm, false, &pole);
 
   switch (ctrl->template_ctx.step_index) {
     case 0: /* 四杆全伸并前进，等待四杆到位。 */
@@ -890,7 +914,7 @@ static bool AutoCtrlTemplate_RunTailDescendOptimized(
     const Config_RobotParam_t *robot_param,
     const AutoCtrl_TemplateParam_t *param, bool use_400mm) {
   auto_ctrl_pole_targets_t pole;
-  AutoCtrlTemplate_SelectPoleTargets(robot_param, use_400mm, &pole);
+  AutoCtrlTemplate_SelectPoleTargets(robot_param, use_400mm, true, &pole);
 
   switch (ctrl->template_ctx.step_index) {
     case 0: /* 尾向下台阶起步前，先收杆到小抬升目标。 */
@@ -1086,7 +1110,7 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
     const Config_RobotParam_t *robot_param,
     const AutoCtrl_TemplateParam_t *param, bool use_400mm) {
   auto_ctrl_pole_targets_t pole;
-  AutoCtrlTemplate_SelectPoleTargets(robot_param, use_400mm, &pole);
+  AutoCtrlTemplate_SelectPoleTargets(robot_param, use_400mm, true, &pole);
 
   switch (ctrl->template_ctx.step_index) {
     case 0: /* 头向下台阶起步，杆到起步高度后快速接近。 */
@@ -1137,7 +1161,7 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
 
     case 2: /* 停车并等待前杆支撑到位。 */
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      AutoCtrlPrimitive_CommandFlatMove(ctrl, 0.0f);
+      AutoCtrlPrimitive_CommandFlatMove(ctrl, 0.2f);
       AutoCtrlTemplate_CommandPole(ctrl, pole.all_extend[0],
                                    pole.all_retract[1],
                                    param->pole_front_extend_speed,
@@ -1205,7 +1229,7 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
 
     case 5: /* 停车并等待四杆支撑到位。 */
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      AutoCtrlPrimitive_CommandFlatMove(ctrl, 0.0f);
+      AutoCtrlPrimitive_CommandFlatMove(ctrl, 0.2f);
       AutoCtrlTemplate_CommandPole(ctrl, pole.all_extend[0],
                                    pole.all_extend[1],
                                    param->pole_front_extend_speed,

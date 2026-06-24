@@ -79,13 +79,20 @@ typedef struct {
     float fall_rate;                               /* 1/s, 回到接地时补偿混合系数下降斜率 */
   } gravity_comp;
   struct {
-    float step_200_all_extend[2];      /* 200mm台阶-四撑杆全伸: [0]前两杆, [1]后两杆 */
-    float step_200_front_retract[2];   /* 200mm台阶-前两撑杆收: [0]前两杆, [1]后两杆 */
-    float step_200_all_retract[2];     /* 200mm台阶-四撑杆全收: [0]前两杆, [1]后两杆 */
-    float step_200_small[2];           /* 200mm台阶-小目标位: [0]前两杆, [1]后两杆 */
-    float step_400_all_extend[2];      /* 400mm台阶-四撑杆全伸: [0]前两杆, [1]后两杆 */
-    float step_400_front_retract[2];   /* 400mm台阶-前两撑杆收: [0]前两杆, [1]后两杆 */
-    float step_400_all_retract[2];     /* 400mm台阶-四撑杆全收: [0]前两杆, [1]后两杆 */
+    float step_200_all_extend[2];      /* 200mm上台阶/取矿-四撑杆全伸: [0]前两杆, [1]后两杆 */
+    float step_200_front_retract[2];   /* 200mm上台阶-前两撑杆收: [0]前两杆, [1]后两杆 */
+    float step_200_all_retract[2];     /* 200mm上台阶/取矿-四撑杆全收: [0]前两杆, [1]后两杆 */
+    float step_200_small[2];           /* 200mm上台阶/取矿-小目标位: [0]前两杆, [1]后两杆 */
+    float step_400_all_extend[2];      /* 400mm上台阶/取矿-四撑杆全伸: [0]前两杆, [1]后两杆 */
+    float step_400_front_retract[2];   /* 400mm上台阶-前两撑杆收: [0]前两杆, [1]后两杆 */
+    float step_400_all_retract[2];     /* 400mm上台阶-四撑杆全收: [0]前两杆, [1]后两杆 */
+    float step_200_descend_all_extend[2];    /* 200mm下台阶-四撑杆全伸: [0]前两杆, [1]后两杆 */
+    float step_200_descend_front_retract[2]; /* 200mm下台阶-前两撑杆收: [0]前两杆, [1]后两杆 */
+    float step_200_descend_all_retract[2];   /* 200mm下台阶-四撑杆全收: [0]前两杆, [1]后两杆 */
+    float step_200_descend_small[2];         /* 200mm下台阶-小目标位: [0]前两杆, [1]后两杆 */
+    float step_400_descend_all_extend[2];    /* 400mm下台阶-四撑杆全伸: [0]前两杆, [1]后两杆 */
+    float step_400_descend_front_retract[2]; /* 400mm下台阶-前两撑杆收: [0]前两杆, [1]后两杆 */
+    float step_400_descend_all_retract[2];   /* 400mm下台阶-四撑杆全收: [0]前两杆, [1]后两杆 */
     float ore_release_target[2];       /* 一键放矿专用撑杆目标: [0]前两杆, [1]后两杆 */
     float ore_release_speed;           /* 一键放矿专用撑杆目标跟随速度，rad/s */
   } preset;

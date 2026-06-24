@@ -121,20 +121,35 @@ Config_RobotParam_t robot_config = {
             },
         },
         .preset = {
-            /* 200mm 台阶四杆全伸位；一键取矿 PICK_POS_200 也使用该撑杆高度。 */
+            /* 200mm 上台阶四杆全伸位；一键取矿 PICK_POS_200 也使用该撑杆高度。 */
             .step_200_all_extend = {13.8f, 13.8f},
-            /* 200mm 台阶前杆收回、后杆保持支撑位。 */
-            .step_200_front_retract = {0.8f, 13.8f},
-            /* 200mm 台阶四杆全收位。 */
-            .step_200_all_retract = {0.8f, 0.8f},
-            /* 200mm 小抬升位；一键取矿 PICK_NEG_200 使用该撑杆高度。 */
+            /* 200mm 上台阶前杆收回、后杆保持支撑位。 */
+            .step_200_front_retract = {0.5f, 13.8f},
+            /* 200mm 上台阶四杆全收位。 */
+            .step_200_all_retract = {0.5f, 0.5f},
+            /* 200mm 上台阶小抬升位；一键取矿 PICK_NEG_200 使用该撑杆高度。 */
             .step_200_small = {3.0f, 3.0f},
-            /* 400mm 台阶四杆全伸位；一键取矿 PICK_POS_400 也使用该撑杆高度。 */
+            /* 400mm 上台阶四杆全伸位；一键取矿 PICK_POS_400 也使用该撑杆高度。 */
             .step_400_all_extend = {27.3f, 27.3f},
-            /* 400mm 台阶前杆收回、后杆保持支撑位。 */
+            /* 400mm 上台阶前杆收回、后杆保持支撑位。 */
             .step_400_front_retract = {0.5f, 27.3f},
-               /* 400mm 台阶四杆全收位。 */
+            /* 400mm 上台阶四杆全收位。 */
             .step_400_all_retract = {0.5f, 0.8f},
+
+            /* 200mm 下台阶四杆全伸位。 */
+            .step_200_descend_all_extend = {13.8f, 13.8f},
+            /* 200mm 下台阶前杆收回、后杆保持支撑位。 */
+            .step_200_descend_front_retract = {0.5f, 13.8f},
+            /* 200mm 下台阶四杆全收位。 */
+            .step_200_descend_all_retract = {0.5f, 0.5f},
+            /* 200mm 下台阶起步/小抬升位。 */
+            .step_200_descend_small = {3.0f, 3.0f},
+            /* 400mm 下台阶四杆全伸位。 */
+            .step_400_descend_all_extend = {27.3f, 27.3f},
+            /* 400mm 下台阶前杆收回、后杆保持支撑位。 */
+            .step_400_descend_front_retract = {0.5f, 27.3f},
+            /* 400mm 下台阶四杆全收位。 */
+            .step_400_descend_all_retract = {0.5f, 0.8f},
         },
         .limit = {
             .max_current = 1.0f,
@@ -494,7 +509,7 @@ Config_RobotParam_t robot_config = {
                 .x_target_adc = 0.0f,                /* 前侧平均 x 目标 ADC；0 保持该动作非法。 */
                 .y_target_adc = 0.0f,                /* 矛头侧平均 y 目标 ADC。 */
                 .yaw_target_diff_adc = 0.0f,         /* 目标 ADC：矛头前侧 - 矛头后侧。 */
-                .x_tolerance_adc = 30.0f,            /* 允许的 x ADC 误差。 */
+                .x_tolerance_adc = 30.0f,            /* 允许的 x ADC 误差。     */
                 .y_tolerance_adc = 30.0f,            /* 允许的 y ADC 误差。 */
                 .yaw_tolerance_adc = 30.0f,          /* 允许的 yaw/z ADC 误差。 */
                 .x_kp_mps_per_adc = 0.0010f,         /* x 误差到 vx 的增益。 */
@@ -524,7 +539,7 @@ Config_RobotParam_t robot_config = {
             .pole_extend_move_speed = 0.4f,    /* 撑杆伸出阶段 vx，单位 m/s。 */
             .front_retract_move_speed = 0.40f,  /* 前杆动作阶段 vx，单位 m/s。 */
             .front_retract_timeout_ms = 5000u,  /* 前光电触发后，等待前杆收回到位超时，单位 ms。 */
-            .mid_move_speed = 0.4f,             /* 前杆收回到位后的中段平移 vx，单位 m/s。 */
+            .mid_move_speed = 0.8f,             /* 前杆收回到位后的中段平移 vx，单位 m/s。 */
             .mid_move_ms = 250u,               /* 中段角度门控兜底超时，单位 ms。 */
             .mid_move_wheel_delta_rad = 10.66f,  /* 编码器门控的中段冲刺轮转角阈值，单位 rad；>0 优先按角度切步，<=0 使用 mid_move_ms。 */
             .timed_move_yaw_tolerance_rad = 0.35f, /* 中段移动切步 yaw 容差，约 10 deg。 */
@@ -532,7 +547,7 @@ Config_RobotParam_t robot_config = {
             .rear_retract_timeout_ms = 5000u,   /* 后光电触发后，全收腿动作超时，单位 ms。 */
             .rear_retract_move_ms = 300u,       /* 后光电触发后，全收腿移动持续时间，单位 ms。 */
             .second_photo_retract_move_speed = 0.40f, /* 后一个光电触发收腿时向头向移动 vx，单位 m/s。 */
-            .final_move_speed = 0.4f,          /* 收尾离开台阶 vx，单位 m/s。 */
+            .final_move_speed = 0.8f,          /* 收尾离开台阶 vx，单位 m/s。 */
             .final_move_ms = 800u,              /* 收尾离开台阶角度门控兜底超时，单位 ms。 */
             .final_move_wheel_delta_rad = 0.0f, /* 编码器门控的收尾离开轮转角阈值，单位 rad；>0 优先按角度切步，<=0 使用 final_move_ms。 */
             .pole_all_extend_speed = 0.0f,     /* 四杆全伸目标跟随速度，单位 rad/s。 */
@@ -597,15 +612,15 @@ Config_RobotParam_t robot_config = {
              */
             /* AutoCtrlTemplate_RunHeadDescend200Optimized 使用的有效字段。 */
             .prealign_move_speed = 0.20f,       /* PREALIGN yaw 对正时叠加的前进 vx，单位 m/s。 */
-            .front_retract_move_speed = 0.1f,  /* step4 等待 PE13/photo1 下降沿的慢速 vx，单位 m/s。 */
-            .mid_move_speed = 1.5f,            /* step0/step3 两段固定快跑 vx，单位 m/s。 */
-            .mid_move_ms = 150u,                /* step0 第一次固定快跑持续时间，单位 ms。 */ 
+            .front_retract_move_speed = 0.2f,  /* step4 等待 PE13/photo1 下降沿的慢速 vx，单位 m/s。 */
+            .mid_move_speed = 1.0f,            /* step0/step3 两段固定快跑 vx，单位 m/s。 */
+            .mid_move_ms = 100u,                /* step0 第一次固定快跑持续时间，单位 ms。 */ 
             .timed_move_yaw_tolerance_rad = 0.35f, /* 中段定时移动切步 yaw 容差，约 10 deg。 */
-            .rear_retract_move_speed = 0.1f,   /* step1 等待 PA2/photo3 下降沿的慢速 vx，单位 m/s。 */
+            .rear_retract_move_speed = 0.2f,   /* step1 等待 PA2/photo3 下降沿的慢速 vx，单位 m/s。 */
             .rear_retract_move_ms = 300u,       /* step3 第二次固定快跑持续时间，单位 ms。 */
             .rear_retract_move_wheel_delta_rad = 8.66f, /* step3 第二次固定快跑轮转角阈值，单位 rad；0 表示按时间切步。 */
-            .second_photo_retract_move_speed = 1.2f, /* step7 第二个下降沿后保持全伸离开 vx，单位 m/s。 */
-            .final_move_speed = 0.5f,          /* step7 离开 vx 的备用值；second_photo_retract_move_speed <= 0 时使用。 */
+            .second_photo_retract_move_speed = 1.1f, /* step7 第二个下降沿后保持全伸离开 vx，单位 m/s。 */
+            .final_move_speed = 0.0f,          /* step7 离开 vx 的备用值；second_photo_retract_move_speed <= 0 时使用。 */
             .final_move_ms = 100u,              /* step7 保持全伸离开持续时间，单位 ms。 */
             .pole_front_extend_speed = 0.0f,   /* step2 前杆伸出、step5-7 四杆全伸时的前杆速度，单位 rad/s。 */
             .pole_front_retract_speed = 0.0f,  /* step0/1 前杆保持或回收到全收目标的速度，单位 rad/s。 */
