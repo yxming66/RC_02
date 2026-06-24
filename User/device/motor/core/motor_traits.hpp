@@ -7,6 +7,7 @@
 #include <stdint.h>
 #include <type_traits>
 
+#include "component/math/scalar.hpp"
 #include "device/motor/core/motor_capability.hpp"
 #include "device/motor/core/motor_kind.hpp"
 #include "device/motor/core/motor_model.hpp"
@@ -191,7 +192,7 @@ struct MotorTraits<MotorKind::RM, MotorModel::M6020> : MotorTraitsBase<MotorKind
 };
 
 constexpr float MotorTraitsRpmToRadPerSec(float rpm) {
-    return rpm * 2.0f * 3.14159265358979323846f / 60.0f;
+    return rpm * mr::component::math::kTwoPi / 60.0f;
 }
 
 constexpr uint32_t MotorTraitsEncoderCprFromBits(uint8_t bits) {
