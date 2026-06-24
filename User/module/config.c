@@ -521,18 +521,18 @@ Config_RobotParam_t robot_config = {
              * - second_photo_retract_move_speed: 后光电触发后，全收腿时的前进速度。
              */
             .prealign_move_speed = 0.0f,        /* PREALIGN 对正阶段叠加 vx，单位 m/s。 */
-            .pole_extend_move_speed = 0.80f,    /* 撑杆伸出阶段 vx，单位 m/s。 */
-            .front_retract_move_speed = 0.80f,  /* 前杆动作阶段 vx，单位 m/s。 */
+            .pole_extend_move_speed = 0.4f,    /* 撑杆伸出阶段 vx，单位 m/s。 */
+            .front_retract_move_speed = 0.40f,  /* 前杆动作阶段 vx，单位 m/s。 */
             .front_retract_timeout_ms = 5000u,  /* 前光电触发后，等待前杆收回到位超时，单位 ms。 */
-            .mid_move_speed = 1.2f,             /* 前杆收回到位后的中段平移 vx，单位 m/s。 */
-            .mid_move_ms = 350u,               /* 中段角度门控兜底超时，单位 ms。 */
+            .mid_move_speed = 0.4f,             /* 前杆收回到位后的中段平移 vx，单位 m/s。 */
+            .mid_move_ms = 250u,               /* 中段角度门控兜底超时，单位 ms。 */
             .mid_move_wheel_delta_rad = 10.66f,  /* 编码器门控的中段冲刺轮转角阈值，单位 rad；>0 优先按角度切步，<=0 使用 mid_move_ms。 */
             .timed_move_yaw_tolerance_rad = 0.35f, /* 中段移动切步 yaw 容差，约 10 deg。 */
-            .rear_retract_move_speed = 0.50f,   /* 等待后光电触发的低速 vx，单位 m/s。 */
+            .rear_retract_move_speed = 0.40f,   /* 等待后光电触发的低速 vx，单位 m/s。 */
             .rear_retract_timeout_ms = 5000u,   /* 后光电触发后，全收腿动作超时，单位 ms。 */
             .rear_retract_move_ms = 300u,       /* 后光电触发后，全收腿移动持续时间，单位 ms。 */
-            .second_photo_retract_move_speed = 0.50f, /* 后一个光电触发收腿时向头向移动 vx，单位 m/s。 */
-            .final_move_speed = 1.0f,          /* 收尾离开台阶 vx，单位 m/s。 */
+            .second_photo_retract_move_speed = 0.40f, /* 后一个光电触发收腿时向头向移动 vx，单位 m/s。 */
+            .final_move_speed = 0.4f,          /* 收尾离开台阶 vx，单位 m/s。 */
             .final_move_ms = 800u,              /* 收尾离开台阶角度门控兜底超时，单位 ms。 */
             .final_move_wheel_delta_rad = 0.0f, /* 编码器门控的收尾离开轮转角阈值，单位 rad；>0 优先按角度切步，<=0 使用 final_move_ms。 */
             .pole_all_extend_speed = 0.0f,     /* 四杆全伸目标跟随速度，单位 rad/s。 */
@@ -844,7 +844,7 @@ Config_RobotParam_t robot_config = {
                     .k = 1.0f,
                     .p = 2.5f,
                     .i = 0.0f,
-                    .d = 0.05f,
+                    .d = 0.0f,
                     .i_limit = 0.0f,
                     .out_limit = 1.0f,
                     .d_cutoff_freq = -1.0f,

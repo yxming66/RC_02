@@ -786,7 +786,7 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
 
     case 2: /* 停车并收前杆，等待前杆到位。 */
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      AutoCtrlPrimitive_CommandFlatMove(ctrl, 0.8f);
+      AutoCtrlPrimitive_CommandFlatMove(ctrl, 0.4f);
       AutoCtrlTemplate_CommandPole(ctrl, pole.front_retract[0],
                                    pole.front_retract[1],
                                    param->pole_front_retract_speed,
@@ -840,7 +840,7 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
 
     case 5: /* 停车并四杆全收，等待四杆到位。 */
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      AutoCtrlPrimitive_CommandFlatMove(ctrl, 0.0f);
+      AutoCtrlPrimitive_CommandFlatMove(ctrl, 0.4f);
       AutoCtrlTemplate_CommandPole(ctrl, pole.all_retract[0],
                                    pole.all_retract[1],
                                    param->pole_front_retract_speed,
@@ -864,7 +864,7 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
       AutoCtrlPrimitive_ApplyPrealignWithMove(ctrl, param->final_move_speed,
                                               0.0f);
       AutoCtrlTemplate_CommandPole(ctrl, pole.all_retract[0],
-                                   pole.all_retract[1]+0.5f,
+                                   pole.all_retract[1],
                                    param->pole_front_retract_speed,
                                    param->pole_rear_retract_speed);
       if (AutoCtrlTemplate_Photo4RisingAfterLowStable(ctrl, now_ms)) {
