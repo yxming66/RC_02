@@ -4,7 +4,6 @@
 
 #include "bsp/time.h"
 #include "component/math/scalar.hpp"
-#include "component/user_math.h"
 #include "device/device.h"
 #include "device/motor.h"
 
@@ -404,7 +403,9 @@ int8_t MotorProtocol<MotorKind::RM, Model>::SetTorque(float torque_nm) {
         debug_.last_set_torque_ret = DEVICE_ERR;
         return DEVICE_ERR;
     }
-    pending_torque_current_ = AbsClip(mapper_.ToTorqueCurrent(torque_nm, install_.reverse_output), max_current);
+    pending_torque_current_ = mr::component::math::abs_clip_scalar(
+        mapper_.ToTorqueCurrent(torque_nm, install_.reverse_output),
+        max_current);
     pending_valid_ = true;
     debug_.pending_valid = pending_valid_;
     debug_.pending_torque_current = pending_torque_current_;

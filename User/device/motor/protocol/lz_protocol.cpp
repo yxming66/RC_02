@@ -1,7 +1,6 @@
 #include "device/motor/protocol/lz_protocol.hpp"
 
 #include "component/math/scalar.hpp"
-#include "component/user_math.h"
 #include "device/device.h"
 
 namespace mr::motor {
@@ -263,7 +262,8 @@ int8_t MotorProtocol<MotorKind::LZ, Model>::SetTorque(float torque_nm) {
                   0.0f,
                   0.0f,
                   0.0f,
-                  AbsClip(torque_nm, max_torque_nm));
+                  mr::component::math::abs_clip_scalar(torque_nm,
+                                                       max_torque_nm));
 }
 
 template <MotorModel Model>
@@ -300,15 +300,18 @@ int8_t MotorProtocol<MotorKind::LZ, Model>::SetMIT(float position, float velocit
     constexpr float max_position_limit = MotorTraits<MotorKind::LZ, Model>::kMaxPosition;
     constexpr float max_velocity_limit = MotorTraits<MotorKind::LZ, Model>::kMaxVelocity;
     constexpr float peak_torque = MotorTraits<MotorKind::LZ, Model>::kPeakTorque;
-    const float rotor_position = mapper_.ToRotorPosition(position);
-    const float rotor_velocity = mapper_.ToRotorVelocity(velocity);
-    const float rotor_position_limit = (max_position_limit > 0.0f) ? mapper_.ToRotorLimit(max_position_limit) : 0.0f;
-    const float rotor_velocity_limit = mapper_.ToRotorLimit(max_velocity_limit);
-    pending_motion_output_.target_angle = (rotor_position_limit > 0.0f) ? AbsClip(rotor_position, rotor_position_limit) : rotor_position;
-    pending_motion_output_.target_velocity = AbsClip(rotor_velocity, rotor_velocity_limit);
+    const MitCommandValues command = PrepareMitCommand(mapper_,
+                                                       position,
+                                                       velocity,
+                                                       torque_ff,
+                                                       max_position_limit,
+                                                       max_velocity_limit,
+                                                       peak_torque);
+    pending_motion_output_.target_angle = command.rotor_position;
+    pending_motion_output_.target_velocity = command.rotor_velocity;
     pending_motion_output_.kp = kp;
     pending_motion_output_.kd = kd;
-    pending_motion_output_.torque = (peak_torque > 0.0f) ? AbsClip(torque_ff, peak_torque) : torque_ff;
+    pending_motion_output_.torque = command.torque_ff;
     pending_type_ = PendingCommandType::Mit;
     debug_.pending_type = pending_type_;
     debug_.pending_position = pending_motion_output_.target_angle;

@@ -113,6 +113,12 @@ struct PositionCommandValues {
     float rotor_velocity_limit = 0.0f;
 };
 
+struct MitCommandValues {
+    float rotor_position = 0.0f;
+    float rotor_velocity = 0.0f;
+    float torque_ff = 0.0f;
+};
+
 inline float PrepareVelocityCommand(const TransmissionMapper& mapper,
                                     float output_velocity,
                                     float max_output_velocity) {
@@ -139,6 +145,33 @@ inline PositionCommandValues PreparePositionCommand(const TransmissionMapper& ma
         ? mr::component::math::abs_clip_scalar(rotor_position, rotor_position_limit)
         : rotor_position;
     values.rotor_velocity_limit = mapper.ToRotorVelocity(output_velocity_limit);
+    return values;
+}
+
+inline MitCommandValues PrepareMitCommand(const TransmissionMapper& mapper,
+                                          float output_position,
+                                          float output_velocity,
+                                          float torque_ff,
+                                          float max_position_limit,
+                                          float max_velocity_limit,
+                                          float peak_torque) {
+    const float rotor_position = mapper.ToRotorPosition(output_position);
+    const float rotor_velocity = mapper.ToRotorVelocity(output_velocity);
+    const float rotor_position_limit = (max_position_limit > 0.0f)
+        ? mapper.ToRotorLimit(max_position_limit)
+        : 0.0f;
+    const float rotor_velocity_limit = mapper.ToRotorLimit(max_velocity_limit);
+
+    MitCommandValues values {};
+    values.rotor_position = (rotor_position_limit > 0.0f)
+        ? mr::component::math::abs_clip_scalar(rotor_position, rotor_position_limit)
+        : rotor_position;
+    values.rotor_velocity = mr::component::math::abs_clip_scalar(
+        rotor_velocity,
+        rotor_velocity_limit);
+    values.torque_ff = (peak_torque > 0.0f)
+        ? mr::component::math::abs_clip_scalar(torque_ff, peak_torque)
+        : torque_ff;
     return values;
 }
 

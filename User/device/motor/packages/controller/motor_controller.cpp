@@ -52,7 +52,6 @@ namespace cntlr = mr::comp::cntlr;
 namespace scalar = mr::component::math;
 
 constexpr float kControllerMaxDtMultiplier = 3.0f;
-constexpr float kTwoPi = 6.28318530717958647692f;
 
 float ClampLimit(float value) {
     return (scalar::is_finite_scalar(value) && value > 0.0f) ? value : 0.0f;
@@ -483,7 +482,7 @@ float MotorControllerT<MotorType>::LowpassAlpha(float cutoff_hz,
     if (cutoff <= 0.0f || dt_s <= 0.0f) {
         return 1.0f;
     }
-    const float rc = 1.0f / (kTwoPi * cutoff);
+    const float rc = 1.0f / (scalar::kTwoPi * cutoff);
     return dt_s / (rc + dt_s);
 }
 
