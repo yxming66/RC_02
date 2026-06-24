@@ -342,7 +342,7 @@ typedef struct {
     uint8_t frame[PC_IR_ORE_ACK_FRAME_SIZE];
 } PC_IrOreAckCMD_t;
 
-/* 红外对接反馈帧：把 UART7 收到的 IR 命令（1 字节状态 + 12 字节矿种）
+/* 红外对接反馈帧：把 UART8 收到的 IR 命令（1 字节状态 + 12 字节矿种）
  * 透传给 PC 上位机，由 pc_comm_task 通过 MrlinkPc_PublishFeedback(PC_FEEDBACK_IR_ORE, …) 周期上报。
  * 与 IrDock_OreInfo_t / IrDock_Debug_t 的对应关系见各字段注释。 */
 typedef struct {

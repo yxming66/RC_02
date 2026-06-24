@@ -318,6 +318,8 @@ static void AutoRodSpearhead_RunDockWait(
   const bool rod_at_target = feedback != 0 && feedback->rod_at_target;
   const bool ore_store_at_target =
       feedback != 0 && feedback->ore_store_at_target;
+  const bool dock_complete_received =
+      feedback != 0 && feedback->dock_complete_received;
 
   switch (ctrl->step_index) {
     case 0:
@@ -328,13 +330,26 @@ static void AutoRodSpearhead_RunDockWait(
                                        ROD_NEW_GRIP_GRAB)) {
         return;
       }
-      if (rod_at_target && ore_store_at_target) {
-        AutoRodSpearhead_FinishSuccess(ctrl);
+      if (rod_at_target && ore_store_at_target && dock_complete_received) {
+        AutoRodSpearhead_NextStep(ctrl);
         return;
       }
       if (AutoRodSpearhead_StepElapsed(ctrl, now_ms) >=
           AutoRodSpearhead_DockWaitDelayMs(ctrl)) {
         AutoRodSpearhead_FinishTimeout(ctrl);
+      }
+      return;
+    case 1:
+      AutoRodSpearhead_EnterStep(ctrl, now_ms);
+      if (!AutoRodSpearhead_CommandOreStore(
+              ctrl, ORE_STORE_TRANSFORM_STANDBY, false) ||
+          !AutoRodSpearhead_CommandRod(ctrl, ROD_NEW_POSE_DOCK_WAIT,
+                                       ROD_NEW_GRIP_RELEASE)) {
+        return;
+      }
+      if (AutoRodSpearhead_StepElapsed(ctrl, now_ms) >=
+          AutoRodSpearhead_OpenDelayMs(ctrl)) {
+        AutoRodSpearhead_FinishSuccess(ctrl);
       }
       return;
     default:

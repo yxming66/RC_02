@@ -31,6 +31,8 @@ extern "C" {
 #define IR_DOCK_MINE_INPUT_CRC_OFFSET (17u)
 #define IR_DOCK_ACK_FRAME_SIZE (6u)
 #define IR_DOCK_ACK_CRC_OFFSET (5u)
+#define IR_DOCK_STATUS_ACK_HEAD (0xA5u)
+#define IR_DOCK_STATUS_ACK_FRAME_SIZE (2u)
 #define IR_DOCK_MAX_PACKET_SIZE (IR_DOCK_RX_BUFFER_SIZE)
 #define IR_DOCK_ORE_POSITION_COUNT (12u)
 #define IR_DOCK_ORE_PACKET_SIZE (1u + IR_DOCK_ORE_POSITION_COUNT)
@@ -120,6 +122,7 @@ typedef struct {
   volatile uint32_t tx_count;
   volatile uint32_t frame_rx_count;
   volatile uint32_t ack_tx_count;
+  volatile uint32_t status_ack_tx_count;
   volatile uint32_t ack_invalid_count;
   volatile uint32_t ack_mismatch_count;
   volatile uint32_t ack_no_pending_count;

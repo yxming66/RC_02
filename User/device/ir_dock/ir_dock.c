@@ -15,6 +15,8 @@ static volatile bool ir_dock_rx_complete_pending = false;
 static volatile bool ir_dock_tx_complete_pending = false;
 static volatile bool ir_dock_error_pending = false;
 
+static bool IrDock_SendStatusAck(IrDock_Status_t status, uint32_t now_ms);
+
 static void IrDock_RxEventCallback(uint16_t size) {
   if (size > IR_DOCK_RX_BUFFER_SIZE) {
     size = IR_DOCK_RX_BUFFER_SIZE;
@@ -159,6 +161,27 @@ static void IrDock_ParseMineFrame(uint32_t now_ms) {
   g_ir_dock_debug.ore_info_rx_count++;
 }
 
+static void IrDock_ParseStatusByte(uint8_t status, uint32_t now_ms) {
+  g_ir_dock_debug.last_rx_status = status;
+  g_ir_dock_debug.last_rx_ms = now_ms;
+  g_ir_dock_debug.last_parse_status = (uint8_t)IR_DOCK_PARSE_STATUS_OK;
+  g_ir_dock_debug.rx_count++;
+}
+
+static bool IrDock_PacketIsStatusOnly(uint16_t packet_len) {
+  if (packet_len == 0u || g_ir_dock_debug.parse_index != 0u) {
+    return false;
+  }
+
+  for (uint16_t i = 0u; i < packet_len; ++i) {
+    if (!IrDock_StatusIsValid(ir_dock_rx_buf[i])) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 static void IrDock_ProcessByte(uint8_t byte, uint32_t now_ms) {
   uint8_t count = g_ir_dock_debug.parse_index;
 
@@ -198,6 +221,15 @@ static void IrDock_ProcessByte(uint8_t byte, uint32_t now_ms) {
 static void IrDock_ParseRxBytes(uint16_t packet_len, uint32_t now_ms) {
   g_ir_dock_debug.last_rx_len = (uint8_t)((packet_len > 255u) ? 255u
                                                               : packet_len);
+
+  if (IrDock_PacketIsStatusOnly(packet_len)) {
+    for (uint16_t i = 0u; i < packet_len; ++i) {
+      IrDock_ParseStatusByte(ir_dock_rx_buf[i], now_ms);
+    }
+    (void)IrDock_SendStatusAck((IrDock_Status_t)ir_dock_rx_buf[packet_len - 1u],
+                               now_ms);
+    return;
+  }
 
   for (uint16_t i = 0u; i < packet_len; ++i) {
     IrDock_ProcessByte(ir_dock_rx_buf[i], now_ms);
@@ -266,6 +298,43 @@ static void IrDock_BuildAck(uint8_t msg_id, uint8_t status,
   ack_frame[4] = status;
   ack_frame[IR_DOCK_ACK_CRC_OFFSET] =
       CRC8_Calc(ack_frame, IR_DOCK_ACK_CRC_OFFSET, CRC8_INIT);
+}
+
+static bool IrDock_SendStatusAck(IrDock_Status_t status, uint32_t now_ms) {
+  if (!IrDock_StatusIsValid((uint8_t)status)) {
+    g_ir_dock_debug.ack_invalid_count++;
+    return false;
+  }
+
+  if (!g_ir_dock_debug.inited || g_ir_dock_debug.tx_busy) {
+    g_ir_dock_debug.tx_interval_block_count++;
+    return false;
+  }
+
+  for (uint8_t i = 0u; i < IR_DOCK_ACK_FRAME_SIZE; ++i) {
+    ir_dock_tx_buf[i] = 0u;
+    g_ir_dock_debug.last_ack_frame[i] = 0u;
+  }
+  ir_dock_tx_buf[0] = IR_DOCK_STATUS_ACK_HEAD;
+  ir_dock_tx_buf[1] = (uint8_t)status;
+
+  if (BSP_UART_Transmit(BSP_UART_IR, ir_dock_tx_buf,
+                        IR_DOCK_STATUS_ACK_FRAME_SIZE, false) == HAL_OK) {
+    IrDock_CopyVolatileBytes(g_ir_dock_debug.last_ack_frame, ir_dock_tx_buf,
+                             IR_DOCK_STATUS_ACK_FRAME_SIZE);
+    g_ir_dock_debug.last_ack_status = (uint8_t)status;
+    g_ir_dock_debug.last_tx_status = (uint8_t)status;
+    g_ir_dock_debug.last_tx_len = IR_DOCK_STATUS_ACK_FRAME_SIZE;
+    g_ir_dock_debug.last_tx_ms = now_ms;
+    g_ir_dock_debug.tx_busy = true;
+    g_ir_dock_debug.tx_count++;
+    g_ir_dock_debug.ack_tx_count++;
+    g_ir_dock_debug.status_ack_tx_count++;
+    return true;
+  }
+
+  g_ir_dock_debug.error_count++;
+  return false;
 }
 
 void IrDock_Init(uint32_t now_ms) {
