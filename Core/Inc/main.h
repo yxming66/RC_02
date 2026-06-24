@@ -88,10 +88,6 @@ void Error_Handler(void);
 #define valve_arm_GPIO_Port GPIOC
 #define valve_rod_Pin GPIO_PIN_11
 #define valve_rod_GPIO_Port GPIOC
-#define checkphoto_orelow_Pin GPIO_PIN_0
-#define checkphoto_orelow_GPIO_Port GPIOE
-#define checkphoto_orehigh_Pin GPIO_PIN_1
-#define checkphoto_orehigh_GPIO_Port GPIOE
 
 /* USER CODE BEGIN Private defines */
 

@@ -91,11 +91,11 @@ void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : checkphoto_spear_Pin checkphoto_orelow_Pin checkphoto_orehigh_Pin */
-  GPIO_InitStruct.Pin = checkphoto_spear_Pin|checkphoto_orelow_Pin|checkphoto_orehigh_Pin;
+  /*Configure GPIO pin : checkphoto_spear_Pin */
+  GPIO_InitStruct.Pin = checkphoto_spear_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
+  HAL_GPIO_Init(checkphoto_spear_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pin : USER_KEY_Pin */
   GPIO_InitStruct.Pin = USER_KEY_Pin;
