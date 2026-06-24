@@ -63,6 +63,19 @@ inline Scalar square_scalar(Scalar value) {
   return value * value;
 }
 
+inline Scalar uint_to_float(uint32_t raw,
+                            Scalar min_value,
+                            Scalar max_value,
+                            uint8_t bits) {
+  if (bits == 0U || bits >= 32U) {
+    return min_value;
+  }
+  const Scalar span = max_value - min_value;
+  const uint32_t raw_max = (1UL << bits) - 1UL;
+  return (static_cast<Scalar>(raw) * span / static_cast<Scalar>(raw_max)) +
+         min_value;
+}
+
 inline Scalar sanitize_positive(Scalar value,
                                 Scalar fallback,
                                 Scalar lower = kDefaultEpsilon,

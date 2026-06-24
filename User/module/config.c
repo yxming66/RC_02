@@ -52,7 +52,7 @@ Config_RobotParam_t robot_config = {
                 .i_limit = 1.0f,
                 .out_limit = 4.0f,
                 .d_cutoff_freq = 35.0f,
-                .range = 0.0f,
+                .range = 0.0f, 
             },
             .motor_pos_pid_param = {
                 .k = 1.5f,
@@ -66,7 +66,7 @@ Config_RobotParam_t robot_config = {
             },
         },
         .physical = {
-            .wheel_radius_m = 0.0635f,
+            .wheel_radius_m = 0.05f,//0.0   635
             .wheelbase_m = 0.456f,  /* L：前后轮距的一半，单位 m。 */
             .trackwidth_m = 0.345f, /* W：左右轮距的一半，单位 m。 */
         },
@@ -842,7 +842,7 @@ Config_RobotParam_t robot_config = {
             .pid = {
                 .yaw_pid = {
                     .k = 1.0f,
-                    .p = 5.0f,
+                    .p = 3.0f,
                     .i = 0.0f,
                     .d = 0.0f,
                     .i_limit = 0.0f,

@@ -8,24 +8,13 @@ namespace mr::motor {
 
 namespace {
 
-constexpr float kPi = 3.14159265358979323846f;
 constexpr float kDmPositionMin = -12.56637f;
 constexpr float kDmPositionMax = 12.56637f;
 constexpr float kDmPositionSpan = kDmPositionMax - kDmPositionMin;
-constexpr float kDefaultResyncDeltaRad = 1.75f * kPi;
 constexpr float kDmVelocityMin = -30.0f;
 constexpr float kDmVelocityMax = 30.0f;
 constexpr float kDmTorqueMin = -12.0f;
 constexpr float kDmTorqueMax = 12.0f;
-
-float UintToFloat(uint16_t raw, float min_value, float max_value, int bits) {
-    const float span = max_value - min_value;
-    return (static_cast<float>(raw) * span / static_cast<float>((1 << bits) - 1)) + min_value;
-}
-
-float WrapToPi(float angle_rad) {
-    return mr::component::math::wrap_to_pi(angle_rad);
-}
 
 uint32_t EncodeDmFault(MOTOR_DM_Status_t status) {
     switch (status) {
@@ -84,17 +73,26 @@ bool MotorProtocol<MotorKind::DM, Model>::TryGetRotorFeedback(float& rotor_posit
         return false;
     }
 
-    rotor_position_rad = UintToFloat(raw->raw_angle, kDmPositionMin, kDmPositionMax, 16);
+    rotor_position_rad = mr::component::math::uint_to_float(raw->raw_angle,
+                                                            kDmPositionMin,
+                                                            kDmPositionMax,
+                                                            16U);
     if (param_.reverse) {
         rotor_position_rad = -rotor_position_rad;
     }
 
-    rotor_velocity_rad_s = UintToFloat(static_cast<uint16_t>(raw->raw_speed), kDmVelocityMin, kDmVelocityMax, 12);
+    rotor_velocity_rad_s = mr::component::math::uint_to_float(static_cast<uint16_t>(raw->raw_speed),
+                                                              kDmVelocityMin,
+                                                              kDmVelocityMax,
+                                                              12U);
     if (param_.reverse) {
         rotor_velocity_rad_s = -rotor_velocity_rad_s;
     }
 
-    torque_current = UintToFloat(static_cast<uint16_t>(raw->raw_current), kDmTorqueMin, kDmTorqueMax, 12);
+    torque_current = mr::component::math::uint_to_float(static_cast<uint16_t>(raw->raw_current),
+                                                        kDmTorqueMin,
+                                                        kDmTorqueMax,
+                                                        12U);
     if (param_.reverse) {
         torque_current = -torque_current;
     }
@@ -142,8 +140,8 @@ void MotorProtocol<MotorKind::DM, Model>::RefreshStateCache() {
         position_tracker_.Accumulate(rotor_position_rad,
                                      rotor_velocity_rad_s,
                                      kDmPositionSpan,
-                                     kDefaultResyncDeltaRad));
-    next.position_single_turn_rad = WrapToPi(next.position_rad);
+                                     kDefaultRotorResyncDeltaRad));
+    next.position_single_turn_rad = mr::component::math::wrap_to_pi(next.position_rad);
     next.velocity_rad_s = mapper_.ToOutputVelocity(rotor_velocity_rad_s);
     next.torque_nm = mapper_.ToOutputTorque(torque_current);
     next.temperature_c = temperature_c;

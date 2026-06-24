@@ -8,19 +8,8 @@ namespace mr::motor {
 
 namespace {
 
-constexpr float kPi = 3.14159265358979323846f;
 constexpr float kLzAngleRangeRad = 12.57f;
 constexpr float kLzVelocityRangeRadS = 20.0f;
-constexpr float kLzRawValueMax = 65535.0f;
-constexpr float kDefaultResyncDeltaRad = 1.75f * kPi;
-
-float RawToFloat(uint16_t raw_value, float max_value) {
-    return (static_cast<float>(raw_value) / kLzRawValueMax) * (2.0f * max_value) - max_value;
-}
-
-float WrapToPi(float angle_rad) {
-    return mr::component::math::wrap_to_pi(angle_rad);
-}
 
 MotorProtocolState DecodeLzProtocolState(uint8_t state_bits, uint32_t fault_code) {
     if (fault_code != 0u) {
@@ -72,18 +61,26 @@ bool MotorProtocol<MotorKind::LZ, Model>::TryGetRotorFeedback(float& rotor_posit
         return false;
     }
 
-    rotor_position_rad = RawToFloat(raw->raw_angle, kLzAngleRangeRad);
+    rotor_position_rad = mr::component::math::uint_to_float(raw->raw_angle,
+                                                            -kLzAngleRangeRad,
+                                                            kLzAngleRangeRad,
+                                                            16U);
     if (param_.reverse) {
         rotor_position_rad = -rotor_position_rad;
     }
 
-    rotor_velocity_rad_s = RawToFloat(static_cast<uint16_t>(raw->raw_speed), kLzVelocityRangeRadS);
+    rotor_velocity_rad_s = mr::component::math::uint_to_float(static_cast<uint16_t>(raw->raw_speed),
+                                                              -kLzVelocityRangeRadS,
+                                                              kLzVelocityRangeRadS,
+                                                              16U);
     if (param_.reverse) {
         rotor_velocity_rad_s = -rotor_velocity_rad_s;
     }
 
-    torque_current = RawToFloat(static_cast<uint16_t>(raw->raw_current),
-                                MotorTraits<MotorKind::LZ, Model>::kPeakTorque);
+    torque_current = mr::component::math::uint_to_float(static_cast<uint16_t>(raw->raw_current),
+                                                        -MotorTraits<MotorKind::LZ, Model>::kPeakTorque,
+                                                        MotorTraits<MotorKind::LZ, Model>::kPeakTorque,
+                                                        16U);
     if (param_.reverse) {
         torque_current = -torque_current;
     }
@@ -130,8 +127,8 @@ void MotorProtocol<MotorKind::LZ, Model>::RefreshStateCache() {
         position_tracker_.Accumulate(rotor_position_rad,
                                      rotor_velocity_rad_s,
                                      2.0f * kLzAngleRangeRad,
-                                     kDefaultResyncDeltaRad));
-    next.position_single_turn_rad = WrapToPi(next.position_rad);
+                                     kDefaultRotorResyncDeltaRad));
+    next.position_single_turn_rad = mr::component::math::wrap_to_pi(next.position_rad);
     next.velocity_rad_s = mapper_.ToOutputVelocity(rotor_velocity_rad_s);
     next.torque_nm = mapper_.ToOutputTorque(torque_current);
     next.temperature_c = temperature_c;

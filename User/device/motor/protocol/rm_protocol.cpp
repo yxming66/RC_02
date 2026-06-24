@@ -12,33 +12,15 @@ namespace mr::motor {
 
 namespace {
 
-constexpr float kPi = 3.14159265358979323846f;
-constexpr float kTwoPi = 6.28318530717958647692f;
-constexpr float kDefaultResyncDeltaRad = 1.75f * kPi;
-constexpr float kSuspiciousDeltaRad = 0.90f * kPi;
-constexpr float kVelocityCorrectionThresholdRad = kPi;
-constexpr float kVelocityMismatchWarnRad = 0.75f * kPi;
+constexpr float kSuspiciousDeltaRad = 0.90f * mr::component::math::kPi;
+constexpr float kVelocityCorrectionThresholdRad = mr::component::math::kPi;
+constexpr float kVelocityMismatchWarnRad = 0.75f * mr::component::math::kPi;
 constexpr float kMotorEncoderResolution = 8192.0f;
-constexpr float kSecondsPerMinute = 60.0f;
 constexpr uint32_t kFeedbackLostUs = 100000u;
 
 constexpr uint32_t kRmPositionFaultNone = 0u;
 constexpr uint32_t kRmPositionFaultLargeDelta = (1u << 0);
 constexpr uint32_t kRmPositionFaultFeedbackLost = (1u << 1);
-
-float ResolvePositiveRatio(float ratio) {
-    return mr::component::math::positive_or(ratio, 1.0f);
-}
-
-float ResolveRmAngleDelta(float current_rad, float last_rad) {
-    float delta = current_rad - last_rad;
-    if (delta > kPi) {
-        delta -= kTwoPi;
-    } else if (delta < -kPi) {
-        delta += kTwoPi;
-    }
-    return delta;
-}
 
 float CorrectRmDeltaByVelocity(float wrapped_delta_rad, float rotor_velocity_rad_s, float dt_s) {
     if (dt_s <= 0.0f || !isfinite(rotor_velocity_rad_s)) {
@@ -48,16 +30,9 @@ float CorrectRmDeltaByVelocity(float wrapped_delta_rad, float rotor_velocity_rad
     if (fabsf(expected_delta) <= kVelocityCorrectionThresholdRad) {
         return wrapped_delta_rad;
     }
-    const float turn_count = roundf((expected_delta - wrapped_delta_rad) / kTwoPi);
-    return wrapped_delta_rad + turn_count * kTwoPi;
-}
-
-float WrapToPi(float angle_rad) {
-    return mr::component::math::wrap_to_pi(angle_rad);
-}
-
-float RpmToRadPerSec(float rpm) {
-    return rpm * kTwoPi / kSecondsPerMinute;
+    const float turn_count = roundf((expected_delta - wrapped_delta_rad) /
+                                    mr::component::math::kTwoPi);
+    return wrapped_delta_rad + turn_count * mr::component::math::kTwoPi;
 }
 
 uint32_t EncodeRmC610Fault(uint8_t error_code) {
@@ -68,10 +43,6 @@ uint32_t EncodeRmC610Fault(uint8_t error_code) {
         return (1u << error_code);
     }
     return (1u << 31);
-}
-
-uint32_t CurrentTimeUs() {
-    return static_cast<uint32_t>(BSP_TIME_Get_us());
 }
 
 float TimeDeltaSeconds(uint32_t newer_us, uint32_t older_us) {
@@ -88,23 +59,14 @@ MotorProtocol<MotorKind::RM, Model>::MotorProtocol(const MotorInstanceConfig<Mot
                                             const MotorInstallSpec& install,
                                             MotorState& state,
                                             MOTOR_RM_Module_t module)
-    : config_(config), install_(install), state_(state), param_(config.ToVendorParam(module)) {
-}
-
-template <MotorModel Model>
-float MotorProtocol<MotorKind::RM, Model>::TotalRatio() const {
-    return ResolvePositiveRatio(MotorTraits<MotorKind::RM, Model>::kGearRatio) * ResolvePositiveRatio(install_.external_ratio);
-}
-
-template <MotorModel Model>
-float MotorProtocol<MotorKind::RM, Model>::ToTorqueCurrent(float output_torque_nm) const {
-    const float signed_torque = install_.reverse_output ? -output_torque_nm : output_torque_nm;
-    const float torque_constant = (MotorTraits<MotorKind::RM, Model>::kTorqueConstant > 0.0f) ? MotorTraits<MotorKind::RM, Model>::kTorqueConstant : 0.0f;
-    const float total_ratio = TotalRatio();
-    if (torque_constant <= 0.0f || total_ratio <= 0.0f) {
-        return 0.0f;
-    }
-    return signed_torque / (torque_constant * total_ratio);
+    : config_(config),
+      install_(install),
+      state_(state),
+      mapper_(TransmissionMapper::FromTotalRatio(
+          ResolvePositiveRatio(MotorTraits<MotorKind::RM, Model>::kGearRatio) *
+              ResolvePositiveRatio(install.external_ratio),
+          MotorTraits<MotorKind::RM, Model>::kTorqueConstant)),
+      param_(config.ToVendorParam(module)) {
 }
 
 template <MotorModel Model>
@@ -149,8 +111,9 @@ float MotorProtocol<MotorKind::RM, Model>::AccumulateRotorPosition(float single_
         return accumulated_rotor_position_rad_;
     }
 
-    const float wrapped_delta = ResolveRmAngleDelta(single_turn_rotor_position_rad,
-                                                    last_single_turn_rotor_position_rad_);
+    const float wrapped_delta = mr::component::math::wrap_error(
+        single_turn_rotor_position_rad - last_single_turn_rotor_position_rad_,
+        mr::component::math::kTwoPi);
     const float delta = CorrectRmDeltaByVelocity(wrapped_delta, rotor_velocity_rad_s, dt_s);
     const float abs_delta = fabsf(delta);
     if (abs_delta > max_abs_delta_rad_) {
@@ -166,8 +129,8 @@ float MotorProtocol<MotorKind::RM, Model>::AccumulateRotorPosition(float single_
         MarkPositionInvalid(kRmPositionFaultLargeDelta);
     }
     const float delta_limit = (fabsf(expected_delta) > 0.0f)
-        ? fabsf(expected_delta) + kPi
-        : kDefaultResyncDeltaRad;
+        ? fabsf(expected_delta) + mr::component::math::kPi
+        : kDefaultRotorResyncDeltaRad;
 
     if (fabsf(delta) > delta_limit) {
         last_single_turn_rotor_position_rad_ = single_turn_rotor_position_rad;
@@ -210,21 +173,6 @@ float MotorProtocol<MotorKind::RM, Model>::ApplyRotorPositionOffset(float rotor_
 }
 
 template <MotorModel Model>
-float MotorProtocol<MotorKind::RM, Model>::ToOutputPosition(float rotor_position_rad) const {
-    return rotor_position_rad / TotalRatio();
-}
-
-template <MotorModel Model>
-float MotorProtocol<MotorKind::RM, Model>::ToOutputVelocity(float rotor_velocity_rad_s) const {
-    return rotor_velocity_rad_s / TotalRatio();
-}
-
-template <MotorModel Model>
-float MotorProtocol<MotorKind::RM, Model>::ToOutputTorque(float torque_current) const {
-    return torque_current * MotorTraits<MotorKind::RM, Model>::kTorqueConstant * TotalRatio();
-}
-
-template <MotorModel Model>
 static float RawCurrentToAmp(int16_t raw_current) {
     constexpr float kRawCurrentRange = MotorTraits<MotorKind::RM, Model>::kRawCurrentRange;
     constexpr float kCurrentRangeAmp = MotorTraits<MotorKind::RM, Model>::kCurrentRangeAmp;
@@ -245,21 +193,22 @@ bool MotorProtocol<MotorKind::RM, Model>::TryGetRotorFeedback(float& rotor_posit
         return false;
     }
 
-    rotor_position_rad = (static_cast<float>(raw->raw_angle) / kMotorEncoderResolution) * kTwoPi;
+    rotor_position_rad = (static_cast<float>(raw->raw_angle) / kMotorEncoderResolution) *
+                         mr::component::math::kTwoPi;
     while (rotor_position_rad < 0.0f) {
-        rotor_position_rad += kTwoPi;
+        rotor_position_rad += mr::component::math::kTwoPi;
     }
-    while (rotor_position_rad >= kTwoPi) {
-        rotor_position_rad -= kTwoPi;
+    while (rotor_position_rad >= mr::component::math::kTwoPi) {
+        rotor_position_rad -= mr::component::math::kTwoPi;
     }
     if (param_.reverse) {
-        rotor_position_rad = kTwoPi - rotor_position_rad;
-        if (rotor_position_rad >= kTwoPi) {
-            rotor_position_rad -= kTwoPi;
+        rotor_position_rad = mr::component::math::kTwoPi - rotor_position_rad;
+        if (rotor_position_rad >= mr::component::math::kTwoPi) {
+            rotor_position_rad -= mr::component::math::kTwoPi;
         }
     }
 
-    rotor_velocity_rad_s = RpmToRadPerSec(static_cast<float>(raw->raw_speed));
+    rotor_velocity_rad_s = MotorTraitsRpmToRadPerSec(static_cast<float>(raw->raw_speed));
     if (param_.reverse) {
         rotor_velocity_rad_s = -rotor_velocity_rad_s;
     }
@@ -296,7 +245,7 @@ void MotorProtocol<MotorKind::RM, Model>::RefreshStateCache() {
         return;
     }
 
-    const uint32_t now_us = CurrentTimeUs();
+    const uint32_t now_us = static_cast<uint32_t>(BSP_TIME_Get_us());
     const float dt_s = TimeDeltaSeconds(now_us, last_feedback_tick_);
     if (last_feedback_tick_ != 0u &&
         (uint32_t)(now_us - last_feedback_tick_) > kFeedbackLostUs) {
@@ -326,12 +275,12 @@ void MotorProtocol<MotorKind::RM, Model>::RefreshStateCache() {
         }
     }
 
-    next.position_rad = ToOutputPosition(ApplyRotorPositionOffset(
+    next.position_rad = mapper_.ToOutputPosition(ApplyRotorPositionOffset(
         AccumulateRotorPosition(rotor_position_rad, rotor_velocity_rad_s, dt_s)));
     last_feedback_tick_ = now_us;
-    next.position_single_turn_rad = WrapToPi(next.position_rad);
-    next.velocity_rad_s = ToOutputVelocity(rotor_velocity_rad_s);
-    next.torque_nm = ToOutputTorque(torque_current);
+    next.position_single_turn_rad = mr::component::math::wrap_to_pi(next.position_rad);
+    next.velocity_rad_s = mapper_.ToOutputVelocity(rotor_velocity_rad_s);
+    next.torque_nm = mapper_.ToOutputTorque(torque_current);
     next.temperature_c = temperature_c;
     next.protocol_status_code = error_code;
     next.protocol_fault = EncodeRmC610Fault(error_code);
@@ -345,7 +294,7 @@ void MotorProtocol<MotorKind::RM, Model>::RefreshStateCache() {
 
     if (install_.reverse_output) {
         next.position_rad = -next.position_rad;
-        next.position_single_turn_rad = WrapToPi(-next.position_single_turn_rad);
+        next.position_single_turn_rad = mr::component::math::wrap_to_pi(-next.position_single_turn_rad);
         next.velocity_rad_s = -next.velocity_rad_s;
         next.torque_nm = -next.torque_nm;
     }
@@ -444,7 +393,7 @@ void MotorProtocol<MotorKind::RM, Model>::ClearPendingCommand() {
     pending_torque_current_ = 0.0f;
     debug_.pending_valid = pending_valid_;
     debug_.pending_torque_current = pending_torque_current_;
-    state_.command_pending = false;
+    MarkNoPendingCommand(state_);
 }
 
 template <MotorModel Model>
@@ -455,7 +404,7 @@ int8_t MotorProtocol<MotorKind::RM, Model>::SetTorque(float torque_nm) {
         debug_.last_set_torque_ret = DEVICE_ERR;
         return DEVICE_ERR;
     }
-    pending_torque_current_ = AbsClip(ToTorqueCurrent(torque_nm), max_current);
+    pending_torque_current_ = AbsClip(mapper_.ToTorqueCurrent(torque_nm, install_.reverse_output), max_current);
     pending_valid_ = true;
     debug_.pending_valid = pending_valid_;
     debug_.pending_torque_current = pending_torque_current_;
@@ -488,8 +437,8 @@ int8_t MotorProtocol<MotorKind::RM, Model>::SetZero() {
         state_.position_max_delta_rad = max_abs_delta_rad_;
         state_.feedback_lost_count = feedback_lost_count_;
         state_.last_feedback_tick = last_feedback_tick_;
-        state_.velocity_rad_s = ToOutputVelocity(rotor_velocity_rad_s);
-        state_.torque_nm = ToOutputTorque(torque_current);
+        state_.velocity_rad_s = mapper_.ToOutputVelocity(rotor_velocity_rad_s);
+        state_.torque_nm = mapper_.ToOutputTorque(torque_current);
         state_.temperature_c = temperature_c;
         state_.protocol_status_code = error_code;
         state_.protocol_fault = EncodeRmC610Fault(error_code);

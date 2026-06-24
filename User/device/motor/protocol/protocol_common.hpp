@@ -10,6 +10,9 @@
 
 namespace mr::motor {
 
+inline constexpr float kDefaultRotorResyncDeltaRad =
+    1.75f * mr::component::math::kPi;
+
 inline float ResolvePositiveRatio(float ratio) {
     return mr::component::math::positive_or(ratio, 1.0f);
 }
@@ -48,6 +51,14 @@ struct TransmissionMapper {
 
     float ToOutputTorque(float torque_current) const {
         return torque_current * torque_constant * total_ratio;
+    }
+
+    float ToTorqueCurrent(float output_torque_nm, bool reverse_output = false) const {
+        const float signed_torque = reverse_output ? -output_torque_nm : output_torque_nm;
+        if (torque_constant <= 0.0f || total_ratio <= 0.0f) {
+            return 0.0f;
+        }
+        return signed_torque / (torque_constant * total_ratio);
     }
 };
 

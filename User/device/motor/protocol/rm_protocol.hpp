@@ -8,6 +8,7 @@
 #include "device/motor/core/motor_instance_config.hpp"
 #include "device/motor/core/motor_state.hpp"
 #include "device/motor/core/motor_traits.hpp"
+#include "device/motor/protocol/protocol_common.hpp"
 #include "device/motor_rm.h"
 
 namespace mr::motor {
@@ -51,8 +52,6 @@ public:
     const RmProtocolDebugSnapshot& GetDebugSnapshot() const;
 
 private:
-    float TotalRatio() const;
-    float ToTorqueCurrent(float output_torque_nm) const;
     void ResetStateCache();
     void RefreshStateCache();
     void ResetPositionTracker();
@@ -62,9 +61,6 @@ private:
     void MarkPositionInvalid(uint32_t fault_mask);
     void RefreshPositionDiagnostics(MotorState& next);
     float ApplyRotorPositionOffset(float rotor_position_rad) const;
-    float ToOutputPosition(float rotor_position_rad) const;
-    float ToOutputVelocity(float rotor_velocity_rad_s) const;
-    float ToOutputTorque(float torque_current) const;
     bool TryGetRotorFeedback(float& rotor_position_rad,
                              float& rotor_velocity_rad_s,
                              float& torque_current,
@@ -74,6 +70,7 @@ private:
     MotorInstanceConfig<MotorKind::RM> config_;
     MotorInstallSpec install_;
     MotorState& state_;
+    TransmissionMapper mapper_;
     MOTOR_RM_Param_t param_{};
     MOTOR_RM_t* instance_ = nullptr;
     MOTOR_RM_t vendor_instance_{};
