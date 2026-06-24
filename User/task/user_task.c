@@ -133,7 +133,7 @@ const osThreadAttr_t attr_chassis_ore = {
 const osThreadAttr_t attr_pole_main = {
     .name = "pole_main",
     .priority = osPriorityHigh,
-    .stack_size = 256 * 4,
+    .stack_size = 512 * 4,
 };
 const osThreadAttr_t attr_rc_main = {
     .name = "rc_main",

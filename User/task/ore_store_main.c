@@ -119,6 +119,24 @@ static void OreStoreTask_StartPowerOnHome(void) {
   OreStoreTask_SetPowerOnHomeCommand(&ore_store_cmd);
 }
 
+static int8_t OreStoreTask_AssumePowerOnHomeAtLowest(void) {
+  int8_t result = ORE_STORE_OK;
+
+  for (uint8_t axis = 0u; axis < ORE_STORE_AXIS_NUM; ++axis) {
+    if (OreStore_IsAxisHomed(&ore_store, axis)) {
+      continue;
+    }
+
+    const int8_t ret =
+        OreStore_AssumeAxisHomedAtCurrent(&ore_store, axis, 0.0f);
+    if (ret != ORE_STORE_OK) {
+      result = ORE_STORE_ERR;
+    }
+  }
+
+  return result;
+}
+
 static bool OreStoreTask_HomeAxisFailed(void) {
   for (uint8_t axis = 0u; axis < ORE_STORE_AXIS_NUM; ++axis) {
     if (ore_store.debug.axis_failed[axis]) {
@@ -152,6 +170,8 @@ static void OreStoreTask_FinishPowerOnHome(bool failed) {
 
 static void OreStoreTask_UpdatePowerOnHomeState(int8_t control_ret,
                                                 uint32_t now_ms) {
+  (void)control_ret;
+
   if (!ore_store_power_on_home_in_progress) {
     return;
   }
@@ -168,9 +188,9 @@ static void OreStoreTask_UpdatePowerOnHomeState(int8_t control_ret,
     return;
   }
 
-  if (control_ret != ORE_STORE_OK && OreStoreTask_HomeAxisFailed()) {
-    OreStoreTask_FinishPowerOnHome(true);
-  }
+  const int8_t assume_ret = OreStoreTask_AssumePowerOnHomeAtLowest();
+  OreStoreTask_FinishPowerOnHome(assume_ret != ORE_STORE_OK ||
+                                 OreStoreTask_HomeAxisFailed());
 }
 
 static void OreStoreTask_SelectControlCommand(OreStore_CMD_t *control_cmd) {
@@ -459,6 +479,7 @@ bool Task_OreStoreInitOnce(void) {
     return false;
   }
   ore_store_inited = true;
+  OreStoreTask_StartPowerOnHome();
 
   return true;
 }
@@ -527,10 +548,14 @@ void Task_OreStoreStep(void) {
   g_ore_store_update_ret = OreStore_UpdateFeedback(&ore_store);
   OreStoreTask_ApplyAssumeHomedDebug();
   const uint32_t now_tick = BSP_TIME_Get_ms();
+  OreStoreTask_UpdatePowerOnHomeState(ORE_STORE_OK, now_tick);
 
   OreStoreTask_UpdateTemperatureAlarm(now_tick);
+
+  OreStore_CMD_t control_cmd;
+  OreStoreTask_SelectControlCommand(&control_cmd);
   g_ore_store_control_ret =
-      OreStore_Control(&ore_store, &ore_store_cmd, now_tick);
+      OreStore_Control(&ore_store, &control_cmd, now_tick);
   OreStore_Output(&ore_store);
   OreStoreTask_ApplyDirectDebugOutput();
   OreStoreTask_UpdateDebugView();

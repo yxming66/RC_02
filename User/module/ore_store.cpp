@@ -911,6 +911,9 @@ int8_t OreStore_AssumeAxisHomedAtCurrent(OreStore_t *store, uint8_t axis,
   store->target_position_rad[axis] = position_rad;
   store->tracked_position_rad[axis] = position_rad;
   store->command_position_rad[axis] = position_rad;
+  store->feedback.position_rad[axis] = position_rad;
+  store->feedback.homed[axis] = AxisHomed(store, axis);
+  store->feedback.all_homed = AllHomed(store);
   RefreshDebugAxis(store, axis);
   return ORE_STORE_OK;
 }

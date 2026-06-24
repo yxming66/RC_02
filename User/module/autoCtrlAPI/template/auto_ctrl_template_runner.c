@@ -786,7 +786,7 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
 
     case 2: /* 停车并收前杆，等待前杆到位。 */
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      AutoCtrlPrimitive_CommandFlatMove(ctrl, 0.0f);
+      AutoCtrlPrimitive_CommandFlatMove(ctrl, 0.8f);
       AutoCtrlTemplate_CommandPole(ctrl, pole.front_retract[0],
                                    pole.front_retract[1],
                                    param->pole_front_retract_speed,

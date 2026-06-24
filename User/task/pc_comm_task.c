@@ -244,7 +244,7 @@ static void PcComm_UpdateModuleFeedback(void) {
 
 static bool PcComm_CameraYawCommandFresh(const MrlinkPc_State_t *state,
                                          uint32_t now_ms) {
-                                          return state != NULL && state->camera_yaw_cmd_tick != 0u;
+    return state != NULL && state->camera_yaw_cmd_tick != 0u;
     // return state != NULL && state->camera_yaw_cmd_tick != 0u &&
     //        (now_ms - state->camera_yaw_cmd_tick) <=
     //            PC_COMM_CAMERA_YAW_CMD_TIMEOUT_MS;
@@ -265,17 +265,6 @@ static void PcComm_UpdateCameraYawCommand(uint32_t now_ms) {
         cmd.yaw[yaw].feedback_valid = true;
     }
 
-    if (PcComm_ShouldRelaxCameraYawByRcSwitch()) {
-        for (uint8_t yaw = 0u; yaw < CAMERA_YAW_NUM; ++yaw) {
-            cmd.yaw[yaw].mode = CAMERA_YAW_MODE_RELAX;
-            cmd.yaw[yaw].target_yaw_rad = 0.0f;
-            cmd.yaw[yaw].feedback_tick_ms = now_ms;
-            cmd.yaw[yaw].feedback_valid = false;
-        }
-        (void)Task_CameraYawPostGroupCommand(&cmd);
-        return;
-    }
-
     const PC_CameraYawCMD_t *pc_cmd = MrlinkPc_GetCameraYawCMD();
     const MrlinkPc_State_t *state = MrlinkPc_GetState();
     if (pc_cmd != NULL && PcComm_CameraYawCommandFresh(state, now_ms)) {
@@ -290,6 +279,19 @@ static void PcComm_UpdateCameraYawCommand(uint32_t now_ms) {
             cmd.yaw[yaw].feedback_tick_ms = now_ms;
             cmd.yaw[yaw].feedback_valid = true;
         }
+        (void)Task_CameraYawPostGroupCommand(&cmd);
+        return;
+    }
+
+    if (PcComm_ShouldRelaxCameraYawByRcSwitch()) {
+        for (uint8_t yaw = 0u; yaw < CAMERA_YAW_NUM; ++yaw) {
+            cmd.yaw[yaw].mode = CAMERA_YAW_MODE_RELAX;
+            cmd.yaw[yaw].target_yaw_rad = 0.0f;
+            cmd.yaw[yaw].feedback_tick_ms = now_ms;
+            cmd.yaw[yaw].feedback_valid = false;
+        }
+        (void)Task_CameraYawPostGroupCommand(&cmd);
+        return;
     }
 
     (void)Task_CameraYawPostGroupCommand(&cmd);

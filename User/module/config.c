@@ -153,10 +153,10 @@ Config_RobotParam_t robot_config = {
         },
         .pid = {
             .position_pid = {    
-                [ORE_STORE_AXIS_PLATFORM] = {.k = 1.0f, .p = 24.0f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 60.0f, .d_cutoff_freq = 80.0f, .range = 0.0f},
+                [ORE_STORE_AXIS_PLATFORM] = {.k = 1.0f, .p = 28.0f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 80.0f, .d_cutoff_freq = 80.0f, .range = 0.0f},
             },
             .velocity_pid = {
-                [ORE_STORE_AXIS_PLATFORM] = {.k = 0.1f, .p = 1.550f, .i = 0.02f, .d = 0.0f, .i_limit = 0.35f, .out_limit = 2.5f, .d_cutoff_freq = 18.0f, .range = 0.0f},
+                [ORE_STORE_AXIS_PLATFORM] = {.k = 0.1f, .p = 2.550f, .i = 0.02f, .d = 0.0f, .i_limit = 0.35f, .out_limit = 4.5f, .d_cutoff_freq = 18.0f, .range = 0.0f},
             },
             // MIT风格控制参数 (Kp/Kd)，用于 MIT_STYLE 模式
             // MIT控制律: torque = Kp * (target_pos - current_pos) - Kd * velocity + torque_ff
@@ -521,14 +521,14 @@ Config_RobotParam_t robot_config = {
              * - second_photo_retract_move_speed: 后光电触发后，全收腿时的前进速度。
              */
             .prealign_move_speed = 0.0f,        /* PREALIGN 对正阶段叠加 vx，单位 m/s。 */
-            .pole_extend_move_speed = 0.30f,    /* 撑杆伸出阶段 vx，单位 m/s。 */
-            .front_retract_move_speed = 0.30f,  /* 前杆动作阶段 vx，单位 m/s。 */
+            .pole_extend_move_speed = 0.80f,    /* 撑杆伸出阶段 vx，单位 m/s。 */
+            .front_retract_move_speed = 0.80f,  /* 前杆动作阶段 vx，单位 m/s。 */
             .front_retract_timeout_ms = 5000u,  /* 前光电触发后，等待前杆收回到位超时，单位 ms。 */
-            .mid_move_speed = 1.5f,             /* 前杆收回到位后的中段平移 vx，单位 m/s。 */
+            .mid_move_speed = 1.2f,             /* 前杆收回到位后的中段平移 vx，单位 m/s。 */
             .mid_move_ms = 350u,               /* 中段角度门控兜底超时，单位 ms。 */
             .mid_move_wheel_delta_rad = 10.66f,  /* 编码器门控的中段冲刺轮转角阈值，单位 rad；>0 优先按角度切步，<=0 使用 mid_move_ms。 */
             .timed_move_yaw_tolerance_rad = 0.35f, /* 中段移动切步 yaw 容差，约 10 deg。 */
-            .rear_retract_move_speed = 0.04f,   /* 等待后光电触发的低速 vx，单位 m/s。 */
+            .rear_retract_move_speed = 0.50f,   /* 等待后光电触发的低速 vx，单位 m/s。 */
             .rear_retract_timeout_ms = 5000u,   /* 后光电触发后，全收腿动作超时，单位 ms。 */
             .rear_retract_move_ms = 300u,       /* 后光电触发后，全收腿移动持续时间，单位 ms。 */
             .second_photo_retract_move_speed = 0.50f, /* 后一个光电触发收腿时向头向移动 vx，单位 m/s。 */
@@ -602,7 +602,7 @@ Config_RobotParam_t robot_config = {
             .mid_move_ms = 150u,                /* step0 第一次固定快跑持续时间，单位 ms。 */ 
             .timed_move_yaw_tolerance_rad = 0.35f, /* 中段定时移动切步 yaw 容差，约 10 deg。 */
             .rear_retract_move_speed = 0.1f,   /* step1 等待 PA2/photo3 下降沿的慢速 vx，单位 m/s。 */
-            .rear_retract_move_ms = 250u,       /* step3 第二次固定快跑持续时间，单位 ms。 */
+            .rear_retract_move_ms = 300u,       /* step3 第二次固定快跑持续时间，单位 ms。 */
             .rear_retract_move_wheel_delta_rad = 8.66f, /* step3 第二次固定快跑轮转角阈值，单位 rad；0 表示按时间切步。 */
             .second_photo_retract_move_speed = 1.2f, /* step7 第二个下降沿后保持全伸离开 vx，单位 m/s。 */
             .final_move_speed = 0.5f,          /* step7 离开 vx 的备用值；second_photo_retract_move_speed <= 0 时使用。 */
@@ -661,7 +661,7 @@ Config_RobotParam_t robot_config = {
             .pole_extend_move_speed = 0.50f,    /* 撑杆伸出阶段 vx，单位 m/s。 */
             .pole_extend_settle_ms = 900u,      /* 撑杆伸出后稳定等待时间，单位 ms。 */
             .front_retract_move_speed = 0.50f,  /* 前杆动作阶段 vx，单位 m/s。 */
-            .front_retract_vy = 0.04f,          /* 前杆动作阶段附加 vy，单位 m/s。 */
+            .front_retract_vy = 0.0f,          /* 前杆动作阶段附加 vy，单位 m/s。 */
             .front_retract_timeout_ms = 5000u,  /* 前杆动作或前光电等待超时，单位 ms。 */
             .mid_move_speed = 0.50f,            /* 中段平移 vx，单位 m/s。 */
             .mid_move_ms = 1500u,               /* 中段平移持续时间，单位 ms。 */
@@ -842,9 +842,9 @@ Config_RobotParam_t robot_config = {
             .pid = {
                 .yaw_pid = {
                     .k = 1.0f,
-                    .p = 3.0f,
+                    .p = 2.5f,
                     .i = 0.0f,
-                    .d = 0.0f,
+                    .d = 0.05f,
                     .i_limit = 0.0f,
                     .out_limit = 1.0f,
                     .d_cutoff_freq = -1.0f,
