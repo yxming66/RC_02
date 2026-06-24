@@ -62,8 +62,10 @@ MotorProtocol<MotorKind::RM, Model>::MotorProtocol(const MotorInstanceConfig<Mot
       install_(install),
       state_(state),
       mapper_(TransmissionMapper::FromTotalRatio(
-          ResolvePositiveRatio(MotorTraits<MotorKind::RM, Model>::kGearRatio) *
-              ResolvePositiveRatio(install.external_ratio),
+          mr::component::math::positive_or(
+              MotorTraits<MotorKind::RM, Model>::kGearRatio,
+              1.0f) *
+              mr::component::math::positive_or(install.external_ratio, 1.0f),
           MotorTraits<MotorKind::RM, Model>::kTorqueConstant)),
       param_(config.ToVendorParam(module)) {
 }
