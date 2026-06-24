@@ -22,6 +22,7 @@
 #define AUTO_ORE_DEFAULT_FUSED_PICK_PRECONTACT_TIMEOUT_MS (2000u)
 #define AUTO_ORE_DEFAULT_FUSED_PICK_LIFT_DETECT_MS (200u)
 #define AUTO_ORE_DEFAULT_FUSED_ARM_PHOTO_STABLE_MS (120u)
+#define AUTO_ORE_FUSED_STEP_PHOTO_STABLE_MS (20u)
 #define AUTO_ORE_FUSED_HEAD_ASCEND_FRONT_RETRACT_STEP_INDEX (2u)
 #define AUTO_ORE_FUSED_HEAD_DESCEND_FIRST_EDGE_STEP_INDEX (1u)
 #define AUTO_ORE_FUSED_ARM_PHOTO_ENABLE_JOINT1_RAD (0.6981317f)
@@ -269,6 +270,67 @@ static bool AutoOre_WaitConditionThenDelay(AutoOre_t *ctrl, uint32_t now_ms,
   return (now_ms - ctrl->step_condition_time_ms) >= delay_ms;
 }
 
+static bool AutoOre_LatchPhotoStableFalling(
+    bool triggered, bool *stable_trigger_seen, bool *stable_release_latched,
+    uint32_t *triggered_since_ms, uint32_t *released_since_ms,
+    uint32_t now_ms) {
+  if (stable_trigger_seen == 0 || stable_release_latched == 0 ||
+      triggered_since_ms == 0 || released_since_ms == 0) {
+    return false;
+  }
+
+  if (*stable_release_latched) {
+    return true;
+  }
+
+  if (!*stable_trigger_seen) {
+    if (!triggered) {
+      *triggered_since_ms = 0u;
+      return false;
+    }
+
+    if (*triggered_since_ms == 0u) {
+      *triggered_since_ms = now_ms;
+      return false;
+    }
+
+    if ((now_ms - *triggered_since_ms) >=
+        AUTO_ORE_FUSED_STEP_PHOTO_STABLE_MS) {
+      *stable_trigger_seen = true;
+      *released_since_ms = 0u;
+    }
+    return false;
+  }
+
+  if (triggered) {
+    *released_since_ms = 0u;
+    return false;
+  }
+
+  if (*released_since_ms == 0u) {
+    *released_since_ms = now_ms;
+    return false;
+  }
+
+  if ((now_ms - *released_since_ms) >=
+      AUTO_ORE_FUSED_STEP_PHOTO_STABLE_MS) {
+    *stable_release_latched = true;
+  }
+  return *stable_release_latched;
+}
+
+static bool AutoOre_ArmCommandAtTarget(const AutoOre_t *ctrl) {
+  const float threshold =
+      (ctrl != 0 && ctrl->param.arm_arrive_threshold_rad > 0.0f)
+          ? ctrl->param.arm_arrive_threshold_rad
+          : 0.05f;
+  return ctrl != 0 && ctrl->arm_cmd_valid &&
+         AutoOre_AbsFloat(ctrl->arm_cmd.target_joint.joint1 -
+                          ctrl->feedback.arm_joint1_rad) <= threshold &&
+         AutoOre_AbsFloat(ctrl->arm_cmd.target_joint.joint2 -
+                          ctrl->feedback.arm_joint2_rad) <= threshold;
+}
+
 static bool AutoOre_WaitArmCommandTarget(AutoOre_t *ctrl, uint32_t now_ms) {
   if (!ctrl->step_condition_met) {
     ctrl->step_condition_met = true;
@@ -278,7 +340,7 @@ static bool AutoOre_WaitArmCommandTarget(AutoOre_t *ctrl, uint32_t now_ms) {
   if (now_ms == ctrl->step_condition_time_ms) {
     return false;
   }
-  return ctrl->feedback.arm_at_target;
+  return AutoOre_ArmCommandAtTarget(ctrl);
 }
 
 static bool AutoOre_WaitOreStoreCommandTarget(AutoOre_t *ctrl,
@@ -894,9 +956,12 @@ static void AutoOre_RunChamberHigh(AutoOre_t *ctrl, uint32_t now_ms) {
         AutoOre_FailInvalidParam(ctrl);
         return;
       }
-      if (AutoOre_WaitArmCommandTarget(ctrl, now_ms) &&
-          AutoOre_OreStorePlatformAtTarget(
-              ctrl, AutoOre_OreStoreArriveThresholdRad(ctrl))) {
+      if (AutoOre_WaitConditionThenDelay(
+              ctrl, now_ms,
+              AutoOre_ArmCommandAtTarget(ctrl) &&
+                  AutoOre_OreStorePlatformAtTarget(
+                      ctrl, AutoOre_OreStoreArriveThresholdRad(ctrl)),
+              AutoOre_ChamberArmSettleMs(ctrl))) {
         AutoOre_NextStep(ctrl);
       } else {
         (void)AutoOre_CheckTimeout(ctrl, now_ms);
@@ -914,7 +979,7 @@ static void AutoOre_RunChamberHigh(AutoOre_t *ctrl, uint32_t now_ms) {
       }
       if (ctrl->step_phase == 0u) {
         if (AutoOre_WaitConditionThenDelay(
-                ctrl, now_ms, ctrl->feedback.arm_at_target,
+                ctrl, now_ms, AutoOre_ArmCommandAtTarget(ctrl),
                 AutoOre_ChamberArmSettleMs(ctrl))) {
           AutoOre_SetStepPhase(ctrl, 1u, now_ms);
         } else {
@@ -963,8 +1028,9 @@ static void AutoOre_RunChamberLow(AutoOre_t *ctrl, uint32_t now_ms) {
       }
       if (AutoOre_WaitConditionThenDelay(
             ctrl, now_ms,
-            AutoOre_OreStorePlatformAtTarget(
-              ctrl, AutoOre_ChamberLowPlatformThresholdRad(ctrl)),
+            AutoOre_ArmCommandAtTarget(ctrl) &&
+                AutoOre_OreStorePlatformAtTarget(
+                    ctrl, AutoOre_ChamberLowPlatformThresholdRad(ctrl)),
               AutoOre_ChamberLowClampMs(ctrl))) {
         AutoOre_NextStep(ctrl);
       } else {
@@ -981,7 +1047,7 @@ static void AutoOre_RunChamberLow(AutoOre_t *ctrl, uint32_t now_ms) {
         return;
       }
       if (AutoOre_WaitConditionThenDelay(
-              ctrl, now_ms, ctrl->feedback.arm_at_target,
+              ctrl, now_ms, AutoOre_ArmCommandAtTarget(ctrl),
               AutoOre_ChamberArmSettleMs(ctrl))) {
         AutoOre_NextStep(ctrl);
       } else {
@@ -1049,8 +1115,7 @@ static bool AutoOre_ActionIsPick(AutoOre_Action_t action) {
 static bool AutoOre_ActionIsFused(AutoOre_Action_t action) {
   return action == AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD ||
          action == AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD ||
-         action == AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD ||
-         action == AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_400_HEAD;
+         action == AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD;
 }
 
 static const AutoOre_FusedParam_t *AutoOre_FusedParam(const AutoOre_t *ctrl) {
@@ -1064,8 +1129,6 @@ static const AutoOre_FusedParam_t *AutoOre_FusedParam(const AutoOre_t *ctrl) {
       return &ctrl->param.fused_step_pick_store_descend_200_head;
     case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD:
       return &ctrl->param.fused_step_pick_store_ascend_400_head;
-    case AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_400_HEAD:
-      return &ctrl->param.fused_step_pick_store_descend_400_head;
     default:
       return 0;
   }
@@ -1118,7 +1181,7 @@ static const float *AutoOre_FusedStepStartPoleTarget(const AutoOre_t *ctrl) {
     case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD:
       return ctrl->param.pole_param->preset.step_200_all_extend;
     case AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD:
-      return ctrl->param.pole_param->preset.step_200_small;
+      return ctrl->param.pole_param->preset.step_200_all_retract;
     default:
       return 0;
   }
@@ -1160,8 +1223,8 @@ static bool AutoOre_FusedTemplateStartsAtHeldPoleTarget(
          template_id == AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD;
 }
 
-static bool AutoOre_FusedStepStartFrontPhotoTriggered(
-    const AutoOre_t *ctrl) {
+static bool AutoOre_FusedStepStartFrontPhotoReached(AutoOre_t *ctrl,
+                                                    uint32_t now_ms) {
   if (ctrl == 0) {
     return false;
   }
@@ -1171,7 +1234,13 @@ static bool AutoOre_FusedStepStartFrontPhotoTriggered(
     case AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD:
       return ctrl->feedback.pe13_photo1_triggered;
     case AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD:
-      return ctrl->feedback.pe9_photo2_triggered;
+    case AUTO_CTRL_TEMPLATE_DESCEND_400_HEAD:
+      return AutoOre_LatchPhotoStableFalling(
+          ctrl->feedback.pe13_photo1_triggered,
+          &ctrl->fused_photo1_stable_trigger_seen,
+          &ctrl->fused_photo1_stable_release_latched,
+          &ctrl->fused_photo1_triggered_since_ms,
+          &ctrl->fused_photo1_released_since_ms, now_ms);
     default:
       return false;
   }
@@ -1188,6 +1257,7 @@ static uint8_t AutoOre_FusedFastPickTemplateStartStepIndex(
     case AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD:
       return AUTO_ORE_FUSED_HEAD_ASCEND_FRONT_RETRACT_STEP_INDEX;
     case AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD:
+    case AUTO_CTRL_TEMPLATE_DESCEND_400_HEAD:
       return AUTO_ORE_FUSED_HEAD_DESCEND_FIRST_EDGE_STEP_INDEX;
     default:
       return 0u;
@@ -1204,6 +1274,7 @@ static bool AutoOre_FusedFastPickOnFrontPhotoEnabled(
     case AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD:
     case AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD:
     case AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD:
+    case AUTO_CTRL_TEMPLATE_DESCEND_400_HEAD:
       return true;
     default:
       return false;
@@ -1228,6 +1299,9 @@ static AutoOre_Action_t AutoOre_FusedDefaultPickAction(
 static const float *AutoOre_FusedPickPoleTarget(const AutoOre_t *ctrl) {
   if (ctrl == 0 || ctrl->param.pole_param == 0) {
     return 0;
+  }
+  if (ctrl->action == AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD) {
+    return ctrl->param.pole_param->preset.step_200_all_retract;
   }
   const AutoOre_FusedParam_t *param = AutoOre_FusedParam(ctrl);
   AutoOre_Action_t pick_action = (param != 0)
@@ -1296,7 +1370,6 @@ static bool AutoOre_FusedArmPhotoConfirmed(AutoOre_t *ctrl,
 }
 
 static AutoOre_Position_t AutoOre_FusedSelectStorePosition(AutoOre_t *ctrl) {
-  AutoOre_ApplyFeedbackOccupancy(ctrl);
   const AutoOre_Position_t position = AutoOre_SelectStorePosition(&ctrl->occupancy);
   return AutoOre_IsPositionValid(position) ? position : AUTO_ORE_POSITION_ARM;
 }
@@ -1644,7 +1717,7 @@ static void AutoOre_RunFusedStepSide(AutoOre_t *ctrl, uint32_t now_ms,
         return;
       }
 
-      if (AutoOre_FusedStepStartFrontPhotoTriggered(ctrl)) {
+      if (AutoOre_FusedStepStartFrontPhotoReached(ctrl, now_ms)) {
         AutoOre_CommandChassisHold(ctrl);
         ctrl->fused_step_template_start_step_index =
             AutoOre_FusedFastPickTemplateStartStepIndex(ctrl);
@@ -1781,7 +1854,7 @@ static void AutoOre_RunStepPickStoreFused(AutoOre_t *ctrl, uint32_t now_ms) {
       AutoOre_CommandChassisMoveYawRate(ctrl, fused->precontact_vx_mps,
                                         ctrl->feedback.yaw_rate_cmd_rad_s);
       if (AutoOre_FusedFastPickOnFrontPhotoEnabled(ctrl, fused)) {
-        if (AutoOre_FusedStepStartFrontPhotoTriggered(ctrl)) {
+        if (AutoOre_FusedStepStartFrontPhotoReached(ctrl, now_ms)) {
           ctrl->pick_lift_confirmed = true;
           AutoOre_SetArmHasOre(ctrl, true);
           ctrl->fused_step_template_start_step_index =
@@ -1981,6 +2054,10 @@ static bool AutoOre_StartResolved(AutoOre_t *ctrl, AutoOre_Action_t action,
   ctrl->prealign_target_yaw_rad = 0.0f;
   ctrl->prealign_yaw_error_rad = 0.0f;
   ctrl->fused_arm_photo_since_ms = 0u;
+  ctrl->fused_photo1_stable_trigger_seen = false;
+  ctrl->fused_photo1_stable_release_latched = false;
+  ctrl->fused_photo1_triggered_since_ms = 0u;
+  ctrl->fused_photo1_released_since_ms = 0u;
   ctrl->fused_store_step_index = 0u;
   ctrl->fused_store_step_phase = 0u;
   ctrl->fused_step_template_start_step_index = 0u;
@@ -2006,9 +2083,13 @@ static bool AutoOre_Start(AutoOre_t *ctrl, AutoOre_Action_t action,
   } else if (action == AUTO_ORE_ACTION_CHAMBER) {
     position = AutoOre_SelectChamberPosition(&ctrl->occupancy);
   } else if (AutoOre_ActionIsPick(action)) {
-    position = AUTO_ORE_POSITION_ARM;
+    if (!ctrl->occupancy.arm_has_ore) {
+      position = AUTO_ORE_POSITION_ARM;
+    }
   } else if (AutoOre_ActionIsFused(action)) {
-    position = AUTO_ORE_POSITION_ARM;
+    if (!ctrl->occupancy.arm_has_ore) {
+      position = AUTO_ORE_POSITION_ARM;
+    }
   }
   return AutoOre_StartResolved(ctrl, action, position, false, now_ms);
 }
@@ -2068,8 +2149,9 @@ bool AutoOre_StartStepPickStoreAscend400Head(AutoOre_t *ctrl,
 
 bool AutoOre_StartStepPickStoreDescend400Head(AutoOre_t *ctrl,
                                               uint32_t now_ms) {
-  return AutoOre_Start(ctrl, AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_400_HEAD,
-                       now_ms);
+  (void)ctrl;
+  (void)now_ms;
+  return false;
 }
 
 void AutoOre_Update(AutoOre_t *ctrl, const AutoOre_Feedback_t *feedback,
@@ -2080,8 +2162,8 @@ void AutoOre_Update(AutoOre_t *ctrl, const AutoOre_Feedback_t *feedback,
   if (feedback != 0) {
     ctrl->feedback = *feedback;
   }
-  AutoOre_ApplyFeedbackOccupancy(ctrl);
   if (ctrl->state != AUTO_ORE_STATE_RUNNING) {
+    AutoOre_ClearOutputs(ctrl);
     return;
   }
   if ((!AutoOre_ActionIsPick(ctrl->action) ||
@@ -2193,11 +2275,17 @@ uint8_t AutoOre_GetStepIndex(const AutoOre_t *ctrl) {
 }
 
 const ArmSimple_CMD_t *AutoOre_GetArmCommand(const AutoOre_t *ctrl) {
-  return (ctrl != 0 && ctrl->arm_cmd_valid) ? &ctrl->arm_cmd : 0;
+  return (ctrl != 0 && ctrl->state == AUTO_ORE_STATE_RUNNING &&
+          ctrl->arm_cmd_valid)
+             ? &ctrl->arm_cmd
+             : 0;
 }
 
 const OreStore_CMD_t *AutoOre_GetOreStoreCommand(const AutoOre_t *ctrl) {
-  return (ctrl != 0 && ctrl->ore_store_cmd_valid) ? &ctrl->ore_store_cmd : 0;
+  return (ctrl != 0 && ctrl->state == AUTO_ORE_STATE_RUNNING &&
+          ctrl->ore_store_cmd_valid)
+             ? &ctrl->ore_store_cmd
+             : 0;
 }
 
 const Pole_CMD_t *AutoOre_GetPoleCommand(const AutoOre_t *ctrl) {

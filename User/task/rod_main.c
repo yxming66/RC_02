@@ -14,6 +14,8 @@
 static RodNew_t rod_new;
 static RodNew_CMD_t rod_new_cmd;
 static RodNew_Feedback_t rod_new_feedback;
+static bool rod_new_init_attempted = false;
+static bool rod_new_inited = false;
 
 volatile RodNew_DebugControl_t g_rod_new_debug = {
   false,
@@ -28,7 +30,82 @@ const RodNew_Feedback_t *Task_RodNewGetFeedback(void) {
   return &rod_new_feedback;
 }
 
+bool Task_RodNewInitOnce(void) {
+  if (rod_new_inited) {
+    return true;
+  }
+  if (rod_new_init_attempted) {
+    return false;
+  }
+  rod_new_init_attempted = true;
+
+  Config_RobotParam_t *cfg = Config_GetRobotParam();
+  if (cfg == NULL ||
+      RodNew_Init(&rod_new, &cfg->rod_new_param, ROD_FREQ) != ROD_NEW_OK) {
+    return false;
+  }
+
+  rod_new_cmd.mode = ROD_NEW_MODE_RELAX;
+  rod_new_cmd.pose = ROD_NEW_POSE_DOCK_WAIT;
+  rod_new_cmd.grip = ROD_NEW_GRIP_RELEASE;
+  rod_new_inited = true;
+  return true;
+}
+
+void Task_RodNewStep(void) {
+  if (!rod_new_inited) {
+    return;
+  }
+
+  const uint32_t profile_start_us =
+      Task_ProfilerLoopBegin(TASK_PROFILE_ROD, TASK_PERIOD_US(ROD_FREQ));
+
+  osMessageQueueGet(task_runtime.msgq.rod.cmd, &rod_new_cmd, NULL, 0);
+
+  if (!g_rod_new_debug.enable) {
+    const uint32_t now_ms = BSP_TIME_Get_ms();
+    RodNew_Control(&rod_new, rod_new_cmd.mode, rod_new_cmd.pose,
+                   rod_new_cmd.grip, rod_new_cmd.target_angle_rad, now_ms);
+  }
+  rod_new_feedback.mode = rod_new.mode;
+  rod_new_feedback.pose = rod_new_cmd.pose;
+  rod_new_feedback.grip = rod_new.gripper.state;
+  rod_new_feedback.target_angle_rad = rod_new.servo.target_angle_rad;
+  rod_new_feedback.tracked_angle_rad = rod_new.servo.tracked_angle_rad;
+  rod_new_feedback.tracked_velocity_rad_s = rod_new.servo.tracked_vel_rad_s;
+  rod_new_feedback.feedback_angle_rad = rod_new.servo.feedback_angle_rad;
+  rod_new_feedback.at_target = rod_new.servo.at_target;
+  RodNew_Output(&rod_new);
+  SharedValve_Output();
+
+  task_runtime.stack_water_mark.rod = uxTaskGetStackHighWaterMark(NULL);
+  task_runtime.heartbeat.rod++;
+  Task_ProfilerLoopEnd(TASK_PROFILE_ROD, profile_start_us);
+}
+
 void Task_rod(void *argument) {
+  (void)argument;
+
+  uint32_t delay_tick = osKernelGetTickFreq() / ROD_FREQ;
+  if (delay_tick == 0U) {
+    delay_tick = 1U;
+  }
+  osDelay(ROD_INIT_DELAY);
+
+  uint32_t tick = osKernelGetTickCount();
+  if (!Task_RodNewInitOnce()) {
+    osThreadTerminate(osThreadGetId());
+    return;
+  }
+
+  while (1) {
+    tick += delay_tick;
+    Task_RodNewStep();
+    Task_DelayUntil(TASK_PROFILE_ROD, &tick, delay_tick);
+  }
+}
+
+static void Task_rod_legacy(void *argument) {
   (void)argument;
  
   const uint32_t delay_tick = osKernelGetTickFreq() / ROD_FREQ;
@@ -37,7 +114,7 @@ void Task_rod(void *argument) {
   uint32_t tick = osKernelGetTickCount();
   Config_RobotParam_t *cfg = Config_GetRobotParam();
   if (cfg == NULL ||
-      RodNew_Init(&rod_new, &cfg->rod_new_param) != ROD_NEW_OK) {
+      RodNew_Init(&rod_new, &cfg->rod_new_param, ROD_FREQ) != ROD_NEW_OK) {
     osThreadTerminate(osThreadGetId());
     return;
   }
@@ -47,6 +124,8 @@ void Task_rod(void *argument) {
   rod_new_cmd.grip = ROD_NEW_GRIP_RELEASE;
 
   while (1) {  
+    const uint32_t profile_start_us =
+        Task_ProfilerLoopBegin(TASK_PROFILE_ROD, TASK_PERIOD_US(ROD_FREQ));
     tick += delay_tick;
 
     osMessageQueueGet(task_runtime.msgq.rod.cmd, &rod_new_cmd, NULL, 0);
@@ -70,6 +149,7 @@ void Task_rod(void *argument) {
 
     task_runtime.stack_water_mark.rod = uxTaskGetStackHighWaterMark(NULL);
     task_runtime.heartbeat.rod++;
-    osDelayUntil(tick);
+    Task_ProfilerLoopEnd(TASK_PROFILE_ROD, profile_start_us);
+    Task_DelayUntil(TASK_PROFILE_ROD, &tick, delay_tick);
   }
 }

@@ -15,7 +15,7 @@
 #include "main.h"
 
 #define PC_COMM_TX_PERIOD_MS (20u)  /* 50Hz */
-#define PC_COMM_LOOP_PERIOD_MS (1u)
+#define PC_COMM_LOOP_PERIOD_MS (2u)
 #define PC_COMM_TX_DMA_TIMEOUT_MS (100u)
 #define PC_COMM_CAMERA_YAW_CMD_TIMEOUT_MS (1000u)
 /* IR_ORE 12 位置矿种类只在对端发来时变一次，正常状态几乎不变。
@@ -28,6 +28,11 @@ extern DR16_t dr16;
 static uint8_t s_tx_buf[384];
 static volatile bool s_tx_dma_busy = false;
 static volatile uint32_t s_tx_dma_start_tick = 0;
+static bool s_pc_comm_channel_inited = false;
+static bool s_pc_comm_callbacks_registered = false;
+static bool s_pc_comm_inited = false;
+static uint32_t s_pc_comm_last_init_attempt_tick = 0u;
+static uint32_t s_pc_comm_last_tx_tick = 0u;
 static const uint8_t s_feedback_cmds[] = {
     PC_FEEDBACK_HEARTBEAT,
     PC_FEEDBACK_AUTO_ACTION,
@@ -114,7 +119,7 @@ static AutoOre_DebugRequest_t PcComm_MapAutoAction(uint8_t action) {
         case PC_AUTO_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD:
             return AUTO_ORE_DEBUG_REQUEST_STEP_PICK_STORE_ASCEND_400_HEAD;
         case PC_AUTO_ACTION_STEP_PICK_STORE_DESCEND_400_HEAD:
-            return AUTO_ORE_DEBUG_REQUEST_STEP_PICK_STORE_DESCEND_400_HEAD;
+            return AUTO_ORE_DEBUG_REQUEST_NONE;
         case PC_AUTO_ACTION_ABORT:
             return AUTO_ORE_DEBUG_REQUEST_ABORT;
         case PC_AUTO_ACTION_NONE:
@@ -431,7 +436,166 @@ static bool PcComm_TransmitFeedback(void) {
     return false;
 }
 
+bool Task_PcCommInitOnce(void) {
+    if (s_pc_comm_inited) {
+        return true;
+    }
+
+    const uint32_t now = BSP_TIME_Get_ms();
+    if (s_pc_comm_last_init_attempt_tick != 0u &&
+        (now - s_pc_comm_last_init_attempt_tick) < 20u) {
+        return false;
+    }
+    s_pc_comm_last_init_attempt_tick = now;
+
+    if (!s_pc_comm_channel_inited) {
+        if (!MrlinkPc_CommInit()) {
+            PcComm_DebugRecordInitFail(g_pc_comm_debug.last_init_error);
+            return false;
+        }
+        s_pc_comm_channel_inited = true;
+    }
+
+    if (!s_pc_comm_callbacks_registered) {
+        if (MrlinkPc_RegisterTxCallbacks(PcComm_TxDoneCallback,
+                                         PcComm_TxErrorCallback) !=
+            MRLINK_CHANNEL_OK) {
+            PcComm_DebugRecordInitFail(-30);
+            return false;
+        }
+        s_pc_comm_callbacks_registered = true;
+    }
+
+    s_pc_comm_last_tx_tick = now;
+    s_pc_comm_inited = true;
+    return true;
+}
+
+void Task_PcCommStep(void) {
+    if (!s_pc_comm_inited) {
+        return;
+    }
+
+    const uint32_t profile_start_us =
+        Task_ProfilerLoopBegin(TASK_PROFILE_PC_COMM,
+                               PC_COMM_LOOP_PERIOD_MS * 1000U);
+    task_runtime.stack_water_mark.pc_comm = uxTaskGetStackHighWaterMark(NULL);
+
+    uint32_t now = BSP_TIME_Get_ms();
+
+    MrlinkPc_CommProcess(now);
+    PcComm_ProcessIrOreAckCommand(now);
+    PcComm_UpdateCameraYawCommand(now);
+
+    if ((now - s_pc_comm_last_tx_tick) >= PC_COMM_TX_PERIOD_MS) {
+        (void)PcComm_TransmitFeedback();
+        s_pc_comm_last_tx_tick = now;
+    }
+
+    if (g_pc_command_source == PC_COMMAND_SOURCE_PC &&
+        MrlinkPc_IsPCControlMode()) {
+        const bool auto_action_pending = PcComm_ProcessAutoActionCommand();
+        const PC_AutoStepParams_t *step_params =
+            (auto_ctrl_inited && !auto_action_pending)
+                ? MrlinkPc_GetAutoStepParams()
+                : NULL;
+        if (step_params != NULL && !AutoCtrl_IsBusy(&auto_ctrl) &&
+            !(auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl)) &&
+            !Task_AutoRodSpearheadIsBusy() &&
+            !Task_AutoSickCorrectIsBusy()) {
+            AutoCtrl_SetYawSource(&auto_ctrl, AUTO_CTRL_YAW_SOURCE_PC);
+            AutoCtrl_SetYawZeroOffset(&auto_ctrl, 0.0f);
+            if (AutoCtrl_StartTemplate(
+                    &auto_ctrl,
+                    step_params->template_id,
+                    step_params->travel_dir,
+                    step_params->target_yaw_rad,
+                    step_params->yaw_tolerance_rad,
+                    AUTO_CTRL_SENSOR_MODE_NONE,
+                    now)) {
+                MrlinkPc_ClearStepCommand();
+            }
+        }
+    }
+
+    MrlinkPc_DebugUpdate();
+    task_runtime.heartbeat.pc_comm++;
+    Task_ProfilerLoopEnd(TASK_PROFILE_PC_COMM, profile_start_us);
+}
+
 void Task_pc_comm(void *argument) {
+    (void)argument;
+
+    uint32_t delay_tick =
+        (osKernelGetTickFreq() * PC_COMM_LOOP_PERIOD_MS) / 1000U;
+    if (delay_tick == 0U) {
+        delay_tick = 1U;
+    }
+
+    while (!Task_PcCommInitOnce()) {
+        osDelay(20u);
+    }
+
+    uint32_t tick = osKernelGetTickCount();
+    while (1) {
+        tick += delay_tick;
+        Task_PcCommStep();
+        Task_DelayUntil(TASK_PROFILE_PC_COMM, &tick, delay_tick);
+    }
+}
+
+void Task_pc_comm_sick(void *argument) {
+    (void)argument;
+
+    uint32_t base_delay_tick =
+        osKernelGetTickFreq() / (uint32_t)TASK_FUSED_LOOP_FREQ;
+    if (base_delay_tick == 0U) {
+        base_delay_tick = 1U;
+    }
+
+    const uint32_t now_us = (uint32_t)BSP_TIME_Get_us();
+    Task_SubtaskTimer_t pc_comm_timer;
+    Task_SubtaskTimer_t sick_timer;
+    Task_SubtaskTimerInit(&pc_comm_timer,
+                          1000.0f / (float)PC_COMM_LOOP_PERIOD_MS, now_us);
+    Task_SubtaskTimerInit(&sick_timer, SICK_FREQ, now_us);
+
+    uint32_t tick = osKernelGetTickCount();
+    uint32_t sick_init_tick = tick + SICK_INIT_DELAY;
+    bool sick_init_due = (SICK_INIT_DELAY == 0U);
+
+    while (1) {
+        const uint32_t profile_start_us =
+            Task_ProfilerLoopBegin(TASK_PROFILE_PC_COMM_SICK,
+                                   TASK_PERIOD_US(TASK_FUSED_LOOP_FREQ));
+        tick += base_delay_tick;
+        const uint32_t loop_now_us = (uint32_t)BSP_TIME_Get_us();
+
+        if (Task_SubtaskTimerDue(&pc_comm_timer, loop_now_us)) {
+            if (Task_PcCommInitOnce()) {
+                Task_PcCommStep();
+            }
+        }
+
+        if (!sick_init_due &&
+            (int32_t)(osKernelGetTickCount() - sick_init_tick) >= 0) {
+            sick_init_due = true;
+        }
+        if (sick_init_due && Task_SubtaskTimerDue(&sick_timer, loop_now_us)) {
+            if (Task_SickInitOnce()) {
+                Task_SickStep();
+            }
+        }
+
+        task_runtime.stack_water_mark.pc_comm_sick =
+            uxTaskGetStackHighWaterMark(NULL);
+        task_runtime.heartbeat.pc_comm_sick++;
+        Task_ProfilerLoopEnd(TASK_PROFILE_PC_COMM_SICK, profile_start_us);
+        Task_DelayUntil(TASK_PROFILE_PC_COMM_SICK, &tick, base_delay_tick);
+    }
+}
+
+static void Task_pc_comm_legacy(void *argument) {
     (void)argument;
 
     while (!MrlinkPc_CommInit()) {
@@ -449,6 +613,9 @@ void Task_pc_comm(void *argument) {
     uint32_t last_tx_tick = BSP_TIME_Get_ms();
 
     while (1) {
+        const uint32_t profile_start_us =
+            Task_ProfilerLoopBegin(TASK_PROFILE_PC_COMM,
+                                   PC_COMM_LOOP_PERIOD_MS * 1000U);
         task_runtime.stack_water_mark.pc_comm = uxTaskGetStackHighWaterMark(NULL);
 
         uint32_t now = BSP_TIME_Get_ms();
@@ -490,6 +657,7 @@ void Task_pc_comm(void *argument) {
 
         MrlinkPc_DebugUpdate();
         task_runtime.heartbeat.pc_comm++;
+        Task_ProfilerLoopEnd(TASK_PROFILE_PC_COMM, profile_start_us);
         osDelay(PC_COMM_LOOP_PERIOD_MS);
     }
 }

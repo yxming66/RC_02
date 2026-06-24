@@ -255,6 +255,9 @@ void Task_atti_esti(void *argument) {
   /* USER CODE INIT END */
   
   while (1) {
+    const uint32_t profile_start_us =
+        Task_ProfilerLoopBegin(TASK_PROFILE_ATTI_ESTI,
+                               TASK_PERIOD_US(ATTI_ESTI_FREQ));
     tick += delay_tick; /* 计算下一个唤醒时刻 */
     /* USER CODE BEGIN */
     if (calib_request_pending) {
@@ -285,8 +288,8 @@ void Task_atti_esti(void *argument) {
     BMI088_GyroStartDmaRecv();
     BMI088_GyroWaitDmaCplt();
 
-    /* 锁住RTOS内核防止数据解析过程中断，造成错误 */
-    osKernelLock();
+    /* DMA is complete; keep AHRS math preemptible. */
+
     /* 接收完所有数据后，把数据从原始字节加工成方便计算的数据 */
     BMI088_ParseAccl(&bmi088);
     BMI088_ParseGyro(&bmi088);
@@ -334,7 +337,6 @@ void Task_atti_esti(void *argument) {
       AHRS_GetEulr(&eulr_chassis, &chassis_ahrs);
     }
     
-    osKernelUnlock();
 
 
 
@@ -351,7 +353,8 @@ void Task_atti_esti(void *argument) {
     /* USER CODE END */
     task_runtime.stack_water_mark.atti_esti = uxTaskGetStackHighWaterMark(NULL);
     task_runtime.heartbeat.atti_esti++;
-    osDelayUntil(tick); /* 运行结束，等待下一次唤醒 */
+    Task_ProfilerLoopEnd(TASK_PROFILE_ATTI_ESTI, profile_start_us);
+    Task_DelayUntil(TASK_PROFILE_ATTI_ESTI, &tick, delay_tick); /* 运行结束，等待下一次唤醒 */
   }
   
 }

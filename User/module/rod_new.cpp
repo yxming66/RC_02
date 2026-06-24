@@ -43,7 +43,8 @@ float RodNew_DefaultAngleRad(const RodNew_Params_t *param) {
 
 extern "C" {
 
-int8_t RodNew_Init(RodNew_t *r, const RodNew_Params_t *param) {
+int8_t RodNew_Init(RodNew_t *r, const RodNew_Params_t *param,
+                   float control_freq_hz) {
   if (r == nullptr || param == nullptr) {
     return ROD_NEW_ERR_NULL;
   }
@@ -54,6 +55,9 @@ int8_t RodNew_Init(RodNew_t *r, const RodNew_Params_t *param) {
   memset(r, 0, sizeof(RodNew_t));
   r->param = param;
   r->mode = ROD_NEW_MODE_RELAX;
+  r->nominal_dt = mr::component::math::sanitize_dt(
+      1.0f / control_freq_hz, 0.001f, 0.0005f, 0.020f);
+  r->dt = r->nominal_dt;
   r->servo.target_angle_rad = RodNew_DefaultAngleRad(param);
   r->servo.tracked_angle_rad = RodNew_DefaultAngleRad(param);
   r->servo.tracked_vel_rad_s = 0.0f;
@@ -88,9 +92,12 @@ int8_t RodNew_Control(RodNew_t *r, RodNew_Mode_t mode, RodNew_Pose_t pose,
   }
 
   r->now_tick = now;
-  r->dt = (r->last_wakeup == 0U) ? 0.001f : (float)(now - r->last_wakeup) / 1000.0f;
+  r->dt = (r->last_wakeup == 0U)
+              ? r->nominal_dt
+              : (float)(now - r->last_wakeup) / 1000.0f;
   r->last_wakeup = now;
-  r->dt = mr::component::math::sanitize_dt(r->dt, 0.001f, 0.0005f, 0.050f);
+  r->dt = mr::component::math::sanitize_dt(
+      r->dt, r->nominal_dt, r->nominal_dt * 0.5f, r->nominal_dt * 3.0f);
 
   r->mode = mode;
 

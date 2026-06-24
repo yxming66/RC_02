@@ -58,10 +58,10 @@ typedef struct {
   uint32_t rear_retract_move_ms;     /* 第二段固定快速靠近/后侧动作移动时间，单位 ms；角度阈值>0时作为兜底超时。 */
   float rear_retract_move_wheel_delta_rad; /* 第二段固定快速靠近/后侧动作移动轮转角阈值，单位 rad；>0 优先按角度切步，<=0 使用 rear_retract_move_ms 定时切步。 */
 
-  float second_photo_retract_move_speed; /* 第二个光电触发后收杆时可选的 vx 幅值，单位 m/s。 */
-  float final_move_speed;     /* 收尾离开速度，或第二光电后收杆 vx 的备用值，单位 m/s。 */
-  uint32_t final_move_ms;     /* 收尾/全收杆后离开时间，单位 ms；角度阈值>0时作为兜底超时。 */
-  float final_move_wheel_delta_rad; /* 收尾/全收杆后离开轮转角阈值，单位 rad；>0 优先按角度切步，<=0 使用 final_move_ms 定时切步。 */
+  float second_photo_retract_move_speed; /* 第二个光电触发后收尾移动的可选 vx 幅值，单位 m/s。 */
+  float final_move_speed;     /* 收尾离开速度，或第二光电后收尾 vx 的备用值，单位 m/s。 */
+  uint32_t final_move_ms;     /* 收尾离开时间，单位 ms；角度阈值>0时作为兜底超时。 */
+  float final_move_wheel_delta_rad; /* 收尾离开轮转角阈值，单位 rad；>0 优先按角度切步，<=0 使用 final_move_ms 定时切步。 */
 
   float pole_all_extend_speed;    /* 四杆全伸速度，单位 rad/s。 */
   float pole_front_extend_speed;  /* 前杆伸出速度，单位 rad/s。 */

@@ -60,14 +60,17 @@ static float CameraYaw_CalcDt(CameraYaw_t *c, uint32_t now_ms) {
     return 0.001f;
   }
 
-  float dt = 0.001f;
+  const float nominal_dt =
+      (isfinite(c->nominal_dt) && c->nominal_dt > 0.0f) ? c->nominal_dt
+                                                        : 0.001f;
+  float dt = nominal_dt;
   if (c->last_wakeup != 0u) {
     dt = (float)(now_ms - c->last_wakeup) * 0.001f;
   }
   c->last_wakeup = now_ms;
 
-  if (!isfinite(dt) || dt < 0.0005f || dt > 0.050f) {
-    dt = 0.001f;
+  if (!isfinite(dt) || dt < nominal_dt * 0.5f || dt > nominal_dt * 3.0f) {
+    dt = nominal_dt;
   }
   return dt;
 }
@@ -109,6 +112,8 @@ int8_t CameraYaw_Init(CameraYaw_t *c, const CameraYaw_Params_t *param,
 
   c->param = param;
   c->mode = CAMERA_YAW_MODE_RELAX;
+  c->nominal_dt = 1.0f / target_freq;
+  c->dt = c->nominal_dt;
   c->cmd.mode = CAMERA_YAW_MODE_RELAX;
 
   if (PID_Init(&c->yaw_pid, KPID_MODE_NO_D, target_freq,

@@ -129,6 +129,8 @@ int8_t FrontOmniRearMecanumController::Init(const Chassis_Params_t *param,
   ResetRuntime();
   param_ = param;
   kinematics_ = kinematics;
+  nominal_dt_ = scalar::sanitize_dt(1.0f / target_freq, kDefaultDtS, kMinDtS,
+                                    kMaxDtS);
   InitFiltersAndPid(target_freq);
 
   const int8_t ret = RegisterWheels(target_freq);
@@ -404,6 +406,7 @@ void FrontOmniRearMecanumController::ResetRuntime() {
   out_ = {};
   last_wakeup_us_ = 0U;
   dt_ = 0.0f;
+  nominal_dt_ = kDefaultDtS;
   mech_zero_ = 0.0f;
   wz_multi_ = 1.0f;
   yaw_rate_rad_s_ = 0.0f;
@@ -812,14 +815,15 @@ void FrontOmniRearMecanumController::StoreWheelDebug(uint8_t idx) {
 }
 
 float FrontOmniRearMecanumController::CalcDt(uint32_t now_ms) {
-  float dt = kDefaultDtS;
+  float dt = nominal_dt_;
   if (last_wakeup_us_ != 0U) {
     dt = static_cast<float>(
              (uint32_t)(now_ms - static_cast<uint32_t>(last_wakeup_us_))) *
          1.0e-3f;
   }
   last_wakeup_us_ = now_ms;
-  return scalar::sanitize_dt(dt, kDefaultDtS, kMinDtS, kMaxDtS);
+  return scalar::sanitize_dt(dt, nominal_dt_, nominal_dt_ * 0.5f,
+                             nominal_dt_ * 3.0f);
 }
 
 }  // namespace mr::module::chassis

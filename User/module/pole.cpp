@@ -211,6 +211,10 @@ int8_t Pole_Init(Pole_t *c, const Pole_Params_t *param, float target_freq) {
 
   c->param = param;
   c->mode = POLE_MODE_RELAX;
+  c->nominal_dt =
+      mr::component::math::sanitize_dt(1.0f / target_freq, 0.001f, 0.0005f,
+                                       0.010f);
+  c->dt = c->nominal_dt;
 
   for (uint8_t i = 0; i < POLE_SUPPORT_MOTOR_NUM; i++) {
     PID_Init(&c->pid.support_pos[i], KPID_MODE_CALC_D, target_freq,
@@ -252,9 +256,12 @@ int8_t Pole_UpdateFeedback(Pole_t *c) {
 int8_t Pole_Control(Pole_t *c, const Pole_CMD_t *c_cmd, uint32_t now) {
   if (c == NULL || c_cmd == NULL || c->param == NULL) return POLE_ERR_NULL;
 
-  c->dt = (float)(now - c->last_wakeup) / 1000.0f;
+  const float raw_dt = (c->last_wakeup == 0U)
+                           ? c->nominal_dt
+                           : (float)(now - c->last_wakeup) / 1000.0f;
   c->last_wakeup = now;
-  c->dt = mr::component::math::sanitize_dt(c->dt, 0.001f, 0.0005f, 0.050f);
+  c->dt = mr::component::math::sanitize_dt(
+      raw_dt, c->nominal_dt, c->nominal_dt * 0.5f, c->nominal_dt * 3.0f);
 
   c->setpoint.disable_lift_accel = c_cmd->disable_lift_accel;
 

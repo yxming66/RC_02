@@ -51,15 +51,11 @@ namespace {
 namespace cntlr = mr::comp::cntlr;
 namespace scalar = mr::component::math;
 
-constexpr float kControllerMaxDtS = 0.05f;
+constexpr float kControllerMaxDtMultiplier = 3.0f;
 constexpr float kTwoPi = 6.28318530717958647692f;
 
 float ClampLimit(float value) {
     return (scalar::is_finite_scalar(value) && value > 0.0f) ? value : 0.0f;
-}
-
-float Maxf(float lhs, float rhs) {
-    return (lhs > rhs) ? lhs : rhs;
 }
 
 float ResolveControlFreqHz(float sample_freq) {
@@ -78,7 +74,7 @@ mr::comp::timer::Config BuildControlTimerConfig(float sample_freq) {
     timer_config.first_dt_us = mr::comp::timer::SecondsToUs(default_dt_s);
     timer_config.min_dt_us = mr::comp::timer::SecondsToUs(default_dt_s);
     timer_config.max_dt_us =
-        mr::comp::timer::SecondsToUs(Maxf(default_dt_s, kControllerMaxDtS));
+        mr::comp::timer::SecondsToUs(default_dt_s * kControllerMaxDtMultiplier);
     return timer_config;
 }
 

@@ -147,6 +147,11 @@ typedef struct {
   volatile uint32_t tx_add_fail_count[BSP_FDCAN_NUM];
   volatile uint32_t tx_abort_count[BSP_FDCAN_NUM];
   volatile uint32_t tx_queue_full_count[BSP_FDCAN_NUM];
+  volatile uint32_t tx_direct_count[BSP_FDCAN_NUM];
+  volatile uint32_t tx_queue_push_count[BSP_FDCAN_NUM];
+  volatile uint32_t tx_queue_pop_count[BSP_FDCAN_NUM];
+  volatile uint32_t tx_queue_depth[BSP_FDCAN_NUM];
+  volatile uint32_t tx_queue_max_depth[BSP_FDCAN_NUM];
 } BSP_FDCAN_RxDebug_t;
 
 extern volatile BSP_FDCAN_RxDebug_t g_bsp_fdcan_rx_debug;

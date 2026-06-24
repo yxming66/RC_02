@@ -16,6 +16,9 @@ void Task_ir_dock(void *argument) {
   IrDock_Init(BSP_TIME_Get_ms());
 
   while (1) {
+    const uint32_t profile_start_us =
+        Task_ProfilerLoopBegin(TASK_PROFILE_IR_DOCK,
+                               TASK_PERIOD_US(IR_DOCK_FREQ));
     tick += delay_tick;
 
     const uint32_t now_ms = BSP_TIME_Get_ms();
@@ -23,6 +26,7 @@ void Task_ir_dock(void *argument) {
 
     task_runtime.stack_water_mark.ir_dock = uxTaskGetStackHighWaterMark(NULL);
     task_runtime.heartbeat.ir_dock++;
-    osDelayUntil(tick);
+    Task_ProfilerLoopEnd(TASK_PROFILE_IR_DOCK, profile_start_us);
+    Task_DelayUntil(TASK_PROFILE_IR_DOCK, &tick, delay_tick);
   }
 }

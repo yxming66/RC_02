@@ -678,6 +678,9 @@ int8_t OreStore_Init(OreStore_t *store, const OreStore_Params_t *param,
 
   store->param = param;
   store->mode = ORE_STORE_MODE_RELAX;
+  store->nominal_dt =
+      scalar::sanitize_dt(1.0f / target_freq, kDefaultDtS, kMinDtS, kMaxDtS);
+  store->dt = store->nominal_dt;
   store->control_mode = ORE_STORE_CONTROL_PID_DUAL;
   store->fixed_ore_cylinder_closed = false;
   store->feedback.fixed_ore_cylinder_closed = false;
@@ -754,9 +757,11 @@ int8_t OreStore_Control(OreStore_t *store, const OreStore_CMD_t *cmd,
   const uint64_t now_us = BSP_TIME_Get_us();
   const float raw_dt_s =
       (store->last_wakeup_us == 0u)
-          ? kDefaultDtS
+          ? store->nominal_dt
           : static_cast<float>(now_us - store->last_wakeup_us) * 0.000001f;
-  store->dt = scalar::sanitize_dt(raw_dt_s, kDefaultDtS, kMinDtS, kMaxDtS);
+  store->dt = scalar::sanitize_dt(raw_dt_s, store->nominal_dt,
+                                  store->nominal_dt * 0.5f,
+                                  store->nominal_dt * 3.0f);
   store->last_wakeup_us = now_us;
   store->last_wakeup = now;
   store->debug.dt_s = store->dt;

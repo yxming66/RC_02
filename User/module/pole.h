@@ -136,6 +136,7 @@ typedef struct {
 typedef struct {
   uint32_t last_wakeup;
   float dt;
+  float nominal_dt;
 
   const Pole_Params_t *param;
   Pole_Mode_t mode;

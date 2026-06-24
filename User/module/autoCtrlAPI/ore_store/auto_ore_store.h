@@ -98,6 +98,7 @@ typedef struct {
   float yaw_auto_rad;
   float yaw_rate_cmd_rad_s;
   float arm_joint1_rad;
+  float arm_joint2_rad;
   float pole_front_lift_rad;
   float pole_rear_lift_rad;
   float wheel_position_rad[4];
@@ -178,7 +179,6 @@ typedef struct {
   AutoOre_FusedParam_t fused_step_pick_store_ascend_200_head;
   AutoOre_FusedParam_t fused_step_pick_store_descend_200_head;
   AutoOre_FusedParam_t fused_step_pick_store_ascend_400_head;
-  AutoOre_FusedParam_t fused_step_pick_store_descend_400_head;
 } AutoOre_Params_t;
 
 typedef struct {
@@ -217,6 +217,10 @@ typedef struct {
   float wheel_delta_rad;
   float target_wheel_delta_rad;
   uint32_t fused_arm_photo_since_ms;
+  bool fused_photo1_stable_trigger_seen;
+  bool fused_photo1_stable_release_latched;
+  uint32_t fused_photo1_triggered_since_ms;
+  uint32_t fused_photo1_released_since_ms;
   uint8_t fused_store_step_index;
   uint8_t fused_store_step_phase;
   uint8_t fused_step_template_start_step_index;

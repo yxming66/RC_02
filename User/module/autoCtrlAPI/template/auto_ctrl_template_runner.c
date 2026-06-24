@@ -1058,15 +1058,15 @@ static bool AutoCtrlTemplate_RunTailDescendOptimized(
       }
       return false;
 
-    case 8: /* 四杆全收并离开。 */
+    case 8: /* 四杆保持全伸并离开。 */
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
       AutoCtrlPrimitive_CommandFlatMoveWithYawRate(
           ctrl, AutoCtrlTemplate_SecondPhotoRetractVx(
                     param, true, -param->final_move_speed));
-      AutoCtrlTemplate_CommandPole(ctrl, pole.all_retract[0],
-                                   pole.all_retract[1],
-                                   param->pole_front_retract_speed,
-                                   param->pole_rear_retract_speed);
+      AutoCtrlTemplate_CommandPole(ctrl, pole.all_extend[0],
+                                   pole.all_extend[1],
+                                   param->pole_front_extend_speed,
+                                   param->pole_rear_extend_speed);
       if (AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >= param->final_move_ms) {
         AutoCtrlTemplate_NextStep(ctrl);
       }
@@ -1229,15 +1229,15 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
       }
       return false;
 
-    case 7: /* 四杆全收并离开。 */
+    case 7: /* 四杆保持全伸并离开。 */
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
       AutoCtrlPrimitive_CommandFlatMoveWithYawRate(
           ctrl, AutoCtrlTemplate_SecondPhotoRetractVx(
                     param, false, param->final_move_speed));
-      AutoCtrlTemplate_CommandPole(ctrl, pole.all_retract[0],
-                                   pole.all_retract[1],
-                                   param->pole_front_retract_speed,
-                                   param->pole_rear_retract_speed);
+      AutoCtrlTemplate_CommandPole(ctrl, pole.all_extend[0],
+                                   pole.all_extend[1],
+                                   param->pole_front_extend_speed,
+                                   param->pole_rear_extend_speed);
       if (AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >= param->final_move_ms) {
         AutoCtrlTemplate_NextStep(ctrl);
       }
