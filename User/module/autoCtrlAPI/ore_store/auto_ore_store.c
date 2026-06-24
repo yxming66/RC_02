@@ -22,6 +22,7 @@
 #define AUTO_ORE_DEFAULT_FUSED_PICK_PRECONTACT_TIMEOUT_MS (2000u)
 #define AUTO_ORE_DEFAULT_FUSED_PICK_LIFT_DETECT_MS (200u)
 #define AUTO_ORE_DEFAULT_FUSED_ARM_PHOTO_STABLE_MS (120u)
+#define AUTO_ORE_FUSED_PHOTO1_LIFT_DELAY_MS (50u)
 #define AUTO_ORE_FUSED_STEP_PHOTO_STABLE_MS (20u)
 #define AUTO_ORE_FUSED_HEAD_ASCEND_FRONT_RETRACT_STEP_INDEX (2u)
 #define AUTO_ORE_FUSED_HEAD_DESCEND_FIRST_EDGE_STEP_INDEX (1u)
@@ -1856,6 +1857,11 @@ static void AutoOre_RunStepPickStoreFused(AutoOre_t *ctrl, uint32_t now_ms) {
                                         ctrl->feedback.yaw_rate_cmd_rad_s);
       if (AutoOre_FusedFastPickOnFrontPhotoEnabled(ctrl, fused)) {
         if (AutoOre_FusedStepStartFrontPhotoReached(ctrl, now_ms)) {
+          if (!AutoOre_WaitConditionThenDelay(
+                  ctrl, now_ms, true,
+                  AUTO_ORE_FUSED_PHOTO1_LIFT_DELAY_MS)) {
+            return;
+          }
           ctrl->pick_lift_confirmed = true;
           AutoOre_SetArmHasOre(ctrl, true);
           ctrl->fused_step_template_start_step_index =
@@ -1865,6 +1871,8 @@ static void AutoOre_RunStepPickStoreFused(AutoOre_t *ctrl, uint32_t now_ms) {
           AutoOre_RunFusedStoreAndStepParallel(ctrl, now_ms, fused);
           return;
         }
+
+        ctrl->step_condition_met = false;
 
         if (AutoOre_StepElapsed(ctrl, now_ms) >=
             AutoOre_FusedPrecontactTimeoutMs(ctrl, fused)) {
