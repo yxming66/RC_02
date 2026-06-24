@@ -248,6 +248,12 @@ float AxisSeekVelocity(const OreStore_Params_t *param, uint8_t axis) {
                     kDefaultMoveVelocityRadS);
 }
 
+float CommandMoveVelocity(const OreStore_t *store, const OreStore_CMD_t *cmd,
+                          uint8_t axis) {
+  return PositiveOr((cmd != nullptr) ? cmd->platform_velocity_rad_s : 0.0f,
+                    AxisMoveVelocity(store->param, axis));
+}
+
 float AxisArriveThreshold(const OreStore_Params_t *param, uint8_t axis,
                           float fallback) {
   return PositiveOr(param->limit.arrive_threshold_rad[axis], fallback);
@@ -597,12 +603,12 @@ int8_t ActiveAxis(OreStore_t *store, const OreStore_CMD_t *cmd, uint8_t axis) {
     // MIT风格控制: 直接设置位置/速度目标，由controller计算力矩
     const float kp = store->param->pid.mit_kp[axis];
     const float kd = store->param->pid.mit_kd[axis];
-    const float target_velocity = AxisMoveVelocity(store->param, axis);
+    const float target_velocity = CommandMoveVelocity(store, cmd, axis);
     return ControllerSetMIT(store, axis, raw_target, target_velocity, kp, kd, 0.0f);
   }
 
   return ControllerSetPosition(store, axis, raw_target,
-                               AxisMoveVelocity(store->param, axis));
+                               CommandMoveVelocity(store, cmd, axis));
 }
 
 int8_t ConstructAxis(OreStore_t *store, uint8_t axis, float target_freq) {

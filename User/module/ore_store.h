@@ -105,6 +105,7 @@ typedef struct {
   bool force_rehome;
   bool fixed_ore_cylinder_closed;
   float platform_target_rad;
+  float platform_velocity_rad_s; /* >0 覆盖本次平台移动速度，<=0 使用默认速度。 */
 } OreStore_CMD_t;
 
 typedef struct {

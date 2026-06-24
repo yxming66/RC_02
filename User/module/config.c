@@ -139,9 +139,9 @@ Config_RobotParam_t robot_config = {
             /* 200mm 下台阶四杆全伸位。 */
             .step_200_descend_all_extend = {13.8f, 13.8f},
             /* 200mm 下台阶前杆收回、后杆保持支撑位。 */
-            .step_200_descend_front_retract = {0.5f, 13.8f},
+            .step_200_descend_front_retract = {0.25f, 13.8f},
             /* 200mm 下台阶四杆全收位。 */
-            .step_200_descend_all_retract = {0.5f, 0.5f},
+            .step_200_descend_all_retract = {0.25f, 0.25f},
             /* 200mm 下台阶起步/小抬升位。 */
             .step_200_descend_small = {3.0f, 3.0f},
             /* 400mm 下台阶四杆全伸位。 */
@@ -381,6 +381,7 @@ Config_RobotParam_t robot_config = {
             .fused_pick_precontact_timeout_ms = 2000u, /* 融合取矿低速靠近超时，单位 ms。 */
             .fused_pick_lift_detect_ms = 200u,         /* 融合取矿抬矿检测位到位后的确认延时，单位 ms。 */
             .fused_arm_photo_stable_ms = 120u,         /* 机械臂取矿传感器稳定确认时间，单位 ms。 */
+            .fused_photo1_lift_delay_ms = 200u,        /* 检测到光电1后，延迟抬 arm/开始并行存矿，单位 ms。 */
         },
         /* 单个状态机 step 的超时时间，单位 ms。 */
         .default_step_timeout_ms = 5000u,
@@ -394,6 +395,8 @@ Config_RobotParam_t robot_config = {
         .fetch_chassis_vx_mps = 0.50f,
         /* 取 -200 矿时底盘前进速度，单位 m/s；可设为 0 禁止底盘前进。 */
         .fetch_neg_200_chassis_vx_mps = 0.20f,
+        /* 低位存矿完成后，transform 从高位 LIFT 回低位 STANDBY 的速度，单位 rad/s；<=0 使用默认值。 */
+        .store_low_return_velocity_rad_s = 80.0f,
         /*
          * 融合动作轮转角阈值说明：
          * - *_wheel_delta_rad 使用四轮累计转角变化绝对值的平均值，单位 rad。
@@ -540,8 +543,8 @@ Config_RobotParam_t robot_config = {
             .front_retract_move_speed = 0.40f,  /* 前杆动作阶段 vx，单位 m/s。 */
             .front_retract_timeout_ms = 5000u,  /* 前光电触发后，等待前杆收回到位超时，单位 ms。 */
             .mid_move_speed = 0.8f,             /* 前杆收回到位后的中段平移 vx，单位 m/s。 */
-            .mid_move_ms = 250u,               /* 中段角度门控兜底超时，单位 ms。 */
-            .mid_move_wheel_delta_rad = 10.66f,  /* 编码器门控的中段冲刺轮转角阈值，单位 rad；>0 优先按角度切步，<=0 使用 mid_move_ms。 */
+            .mid_move_ms = 100u,               /* 中段角度门控兜底超时，单位 ms。 */
+            .mid_move_wheel_delta_rad = 10.66f, /* 编码器门控的中段冲刺轮转角阈值，单位 rad；>0 优先按角度切步，<=0 使用 mid_move_ms。 */
             .timed_move_yaw_tolerance_rad = 0.35f, /* 中段移动切步 yaw 容差，约 10 deg。 */
             .rear_retract_move_speed = 0.40f,   /* 等待后光电触发的低速 vx，单位 m/s。 */
             .rear_retract_timeout_ms = 5000u,   /* 后光电触发后，全收腿动作超时，单位 ms。 */
@@ -574,23 +577,23 @@ Config_RobotParam_t robot_config = {
             .pole_extend_move_speed = 0.30f,    /* 撑杆伸出阶段 vx，单位 m/s。 */
             .front_retract_move_speed = 0.30f,  /* 前杆动作阶段 vx，单位 m/s。 */
             .front_retract_timeout_ms = 5000u,  /* 前光电触发后，等待前杆收回到位超时，单位 ms。 */
-            .mid_move_speed = 1.5f,             /* 前杆收回到位后的中段平移 vx，单位 m/s。 */
+            .mid_move_speed = 1.2f,             /* 前杆收回到位后的中段平移 vx，单位 m/s。 */
             .mid_move_ms = 200u,                /* 中段平移持续时间，单位 ms。 */
             .mid_move_wheel_delta_rad = 8.66f,   /* 0 表示该模板继续按时间切步。 */
             .timed_move_yaw_tolerance_rad = 0.35f, /* 中段定时移动切步 yaw 容差，约 10 deg。 */
-            .rear_retract_move_speed = 0.20f,   /* 等待后光电触发的低速 vx，单位 m/s。 */
+            .rear_retract_move_speed = 0.30f,   /* 等待后光电触发的低速 vx，单位 m/s。 */
             .rear_retract_timeout_ms = 5000u,   /* 后光电触发后，全收腿动作超时，单位 ms。 */
             .rear_retract_move_ms = 300u,       /* 后光电触发后，全收腿移动持续时间，单位 ms。 */
             .second_photo_retract_move_speed = 0.0f, /* 后一个光电触发收腿时向头向移动 vx，单位 m/s。*/
             .final_move_speed = 1.0f,           /* 收尾离开台阶 vx，单位 m/s。 */
             .final_move_ms = 1000u,              /* 收尾离开台阶持续时间，单位 ms。 */
             .final_move_wheel_delta_rad = 0.0f, /* 0 表示该模板继续按时间切步。 */
-            .pole_all_extend_speed = 70.0f,     /* 四杆全伸目标跟随速度，单位 rad/s。 */
-            .pole_front_extend_speed = 20.0f,   /* 前杆伸出目标跟随速度，单位 rad/s。 */
-            .pole_front_retract_speed = 70.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
-            .pole_rear_extend_speed = 18.0f,    /* 后杆伸出目标跟随速度，单位 rad/s。 */
-            .pole_rear_retract_speed = 60.0f,   /* 后杆回收目标跟随速度，单位 rad/s。 */
-            .pole_lift_accel = 500.0f,          /* 当前模板撑杆加速度限幅，单位 rad/s^2。 */
+            .pole_all_extend_speed = 0.0f,     /* 四杆全伸目标跟随速度，单位 rad/s。 */
+            .pole_front_extend_speed = 0.0f,   /* 前杆伸出目标跟随速度，单位 rad/s。 */
+            .pole_front_retract_speed = 0.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
+            .pole_rear_extend_speed = 0.0f,    /* 后杆伸出目标跟随速度，单位 rad/s。 */
+            .pole_rear_retract_speed = 0.0f,   /* 后杆回收目标跟随速度，单位 rad/s。 */
+            .pole_lift_accel = 0.0f,          /* 当前模板撑杆加速度限幅，单位 rad/s^2。 */
             .front_photo_timeout_ms = 5000u,    /* 等待前光电触发/下降沿超时，单位 ms。 */
             .rear_photo_timeout_ms = 10000u,     /* 等待后光电触发/下降沿超时，单位 ms。 */
         },
@@ -612,14 +615,14 @@ Config_RobotParam_t robot_config = {
              */
             /* AutoCtrlTemplate_RunHeadDescend200Optimized 使用的有效字段。 */
             .prealign_move_speed = 0.20f,       /* PREALIGN yaw 对正时叠加的前进 vx，单位 m/s。 */
-            .front_retract_move_speed = 0.2f,  /* step4 等待 PE13/photo1 下降沿的慢速 vx，单位 m/s。 */
-            .mid_move_speed = 1.0f,            /* step0/step3 两段固定快跑 vx，单位 m/s。 */
+            .front_retract_move_speed = 0.15f,  /* step4 等待 PE13/photo1 下降沿的慢速 vx，单位 m/s。 */
+            .mid_move_speed = 0.5f,            /* step0/step3 两段固定快跑 vx，单位 m/s。 */
             .mid_move_ms = 100u,                /* step0 第一次固定快跑持续时间，单位 ms。 */ 
             .timed_move_yaw_tolerance_rad = 0.35f, /* 中段定时移动切步 yaw 容差，约 10 deg。 */
-            .rear_retract_move_speed = 0.2f,   /* step1 等待 PA2/photo3 下降沿的慢速 vx，单位 m/s。 */
-            .rear_retract_move_ms = 300u,       /* step3 第二次固定快跑持续时间，单位 ms。 */
+            .rear_retract_move_speed = 0.15f,   /* step1 等待 PA2/photo3 下降沿的慢速 vx，单位 m/s。 */
+            .rear_retract_move_ms = 100u,       /* step3 第二次固定快跑持续时间，单位 ms。 */
             .rear_retract_move_wheel_delta_rad = 8.66f, /* step3 第二次固定快跑轮转角阈值，单位 rad；0 表示按时间切步。 */
-            .second_photo_retract_move_speed = 1.1f, /* step7 第二个下降沿后保持全伸离开 vx，单位 m/s。 */
+            .second_photo_retract_move_speed = 0.5f, /* step7 第二个下降沿后保持全伸离开 vx，单位 m/s。 */
             .final_move_speed = 0.0f,          /* step7 离开 vx 的备用值；second_photo_retract_move_speed <= 0 时使用。 */
             .final_move_ms = 100u,              /* step7 保持全伸离开持续时间，单位 ms。 */
             .pole_front_extend_speed = 0.0f,   /* step2 前杆伸出、step5-7 四杆全伸时的前杆速度，单位 rad/s。 */
@@ -649,7 +652,7 @@ Config_RobotParam_t robot_config = {
             /* AutoCtrlTemplate_RunHeadDescend400Optimized 使用的有效字段。 */
             .prealign_move_speed = 0.20f,       /* PREALIGN 对正阶段叠加 vx，单位 m/s。 */
             .front_retract_move_speed = 0.1f,  /* 前杆动作阶段 vx，单位 m/s。 */
-            .mid_move_speed = 1.50f,            /* 中段平移 vx，单位 m/s。 */
+            .mid_move_speed = 1.0f,            /* 中段平移 vx，单位 m/s。 */
             .mid_move_ms = 150u,                /* 中段平移持续时间，单位 ms。 */
             .timed_move_yaw_tolerance_rad = 0.35f, /* 中段定时移动切步 yaw 容差，约 10 deg。 */
             .rear_retract_move_speed = 0.1f,   /* 后杆动作阶段 vx，单位 m/s。 */ 
@@ -658,14 +661,14 @@ Config_RobotParam_t robot_config = {
             .second_photo_retract_move_speed = 0.50f, /* step7 第二个下降沿后保持全伸离开 vx，单位 m/s。 */
             .final_move_speed = 0.5f,          /* 收尾离开台阶 vx，单位 m/s。 */
             .final_move_ms = 200u,             /* 收尾离开台阶持续时间，单位 ms。 */
-            .pole_front_extend_speed = 65.0f,   /* 前杆伸出目标跟随速度，单位 rad/s。 */
-            .pole_front_retract_speed = 40.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
-            .pole_rear_extend_speed = 65.0f,    /* 后杆伸出目标跟随速度，单位 rad/s。 */
-            .pole_rear_retract_speed = 40.0f,   /* 后杆回收目标跟随速度，单位 rad/s。 */
-            .pole_lift_accel = 500.0f,          /* 当前模板撑杆加速度限幅，单位 rad/s^2。 */
+            .pole_front_extend_speed = 0.0f,   /* 前杆伸出目标跟随速度，单位 rad/s。 */
+            .pole_front_retract_speed = 0.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
+            .pole_rear_extend_speed = 0.0f,    /* 后杆伸出目标跟随速度，单位 rad/s。 */
+            .pole_rear_retract_speed = 0.0f,   /* 后杆回收目标跟随速度，单位 rad/s。 */
+            .pole_lift_accel = 0.0f,          /* 当前模板撑杆加速度限幅，单位 rad/s^2。 */
             .front_photo_timeout_ms = 5000u,    /* 等待前光电触发/下降沿超时，单位 ms。 */
             .rear_photo_timeout_ms = 5000u,     /* 等待后光电触发/下降沿超时，单位 ms。 */
-            .pole_extend_move_speed = 1.5f,    /* step6 四杆全伸行走 vx，单位 m/s。 */
+            .pole_extend_move_speed = 1.0f,    /* step6 四杆全伸行走 vx，单位 m/s。 */
             .hold_ms = 100u,                    /* step6 四杆全伸行走持续时间，单位 ms。 */
         },
         /* 尾向 / 上台阶 / 200mm 模板参数。 */

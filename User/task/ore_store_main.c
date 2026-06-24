@@ -241,7 +241,8 @@ static bool OreStoreTask_TargetsAreFinite(const OreStore_CMD_t *cmd) {
     return false;
   }
 
-  return isfinite(cmd->platform_target_rad);
+  return isfinite(cmd->platform_target_rad) &&
+         isfinite(cmd->platform_velocity_rad_s);
 }
 
 static void OreStoreTask_SanitizeCommand(OreStore_CMD_t *cmd) {

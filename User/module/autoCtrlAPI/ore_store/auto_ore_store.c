@@ -9,6 +9,7 @@
 #define AUTO_ORE_DEFAULT_STORE_CYLINDER_CLOSE_MS (50u)
 #define AUTO_ORE_DEFAULT_STORE_ARM_SUCTION_OFF_MS (300u)
 #define AUTO_ORE_DEFAULT_STORE_CYLINDER_OPEN_MS (50u)
+#define AUTO_ORE_DEFAULT_STORE_LOW_RETURN_VELOCITY_RAD_S (80.0f)
 #define AUTO_ORE_DEFAULT_RELEASE_WAIT_MS (50u)
 #define AUTO_ORE_DEFAULT_RELEASE_ARM_SETTLE_MS (10u)
 #define AUTO_ORE_DEFAULT_RELEASE_SUCTION_OFF_MS (100u)
@@ -22,7 +23,7 @@
 #define AUTO_ORE_DEFAULT_FUSED_PICK_PRECONTACT_TIMEOUT_MS (2000u)
 #define AUTO_ORE_DEFAULT_FUSED_PICK_LIFT_DETECT_MS (200u)
 #define AUTO_ORE_DEFAULT_FUSED_ARM_PHOTO_STABLE_MS (120u)
-#define AUTO_ORE_FUSED_PHOTO1_LIFT_DELAY_MS (200u)//检测到光电1逻辑延迟存矿
+#define AUTO_ORE_DEFAULT_FUSED_PHOTO1_LIFT_DELAY_MS (200u)
 #define AUTO_ORE_FUSED_STEP_PHOTO_STABLE_MS (20u)
 #define AUTO_ORE_FUSED_HEAD_ASCEND_FRONT_RETRACT_STEP_INDEX (2u)
 #define AUTO_ORE_FUSED_HEAD_DESCEND_FIRST_EDGE_STEP_INDEX (1u)
@@ -118,6 +119,12 @@ static uint32_t AutoOre_StoreCylinderOpenMs(const AutoOre_t *ctrl) {
                              AUTO_ORE_DEFAULT_STORE_CYLINDER_OPEN_MS);
 }
 
+static float AutoOre_StoreLowReturnVelocityRadS(const AutoOre_t *ctrl) {
+  return (ctrl->param.store_low_return_velocity_rad_s > 0.0f)
+             ? ctrl->param.store_low_return_velocity_rad_s
+             : AUTO_ORE_DEFAULT_STORE_LOW_RETURN_VELOCITY_RAD_S;
+}
+
 static uint32_t AutoOre_ReleaseWaitMs(const AutoOre_t *ctrl) {
   return AutoOre_TimingValue(ctrl->param.timing.release_wait_ms,
                              AUTO_ORE_DEFAULT_RELEASE_WAIT_MS);
@@ -184,6 +191,11 @@ static uint32_t AutoOre_FusedPickLiftDetectMs(const AutoOre_t *ctrl) {
 static uint32_t AutoOre_FusedArmPhotoStableMs(const AutoOre_t *ctrl) {
   return AutoOre_TimingValue(ctrl->param.timing.fused_arm_photo_stable_ms,
                              AUTO_ORE_DEFAULT_FUSED_ARM_PHOTO_STABLE_MS);
+}
+
+static uint32_t AutoOre_FusedPhoto1LiftDelayMs(const AutoOre_t *ctrl) {
+  return AutoOre_TimingValue(ctrl->param.timing.fused_photo1_lift_delay_ms,
+                             AUTO_ORE_DEFAULT_FUSED_PHOTO1_LIFT_DELAY_MS);
 }
 
 static float AutoOre_OreStoreArriveThresholdRad(const AutoOre_t *ctrl) {
@@ -406,6 +418,16 @@ static bool AutoOre_CommandOreStore(AutoOre_t *ctrl,
       ctrl->param.ore_store_param, transform, cylinder_closed,
       &ctrl->ore_store_cmd);
   return ctrl->ore_store_cmd_valid;
+}
+
+static bool AutoOre_CommandOreStoreWithVelocity(
+    AutoOre_t *ctrl, OreStore_TransformPoint_t transform,
+    bool cylinder_closed, float platform_velocity_rad_s) {
+  if (!AutoOre_CommandOreStore(ctrl, transform, cylinder_closed)) {
+    return false;
+  }
+  ctrl->ore_store_cmd.platform_velocity_rad_s = platform_velocity_rad_s;
+  return true;
 }
 
 static bool AutoOre_CommandPoleTarget(AutoOre_t *ctrl,
@@ -802,7 +824,9 @@ static void AutoOre_RunStoreLow(AutoOre_t *ctrl, uint32_t now_ms) {
       AutoOre_EnterStep(ctrl, now_ms);
       if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_WAIT_STORE_ORE,
           SUCTION_OFF, &ctrl->param.arm_speed.store_wait) ||
-          !AutoOre_CommandOreStore(ctrl, ORE_STORE_TRANSFORM_STANDBY, false)) {
+          !AutoOre_CommandOreStoreWithVelocity(
+              ctrl, ORE_STORE_TRANSFORM_STANDBY, false,
+              AutoOre_StoreLowReturnVelocityRadS(ctrl))) {
         AutoOre_FailInvalidParam(ctrl);
         return;
       }
@@ -1491,7 +1515,9 @@ static void AutoOre_RunFusedStoreLow(AutoOre_t *ctrl, uint32_t now_ms) {
       if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_WAIT_STORE_ORE,
                               SUCTION_OFF,
                               &ctrl->param.arm_speed.store_wait) ||
-          !AutoOre_CommandOreStore(ctrl, ORE_STORE_TRANSFORM_STANDBY, false)) {
+          !AutoOre_CommandOreStoreWithVelocity(
+              ctrl, ORE_STORE_TRANSFORM_STANDBY, false,
+              AutoOre_StoreLowReturnVelocityRadS(ctrl))) {
         AutoOre_FailStoreInvalidParam(ctrl);
         return;
       }
@@ -1886,7 +1912,7 @@ static void AutoOre_RunStepPickStoreFused(AutoOre_t *ctrl, uint32_t now_ms) {
         if (AutoOre_FusedStepStartFrontPhotoReached(ctrl, now_ms)) {
           if (!AutoOre_WaitConditionThenDelay(
                   ctrl, now_ms, true,
-                  AUTO_ORE_FUSED_PHOTO1_LIFT_DELAY_MS)) {
+              AutoOre_FusedPhoto1LiftDelayMs(ctrl))) {
             return;
           }
           ctrl->pick_lift_confirmed = true;

@@ -124,6 +124,7 @@ typedef struct {
   uint32_t fused_pick_precontact_timeout_ms;
   uint32_t fused_pick_lift_detect_ms;
   uint32_t fused_arm_photo_stable_ms;
+  uint32_t fused_photo1_lift_delay_ms;
 } AutoOre_TimingParam_t;
 
 typedef struct {
@@ -176,6 +177,7 @@ typedef struct {
   float prealign_yaw_tolerance_rad;
   float fetch_chassis_vx_mps;
   float fetch_neg_200_chassis_vx_mps;
+  float store_low_return_velocity_rad_s;
   AutoOre_FusedParam_t fused_step_pick_store_ascend_200_head;
   AutoOre_FusedParam_t fused_step_pick_store_descend_200_head;
   AutoOre_FusedParam_t fused_step_pick_store_ascend_400_head;
