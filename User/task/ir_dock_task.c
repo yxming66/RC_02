@@ -5,6 +5,8 @@
 
 #include "task/user_task.h"
 
+volatile IrDock_Debug_t g_ir_dock_debug = {0};
+
 void Task_ir_dock(void *argument) {
   (void)argument;
 

@@ -5,8 +5,6 @@
 #include "bsp/uart.h"
 #include "component/crc8.h"
 
-volatile IrDock_Debug_t g_ir_dock_debug = {0};
-
 static uint8_t ir_dock_rx_buf[IR_DOCK_RX_BUFFER_SIZE] = {0};
 static uint8_t ir_dock_tx_buf[IR_DOCK_ACK_FRAME_SIZE] = {0};
 static uint8_t ir_dock_parse_frame[IR_DOCK_MINE_INPUT_FRAME_SIZE] = {0};
