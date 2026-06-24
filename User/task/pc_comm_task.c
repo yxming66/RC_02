@@ -160,7 +160,8 @@ static bool PcComm_AppendFeedbackFrame(uint8_t cmd, uint16_t *tx_len) {
         return false;
     }
 
-    uint16_t frame_len = MrlinkPc_BuildFeedbackFrame(
+    uint16_t frame_len = 0u;
+    frame_len = MrlinkPc_BuildFeedbackFrame(
         cmd, &s_tx_buf[*tx_len], (uint16_t)(sizeof(s_tx_buf) - *tx_len));
     if (frame_len == 0u) {
         return false;
@@ -256,6 +257,16 @@ static bool PcComm_ShouldRelaxCameraYawByRcSwitch(void) {
             dr16.data.sw_r == DR16_SW_DOWN);
 }
 
+static float PcComm_GetCameraYawFeedbackRad(uint8_t yaw, float fallback) {
+    const CameraYaw_GroupFeedback_t *camera_fb = Task_CameraYawGetGroupFeedback();
+    if (camera_fb == NULL || yaw >= CAMERA_YAW_NUM) {
+        return fallback;
+    }
+
+    const float feedback_yaw_rad = camera_fb->yaw[yaw].feedback_yaw_rad;
+    return isfinite(feedback_yaw_rad) ? feedback_yaw_rad : fallback;
+}
+
 static void PcComm_UpdateCameraYawCommand(uint32_t now_ms) {
     CameraYaw_GroupCMD_t cmd = {0};
     for (uint8_t yaw = 0u; yaw < CAMERA_YAW_NUM; ++yaw) {
@@ -263,6 +274,17 @@ static void PcComm_UpdateCameraYawCommand(uint32_t now_ms) {
         cmd.yaw[yaw].target_yaw_rad = 0.0f;
         cmd.yaw[yaw].feedback_tick_ms = now_ms;
         cmd.yaw[yaw].feedback_valid = true;
+    }
+
+    if (PcComm_ShouldRelaxCameraYawByRcSwitch()) {
+        for (uint8_t yaw = 0u; yaw < CAMERA_YAW_NUM; ++yaw) {
+            cmd.yaw[yaw].mode = CAMERA_YAW_MODE_RELAX;
+            cmd.yaw[yaw].target_yaw_rad = 0.0f;
+            cmd.yaw[yaw].feedback_tick_ms = now_ms;
+            cmd.yaw[yaw].feedback_valid = false;
+        }
+        (void)Task_CameraYawPostGroupCommand(&cmd);
+        return;
     }
 
     const PC_CameraYawCMD_t *pc_cmd = MrlinkPc_GetCameraYawCMD();
@@ -275,20 +297,9 @@ static void PcComm_UpdateCameraYawCommand(uint32_t now_ms) {
             cmd.yaw[yaw].target_yaw_rad =
                 isfinite(pc_cmd->target_yaw_rad[yaw])
                     ? pc_cmd->target_yaw_rad[yaw]
-                    : 0.0f;
+                    : PcComm_GetCameraYawFeedbackRad(yaw, 0.0f);
             cmd.yaw[yaw].feedback_tick_ms = now_ms;
             cmd.yaw[yaw].feedback_valid = true;
-        }
-        (void)Task_CameraYawPostGroupCommand(&cmd);
-        return;
-    }
-
-    if (PcComm_ShouldRelaxCameraYawByRcSwitch()) {
-        for (uint8_t yaw = 0u; yaw < CAMERA_YAW_NUM; ++yaw) {
-            cmd.yaw[yaw].mode = CAMERA_YAW_MODE_RELAX;
-            cmd.yaw[yaw].target_yaw_rad = 0.0f;
-            cmd.yaw[yaw].feedback_tick_ms = now_ms;
-            cmd.yaw[yaw].feedback_valid = false;
         }
         (void)Task_CameraYawPostGroupCommand(&cmd);
         return;

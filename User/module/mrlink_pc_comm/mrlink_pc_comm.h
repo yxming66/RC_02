@@ -64,11 +64,11 @@ typedef enum {
     PC_FEEDBACK_CAMERA_YAW = 0x98,   /* 相机云台 yaw 状态反馈 */
     PC_FEEDBACK_IR_ORE_BRIDGE = 0x99,/* 红外对接桥接调试反馈，含 msg_id/side/原始 18 字节帧 */
 } PC_FeedbackCMD_t;
-
+ 
 #define MRLINK_PC_MAX_PAYLOAD_SIZE (64u)    /* 单帧 payload 最大字节数，上位机结构体不能超过该值 */
 #define MRLINK_PC_MAX_FRAME_SIZE (2u + 1u + 1u + MRLINK_PC_MAX_PAYLOAD_SIZE + 2u) /* 完整 mrlink 帧最大长度：帧头+长度+命令+payload+CRC */
 #define PC_COMM_DEBUG_RX_RAW_SIZE (256u)    /* 调试缓存：最近接收原始数据最大保存字节数 */
-#define PC_COMM_DEBUG_TX_RAW_SIZE (96u)     /* 调试缓存：最近发送原始数据最大保存字节数 */
+#define PC_COMM_DEBUG_TX_RAW_SIZE (384u)    /* 调试缓存：最近发送原始数据最大保存字节数，匹配 pc_comm_task 的发送打包缓存 */
 
 #ifndef MRLINK_PC_RX_DMA_SLOT_COUNT
 #define MRLINK_PC_RX_DMA_SLOT_COUNT (4u)    /* UART RX DMA 环形接收槽数量 */
