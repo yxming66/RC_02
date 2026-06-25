@@ -15,10 +15,6 @@ static volatile bool ir_dock_error_pending = false;
 
 static bool IrDock_SendStatusAck(IrDock_Status_t status, uint32_t now_ms);
 
-static bool IrDock_RawByteIsActive(uint8_t byte) {
-  return byte != 0u && byte != (uint8_t)IR_DOCK_RAW_SIGNAL_IDLE_BYTE;
-}
-
 static void IrDock_RxEventCallback(uint16_t size) {
   if (size > IR_DOCK_RX_BUFFER_SIZE) {
     size = IR_DOCK_RX_BUFFER_SIZE;
@@ -285,46 +281,6 @@ static void IrDock_ParseRxBytes(uint16_t packet_len, uint32_t now_ms) {
   }
 }
 
-static void IrDock_UpdateRawSignalComplete(uint32_t now_ms) {
-  g_ir_dock_debug.last_rx_raw_age_ms =
-      (g_ir_dock_debug.last_rx_raw_ms == 0u)
-          ? 0u
-          : (now_ms - g_ir_dock_debug.last_rx_raw_ms);
-  const bool active = IrDock_RawByteIsActive(g_ir_dock_debug.last_rx_raw_byte) &&
-                      g_ir_dock_debug.last_rx_raw_ms != 0u &&
-                      g_ir_dock_debug.last_rx_raw_age_ms <=
-                          IR_DOCK_RAW_SIGNAL_LOST_MS;
-
-  if (!active) {
-    g_ir_dock_debug.raw_signal_active = false;
-    g_ir_dock_debug.raw_signal_stable = false;
-    g_ir_dock_debug.raw_signal_start_ms = 0u;
-    g_ir_dock_debug.raw_signal_stable_ms = 0u;
-    return;
-  }
-
-  if (!g_ir_dock_debug.raw_signal_active) {
-    g_ir_dock_debug.raw_signal_active = true;
-    g_ir_dock_debug.raw_signal_stable = false;
-    g_ir_dock_debug.raw_signal_start_ms = now_ms;
-    g_ir_dock_debug.raw_signal_stable_ms = 0u;
-    return;
-  }
-
-  g_ir_dock_debug.raw_signal_stable_ms = now_ms -
-                                         g_ir_dock_debug.raw_signal_start_ms;
-  if (!g_ir_dock_debug.raw_signal_stable &&
-      g_ir_dock_debug.raw_signal_stable_ms >= IR_DOCK_RAW_SIGNAL_STABLE_MS) {
-    g_ir_dock_debug.raw_signal_stable = true;
-    g_ir_dock_debug.raw_signal_complete_count++;
-    g_ir_dock_debug.last_rx_status = (uint8_t)IR_DOCK_STATUS_DOCK_COMPLETE;
-    g_ir_dock_debug.last_rx_ms = now_ms;
-    g_ir_dock_debug.last_parse_status = (uint8_t)IR_DOCK_PARSE_STATUS_OK;
-    g_ir_dock_debug.rx_count++;
-    (void)IrDock_SendStatusAck(IR_DOCK_STATUS_DOCK_COMPLETE, now_ms);
-  }
-}
-
 static void IrDock_HandlePending(uint32_t now_ms) {
   if (ir_dock_rx_complete_pending) {
     ir_dock_rx_complete_pending = false;
@@ -440,8 +396,6 @@ void IrDock_Init(uint32_t now_ms) {
   g_ir_dock_debug.tx_busy = false;
   g_ir_dock_debug.ack_pending = false;
   g_ir_dock_debug.dock_complete_fresh = false;
-  g_ir_dock_debug.raw_signal_active = false;
-  g_ir_dock_debug.raw_signal_stable = false;
   g_ir_dock_debug.ore_info_valid = false;
   g_ir_dock_debug.ore_info_fresh = false;
   g_ir_dock_debug.last_rx_status = (uint8_t)IR_DOCK_STATUS_IDLE;
@@ -469,9 +423,6 @@ void IrDock_Init(uint32_t now_ms) {
   g_ir_dock_debug.last_rx_age_ms = 0u;
   g_ir_dock_debug.last_ore_rx_age_ms = 0u;
   g_ir_dock_debug.last_rx_raw_age_ms = 0u;
-  g_ir_dock_debug.raw_signal_start_ms = 0u;
-  g_ir_dock_debug.raw_signal_stable_ms = 0u;
-  g_ir_dock_debug.raw_signal_complete_count = 0u;
   (void)IrDock_TryStartReceive(now_ms);
 }
 
@@ -481,7 +432,10 @@ void IrDock_Process(uint32_t now_ms) {
   }
 
   IrDock_HandlePending(now_ms);
-  IrDock_UpdateRawSignalComplete(now_ms);
+  g_ir_dock_debug.last_rx_raw_age_ms =
+      (g_ir_dock_debug.last_rx_raw_ms == 0u)
+          ? 0u
+          : (now_ms - g_ir_dock_debug.last_rx_raw_ms);
   IrDock_UpdateAckTimeout(now_ms);
   g_ir_dock_debug.dock_complete_fresh = IrDock_IsDockCompleteFresh(now_ms);
   g_ir_dock_debug.ore_info_fresh = IrDock_IsOreInfoFresh(now_ms);

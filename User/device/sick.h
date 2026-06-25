@@ -33,20 +33,26 @@ extern "C" {
 #define SICK_CAN_BUS BSP_CAN_2
 #endif
 
+/* SICK ADC channel mapping:
+ * [0] rear SICK
+ * [1] rod-side rear SICK
+ * [2] rod-side front SICK
+ * [3] front SICK
+ */
 #ifndef SICK_FRONT_INDEX
-#define SICK_FRONT_INDEX (0u)
+#define SICK_FRONT_INDEX (3u)
 #endif
 
 #ifndef SICK_ROD_FRONT_INDEX
-#define SICK_ROD_FRONT_INDEX (1u)
+#define SICK_ROD_FRONT_INDEX (2u)
 #endif
 
 #ifndef SICK_REAR_INDEX
-#define SICK_REAR_INDEX (2u)
+#define SICK_REAR_INDEX (0u)
 #endif
 
 #ifndef SICK_ROD_REAR_INDEX
-#define SICK_ROD_REAR_INDEX (3u)
+#define SICK_ROD_REAR_INDEX (1u)
 #endif
 
 #ifndef SICK_CHANNEL_2_ADC_OFFSET

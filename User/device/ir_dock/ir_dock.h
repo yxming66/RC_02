@@ -11,18 +11,6 @@ extern "C" {
 #define IR_DOCK_COMPLETE_FRESH_MS (1000u)
 #endif
 
-#ifndef IR_DOCK_RAW_SIGNAL_STABLE_MS
-#define IR_DOCK_RAW_SIGNAL_STABLE_MS (500u)
-#endif
-
-#ifndef IR_DOCK_RAW_SIGNAL_IDLE_BYTE
-#define IR_DOCK_RAW_SIGNAL_IDLE_BYTE (0xFEu)
-#endif
-
-#ifndef IR_DOCK_RAW_SIGNAL_LOST_MS
-#define IR_DOCK_RAW_SIGNAL_LOST_MS (300u)
-#endif
-
 #ifndef IR_DOCK_ORE_INFO_FRESH_MS
 #define IR_DOCK_ORE_INFO_FRESH_MS (1000u)
 #endif
@@ -110,8 +98,6 @@ typedef struct {
   volatile bool tx_busy;
   volatile bool ack_pending;
   volatile bool dock_complete_fresh;
-  volatile bool raw_signal_active;
-  volatile bool raw_signal_stable;
   volatile bool ore_info_valid;
   volatile bool ore_info_fresh;
   volatile uint8_t last_rx_status;
@@ -137,9 +123,6 @@ typedef struct {
   volatile uint32_t last_rx_age_ms;
   volatile uint32_t last_ore_rx_age_ms;
   volatile uint32_t last_rx_raw_age_ms;
-  volatile uint32_t raw_signal_start_ms;
-  volatile uint32_t raw_signal_stable_ms;
-  volatile uint32_t raw_signal_complete_count;
   volatile uint32_t rx_count;
   volatile uint32_t tx_count;
   volatile uint32_t frame_rx_count;

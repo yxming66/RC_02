@@ -466,7 +466,7 @@ Config_RobotParam_t robot_config = {
         /*
          * SICK 校正参数：
          * - index 字段选择校正使用的 4 路 SICK ADC 通道。
-         *   当前硬件：前侧=0，矛头前侧=1，后侧=2，矛头后侧=3。
+         *   当前硬件：前侧=3，后侧=0，矛头侧后侧=1，矛头侧前侧=2。
          * - x_sample_adc 使用前/后侧中距离更近的一路 SICK。
          * - y_sample_adc = average(矛头前侧, 矛头后侧)。
          * - yaw_sample_diff_adc = 矛头前侧 - 矛头后侧。
@@ -482,15 +482,15 @@ Config_RobotParam_t robot_config = {
                 .rod_rear_index = SICK_ROD_REAR_INDEX,
                 .valid_adc_min = 100u,               /* 有效 ADC 下限，低于认为传感器无效。 */
                 .valid_adc_max = 32100u,             /* 有效 ADC 上限，高于认为传感器无效。 */
-                .x_target_adc = 3825.0f,             /* 前/后侧中距离更近一路的 x 目标 ADC。 */
-                .y_target_adc = (959.0f + 1058.0f) / 2.0f,             /* 矛头侧平均 y 目标 ADC。 */
-                .yaw_target_diff_adc = -99.0f,         /* yaw 目标 ADC：矛头前侧 - 矛头后侧。 */
+                .x_target_adc = 3574.0f,             /* 前/后侧中距离更近一路的 x 目标 ADC。 */
+                .y_target_adc = (1089.0f + 896.0f) / 2.0f,             /* 矛头侧平均 y 目标 ADC。 */
+                .yaw_target_diff_adc = (894.0f-1079.0f),         /* yaw 目标 ADC：矛头前侧 - 矛头后侧。 */
                 .x_tolerance_adc = 30.0f,            /* x 误差小于该值认为 x 到位。 */
                 .y_tolerance_adc = 20.0f,            /* y 误差小于该值认为 y 到位。 */
                 .yaw_tolerance_adc = 20.0f,          /* yaw/z 误差小于该值认为姿态到位。 */
-                .x_kp_mps_per_adc = -0.0005f,         /* x ADC 误差到 vx(m/s) 的比例系数。 */
+                .x_kp_mps_per_adc = -0.0002f,         /* x ADC 误差到 vx(m/s) 的比例系数。 */
                 .y_kp_mps_per_adc = 0.0019f,       /* y ADC 误差到 vy(m/s) 的比例系数。 */
-                .yaw_kp_rad_s_per_adc = 0.0017f,     /* yaw/z ADC 误差到 wz(rad/s) 的比例系数。 */
+                .yaw_kp_rad_s_per_adc = -0.0f,     /* yaw/z ADC 误差到 wz(rad/s) 的比例系数。 */
                 .vx_limit_mps = 0.30f,               /* vx 指令限幅，单位 m/s。 */
                 .vy_limit_mps = 0.30f,               /* vy 指令限幅，单位 m/s。 */
                 .wz_limit_rad_s = 0.80f,             /* wz 指令限幅，单位 rad/s。 */
