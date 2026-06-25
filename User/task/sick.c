@@ -7,6 +7,9 @@ static bool sick_inited = false;
 
 static void Task_SickUpdateDebug(void) {
   Sick_Output_t output = {0};
+  g_sick_debug.can_bus = SICK_CAN_BUS;
+  g_sick_debug.can_id = SICK_CAN_ID;
+
   if (!Task_SickGetLatestOutput(&output)) {
     g_sick_debug.read_fail_count++;
     return;

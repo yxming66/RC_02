@@ -29,8 +29,8 @@ extern "C" {
 #define SICK_CAN_ID (0x121u)
 #endif
 
-#ifndef SICK_CAN_BUS
-#define SICK_CAN_BUS BSP_CAN_3
+#ifndef SICK_CAN_BUS 
+#define SICK_CAN_BUS BSP_CAN_2
 #endif
 
 #ifndef SICK_FRONT_INDEX

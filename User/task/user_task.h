@@ -250,6 +250,8 @@ typedef struct {
 } AutoOre_DebugControl_t;
 
 typedef struct {
+    volatile uint32_t can_bus;
+    volatile uint32_t can_id;
     volatile uint16_t adc_raw[SICK_OUTPUT_CHANNEL_COUNT];
     volatile float distance_mm[SICK_OUTPUT_CHANNEL_COUNT];
     volatile float distance_m[SICK_OUTPUT_CHANNEL_COUNT];
