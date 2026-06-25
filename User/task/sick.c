@@ -1,7 +1,27 @@
 #include "task/user_task.h"
 
+volatile Sick_Debug_t g_sick_debug = {0};
+
 static bool sick_init_attempted = false;
 static bool sick_inited = false;
+
+static void Task_SickUpdateDebug(void) {
+  Sick_Output_t output = {0};
+  if (!Task_SickGetLatestOutput(&output)) {
+    g_sick_debug.read_fail_count++;
+    return;
+  }
+
+  for (uint8_t i = 0u; i < SICK_OUTPUT_CHANNEL_COUNT; i++) {
+    g_sick_debug.adc_raw[i] = output.adc_raw[i];
+    g_sick_debug.distance_mm[i] = output.distance_mm[i];
+    g_sick_debug.distance_m[i] = output.distance_m[i];
+    g_sick_debug.valid[i] = output.valid[i];
+  }
+  g_sick_debug.miss_count = output.miss_count;
+  g_sick_debug.update_tick = output.update_tick;
+  g_sick_debug.read_count++;
+}
 
 bool Task_SickInitOnce(void) {
   if (sick_inited) {
@@ -29,6 +49,7 @@ void Task_SickStep(void) {
       Task_ProfilerLoopBegin(TASK_PROFILE_SICK, TASK_PERIOD_US(SICK_FREQ));
 
   SICK_Update(BSP_TIME_Get_ms());
+  Task_SickUpdateDebug();
   task_runtime.stack_water_mark.sick = uxTaskGetStackHighWaterMark(NULL);
   task_runtime.heartbeat.sick++;
   Task_ProfilerLoopEnd(TASK_PROFILE_SICK, profile_start_us);

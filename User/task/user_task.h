@@ -250,6 +250,17 @@ typedef struct {
 } AutoOre_DebugControl_t;
 
 typedef struct {
+    volatile uint16_t adc_raw[SICK_OUTPUT_CHANNEL_COUNT];
+    volatile float distance_mm[SICK_OUTPUT_CHANNEL_COUNT];
+    volatile float distance_m[SICK_OUTPUT_CHANNEL_COUNT];
+    volatile bool valid[SICK_OUTPUT_CHANNEL_COUNT];
+    volatile uint16_t miss_count;
+    volatile uint32_t update_tick;
+    volatile uint32_t read_count;
+    volatile uint32_t read_fail_count;
+} Sick_Debug_t;
+
+typedef struct {
     volatile bool override_enable;
     volatile bool load_from_config_once;
     volatile bool restore_defaults_once;
@@ -393,6 +404,7 @@ extern bool auto_ctrl_inited;
 extern AutoOre_t auto_ore_ctrl;
 extern bool auto_ore_inited;
 extern volatile AutoOre_DebugControl_t g_auto_ore_debug;
+extern volatile Sick_Debug_t g_sick_debug;
 extern volatile PolePidDebugControl_t g_pole_pid_debug;
 extern volatile IrDock_Debug_t g_ir_dock_debug;
 extern AutoRodSpearhead_t auto_rod_spearhead_ctrl;

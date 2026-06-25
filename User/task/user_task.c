@@ -152,7 +152,7 @@ const osThreadAttr_t attr_upper_mech = {
 };
 const osThreadAttr_t attr_pc_comm_sick = {
     .name = "pc_comm_sick",
-    .priority = osPriorityNormal,
+    .priority = osPriorityAboveNormal,
     .stack_size = 768 * 4,
 };
 const osThreadAttr_t attr_ir_dock = {
