@@ -117,7 +117,7 @@ const osThreadAttr_t attr_init = {
 /* User_task */
 const osThreadAttr_t attr_blink = {
     .name = "blink",
-    .priority = osPriorityAboveNormal,
+    .priority = osPriorityLow,
     .stack_size = 256 * 4,
 };
 const osThreadAttr_t attr_atti_esti = {
@@ -132,7 +132,7 @@ const osThreadAttr_t attr_chassis_ore = {
 };
 const osThreadAttr_t attr_pole_main = {
     .name = "pole_main",
-    .priority = osPriorityHigh1,
+    .priority = osPriorityRealtime,
     .stack_size = 512 * 4,
 };
 const osThreadAttr_t attr_rc_main = {
@@ -152,7 +152,7 @@ const osThreadAttr_t attr_upper_mech = {
 };
 const osThreadAttr_t attr_pc_comm_sick = {
     .name = "pc_comm_sick",
-    .priority = osPriorityHigh,
+    .priority = osPriorityNormal,
     .stack_size = 768 * 4,
 };
 const osThreadAttr_t attr_ir_dock = {
