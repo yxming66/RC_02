@@ -809,7 +809,7 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
 
     case 2: /* 停车并收前杆，等待前杆到位。 */
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      AutoCtrlPrimitive_CommandFlatMove(ctrl, 0.4f);
+      AutoCtrlPrimitive_CommandFlatMove(ctrl, use_400mm ? 0.0f : 0.4f);
       AutoCtrlTemplate_CommandPole(ctrl, pole.front_retract[0],
                                    pole.front_retract[1],
                                    param->pole_front_retract_speed,
@@ -863,7 +863,7 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
 
     case 5: /* 停车并四杆全收，等待四杆到位。 */
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      AutoCtrlPrimitive_CommandFlatMove(ctrl, 0.4f);
+      AutoCtrlPrimitive_CommandFlatMove(ctrl, use_400mm ? 0.0f : 0.4f);
       AutoCtrlTemplate_CommandPole(ctrl, pole.all_retract[0],
                                    pole.all_retract[1],
                                    param->pole_front_retract_speed,
@@ -933,7 +933,7 @@ static bool AutoCtrlTemplate_RunTailDescendOptimized(
                                                           use_400mm, now_ms)) {
         if (AutoCtrlTemplate_CommandPhotoStopAndPole(
                 ctrl, now_ms, param->photo_stop_settle_ms,
-          -param->rear_retract_move_speed,
+            use_400mm ? 0.0f : -param->rear_retract_move_speed,
                 pole.all_retract[0], pole.all_retract[1],
                 param->pole_front_retract_speed,
                 param->pole_rear_retract_speed,
@@ -962,7 +962,7 @@ static bool AutoCtrlTemplate_RunTailDescendOptimized(
                                                           use_400mm, now_ms)) {
         if (AutoCtrlTemplate_CommandPhotoStopAndPole(
                 ctrl, now_ms, param->photo_stop_settle_ms,
-          -param->rear_retract_move_speed,
+            use_400mm ? 0.0f : -param->rear_retract_move_speed,
                 pole.all_retract[0], pole.all_retract[1],
                 param->pole_front_retract_speed,
                 param->pole_rear_retract_speed,
@@ -1005,7 +1005,7 @@ static bool AutoCtrlTemplate_RunTailDescendOptimized(
                                                            use_400mm, now_ms)) {
         if (AutoCtrlTemplate_CommandPhotoStopAndPole(
                 ctrl, now_ms, param->photo_stop_settle_ms,
-          -param->front_retract_move_speed,
+            use_400mm ? 0.0f : -param->front_retract_move_speed,
                 pole.all_retract[0], pole.all_extend[1],
                 param->pole_front_retract_speed,
                 param->pole_rear_extend_speed,
@@ -1035,7 +1035,7 @@ static bool AutoCtrlTemplate_RunTailDescendOptimized(
                                                            use_400mm, now_ms)) {
         if (AutoCtrlTemplate_CommandPhotoStopAndPole(
                 ctrl, now_ms, param->photo_stop_settle_ms,
-          -param->front_retract_move_speed,
+            use_400mm ? 0.0f : -param->front_retract_move_speed,
                 pole.all_retract[0], pole.all_extend[1],
                 param->pole_front_retract_speed,
                 param->pole_rear_extend_speed,
@@ -1139,7 +1139,7 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
                                                           use_400mm, now_ms)) {
         if (AutoCtrlTemplate_CommandPhotoStopAndPole(
                 ctrl, now_ms, param->photo_stop_settle_ms,
-          param->rear_retract_move_speed,
+            use_400mm ? 0.0f : param->rear_retract_move_speed,
                 pole.all_retract[0], pole.all_retract[1],
                 param->pole_front_retract_speed,
                 param->pole_rear_retract_speed,
@@ -1165,7 +1165,8 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
 
     case 2: /* 低速前进并等待前杆支撑到位。 */
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      AutoCtrlPrimitive_CommandFlatMoveWithYawRate(ctrl, 0.2f);
+      AutoCtrlPrimitive_CommandFlatMoveWithYawRate(ctrl,
+                                                   use_400mm ? 0.0f : 0.2f);
       AutoCtrlTemplate_CommandPole(ctrl, pole.all_extend[0],
                                    pole.all_retract[1],
                                    param->pole_front_extend_speed,
@@ -1208,7 +1209,7 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
                                                            use_400mm, now_ms)) {
         if (AutoCtrlTemplate_CommandPhotoStopAndPole(
                 ctrl, now_ms, param->photo_stop_settle_ms,
-          param->front_retract_move_speed,
+            use_400mm ? 0.0f : param->front_retract_move_speed,
                 pole.all_extend[0], pole.all_retract[1],
                 param->pole_front_extend_speed,
                 param->pole_rear_retract_speed,
@@ -1234,7 +1235,8 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
 
     case 5: /* 低速前进并等待四杆支撑到位。 */
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      AutoCtrlPrimitive_CommandFlatMoveWithYawRate(ctrl, 0.2f);
+      AutoCtrlPrimitive_CommandFlatMoveWithYawRate(ctrl,
+                                                   use_400mm ? 0.0f : 0.2f);
       AutoCtrlTemplate_CommandPole(ctrl, pole.all_extend[0],
                                    pole.all_extend[1],
                                    param->pole_front_extend_speed,
