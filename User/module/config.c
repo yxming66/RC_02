@@ -66,7 +66,7 @@ Config_RobotParam_t robot_config = {
             },
         },
         .physical = {
-            .wheel_radius_m = 0.05f,//0.0   635
+            .wheel_radius_m = 0.0635f,//0.0   635
             .wheelbase_m = 0.456f,  /* L：前后轮距的一半，单位 m。 */
             .trackwidth_m = 0.345f, /* W：左右轮距的一半，单位 m。 */
         },
@@ -860,11 +860,11 @@ Config_RobotParam_t robot_config = {
             .pid = {
                 .yaw_pid = {
                     .k = 1.0f,
-                    .p = 2.5f,
+                    .p = 2.0f,
                     .i = 0.0f,
-                    .d = 0.0f,
+                    .d = 0.3f,
                     .i_limit = 0.0f,
-                    .out_limit = 1.0f,
+                    .out_limit = 0.5f,
                     .d_cutoff_freq = -1.0f,
                     .range = M_2PI,
                 },

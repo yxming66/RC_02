@@ -15,6 +15,10 @@ static volatile bool ir_dock_error_pending = false;
 
 static bool IrDock_SendStatusAck(IrDock_Status_t status, uint32_t now_ms);
 
+static bool IrDock_RawByteIsActive(uint8_t byte) {
+  return byte != 0u && byte != (uint8_t)IR_DOCK_RAW_SIGNAL_IDLE_BYTE;
+}
+
 static void IrDock_RxEventCallback(uint16_t size) {
   if (size > IR_DOCK_RX_BUFFER_SIZE) {
     size = IR_DOCK_RX_BUFFER_SIZE;
@@ -41,10 +45,28 @@ static void IrDock_ErrorCallback(void) {
   g_ir_dock_debug.tx_busy = false;
 }
 
+static bool IrDock_NormalizeStatusByte(uint8_t byte, uint8_t *status) {
+  if (byte == (uint8_t)IR_DOCK_STATUS_IDLE ||
+      byte == (uint8_t)IR_DOCK_STATUS_DOCKING ||
+      byte == (uint8_t)IR_DOCK_STATUS_DOCK_COMPLETE) {
+    if (status != NULL) {
+      *status = byte;
+    }
+    return true;
+  }
+
+  if (byte == (uint8_t)'0' || byte == (uint8_t)'1' || byte == (uint8_t)'2') {
+    if (status != NULL) {
+      *status = (uint8_t)(byte - (uint8_t)'0');
+    }
+    return true;
+  }
+
+  return false;
+}
+
 static bool IrDock_StatusIsValid(uint8_t status) {
-  return status == (uint8_t)IR_DOCK_STATUS_IDLE ||
-         status == (uint8_t)IR_DOCK_STATUS_DOCKING ||
-         status == (uint8_t)IR_DOCK_STATUS_DOCK_COMPLETE;
+  return IrDock_NormalizeStatusByte(status, NULL);
 }
 
 static bool IrDock_SideIsValid(uint8_t side) {
@@ -95,6 +117,27 @@ static void IrDock_ClearRawFrame(void) {
   for (uint8_t i = 0u; i < IR_DOCK_MINE_INPUT_FRAME_SIZE; ++i) {
     g_ir_dock_debug.raw_frame[i] = 0u;
     ir_dock_parse_frame[i] = 0u;
+  }
+}
+
+static void IrDock_ClearRawRxData(void) {
+  for (uint8_t i = 0u; i < IR_DOCK_RX_BUFFER_SIZE; ++i) {
+    g_ir_dock_debug.last_rx_raw_data[i] = 0u;
+  }
+  g_ir_dock_debug.last_rx_raw_len = 0u;
+}
+
+static void IrDock_RecordRawRxData(uint16_t packet_len, uint32_t now_ms) {
+  uint16_t copy_len = packet_len;
+  if (copy_len > IR_DOCK_RX_BUFFER_SIZE) {
+    copy_len = IR_DOCK_RX_BUFFER_SIZE;
+  }
+
+  IrDock_ClearRawRxData();
+  g_ir_dock_debug.last_rx_raw_len = (uint8_t)copy_len;
+  g_ir_dock_debug.last_rx_raw_ms = now_ms;
+  for (uint16_t i = 0u; i < copy_len; ++i) {
+    g_ir_dock_debug.last_rx_raw_data[i] = ir_dock_rx_buf[i];
   }
 }
 
@@ -159,7 +202,9 @@ static void IrDock_ParseMineFrame(uint32_t now_ms) {
   g_ir_dock_debug.ore_info_rx_count++;
 }
 
-static void IrDock_ParseStatusByte(uint8_t status, uint32_t now_ms) {
+static void IrDock_ParseStatusByte(uint8_t raw_byte, uint8_t status,
+                                   uint32_t now_ms) {
+  g_ir_dock_debug.last_rx_raw_byte = raw_byte;
   g_ir_dock_debug.last_rx_status = status;
   g_ir_dock_debug.last_rx_ms = now_ms;
   g_ir_dock_debug.last_parse_status = (uint8_t)IR_DOCK_PARSE_STATUS_OK;
@@ -172,7 +217,7 @@ static bool IrDock_PacketIsStatusOnly(uint16_t packet_len) {
   }
 
   for (uint16_t i = 0u; i < packet_len; ++i) {
-    if (!IrDock_StatusIsValid(ir_dock_rx_buf[i])) {
+    if (!IrDock_NormalizeStatusByte(ir_dock_rx_buf[i], NULL)) {
       return false;
     }
   }
@@ -217,20 +262,66 @@ static void IrDock_ProcessByte(uint8_t byte, uint32_t now_ms) {
 }
 
 static void IrDock_ParseRxBytes(uint16_t packet_len, uint32_t now_ms) {
+  IrDock_RecordRawRxData(packet_len, now_ms);
   g_ir_dock_debug.last_rx_len = (uint8_t)((packet_len > 255u) ? 255u
                                                               : packet_len);
 
   if (IrDock_PacketIsStatusOnly(packet_len)) {
+    uint8_t status = (uint8_t)IR_DOCK_STATUS_IDLE;
     for (uint16_t i = 0u; i < packet_len; ++i) {
-      IrDock_ParseStatusByte(ir_dock_rx_buf[i], now_ms);
+      (void)IrDock_NormalizeStatusByte(ir_dock_rx_buf[i], &status);
+      IrDock_ParseStatusByte(ir_dock_rx_buf[i], status, now_ms);
     }
-    (void)IrDock_SendStatusAck((IrDock_Status_t)ir_dock_rx_buf[packet_len - 1u],
-                               now_ms);
+    (void)IrDock_SendStatusAck((IrDock_Status_t)status, now_ms);
     return;
+  }
+
+  if (packet_len > 0u) {
+    g_ir_dock_debug.last_rx_raw_byte = ir_dock_rx_buf[packet_len - 1u];
   }
 
   for (uint16_t i = 0u; i < packet_len; ++i) {
     IrDock_ProcessByte(ir_dock_rx_buf[i], now_ms);
+  }
+}
+
+static void IrDock_UpdateRawSignalComplete(uint32_t now_ms) {
+  g_ir_dock_debug.last_rx_raw_age_ms =
+      (g_ir_dock_debug.last_rx_raw_ms == 0u)
+          ? 0u
+          : (now_ms - g_ir_dock_debug.last_rx_raw_ms);
+  const bool active = IrDock_RawByteIsActive(g_ir_dock_debug.last_rx_raw_byte) &&
+                      g_ir_dock_debug.last_rx_raw_ms != 0u &&
+                      g_ir_dock_debug.last_rx_raw_age_ms <=
+                          IR_DOCK_RAW_SIGNAL_LOST_MS;
+
+  if (!active) {
+    g_ir_dock_debug.raw_signal_active = false;
+    g_ir_dock_debug.raw_signal_stable = false;
+    g_ir_dock_debug.raw_signal_start_ms = 0u;
+    g_ir_dock_debug.raw_signal_stable_ms = 0u;
+    return;
+  }
+
+  if (!g_ir_dock_debug.raw_signal_active) {
+    g_ir_dock_debug.raw_signal_active = true;
+    g_ir_dock_debug.raw_signal_stable = false;
+    g_ir_dock_debug.raw_signal_start_ms = now_ms;
+    g_ir_dock_debug.raw_signal_stable_ms = 0u;
+    return;
+  }
+
+  g_ir_dock_debug.raw_signal_stable_ms = now_ms -
+                                         g_ir_dock_debug.raw_signal_start_ms;
+  if (!g_ir_dock_debug.raw_signal_stable &&
+      g_ir_dock_debug.raw_signal_stable_ms >= IR_DOCK_RAW_SIGNAL_STABLE_MS) {
+    g_ir_dock_debug.raw_signal_stable = true;
+    g_ir_dock_debug.raw_signal_complete_count++;
+    g_ir_dock_debug.last_rx_status = (uint8_t)IR_DOCK_STATUS_DOCK_COMPLETE;
+    g_ir_dock_debug.last_rx_ms = now_ms;
+    g_ir_dock_debug.last_parse_status = (uint8_t)IR_DOCK_PARSE_STATUS_OK;
+    g_ir_dock_debug.rx_count++;
+    (void)IrDock_SendStatusAck(IR_DOCK_STATUS_DOCK_COMPLETE, now_ms);
   }
 }
 
@@ -349,9 +440,12 @@ void IrDock_Init(uint32_t now_ms) {
   g_ir_dock_debug.tx_busy = false;
   g_ir_dock_debug.ack_pending = false;
   g_ir_dock_debug.dock_complete_fresh = false;
+  g_ir_dock_debug.raw_signal_active = false;
+  g_ir_dock_debug.raw_signal_stable = false;
   g_ir_dock_debug.ore_info_valid = false;
   g_ir_dock_debug.ore_info_fresh = false;
   g_ir_dock_debug.last_rx_status = (uint8_t)IR_DOCK_STATUS_IDLE;
+  g_ir_dock_debug.last_rx_raw_byte = 0u;
   g_ir_dock_debug.last_tx_status = (uint8_t)IR_DOCK_STATUS_IDLE;
   g_ir_dock_debug.last_rx_len = 0u;
   g_ir_dock_debug.last_tx_len = 0u;
@@ -362,16 +456,22 @@ void IrDock_Init(uint32_t now_ms) {
   g_ir_dock_debug.parse_index = 0u;
   IrDock_ClearOreTypes();
   IrDock_ClearRawFrame();
+  IrDock_ClearRawRxData();
   for (uint8_t i = 0u; i < IR_DOCK_ACK_FRAME_SIZE; ++i) {
     g_ir_dock_debug.last_ack_frame[i] = 0u;
     ir_dock_tx_buf[i] = 0u;
   }
   g_ir_dock_debug.last_rx_start_ms = now_ms;
+  g_ir_dock_debug.last_rx_raw_ms = 0u;
   g_ir_dock_debug.last_rx_ms = 0u;
   g_ir_dock_debug.last_ore_rx_ms = 0u;
   g_ir_dock_debug.last_tx_ms = 0u;
   g_ir_dock_debug.last_rx_age_ms = 0u;
   g_ir_dock_debug.last_ore_rx_age_ms = 0u;
+  g_ir_dock_debug.last_rx_raw_age_ms = 0u;
+  g_ir_dock_debug.raw_signal_start_ms = 0u;
+  g_ir_dock_debug.raw_signal_stable_ms = 0u;
+  g_ir_dock_debug.raw_signal_complete_count = 0u;
   (void)IrDock_TryStartReceive(now_ms);
 }
 
@@ -381,6 +481,7 @@ void IrDock_Process(uint32_t now_ms) {
   }
 
   IrDock_HandlePending(now_ms);
+  IrDock_UpdateRawSignalComplete(now_ms);
   IrDock_UpdateAckTimeout(now_ms);
   g_ir_dock_debug.dock_complete_fresh = IrDock_IsDockCompleteFresh(now_ms);
   g_ir_dock_debug.ore_info_fresh = IrDock_IsOreInfoFresh(now_ms);

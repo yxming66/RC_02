@@ -11,6 +11,18 @@ extern "C" {
 #define IR_DOCK_COMPLETE_FRESH_MS (1000u)
 #endif
 
+#ifndef IR_DOCK_RAW_SIGNAL_STABLE_MS
+#define IR_DOCK_RAW_SIGNAL_STABLE_MS (500u)
+#endif
+
+#ifndef IR_DOCK_RAW_SIGNAL_IDLE_BYTE
+#define IR_DOCK_RAW_SIGNAL_IDLE_BYTE (0xFEu)
+#endif
+
+#ifndef IR_DOCK_RAW_SIGNAL_LOST_MS
+#define IR_DOCK_RAW_SIGNAL_LOST_MS (300u)
+#endif
+
 #ifndef IR_DOCK_ORE_INFO_FRESH_MS
 #define IR_DOCK_ORE_INFO_FRESH_MS (1000u)
 #endif
@@ -98,26 +110,36 @@ typedef struct {
   volatile bool tx_busy;
   volatile bool ack_pending;
   volatile bool dock_complete_fresh;
+  volatile bool raw_signal_active;
+  volatile bool raw_signal_stable;
   volatile bool ore_info_valid;
   volatile bool ore_info_fresh;
   volatile uint8_t last_rx_status;
+  volatile uint8_t last_rx_raw_byte;
   volatile uint8_t last_tx_status;
   volatile uint8_t last_rx_len;
+  volatile uint8_t last_rx_raw_len;
   volatile uint8_t last_tx_len;
   volatile uint8_t last_msg_id;
   volatile uint8_t last_side;
   volatile uint8_t last_parse_status;
   volatile uint8_t last_ack_status;
   volatile uint8_t parse_index;
+  volatile uint8_t last_rx_raw_data[IR_DOCK_RX_BUFFER_SIZE];
   volatile uint8_t ore_type[IR_DOCK_ORE_POSITION_COUNT];
   volatile uint8_t raw_frame[IR_DOCK_MINE_INPUT_FRAME_SIZE];
   volatile uint8_t last_ack_frame[IR_DOCK_ACK_FRAME_SIZE];
   volatile uint32_t last_rx_start_ms;
+  volatile uint32_t last_rx_raw_ms;
   volatile uint32_t last_rx_ms;
   volatile uint32_t last_ore_rx_ms;
   volatile uint32_t last_tx_ms;
   volatile uint32_t last_rx_age_ms;
   volatile uint32_t last_ore_rx_age_ms;
+  volatile uint32_t last_rx_raw_age_ms;
+  volatile uint32_t raw_signal_start_ms;
+  volatile uint32_t raw_signal_stable_ms;
+  volatile uint32_t raw_signal_complete_count;
   volatile uint32_t rx_count;
   volatile uint32_t tx_count;
   volatile uint32_t frame_rx_count;
