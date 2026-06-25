@@ -61,6 +61,7 @@ typedef struct {
   float second_photo_retract_move_speed; /* 第二个光电触发后收尾移动的可选 vx 幅值，单位 m/s。 */
   float final_move_speed;     /* 收尾离开速度，或第二光电后收尾 vx 的备用值，单位 m/s。 */
   uint32_t final_move_ms;     /* 收尾离开时间，单位 ms；角度阈值>0时作为兜底超时。 */
+  uint32_t final_photo_sprint_ms; /* 上台阶末尾光电稳定触发后的额外冲刺时间，单位 ms；0 表示触发即结束。 */
   float final_move_wheel_delta_rad; /* 收尾离开轮转角阈值，单位 rad；>0 优先按角度切步，<=0 使用 final_move_ms 定时切步。 */
 
   float pole_all_extend_speed;    /* 四杆全伸速度，单位 rad/s。 */

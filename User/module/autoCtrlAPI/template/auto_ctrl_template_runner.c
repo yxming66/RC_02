@@ -33,6 +33,8 @@ static void AutoCtrlTemplate_SetStep(auto_ctrl_t *ctrl, uint8_t step_index) {
   ctrl->template_ctx.pole_target_seen_not_ready = false;
   ctrl->template_ctx.photo_stop_entered = false;
   ctrl->template_ctx.photo_stop_enter_time_ms = 0u;
+  ctrl->template_ctx.final_photo_sprint_started = false;
+  ctrl->template_ctx.final_photo_sprint_start_ms = 0u;
   ctrl->template_ctx.descend_start_move_entered = false;
   ctrl->template_ctx.descend_start_move_time_ms = 0u;
   ctrl->template_ctx.distance_latch_valid = false;
@@ -564,6 +566,22 @@ static void AutoCtrlTemplate_ResetPhoto4RisingAfterLow(auto_ctrl_t *ctrl) {
   ctrl->template_ctx.pa0_photo4_stable_low_seen = false;
 }
 
+static bool AutoCtrlTemplate_FinalPhotoSprintReady(
+    auto_ctrl_t *ctrl, uint32_t now_ms, const AutoCtrl_TemplateParam_t *param) {
+  if (!ctrl->template_ctx.final_photo_sprint_started) {
+    if (!AutoCtrlTemplate_Photo4RisingAfterLowStable(ctrl, now_ms)) {
+      return false;
+    }
+
+    ctrl->template_ctx.final_photo_sprint_started = true;
+    ctrl->template_ctx.final_photo_sprint_start_ms = now_ms;
+  }
+
+  const uint32_t sprint_ms = (param == 0) ? 0u : param->final_photo_sprint_ms;
+  return (now_ms - ctrl->template_ctx.final_photo_sprint_start_ms) >=
+         sprint_ms;
+}
+
 static bool AutoCtrlTemplate_PhotoStopSettled(auto_ctrl_t *ctrl,
                                               uint32_t now_ms,
                                               uint32_t settle_ms) {
@@ -746,9 +764,10 @@ static bool AutoCtrlTemplate_RunAscend(auto_ctrl_t *ctrl, uint32_t now_ms,
                                    pole.all_retract[1],
                                    param->pole_front_retract_speed,
                                    param->pole_rear_retract_speed);
-      if (AutoCtrlTemplate_Photo4RisingAfterLowStable(ctrl, now_ms)) {
+      if (AutoCtrlTemplate_FinalPhotoSprintReady(ctrl, now_ms, param)) {
         AutoCtrlTemplate_NextStep(ctrl);
-      } else if (param->final_move_ms > 0u &&
+      } else if (!ctrl->template_ctx.final_photo_sprint_started &&
+                 param->final_move_ms > 0u &&
                  AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
                      param->final_move_ms) {
         ctrl->fault = AUTO_CTRL_FAULT_SENSOR_INVALID;
@@ -900,9 +919,10 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
                                    pole.all_retract[1],
                                    param->pole_front_retract_speed,
                                    param->pole_rear_retract_speed);
-      if (AutoCtrlTemplate_Photo4RisingAfterLowStable(ctrl, now_ms)) {
+      if (AutoCtrlTemplate_FinalPhotoSprintReady(ctrl, now_ms, param)) {
         AutoCtrlTemplate_NextStep(ctrl);
-      } else if (param->final_move_ms > 0u &&
+      } else if (!ctrl->template_ctx.final_photo_sprint_started &&
+                 param->final_move_ms > 0u &&
                  AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
                      param->final_move_ms) {
         ctrl->fault = AUTO_CTRL_FAULT_SENSOR_INVALID;
