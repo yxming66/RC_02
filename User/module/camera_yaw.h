@@ -1,5 +1,5 @@
 /*
- * Camera yaw module: 6020 yaw motor closed loop in chassis body frame.
+ * Camera yaw module: DM-H3510 yaw motor current loop in chassis body frame.
  */
 #pragma once
 
@@ -12,7 +12,7 @@ extern "C" {
 
 #include "component/pid.h"
 #include "device/motor.h"
-#include "device/motor_rm.h"
+#include "device/motor_dm.h"
 
 #define CAMERA_YAW_OK (0)
 #define CAMERA_YAW_ERR (-1)
@@ -30,7 +30,7 @@ typedef enum {
 } CameraYaw_Channel_t;
 
 typedef struct {
-  MOTOR_RM_Param_t motor_param;
+  MOTOR_DM_Param_t motor_param;
   float encoder_zero_offset_rad;
   struct {
     KPID_Params_t yaw_pid;
@@ -88,7 +88,7 @@ typedef struct {
   float nominal_dt;
   const CameraYaw_Params_t *param;
   CameraYaw_Mode_t mode;
-  MOTOR_RM_t *motor;
+  MOTOR_DM_t *motor;
   KPID_t yaw_pid;
   CameraYaw_CMD_t cmd;
   CameraYaw_Feedback_t feedback;

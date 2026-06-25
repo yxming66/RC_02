@@ -821,40 +821,13 @@ Config_RobotParam_t robot_config = {
     },
     /* 模块参数：相机 yaw camera_yaw_param，相机云台电机、PID 和限幅。 */
     .camera_yaw_param = {
-        [CAMERA_YAW_LEFT] = {
-            .motor_param = {
-                .can = BSP_CAN_2,
-                .id = 0x209,
-                .module = MOTOR_GM6020,
-                .reverse = false,
-                .gear = false,
-            },
-            .encoder_zero_offset_rad = 0.562970936f,
-            .pid = {
-                .yaw_pid = {
-                    .k = 1.0f,
-                    .p = 5.0f,
-                    .i = 0.0f,
-                    .d = 0.0f,
-                    .i_limit = 0.0f,
-                    .out_limit = 1.0f,
-                    .d_cutoff_freq = -1.0f,
-                    .range = M_2PI,
-                },
-            },
-            .limit = {
-                .max_output = 1.0f,
-                .arrive_threshold_rad = 0.02f,
-                .feedback_timeout_ms = 200u,
-            },
-        },
         [CAMERA_YAW_RIGHT] = {
             .motor_param = {
                 .can = BSP_CAN_2,
-                .id = 0x20A,
-                .module = MOTOR_GM6020,
+                .master_id = 0x1A,
+                .can_id = 0x0A,
+                .module = MOTOR_DM_H3510,
                 .reverse = false,
-                .gear = false,
             },
             .encoder_zero_offset_rad = 1.61221385f,
             .pid = {
@@ -862,7 +835,7 @@ Config_RobotParam_t robot_config = {
                     .k = 1.0f,
                     .p = 2.0f,
                     .i = 0.0f,
-                    .d = 0.3f,
+                    .d = 0.0f,
                     .i_limit = 0.0f,
                     .out_limit = 0.5f,
                     .d_cutoff_freq = -1.0f,

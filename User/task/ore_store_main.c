@@ -39,6 +39,8 @@ volatile int8_t g_camera_yaw_update_ret_by_channel[CAMERA_YAW_NUM] = {
 volatile int8_t g_camera_yaw_control_ret_by_channel[CAMERA_YAW_NUM] = {
     CAMERA_YAW_ERR_NULL, CAMERA_YAW_ERR_NULL};
 
+#define CAMERA_YAW_ACTIVE_CHANNEL CAMERA_YAW_RIGHT
+
 typedef struct {
   volatile bool inited;
   volatile OreStore_Mode_t mode;
@@ -486,10 +488,7 @@ bool Task_OreStoreInitOnce(void) {
 }
 
 bool Task_CameraYawInitOnce(void) {
-  bool any_inited = false;
-  for (uint8_t yaw = 0u; yaw < CAMERA_YAW_NUM; ++yaw) {
-    any_inited = any_inited || camera_yaw_inited[yaw];
-  }
+  bool any_inited = camera_yaw_inited[CAMERA_YAW_ACTIVE_CHANNEL];
   if (any_inited) {
     return true;
   }
@@ -508,16 +507,15 @@ bool Task_CameraYawInitOnce(void) {
   memset(&camera_yaw_feedback, 0, sizeof(camera_yaw_feedback));
 
   g_camera_yaw_init_ret = CAMERA_YAW_ERR;
-  for (uint8_t yaw = 0u; yaw < CAMERA_YAW_NUM; ++yaw) {
-    g_camera_yaw_init_ret_by_channel[yaw] =
-        CameraYaw_Init(&camera_yaw[yaw], &cfg->camera_yaw_param[yaw],
-                       (float)CAMERA_YAW_FREQ);
-    camera_yaw_inited[yaw] =
-        (g_camera_yaw_init_ret_by_channel[yaw] == CAMERA_YAW_OK);
-    if (camera_yaw_inited[yaw]) {
-      g_camera_yaw_init_ret = CAMERA_YAW_OK;
-      any_inited = true;
-    }
+  const uint8_t yaw = CAMERA_YAW_ACTIVE_CHANNEL;
+  g_camera_yaw_init_ret_by_channel[yaw] =
+      CameraYaw_Init(&camera_yaw[yaw], &cfg->camera_yaw_param[yaw],
+                     (float)CAMERA_YAW_FREQ);
+  camera_yaw_inited[yaw] =
+      (g_camera_yaw_init_ret_by_channel[yaw] == CAMERA_YAW_OK);
+  if (camera_yaw_inited[yaw]) {
+    g_camera_yaw_init_ret = CAMERA_YAW_OK;
+    any_inited = true;
   }
 
   return any_inited;
@@ -569,11 +567,7 @@ void Task_OreStoreStep(void) {
 }
 
 void Task_CameraYawStep(void) {
-  bool any_inited = false;
-  for (uint8_t yaw = 0u; yaw < CAMERA_YAW_NUM; ++yaw) {
-    any_inited = any_inited || camera_yaw_inited[yaw];
-  }
-  if (!any_inited) {
+  if (!camera_yaw_inited[CAMERA_YAW_ACTIVE_CHANNEL]) {
     return;
   }
 
@@ -589,35 +583,23 @@ void Task_CameraYawStep(void) {
     camera_yaw_cmd = next_camera_yaw_cmd;
   }
 
-  for (uint8_t yaw = 0u; yaw < CAMERA_YAW_NUM; ++yaw) {
-    if (camera_yaw_inited[yaw]) {
-      (void)OreStoreTask_TryApplyCameraYawDebugCommand(
-          &camera_yaw_cmd.yaw[yaw], now_tick);
-    }
-  }
+  const uint8_t yaw = CAMERA_YAW_ACTIVE_CHANNEL;
+  (void)OreStoreTask_TryApplyCameraYawDebugCommand(
+      &camera_yaw_cmd.yaw[yaw], now_tick);
 
-  for (uint8_t yaw = 0u; yaw < CAMERA_YAW_NUM; ++yaw) {
-    if (!camera_yaw_inited[yaw]) {
-      continue;
-    }
-    g_camera_yaw_update_ret_by_channel[yaw] =
-        CameraYaw_UpdateFeedback(&camera_yaw[yaw]);
-    g_camera_yaw_control_ret_by_channel[yaw] =
-        CameraYaw_Control(&camera_yaw[yaw], &camera_yaw_cmd.yaw[yaw],
-                          now_tick);
-    CameraYaw_SetOutput(&camera_yaw[yaw]);
-    camera_yaw_feedback.yaw[yaw] = camera_yaw[yaw].feedback;
-  }
-  for (uint8_t yaw = 0u; yaw < CAMERA_YAW_NUM; ++yaw) {
-    if (camera_yaw_inited[yaw]) {
-      CameraYaw_FlushOutput(&camera_yaw[yaw]);
-    }
-  }
+  g_camera_yaw_update_ret_by_channel[yaw] =
+      CameraYaw_UpdateFeedback(&camera_yaw[yaw]);
+  g_camera_yaw_control_ret_by_channel[yaw] =
+      CameraYaw_Control(&camera_yaw[yaw], &camera_yaw_cmd.yaw[yaw],
+                        now_tick);
+  CameraYaw_SetOutput(&camera_yaw[yaw]);
+  camera_yaw_feedback.yaw[yaw] = camera_yaw[yaw].feedback;
+  CameraYaw_FlushOutput(&camera_yaw[yaw]);
 
   g_camera_yaw_update_ret =
-      g_camera_yaw_update_ret_by_channel[CAMERA_YAW_LEFT];
+      g_camera_yaw_update_ret_by_channel[CAMERA_YAW_ACTIVE_CHANNEL];
   g_camera_yaw_control_ret =
-      g_camera_yaw_control_ret_by_channel[CAMERA_YAW_LEFT];
+      g_camera_yaw_control_ret_by_channel[CAMERA_YAW_ACTIVE_CHANNEL];
   task_runtime.stack_water_mark.camera_yaw = uxTaskGetStackHighWaterMark(NULL);
   task_runtime.heartbeat.camera_yaw++;
   Task_ProfilerLoopEnd(TASK_PROFILE_CAMERA_YAW, profile_start_us);
@@ -707,24 +689,14 @@ const OreStore_Debug_t *Task_OreStoreGetDebug(void) {
 }
 
 const CameraYaw_Feedback_t *Task_CameraYawGetFeedback(void) {
-  if (camera_yaw_inited[CAMERA_YAW_LEFT]) {
-    return &camera_yaw_feedback.yaw[CAMERA_YAW_LEFT];
-  }
-  for (uint8_t yaw = 0u; yaw < CAMERA_YAW_NUM; ++yaw) {
-    if (camera_yaw_inited[yaw]) {
-      return &camera_yaw_feedback.yaw[yaw];
-    }
-  }
-  return NULL;
+  return camera_yaw_inited[CAMERA_YAW_ACTIVE_CHANNEL]
+             ? &camera_yaw_feedback.yaw[CAMERA_YAW_ACTIVE_CHANNEL]
+             : NULL;
 }
 
 const CameraYaw_GroupFeedback_t *Task_CameraYawGetGroupFeedback(void) {
-  for (uint8_t yaw = 0u; yaw < CAMERA_YAW_NUM; ++yaw) {
-    if (camera_yaw_inited[yaw]) {
-      return &camera_yaw_feedback;
-    }
-  }
-  return NULL;
+  return camera_yaw_inited[CAMERA_YAW_ACTIVE_CHANNEL] ? &camera_yaw_feedback
+                                                      : NULL;
 }
 
 int8_t Task_CameraYawPostCommand(const CameraYaw_CMD_t *cmd) {
@@ -733,7 +705,7 @@ int8_t Task_CameraYawPostCommand(const CameraYaw_CMD_t *cmd) {
   }
 
   CameraYaw_GroupCMD_t safe_cmd = camera_yaw_cmd;
-  safe_cmd.yaw[CAMERA_YAW_LEFT] = *cmd;
+  safe_cmd.yaw[CAMERA_YAW_ACTIVE_CHANNEL] = *cmd;
   OreStoreTask_SanitizeCameraYawGroupCommand(&safe_cmd);
   (void)osMessageQueueReset(task_runtime.msgq.camera_yaw.cmd);
   return (osMessageQueuePut(task_runtime.msgq.camera_yaw.cmd, &safe_cmd, 0,
