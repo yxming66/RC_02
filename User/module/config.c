@@ -122,9 +122,9 @@ Config_RobotParam_t robot_config = {
         },
         .preset = {
             /* 200mm 上台阶四杆全伸位；一键取矿 PICK_POS_200 也使用该撑杆高度。 */
-            .step_200_all_extend = {13.8f, 13.8f},
+            .step_200_all_extend = {14.0f, 14.0f},
             /* 200mm 上台阶前杆收回、后杆保持支撑位。 */
-            .step_200_front_retract = {0.5f, 13.8f},
+            .step_200_front_retract = {0.5f, 14.0f},
             /* 200mm 上台阶四杆全收位。 */
             .step_200_all_retract = {0.5f, 0.5f},
             /* 200mm 上台阶小抬升位；一键取矿 PICK_NEG_200 使用该撑杆高度。 */
@@ -551,7 +551,7 @@ Config_RobotParam_t robot_config = {
             .rear_retract_move_ms = 300u,       /* 后光电触发后，全收腿移动持续时间，单位 ms。 */
             .second_photo_retract_move_speed = 0.40f, /* 后一个光电触发收腿时向头向移动 vx，单位 m/s。 */
             .final_move_speed = 0.8f,          /* 收尾离开台阶 vx，单位 m/s。 */
-            .final_move_ms = 800u,              /* 收尾离开台阶角度门控兜底超时，单位 ms。 */
+            .final_move_ms = 1200u,              /* 收尾离开台阶角度门控兜底超时，单位 ms。 */
             .final_move_wheel_delta_rad = 0.0f, /* 编码器门控的收尾离开轮转角阈值，单位 rad；>0 优先按角度切步，<=0 使用 final_move_ms。 */
             .pole_all_extend_speed = 0.0f,     /* 四杆全伸目标跟随速度，单位 rad/s。 */
             .pole_front_extend_speed = 0.0f,   /* 前杆伸出目标跟随速度，单位 rad/s。 */

@@ -826,6 +826,16 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
       return false;
 
     case 3: /* 前杆收回后的中段定时移动。 */
+      if (use_400mm && AutoCtrlTemplate_LatchRearPhotoStable(ctrl, false,
+                                                             now_ms)) {
+        AutoCtrlPrimitive_CommandFlatMove(ctrl, 0.0f);
+        AutoCtrlTemplate_CommandPole(ctrl, pole.all_retract[0],
+                                     pole.all_retract[1],
+                                     param->pole_front_retract_speed,
+                                     param->pole_rear_retract_speed);
+        AutoCtrlTemplate_SetStep(ctrl, 5u);
+        return false;
+      }
       AutoCtrlPrimitive_ApplyPrealignWithMove(ctrl, param->mid_move_speed,
                                               0.0f);
       AutoCtrlTemplate_CommandPole(ctrl, pole.front_retract[0],
