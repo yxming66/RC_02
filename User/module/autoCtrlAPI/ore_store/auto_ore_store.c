@@ -62,6 +62,7 @@ static bool AutoOre_ActionIsFused(AutoOre_Action_t action);
 static auto_ctrl_template_e AutoOre_FusedStepTemplateId(
   const AutoOre_t *ctrl);
 static float AutoOre_SelectPrealignWz(AutoOre_t *ctrl);
+static void AutoOre_FinishSuccess(AutoOre_t *ctrl);
 
 static void AutoOre_EnterStep(AutoOre_t *ctrl, uint32_t now_ms) {
   if (!ctrl->step_entered) {
@@ -755,6 +756,21 @@ static void AutoOre_FinishChamberSuccess(AutoOre_t *ctrl) {
   AutoOre_SetArmHasOre(ctrl, true);
 }
 
+static void AutoOre_FinishChamberSegment(AutoOre_t *ctrl, uint32_t now_ms) {
+  AutoOre_FinishChamberSuccess(ctrl);
+  if (ctrl->action == AUTO_ORE_ACTION_RELEASE) {
+    ctrl->active_position = AUTO_ORE_POSITION_ARM;
+    ctrl->step_index = 0u;
+    ctrl->step_phase = 0u;
+    ctrl->step_entered = false;
+    ctrl->step_condition_met = false;
+    ctrl->step_condition_time_ms = now_ms;
+    ctrl->step_enter_time_ms = now_ms;
+    return;
+  }
+  AutoOre_FinishSuccess(ctrl);
+}
+
 static void AutoOre_FinishSuccess(AutoOre_t *ctrl) {
   const AutoOre_Fault_t fault_before_finish = ctrl->fault;
   if (ctrl->action == AUTO_ORE_ACTION_STORE) {
@@ -967,6 +983,9 @@ static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
     case 0:
       AutoOre_EnterStep(ctrl, now_ms);
       if (!AutoOre_CommandReleasePoleTarget(ctrl) ||
+          !AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_WAIT_RELEASE_ORE,
+              SUCTION_ON,
+              &ctrl->param.arm_speed.release_wait) ||
           !AutoOre_CommandReleaseOreStoreHold(ctrl,
                                               ORE_STORE_TRANSFORM_STANDBY,
                                               true)) {
@@ -1122,7 +1141,7 @@ static void AutoOre_RunChamberHigh(AutoOre_t *ctrl, uint32_t now_ms) {
         return;
       }
       if (AutoOre_WaitArmCommandTarget(ctrl, now_ms)) {
-        AutoOre_FinishSuccess(ctrl);
+        AutoOre_FinishChamberSegment(ctrl, now_ms);
       } else {
         (void)AutoOre_CheckTimeout(ctrl, now_ms);
       }
@@ -1213,7 +1232,7 @@ static void AutoOre_RunChamberLow(AutoOre_t *ctrl, uint32_t now_ms) {
         return;
       }
       if (AutoOre_WaitArmCommandTarget(ctrl, now_ms)) {
-        AutoOre_FinishSuccess(ctrl);
+        AutoOre_FinishChamberSegment(ctrl, now_ms);
       } else {
         (void)AutoOre_CheckTimeout(ctrl, now_ms);
       }
@@ -2254,6 +2273,8 @@ static bool AutoOre_Start(AutoOre_t *ctrl, AutoOre_Action_t action,
   } else if (action == AUTO_ORE_ACTION_RELEASE) {
     if (ctrl->occupancy.arm_has_ore) {
       position = AUTO_ORE_POSITION_ARM;
+    } else {
+      position = AutoOre_SelectChamberPosition(&ctrl->occupancy);
     }
   } else if (action == AUTO_ORE_ACTION_CHAMBER) {
     position = AutoOre_SelectChamberPosition(&ctrl->occupancy);
@@ -2362,12 +2383,21 @@ void AutoOre_Update(AutoOre_t *ctrl, const AutoOre_Feedback_t *feedback,
         break;
     }
   } else if (ctrl->action == AUTO_ORE_ACTION_RELEASE) {
-    if (ctrl->active_position == AUTO_ORE_POSITION_ARM) {
-      AutoOre_RunReleaseArm(ctrl, now_ms);
-    } else {
-      ctrl->state = AUTO_ORE_STATE_FAIL;
-      ctrl->result = AUTO_ORE_RESULT_FAIL;
-      ctrl->fault = AUTO_ORE_FAULT_INVALID_OCCUPANCY;
+    switch (ctrl->active_position) {
+      case AUTO_ORE_POSITION_ARM:
+        AutoOre_RunReleaseArm(ctrl, now_ms);
+        break;
+      case AUTO_ORE_POSITION_TRANSFORM_HIGH:
+        AutoOre_RunChamberHigh(ctrl, now_ms);
+        break;
+      case AUTO_ORE_POSITION_TRANSFORM_LOW:
+        AutoOre_RunChamberLow(ctrl, now_ms);
+        break;
+      default:
+        ctrl->state = AUTO_ORE_STATE_FAIL;
+        ctrl->result = AUTO_ORE_RESULT_FAIL;
+        ctrl->fault = AUTO_ORE_FAULT_INVALID_OCCUPANCY;
+        break;
     }
   } else if (ctrl->action == AUTO_ORE_ACTION_CHAMBER) {
     switch (ctrl->active_position) {

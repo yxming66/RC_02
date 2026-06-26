@@ -46,6 +46,7 @@ typedef struct {
   uint32_t open_delay_ms;
   uint32_t grab_high_delay_ms;
   uint32_t dock_wait_delay_ms;
+  OreStore_TransformPoint_t dock_wait_transform;
   bool use_photo_check;
   uint32_t photo_check_ms;
 } AutoRodSpearhead_Params_t;

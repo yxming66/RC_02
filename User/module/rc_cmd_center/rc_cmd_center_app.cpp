@@ -541,7 +541,7 @@ static void Rc_SetOreStoreActiveManual(void) {
 
   const float dt_s = 1.0f / (float)RC_MAIN_FREQ;
   const float platform_velocity =
-    Rc_ApplyOreStoreDeadband(dr16.data.ch_r_y) *
+    Rc_ApplyOreStoreDeadband(dr16.data.ch_r_y) * 0.2*
     Rc_OreStoreAxisMoveSpeed(ORE_STORE_AXIS_PLATFORM);
   const float platform_delta = platform_velocity * dt_s;
 

@@ -35,6 +35,14 @@ static uint32_t AutoRodSpearhead_PhotoCheckMs(
              : AUTO_ROD_SPEARHEAD_DEFAULT_PHOTO_CHECK_MS;
 }
 
+static OreStore_TransformPoint_t AutoRodSpearhead_DockWaitTransform(
+    const AutoRodSpearhead_t *ctrl) {
+  if (ctrl->param.dock_wait_transform < ORE_STORE_TRANSFORM_POINT_NUM) {
+    return ctrl->param.dock_wait_transform;
+  }
+  return ORE_STORE_TRANSFORM_SPEARHEAD_DOCK_WAIT;
+}
+
 static uint32_t AutoRodSpearhead_StepElapsed(
     const AutoRodSpearhead_t *ctrl, uint32_t now_ms) {
   return now_ms - ctrl->step_enter_time_ms;
@@ -326,7 +334,7 @@ static void AutoRodSpearhead_RunDockWait(
         return;
       }
       if (!AutoRodSpearhead_CommandOreStore(
-              ctrl, ORE_STORE_TRANSFORM_STANDBY, false) ||
+              ctrl, AutoRodSpearhead_DockWaitTransform(ctrl), false) ||
           !AutoRodSpearhead_CommandRod(ctrl, ROD_NEW_POSE_DOCK_WAIT,
                                        ROD_NEW_GRIP_GRAB)) {
         return;

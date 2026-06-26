@@ -215,8 +215,8 @@ Config_RobotParam_t robot_config = {
                 [ORE_STORE_TRANSFORM_MID_WAIT] = 11.0f,
                 /* 平台抬升位/满行程位，用于低位存矿或低位上膛交接。 */
                 [ORE_STORE_TRANSFORM_LIFT] = 18.4731674f,
-                /* 平台缓冲/备用预设位，待实机标定。 */
-                [ORE_STORE_TRANSFORM_BUFFER] = 0.0f,
+                /* 平台等待矛头对接位置，待实机标定。 */
+                [ORE_STORE_TRANSFORM_SPEARHEAD_DOCK_WAIT] = 0.666363478f,
                 /* 取矛头平台预设位，待实机标定。 */
                 [ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP] = 22.5139351f,
             },
@@ -451,6 +451,8 @@ Config_RobotParam_t robot_config = {
         .open_delay_ms = 1000u,
         .grab_high_delay_ms = 200u,
         .dock_wait_delay_ms = 10000u,
+        /* 等待对接时 transform 的目标点；实际角度在 ore_store_param.preset.transform_position_rad 中标定。 */
+        .dock_wait_transform = ORE_STORE_TRANSFORM_SPEARHEAD_DOCK_WAIT,
         .use_photo_check = true,
         .photo_check_ms = 500u,
     },
@@ -713,7 +715,7 @@ Config_RobotParam_t robot_config = {
             .pid = {
                 .yaw_pid = {
                     .k = 1.0f,
-                    .p = 1.0f,
+                    .p = 0.45f,
                     .i = 0.0f,
                     .d = 0.0f,
                     .i_limit = 0.0f,
