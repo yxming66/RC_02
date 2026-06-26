@@ -523,11 +523,13 @@ static void Rc_InitOreStoreActiveTargets(void) {
   memset(&ore_store_cmd, 0, sizeof(ore_store_cmd));
   ore_store_cmd.mode = ORE_STORE_MODE_ACTIVE;
 
-    if (feedback != NULL) {
+  if (feedback != NULL) {
     if (feedback->homed[ORE_STORE_AXIS_PLATFORM]) {
       ore_store_cmd.platform_target_rad =
         feedback->position_rad[ORE_STORE_AXIS_PLATFORM];
     }
+    ore_store_cmd.fixed_ore_cylinder_closed =
+        feedback->fixed_ore_cylinder_closed;
   }
 
   ore_store_cmd.platform_target_rad = Rc_ClampOreStoreTarget(
