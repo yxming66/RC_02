@@ -479,6 +479,12 @@ typedef struct {
     uint32_t rx_chassis_count;         /* 收到底盘命令次数 */
     uint32_t rx_pole_count;            /* 收到撑杆命令次数 */
     uint32_t rx_arm_simple_count;      /* 收到简易机械臂命令次数 */
+    uint8_t pole_cmd_recent;           /* 最近是否收到有效撑杆命令，0=否，1=是 */
+    uint8_t arm_simple_cmd_recent;     /* 最近是否收到有效简易机械臂命令，0=否，1=是 */
+    uint32_t pole_cmd_tick;            /* 最近一次撑杆命令 tick，单位 ms */
+    uint32_t pole_cmd_age_ms;          /* 最近一次撑杆命令距当前时间，单位 ms */
+    uint32_t arm_simple_cmd_tick;      /* 最近一次简易机械臂命令 tick，单位 ms */
+    uint32_t arm_simple_cmd_age_ms;    /* 最近一次简易机械臂命令距当前时间，单位 ms */
     uint32_t rx_rod_new_count;         /* 收到取矛头机构命令次数 */
     uint32_t rx_ore_store_count;       /* 收到矿仓命令次数 */
     uint32_t rx_auto_action_count;     /* 收到一键动作命令次数 */

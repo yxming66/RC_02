@@ -632,6 +632,7 @@ extern "C" const MrlinkPc_State_t *MrlinkPc_GetState(void) {
 }
 
 extern "C" void MrlinkPc_DebugUpdate(void) {
+  const uint32_t now_ms = BSP_TIME_Get_ms();
   DebugUpdateUsartConfig();
   g_pc_comm_debug.online = s_state.online ? 1u : 0u;
   g_pc_comm_debug.heartbeat_valid = s_state.heartbeat_valid ? 1u : 0u;
@@ -649,6 +650,18 @@ extern "C" void MrlinkPc_DebugUpdate(void) {
       MrLink_Channel_GetRxOverflowCount(s_bus.Channel());
   g_pc_comm_debug.rx_dma_start_fail_count =
       MrLink_Channel_GetRxStartFailCount(s_bus.Channel());
+  g_pc_comm_debug.pole_cmd_recent =
+      IsRecentCommand(s_pole_cmd_received, s_pole_cmd_tick, now_ms) ? 1u : 0u;
+  g_pc_comm_debug.arm_simple_cmd_recent =
+      IsRecentCommand(s_arm_simple_cmd_received, s_arm_simple_cmd_tick, now_ms)
+          ? 1u
+          : 0u;
+  g_pc_comm_debug.pole_cmd_tick = s_pole_cmd_tick;
+  g_pc_comm_debug.pole_cmd_age_ms =
+      (s_pole_cmd_tick > 0u) ? (now_ms - s_pole_cmd_tick) : 0u;
+  g_pc_comm_debug.arm_simple_cmd_tick = s_arm_simple_cmd_tick;
+  g_pc_comm_debug.arm_simple_cmd_age_ms =
+      (s_arm_simple_cmd_tick > 0u) ? (now_ms - s_arm_simple_cmd_tick) : 0u;
   CopyPlainToVolatile(&g_pc_comm_debug.rx_chassis, &s_state.cmd.chassis);
   CopyPlainToVolatile(&g_pc_comm_debug.rx_pole, &s_state.cmd.pole);
   CopyPlainToVolatile(&g_pc_comm_debug.rx_arm_simple, &s_state.cmd.arm_simple);
