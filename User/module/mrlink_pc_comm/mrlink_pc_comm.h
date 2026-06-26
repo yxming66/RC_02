@@ -603,6 +603,8 @@ bool MrlinkPc_HasArmSimpleCMD(void);
 /* 获取最近一次 PC 取矛头机构命令。 */
 const PC_RodNewCMD_t *MrlinkPc_GetRodNewCMD(void);
 
+bool MrlinkPc_HasRodNewCMD(void);
+
 /* 获取最近一次 PC 矿仓命令。 */
 const PC_OreStoreCMD_t *MrlinkPc_GetOreStoreCMD(void);
 

@@ -1850,7 +1850,8 @@ struct RcRodNewOperatorRoute {
 
 struct RcRodNewPcRoute {
   bool operator()(const RcRuntimeInput &, cmd::Context &, RodNew_CMD_t &out) const {
-    const PC_RodNewCMD_t *pc_rod_new_cmd = MrlinkPc_GetRodNewCMD();
+    const PC_RodNewCMD_t *pc_rod_new_cmd =
+        MrlinkPc_HasRodNewCMD() ? MrlinkPc_GetRodNewCMD() : NULL;
     if (pc_rod_new_cmd != NULL) {
       auto_rod_spearhead_hold_after_finish = false;
       rod_cmd.mode = (RodNew_Mode_t)pc_rod_new_cmd->mode;

@@ -62,8 +62,10 @@ static BSP_UART_t s_channel_uart = BSP_UART_PC;
 static bool s_comm_initialized = false;
 static bool s_pole_cmd_received = false;
 static bool s_arm_simple_cmd_received = false;
+static bool s_rod_new_cmd_received = false;
 static uint32_t s_pole_cmd_tick = 0u;
 static uint32_t s_arm_simple_cmd_tick = 0u;
+static uint32_t s_rod_new_cmd_tick = 0u;
 static bool s_ir_ore_ack_pending = false;
 
 bool IsRecentCommand(bool received, uint32_t tick, uint32_t now_ms) {
@@ -73,8 +75,10 @@ bool IsRecentCommand(bool received, uint32_t tick, uint32_t now_ms) {
 void ClearModuleCommands() {
   s_pole_cmd_received = false;
   s_arm_simple_cmd_received = false;
+  s_rod_new_cmd_received = false;
   s_pole_cmd_tick = 0u;
   s_arm_simple_cmd_tick = 0u;
+  s_rod_new_cmd_tick = 0u;
 }
 
 uint16_t DebugCopyRaw(volatile uint8_t *dst, uint16_t dst_size,
@@ -235,6 +239,8 @@ void OnRodNew(const wire::RodNewCmd &cmd) {
   s_state.cmd.rod_new.pose = cmd.pose;
   s_state.cmd.rod_new.grip = cmd.grip;
   s_state.cmd.rod_new.target_angle_rad = cmd.target_angle_rad;
+  s_rod_new_cmd_received = true;
+  s_rod_new_cmd_tick = BSP_TIME_Get_ms();
   s_state.cmd.abstract_position.enable_mask &=
       static_cast<uint8_t>(~(PC_ABSTRACT_MODULE_ROD_NEW |
                             PC_ABSTRACT_MODULE_POLE |
@@ -712,6 +718,11 @@ extern "C" bool MrlinkPc_HasArmSimpleCMD(void) {
 
 extern "C" const PC_RodNewCMD_t *MrlinkPc_GetRodNewCMD(void) {
   return &s_state.cmd.rod_new;
+}
+
+extern "C" bool MrlinkPc_HasRodNewCMD(void) {
+  return IsRecentCommand(s_rod_new_cmd_received, s_rod_new_cmd_tick,
+                         BSP_TIME_Get_ms());
 }
 
 extern "C" const PC_OreStoreCMD_t *MrlinkPc_GetOreStoreCMD(void) {
