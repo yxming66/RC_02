@@ -53,6 +53,8 @@ static uint8_t s_auto_action_rx_latch = PC_AUTO_ACTION_NONE;
 static uint32_t s_auto_action_rx_latch_tick = 0u;
 static PC_IrOreFeedback_t s_ir_ore_feedback{};
 static PC_IrOreBridgeFeedback_t s_ir_ore_bridge_feedback{};
+static wire::StartMatchCmd s_start_match_cmd{};
+static bool s_start_match_pending = false;
 static MrlinkPc_TxCallback_t s_tx_done_callback = nullptr;
 static MrlinkPc_TxCallback_t s_tx_error_callback = nullptr;
 static BSP_UART_t s_channel_uart = BSP_UART_PC;
@@ -774,6 +776,31 @@ extern "C" bool MrlinkPc_PublishFeedback(uint8_t topic,
     default:
       return false;
   }
+}
+
+extern "C" bool MrlinkPc_RequestStartMatch(uint8_t start) {
+  s_start_match_cmd.start = (start != 0u) ? 1u : 0u;
+  s_start_match_pending = true;
+  return true;
+}
+
+extern "C" bool MrlinkPc_HasStartMatchRequest(void) {
+  return s_start_match_pending;
+}
+
+extern "C" void MrlinkPc_ClearStartMatchRequest(void) {
+  s_start_match_pending = false;
+  s_start_match_cmd.start = 0u;
+}
+
+extern "C" uint16_t MrlinkPc_BuildStartMatchFrame(uint8_t *tx_buf,
+                                                    uint16_t buf_size) {
+  if (!s_start_match_pending || tx_buf == nullptr) {
+    return 0u;
+  }
+
+  return s_bus.Publish(wire::kFeedbackStartMatch, s_start_match_cmd, tx_buf,
+                       buf_size);
 }
 
 extern "C" const PC_AutoStepParams_t *MrlinkPc_GetAutoStepParams(void) {

@@ -928,6 +928,8 @@ static bool Rc_ShouldUsePcCommand(void) {
          dr16.data.sw_r == DR16_SW_UP;
 }
 
+static bool rc_pc_behavior_was_active = false;
+
 static RcControlPage_t Rc_PageForBehavior(RcBehavior_t behavior) {
   switch (behavior) {
     case RC_BEHAVIOR_DRIVE:
@@ -1988,6 +1990,11 @@ void RcCmdCenterApp_Update(uint32_t now_ms) {
 
   behavior = Rc_SelectMappedBehavior();
   rc_current_plan = Rc_SelectCommandPlan(behavior);
+  const bool pc_behavior_active = (behavior == RC_BEHAVIOR_PC);
+  if (pc_behavior_active && !rc_pc_behavior_was_active) {
+    (void)MrlinkPc_RequestStartMatch(1u);
+  }
+  rc_pc_behavior_was_active = pc_behavior_active;
   rc_cmd_center.tick(now_ms).publish();
   Rc_PublishCommandsAndDebug();
   Rc_UpdateAutoBusyHistory();

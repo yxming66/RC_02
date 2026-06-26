@@ -51,6 +51,7 @@ typedef enum {
 } PC_CMD_t;
 
 typedef enum {
+    PC_FEEDBACK_START_MATCH = 0x02,  /* STM32 发给 PC 的开始比赛命令，payload: uint8 start */
     PC_FEEDBACK_HEARTBEAT = 0x81,    /* STM32 心跳反馈 */
     PC_FEEDBACK_CHASSIS = 0x90,      /* 底盘速度反馈 */
     PC_FEEDBACK_POLE = 0x91,         /* 撑杆位置/电机角度反馈 */
@@ -619,6 +620,18 @@ const PC_IrOreAckCMD_t *MrlinkPc_GetIrOreAckCMD(void);
 
 /* 发布某个反馈 topic 的最新数据；topic 见 PC_FeedbackCMD_t，feedback 指向对应反馈结构体。 */
 bool MrlinkPc_PublishFeedback(uint8_t topic, const void *feedback);
+
+/* 请求发送开始比赛命令；start=0 默认等待，start=1 开始/启动。 */
+bool MrlinkPc_RequestStartMatch(uint8_t start);
+
+/* 是否有待发送的开始比赛命令。 */
+bool MrlinkPc_HasStartMatchRequest(void);
+
+/* 清除待发送的开始比赛命令，通常在实际发送成功后调用。 */
+void MrlinkPc_ClearStartMatchRequest(void);
+
+/* 构造待发送的开始比赛命令帧；无待发送命令或缓存不足时返回 0。 */
+uint16_t MrlinkPc_BuildStartMatchFrame(uint8_t *tx_buf, uint16_t buf_size);
 
 /* 将 PC_StepCMD_t 映射为 AutoCtrl 可直接使用的台阶参数；无有效模板时返回 NULL。 */
 const PC_AutoStepParams_t *MrlinkPc_GetAutoStepParams(void);

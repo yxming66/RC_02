@@ -446,7 +446,7 @@ Config_RobotParam_t robot_config = {
         /* One-key spearhead action timing; rod_param is filled during init. */
         .open_delay_ms = 1000u,
         .grab_high_delay_ms = 200u,
-        .dock_wait_delay_ms = 5000u,
+        .dock_wait_delay_ms = 10000u,
         .use_photo_check = true,
         .photo_check_ms = 500u,
     },

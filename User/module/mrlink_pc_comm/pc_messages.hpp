@@ -39,6 +39,7 @@ inline constexpr Topic kCmdImu = PC_CMD_IMU;
 inline constexpr Topic kCmdIrOreAck = PC_CMD_IR_ORE_ACK;
 
 inline constexpr Topic kFeedbackHeartbeat = PC_FEEDBACK_HEARTBEAT;
+inline constexpr Topic kFeedbackStartMatch = PC_FEEDBACK_START_MATCH;
 inline constexpr Topic kFeedbackChassis = PC_FEEDBACK_CHASSIS;
 inline constexpr Topic kFeedbackPole = PC_FEEDBACK_POLE;
 inline constexpr Topic kFeedbackStep = PC_FEEDBACK_STEP;
@@ -85,6 +86,10 @@ struct __attribute__((packed)) CameraYawCmd {
 
 struct __attribute__((packed)) AutoActionCmd {
   uint8_t action;    /* 一键动作类型，见 PC_AutoAction_t */
+};
+
+struct __attribute__((packed)) StartMatchCmd {
+  uint8_t start;     /* 0=默认等待，1=开始/启动 */
 };
 
 struct __attribute__((packed)) StepCmd {
@@ -152,6 +157,7 @@ constexpr bool IsValidWirePayload() {
 static_assert(IsValidWirePayload<PC_ChassisCMD_t>(), "PC_ChassisCMD_t payload is invalid");
 static_assert(IsValidWirePayload<PC_ImuCMD_t>(), "PC_ImuCMD_t payload is invalid");
 static_assert(IsValidWirePayload<PC_IrOreAckCMD_t>(), "PC_IrOreAckCMD_t payload is invalid");
+static_assert(IsValidWirePayload<StartMatchCmd>(), "StartMatchCmd payload is invalid");
 static_assert(IsValidWirePayload<PoleCmd>(), "PoleCmd payload is invalid");
 static_assert(IsValidWirePayload<ArmSimpleCmd>(), "ArmSimpleCmd payload is invalid");
 static_assert(IsValidWirePayload<RodNewCmd>(), "RodNewCmd payload is invalid");
@@ -175,6 +181,7 @@ static_assert(IsValidWirePayload<StatusFeedback>(), "StatusFeedback payload is i
 static_assert(sizeof(PC_ChassisCMD_t) == 12u, "PC_CMD_CHASSIS wire size changed");
 static_assert(sizeof(PC_ImuCMD_t) == 28u, "PC_CMD_IMU wire size changed");
 static_assert(sizeof(PC_IrOreAckCMD_t) == 6u, "PC_CMD_IR_ORE_ACK wire size changed");
+static_assert(sizeof(StartMatchCmd) == 1u, "PC_FEEDBACK_START_MATCH wire size changed");
 static_assert(sizeof(PoleCmd) == 9u, "PC_CMD_POLE wire size changed");
 static_assert(sizeof(ArmSimpleCmd) == 11u, "PC_CMD_ARM_SIMPLE wire size changed");
 static_assert(sizeof(RodNewCmd) == 7u, "PC_CMD_ROD_NEW wire size changed");
