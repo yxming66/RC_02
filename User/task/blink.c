@@ -299,7 +299,7 @@ void Task_blink(void *argument) {
     tick += delay_tick;
     /* USER CODE BEGIN */
     const uint32_t now_tick = BSP_TIME_Get_ms();
-    // Blink_UpdateAudio(now_tick);
+    Blink_UpdateAudio(now_tick);
 
     if (reset) {
       __set_FAULTMASK(1);
