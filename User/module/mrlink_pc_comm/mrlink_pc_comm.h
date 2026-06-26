@@ -206,7 +206,10 @@ typedef enum {
     PC_AUTO_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD = 12, /* 融合取矿存矿并头向上 200mm 台阶 */
     PC_AUTO_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD = 13, /* 融合取矿存矿并头向下 200mm 台阶 */
     PC_AUTO_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD = 14, /* 融合取矿存矿并头向上 400mm 台阶 */
-    PC_AUTO_ACTION_STEP_PICK_STORE_DESCEND_400_HEAD = 15, /* 融合取矿存矿并头向下 400mm 台阶 */
+    PC_AUTO_ACTION_STEP_ASCEND_200_HEAD = 16, /* 普通头向上 200mm 台阶 */
+    PC_AUTO_ACTION_STEP_DESCEND_200_HEAD = 17, /* 普通头向下 200mm 台阶 */
+    PC_AUTO_ACTION_STEP_ASCEND_400_HEAD = 18, /* 普通头向上 400mm 台阶 */
+    PC_AUTO_ACTION_STEP_DESCEND_400_HEAD = 19, /* 普通头向下 400mm 台阶 */
 } PC_AutoAction_t;
 
 typedef enum {
