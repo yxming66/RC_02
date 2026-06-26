@@ -329,19 +329,32 @@ static void AutoRodSpearhead_RunDockWait(
   switch (ctrl->step_index) {
     case 0:
       AutoRodSpearhead_EnterStep(ctrl, now_ms);
-      if (dock_complete_received) {
-        AutoRodSpearhead_FinishSuccess(ctrl);
-        return;
-      }
       if (!AutoRodSpearhead_CommandOreStore(
               ctrl, AutoRodSpearhead_DockWaitTransform(ctrl), false) ||
           !AutoRodSpearhead_CommandRod(ctrl, ROD_NEW_POSE_DOCK_WAIT,
                                        ROD_NEW_GRIP_GRAB)) {
         return;
       }
+      if (dock_complete_received) {
+        AutoRodSpearhead_NextStep(ctrl);
+        return;
+      }
       if (AutoRodSpearhead_StepElapsed(ctrl, now_ms) >=
           AutoRodSpearhead_DockWaitDelayMs(ctrl)) {
         AutoRodSpearhead_FinishTimeout(ctrl);
+      }
+      return;
+    case 1:
+      AutoRodSpearhead_EnterStep(ctrl, now_ms);
+      if (!AutoRodSpearhead_CommandOreStore(
+              ctrl, AutoRodSpearhead_DockWaitTransform(ctrl), false) ||
+          !AutoRodSpearhead_CommandRod(ctrl, ROD_NEW_POSE_DOCK_WAIT,
+                                       ROD_NEW_GRIP_RELEASE)) {
+        return;
+      }
+      if (AutoRodSpearhead_StepElapsed(ctrl, now_ms) >=
+          AutoRodSpearhead_OpenDelayMs(ctrl)) {
+        AutoRodSpearhead_FinishSuccess(ctrl);
       }
       return;
     default:
