@@ -453,6 +453,39 @@ static bool AutoOre_CommandPoleTarget(AutoOre_t *ctrl,
   return true;
 }
 
+static bool AutoOre_CommandReleasePoleTarget(AutoOre_t *ctrl) {
+  if (ctrl == 0 || ctrl->param.pole_param == 0) {
+    return false;
+  }
+
+  if (!AutoOre_CommandPoleTarget(
+          ctrl, ctrl->param.pole_param->preset.ore_release_target)) {
+    return false;
+  }
+
+  const float speed = ctrl->param.pole_param->preset.ore_release_speed;
+  if (speed > 0.0f) {
+    ctrl->pole_cmd.auto_lift_speed[0] = speed;
+    ctrl->pole_cmd.auto_lift_speed[1] = speed;
+  }
+  return true;
+}
+
+static bool AutoOre_ReleasePoleAtTarget(const AutoOre_t *ctrl) {
+  if (ctrl == 0 || ctrl->param.pole_param == 0) {
+    return false;
+  }
+
+  const float *target = ctrl->param.pole_param->preset.ore_release_target;
+  const float threshold = (ctrl->param.pole_arrive_threshold_rad > 0.0f)
+                              ? ctrl->param.pole_arrive_threshold_rad
+                              : 0.30f;
+  return AutoOre_AbsFloat(ctrl->feedback.pole_front_lift_rad - target[0]) <=
+             threshold &&
+         AutoOre_AbsFloat(ctrl->feedback.pole_rear_lift_rad - target[1]) <=
+             threshold;
+}
+
 static void AutoOre_CommandChassisMove(AutoOre_t *ctrl, float vx_mps) {
   memset(&ctrl->chassis_cmd, 0, sizeof(ctrl->chassis_cmd));
   ctrl->chassis_cmd.mode = CHASSIS_MODE_INDEPENDENT;
@@ -472,6 +505,12 @@ static void AutoOre_CommandChassisMoveYawRate(AutoOre_t *ctrl, float vx_mps,
 
 static void AutoOre_CommandChassisHold(AutoOre_t *ctrl) {
   AutoOre_CommandChassisMove(ctrl, 0.0f);
+}
+
+static void AutoOre_CommandChassisZeroVector(AutoOre_t *ctrl) {
+  memset(&ctrl->chassis_cmd, 0, sizeof(ctrl->chassis_cmd));
+  ctrl->chassis_cmd.mode = CHASSIS_MODE_INDEPENDENT;
+  ctrl->chassis_cmd_valid = true;
 }
 
 static float AutoOre_PrealignYawToleranceRad(const AutoOre_t *ctrl) {
@@ -902,12 +941,29 @@ static bool AutoOre_CommandReleaseOreStoreHold(
 }
 
 static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
-  AutoOre_CommandChassisHold(ctrl);
+  AutoOre_CommandChassisZeroVector(ctrl);
 
   switch (ctrl->step_index) {
     case 0:
       AutoOre_EnterStep(ctrl, now_ms);
-      if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_WAIT_RELEASE_ORE,
+      if (!AutoOre_CommandReleasePoleTarget(ctrl) ||
+          !AutoOre_CommandReleaseOreStoreHold(ctrl,
+                                              ORE_STORE_TRANSFORM_STANDBY,
+                                              true)) {
+        AutoOre_FailInvalidParam(ctrl);
+        return;
+      }
+        if (AutoOre_StepElapsed(ctrl, now_ms) > 0u &&
+          AutoOre_ReleasePoleAtTarget(ctrl)) {
+        AutoOre_NextStep(ctrl);
+      } else {
+        (void)AutoOre_CheckTimeout(ctrl, now_ms);
+      }
+      return;
+    case 1:
+      AutoOre_EnterStep(ctrl, now_ms);
+      if (!AutoOre_CommandReleasePoleTarget(ctrl) ||
+          !AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_WAIT_RELEASE_ORE,
               SUCTION_ON,
               &ctrl->param.arm_speed.release_wait) ||
           !AutoOre_CommandReleaseOreStoreHold(ctrl,
@@ -924,9 +980,10 @@ static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
         (void)AutoOre_CheckTimeout(ctrl, now_ms);
       }
       return;
-    case 1:
+    case 2:
       AutoOre_EnterStep(ctrl, now_ms);
-      if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_RELEASE_ORE,
+      if (!AutoOre_CommandReleasePoleTarget(ctrl) ||
+          !AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_RELEASE_ORE,
               SUCTION_ON,
               &ctrl->param.arm_speed.release_place) ||
           !AutoOre_CommandReleaseOreStoreHold(ctrl,
@@ -943,9 +1000,10 @@ static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
         (void)AutoOre_CheckTimeout(ctrl, now_ms);
       }
       return;
-    case 2:
+    case 3:
       AutoOre_EnterStep(ctrl, now_ms);
-      if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_RELEASE_ORE,
+      if (!AutoOre_CommandReleasePoleTarget(ctrl) ||
+          !AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_RELEASE_ORE,
               SUCTION_OFF,
               &ctrl->param.arm_speed.release_place) ||
           !AutoOre_CommandReleaseOreStoreHold(ctrl,
@@ -961,9 +1019,10 @@ static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
         (void)AutoOre_CheckTimeout(ctrl, now_ms);
       }
       return;
-    case 3:
+    case 4:
       AutoOre_EnterStep(ctrl, now_ms);
-      if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_STANDBY,
+      if (!AutoOre_CommandReleasePoleTarget(ctrl) ||
+          !AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_STANDBY,
               SUCTION_OFF,
               &ctrl->param.arm_speed.release_standby) ||
           !AutoOre_CommandReleaseOreStoreHold(ctrl,
