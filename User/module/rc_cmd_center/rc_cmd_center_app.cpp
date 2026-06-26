@@ -216,11 +216,7 @@ typedef enum {
 } RcAutoStepProfile_t;
 
 static RcAutoStepProfile_t Rc_SelectAutoStepProfile(void) {
-  if (dr16.data.ch_res <= -RC_AUTO_STEP_CH_RES_THRESHOLD) {
-    return RC_AUTO_STEP_PROFILE_FUSED_UP_400_NORMAL_DOWN_400;
-  }
-
-  return RC_AUTO_STEP_PROFILE_FUSED_200;
+  return RC_AUTO_STEP_PROFILE_FUSED_UP_400_NORMAL_DOWN_400;
 }
 
 #if RC_MAPPING_ACTIVE_PRESET == RC_MAPPING_PRESET_PC_FIRST
