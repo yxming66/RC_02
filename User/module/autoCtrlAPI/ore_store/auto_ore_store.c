@@ -468,6 +468,11 @@ static bool AutoOre_CommandReleasePoleTarget(AutoOre_t *ctrl) {
     ctrl->pole_cmd.auto_lift_speed[0] = speed;
     ctrl->pole_cmd.auto_lift_speed[1] = speed;
   }
+  const float accel = ctrl->param.pole_param->preset.ore_release_accel;
+  if (accel > 0.0f) {
+    ctrl->pole_cmd.auto_lift_accel[0] = accel;
+    ctrl->pole_cmd.auto_lift_accel[1] = accel;
+  }
   return true;
 }
 

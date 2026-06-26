@@ -95,6 +95,7 @@ typedef struct {
     float step_400_descend_all_retract[2];   /* 400mm下台阶-四撑杆全收: [0]前两杆, [1]后两杆 */
     float ore_release_target[2];       /* 一键放矿专用撑杆目标: [0]前两杆, [1]后两杆 */
     float ore_release_speed;           /* 一键放矿专用撑杆目标跟随速度，rad/s */
+    float ore_release_accel;           /* 一键放矿专用撑杆目标跟随加速度，rad/s^2 */
   } preset;
   struct {
     float max_torque_nm; /* Nm, <=0 means fallback to max_current */

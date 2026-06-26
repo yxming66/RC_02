@@ -1618,13 +1618,6 @@ struct RcPoleAutoCtrlRoute {
 
 struct RcPoleAutoOreRoute {
   bool operator()(const RcRuntimeInput &, cmd::Context &, Pole_CMD_t &out) const {
-    if (auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl) &&
-        auto_ore_ctrl.action == AUTO_ORE_ACTION_RELEASE &&
-        Rc_SetPolePcCommand(true)) {
-      out = pole_cmd;
-      return true;
-    }
-
     const Pole_CMD_t *auto_pole_cmd = AutoOre_GetPoleCommand(&auto_ore_ctrl);
     if (auto_pole_cmd != NULL) {
       out = *auto_pole_cmd;
