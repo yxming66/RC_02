@@ -30,26 +30,6 @@ void Task_Init(void *argument) {
 
   osKernelLock();
 
-  task_runtime.thread.blink = 
-      osThreadNew(Task_blink, NULL, &attr_blink);
-  task_runtime.thread.atti_esti =
-      osThreadNew(Task_atti_esti, NULL, &attr_atti_esti);
-  task_runtime.thread.chassis_ore =
-      osThreadNew(Task_chassis_ore, NULL, &attr_chassis_ore);
-  task_runtime.thread.upper_mech =
-      osThreadNew(Task_upper_mech, NULL, &attr_upper_mech);
-  task_runtime.thread.pole_main =
-      osThreadNew(Task_pole_main, NULL, &attr_pole_main);
-  task_runtime.thread.rc_main = 
-      osThreadNew(Task_rc_main, NULL, &attr_rc_main);
-  task_runtime.thread.auto_ctrl =
-      osThreadNew(Task_auto_ctrl, NULL, &attr_auto_ctrl);
-  task_runtime.thread.pc_comm_sick =
-      osThreadNew(Task_pc_comm_sick, NULL, &attr_pc_comm_sick);
-  task_runtime.thread.ir_dock = osThreadNew(Task_ir_dock, NULL, &attr_ir_dock);
-
-  task_runtime.heartbeat.init++;
-
   task_runtime.msgq.chassis.imu =
       osMessageQueueNew(1u, sizeof(Chassis_IMU_t), NULL);
   task_runtime.msgq.chassis.cmd =
@@ -70,6 +50,28 @@ void Task_Init(void *argument) {
     SharedValve_Init(BSP_GPIO_SPEARHEAD_RELAY);
 
   task_runtime.heartbeat.init++;
+
+  task_runtime.thread.blink = 
+      osThreadNew(Task_blink, NULL, &attr_blink);
+  task_runtime.thread.atti_esti =
+      osThreadNew(Task_atti_esti, NULL, &attr_atti_esti);
+  task_runtime.thread.chassis_ore =
+      osThreadNew(Task_chassis_ore, NULL, &attr_chassis_ore);
+  task_runtime.thread.upper_mech =
+      osThreadNew(Task_upper_mech, NULL, &attr_upper_mech);
+  task_runtime.thread.pole_main =
+      osThreadNew(Task_pole_main, NULL, &attr_pole_main);
+  task_runtime.thread.rc_main = 
+      osThreadNew(Task_rc_main, NULL, &attr_rc_main);
+  task_runtime.thread.auto_ctrl =
+      osThreadNew(Task_auto_ctrl, NULL, &attr_auto_ctrl);
+  task_runtime.thread.pc_comm_sick =
+      osThreadNew(Task_pc_comm_sick, NULL, &attr_pc_comm_sick);
+  task_runtime.thread.ir_dock = osThreadNew(Task_ir_dock, NULL, &attr_ir_dock);
+
+  task_runtime.heartbeat.init++;
+
+
 
 
 
