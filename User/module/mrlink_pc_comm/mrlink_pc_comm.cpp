@@ -22,6 +22,7 @@ constexpr uint16_t kRxDmaBufSize = MRLINK_PC_RX_DMA_BUF_SIZE;
 constexpr uint16_t kMrlinkRxBufSize = MRLINK_PC_RX_STREAM_BUF_SIZE;
 constexpr uint16_t kMrlinkTxBufSize = MRLINK_PC_MAX_FRAME_SIZE;
 constexpr uint32_t kAutoActionRepeatReleaseMs = 300u;
+constexpr uint32_t kModuleCommandTimeoutMs = 100u;
 
 static_assert(kRxDmaSlotCount >= 2u, "MRLINK_PC_RX_DMA_SLOT_COUNT must be >= 2");
 static_assert(kRxDmaBufSize >= MRLINK_PC_MAX_FRAME_SIZE,
@@ -61,7 +62,20 @@ static BSP_UART_t s_channel_uart = BSP_UART_PC;
 static bool s_comm_initialized = false;
 static bool s_pole_cmd_received = false;
 static bool s_arm_simple_cmd_received = false;
+static uint32_t s_pole_cmd_tick = 0u;
+static uint32_t s_arm_simple_cmd_tick = 0u;
 static bool s_ir_ore_ack_pending = false;
+
+bool IsRecentCommand(bool received, uint32_t tick, uint32_t now_ms) {
+  return received && tick > 0u && (now_ms - tick) <= kModuleCommandTimeoutMs;
+}
+
+void ClearModuleCommands() {
+  s_pole_cmd_received = false;
+  s_arm_simple_cmd_received = false;
+  s_pole_cmd_tick = 0u;
+  s_arm_simple_cmd_tick = 0u;
+}
 
 uint16_t DebugCopyRaw(volatile uint8_t *dst, uint16_t dst_size,
                       const uint8_t *src, uint16_t src_len) {
@@ -181,8 +195,6 @@ void OnHeartbeat() {
 
 void OnChassis(const PC_ChassisCMD_t &cmd) {
   s_state.cmd.chassis = cmd;
-  s_pole_cmd_received = false;
-  s_arm_simple_cmd_received = false;
   s_state.cmd.abstract_position.enable_mask &=
       static_cast<uint8_t>(~(PC_ABSTRACT_MODULE_POLE |
                             PC_ABSTRACT_MODULE_ARM_SIMPLE));
@@ -195,7 +207,7 @@ void OnPole(const wire::PoleCmd &cmd) {
   s_state.cmd.pole.lift[0] = cmd.lift0;
   s_state.cmd.pole.lift[1] = cmd.lift1;
   s_pole_cmd_received = true;
-  s_arm_simple_cmd_received = false;
+  s_pole_cmd_tick = BSP_TIME_Get_ms();
   s_state.cmd.abstract_position.enable_mask &=
       static_cast<uint8_t>(~(PC_ABSTRACT_MODULE_POLE |
                 PC_ABSTRACT_MODULE_ARM_SIMPLE));
@@ -209,8 +221,8 @@ void OnArmSimple(const wire::ArmSimpleCmd &cmd) {
   s_state.cmd.arm_simple.suction = cmd.suction;
   s_state.cmd.arm_simple.target_joint1_rad = cmd.target_joint1_rad;
   s_state.cmd.arm_simple.target_joint2_rad = cmd.target_joint2_rad;
-  s_pole_cmd_received = false;
   s_arm_simple_cmd_received = true;
+  s_arm_simple_cmd_tick = BSP_TIME_Get_ms();
   s_state.cmd.abstract_position.enable_mask &=
       static_cast<uint8_t>(~(PC_ABSTRACT_MODULE_POLE |
                             PC_ABSTRACT_MODULE_ARM_SIMPLE));
@@ -223,8 +235,6 @@ void OnRodNew(const wire::RodNewCmd &cmd) {
   s_state.cmd.rod_new.pose = cmd.pose;
   s_state.cmd.rod_new.grip = cmd.grip;
   s_state.cmd.rod_new.target_angle_rad = cmd.target_angle_rad;
-  s_pole_cmd_received = false;
-  s_arm_simple_cmd_received = false;
   s_state.cmd.abstract_position.enable_mask &=
       static_cast<uint8_t>(~(PC_ABSTRACT_MODULE_ROD_NEW |
                             PC_ABSTRACT_MODULE_POLE |
@@ -237,8 +247,6 @@ void OnOreStore(const wire::OreStoreCmd &cmd) {
   s_state.cmd.ore_store.mode = cmd.mode;
   s_state.cmd.ore_store.force_rehome = cmd.force_rehome;
   s_state.cmd.ore_store.platform_target_rad = cmd.platform_target_rad;
-  s_pole_cmd_received = false;
-  s_arm_simple_cmd_received = false;
   s_state.cmd.abstract_position.enable_mask &=
       static_cast<uint8_t>(~(PC_ABSTRACT_MODULE_ORE_STORE |
                             PC_ABSTRACT_MODULE_POLE |
@@ -253,8 +261,6 @@ void OnAutoAction(const wire::AutoActionCmd &cmd) {
       s_auto_action_rx_latch != PC_AUTO_ACTION_NONE &&
       (now_ms - s_auto_action_rx_latch_tick) >= kAutoActionRepeatReleaseMs;
 
-  s_pole_cmd_received = false;
-  s_arm_simple_cmd_received = false;
   s_state.cmd.abstract_position.enable_mask &=
       static_cast<uint8_t>(~(PC_ABSTRACT_MODULE_POLE |
                             PC_ABSTRACT_MODULE_ARM_SIMPLE));
@@ -285,8 +291,6 @@ void OnCameraYaw(const wire::CameraYawCmd &cmd) {
     s_state.cmd.camera_yaw.mode[yaw] = cmd.mode[yaw];
     s_state.cmd.camera_yaw.target_yaw_rad[yaw] = cmd.target_yaw_rad[yaw];
   }
-  s_pole_cmd_received = false;
-  s_arm_simple_cmd_received = false;
   s_state.cmd.abstract_position.enable_mask &=
       static_cast<uint8_t>(~(PC_ABSTRACT_MODULE_POLE |
                             PC_ABSTRACT_MODULE_ARM_SIMPLE));
@@ -297,8 +301,6 @@ void OnCameraYaw(const wire::CameraYawCmd &cmd) {
 
 void OnAbstractPosition(const PC_AbstractPositionCMD_t &cmd) {
   s_state.cmd.abstract_position = cmd;
-  s_pole_cmd_received = false;
-  s_arm_simple_cmd_received = false;
   MarkRxFrame(PC_CMD_ABSTRACT_POSITION, sizeof(cmd), MRLINK_OK);
   TouchOnline(PC_CMD_ABSTRACT_POSITION);
 }
@@ -309,8 +311,6 @@ void OnStep(const wire::StepCmd &cmd) {
   s_state.cmd.step.travel_dir = static_cast<PC_StepDir_t>(cmd.travel_dir);
   s_state.cmd.step.target_yaw_rad = cmd.target_yaw_rad;
   s_state.cmd.step.yaw_tolerance_rad = cmd.yaw_tolerance_rad;
-  s_pole_cmd_received = false;
-  s_arm_simple_cmd_received = false;
   s_state.cmd.abstract_position.enable_mask &=
       static_cast<uint8_t>(~(PC_ABSTRACT_MODULE_POLE |
                             PC_ABSTRACT_MODULE_ARM_SIMPLE));
@@ -557,8 +557,7 @@ extern "C" bool MrlinkPc_CommInit(void) {
   }
 
   std::memset(&s_state, 0, sizeof(s_state));
-  s_pole_cmd_received = false;
-  s_arm_simple_cmd_received = false;
+  ClearModuleCommands();
   s_ir_ore_ack_pending = false;
   s_state.control_mode = PC_MODE_RC;
   s_state.feedback.status.command_source = PC_COMMAND_SOURCE_RC;
@@ -594,8 +593,7 @@ extern "C" void MrlinkPc_CommProcess(uint32_t now_ms) {
     s_state.heartbeat_valid = false;
     s_state.control_mode = PC_MODE_RC;
     s_state.online = false;
-    s_pole_cmd_received = false;
-    s_arm_simple_cmd_received = false;
+    ClearModuleCommands();
   }
 
   (void)WaitRecvComplete(0u);
@@ -690,7 +688,8 @@ extern "C" const PC_PoleCMD_t *MrlinkPc_GetPoleCMD(void) {
 }
 
 extern "C" bool MrlinkPc_HasPoleCMD(void) {
-  return s_pole_cmd_received;
+  return IsRecentCommand(s_pole_cmd_received, s_pole_cmd_tick,
+                         BSP_TIME_Get_ms());
 }
 
 extern "C" const PC_ArmCMD_t *MrlinkPc_GetArmCMD(void) {
@@ -702,7 +701,8 @@ extern "C" const PC_ArmSimpleCMD_t *MrlinkPc_GetArmSimpleCMD(void) {
 }
 
 extern "C" bool MrlinkPc_HasArmSimpleCMD(void) {
-  return s_arm_simple_cmd_received;
+  return IsRecentCommand(s_arm_simple_cmd_received, s_arm_simple_cmd_tick,
+                         BSP_TIME_Get_ms());
 }
 
 extern "C" const PC_RodNewCMD_t *MrlinkPc_GetRodNewCMD(void) {
