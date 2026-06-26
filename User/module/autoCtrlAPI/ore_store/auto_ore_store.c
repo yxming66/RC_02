@@ -1196,7 +1196,6 @@ static ArmSimple_BehaviorPoint_t AutoOre_PickArmPoint(
     case AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD:
       return ARM_SIMPLE_BEHAVIOR_PICK_POS_200;
     case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD:
-    case AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_400_HEAD:
       return ARM_SIMPLE_BEHAVIOR_PICK_POS_400;
     case AUTO_ORE_ACTION_PICK_POS_400:
       return ARM_SIMPLE_BEHAVIOR_PICK_POS_400;
@@ -1216,8 +1215,6 @@ static const float *AutoOre_FusedStepStartPoleTarget(const AutoOre_t *ctrl) {
   switch (ctrl->action) {
     case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD:
       return ctrl->param.pole_param->preset.step_400_all_extend;
-    case AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_400_HEAD:
-      return ctrl->param.pole_param->preset.step_400_descend_all_extend;
     case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD:
       return ctrl->param.pole_param->preset.step_200_all_extend;
     case AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD:
@@ -1240,8 +1237,6 @@ static auto_ctrl_template_e AutoOre_FusedDefaultTemplate(
       return AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD;
     case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD:
       return AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD;
-    case AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_400_HEAD:
-      return AUTO_CTRL_TEMPLATE_DESCEND_400_HEAD;
     default:
       return AUTO_CTRL_TEMPLATE_NONE;
   }
@@ -1325,7 +1320,6 @@ static AutoOre_Action_t AutoOre_FusedDefaultPickAction(
     AutoOre_Action_t action) {
   switch (action) {
     case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD:
-    case AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_400_HEAD:
       return AUTO_ORE_ACTION_PICK_POS_400;
     case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD:
       return AUTO_ORE_ACTION_PICK_POS_200;
@@ -2207,13 +2201,6 @@ bool AutoOre_StartStepPickStoreAscend400Head(AutoOre_t *ctrl,
                                              uint32_t now_ms) {
   return AutoOre_Start(ctrl, AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD,
                        now_ms);
-}
-
-bool AutoOre_StartStepPickStoreDescend400Head(AutoOre_t *ctrl,
-                                              uint32_t now_ms) {
-  (void)ctrl;
-  (void)now_ms;
-  return false;
 }
 
 void AutoOre_Update(AutoOre_t *ctrl, const AutoOre_Feedback_t *feedback,

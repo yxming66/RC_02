@@ -160,8 +160,6 @@ static PC_AutoAction_t AutoCtrlFeed_MapOreAction(AutoOre_Action_t action) {
       return PC_AUTO_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD;
     case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD:
       return PC_AUTO_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD;
-    case AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_400_HEAD:
-      return PC_AUTO_ACTION_NONE;
     case AUTO_ORE_ACTION_NONE:
     default:
       return PC_AUTO_ACTION_NONE;
@@ -189,14 +187,16 @@ static AutoOre_Action_t AutoCtrlFeed_RequestToOreAction(
       return AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD;
     case AUTO_ORE_DEBUG_REQUEST_STEP_PICK_STORE_ASCEND_400_HEAD:
       return AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD;
-    case AUTO_ORE_DEBUG_REQUEST_STEP_PICK_STORE_DESCEND_400_HEAD:
-      return AUTO_ORE_ACTION_NONE;
     case AUTO_ORE_DEBUG_REQUEST_NONE:
     case AUTO_ORE_DEBUG_REQUEST_ABORT:
     case AUTO_ORE_DEBUG_REQUEST_ROD_SPEARHEAD:
     case AUTO_ORE_DEBUG_REQUEST_SICK_CORRECT_ROD_SPEARHEAD:
     case AUTO_ORE_DEBUG_REQUEST_SICK_CORRECT_ORE_RELEASE:
     case AUTO_ORE_DEBUG_REQUEST_ROD_DOCK_WAIT:
+    case AUTO_ORE_DEBUG_REQUEST_STEP_ASCEND_200_HEAD:
+    case AUTO_ORE_DEBUG_REQUEST_STEP_DESCEND_200_HEAD:
+    case AUTO_ORE_DEBUG_REQUEST_STEP_ASCEND_400_HEAD:
+    case AUTO_ORE_DEBUG_REQUEST_STEP_DESCEND_400_HEAD:
     default:
       return AUTO_ORE_ACTION_NONE;
   }
@@ -403,6 +403,42 @@ static bool AutoCtrlFeed_IsOreAction(PC_AutoAction_t action) {
   }
 }
 
+static PC_AutoAction_t AutoCtrlFeed_MapStepRequest(
+    AutoOre_DebugRequest_t request) {
+  switch (request) {
+    case AUTO_ORE_DEBUG_REQUEST_STEP_ASCEND_200_HEAD:
+      return PC_AUTO_ACTION_STEP_ASCEND_200_HEAD;
+    case AUTO_ORE_DEBUG_REQUEST_STEP_DESCEND_200_HEAD:
+      return PC_AUTO_ACTION_STEP_DESCEND_200_HEAD;
+    case AUTO_ORE_DEBUG_REQUEST_STEP_ASCEND_400_HEAD:
+      return PC_AUTO_ACTION_STEP_ASCEND_400_HEAD;
+    case AUTO_ORE_DEBUG_REQUEST_STEP_DESCEND_400_HEAD:
+      return PC_AUTO_ACTION_STEP_DESCEND_400_HEAD;
+    default:
+      return PC_AUTO_ACTION_NONE;
+  }
+}
+
+static auto_ctrl_template_e AutoCtrlFeed_MapStepTemplate(
+    PC_AutoAction_t action) {
+  switch (action) {
+    case PC_AUTO_ACTION_STEP_ASCEND_200_HEAD:
+      return AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD;
+    case PC_AUTO_ACTION_STEP_DESCEND_200_HEAD:
+      return AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD;
+    case PC_AUTO_ACTION_STEP_ASCEND_400_HEAD:
+      return AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD;
+    case PC_AUTO_ACTION_STEP_DESCEND_400_HEAD:
+      return AUTO_CTRL_TEMPLATE_DESCEND_400_HEAD;
+    default:
+      return AUTO_CTRL_TEMPLATE_NONE;
+  }
+}
+
+static bool AutoCtrlFeed_IsStepAction(PC_AutoAction_t action) {
+  return AutoCtrlFeed_MapStepTemplate(action) != AUTO_CTRL_TEMPLATE_NONE;
+}
+
 static bool AutoCtrlFeed_IsFusedOreAction(AutoOre_Action_t action) {
   switch (action) {
     case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD:
@@ -459,7 +495,6 @@ static uint16_t AutoCtrlFeed_OreActionFailureMask(AutoOre_Action_t action) {
     case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD:
     case AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD:
     case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD:
-    case AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_400_HEAD:
       return PC_AUTO_ACTION_FAILURE_SETUP;
     case AUTO_ORE_ACTION_NONE:
     default:
@@ -540,9 +575,6 @@ static bool AutoCtrlFeed_StartOreAction(AutoOre_Action_t action) {
       result = AutoOre_StartStepPickStoreAscend400Head(&auto_ore_ctrl,
                                                        now_ms);
       break;
-    case AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_400_HEAD:
-      result = false;
-      break;
     case AUTO_ORE_ACTION_NONE:
     default:
       result = false;
@@ -551,6 +583,36 @@ static bool AutoCtrlFeed_StartOreAction(AutoOre_Action_t action) {
 
   if (result || AutoOre_GetState(&auto_ore_ctrl) == AUTO_ORE_STATE_FAIL) {
     AutoCtrlFeed_RememberOreAction(action);
+  }
+  return result;
+}
+
+static bool AutoCtrlFeed_StartStepAction(PC_AutoAction_t action) {
+  if (!auto_ctrl_inited || AutoCtrl_IsBusy(&auto_ctrl) ||
+      (auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl)) ||
+      Task_AutoRodSpearheadIsBusy() || Task_AutoSickCorrectIsBusy()) {
+    return false;
+  }
+
+  const auto_ctrl_template_e template_id =
+      AutoCtrlFeed_MapStepTemplate(action);
+  if (template_id == AUTO_CTRL_TEMPLATE_NONE) {
+    return false;
+  }
+
+  const uint32_t now_ms = BSP_TIME_Get_ms();
+  AutoCtrl_SetYawSource(&auto_ctrl, AUTO_CTRL_YAW_SOURCE_PC);
+  AutoCtrl_SetYawZeroOffset(&auto_ctrl, 0.0f);
+  const bool result = AutoCtrl_StartTemplate(
+      &auto_ctrl,
+      template_id,
+      AUTO_CTRL_TRAVEL_DIR_HEAD_FORWARD,
+      feedback.yaw_auto_rad,
+      0.0f,
+      AUTO_CTRL_SENSOR_MODE_NONE,
+      now_ms);
+  if (result) {
+    auto_action_last_action = action;
   }
   return result;
 }
@@ -619,6 +681,14 @@ static void AutoCtrlFeed_PublishAutoActionFeedback(void) {
         AutoSickCorrect_GetAction(&auto_sick_correct_ctrl));
   }
 
+  if (auto_ctrl_inited && AutoCtrl_IsBusy(&auto_ctrl) &&
+      AutoCtrlFeed_IsStepAction(auto_action_last_action)) {
+    pc_feedback.busy = 1u;
+    pc_feedback.action = (uint8_t)auto_action_last_action;
+    (void)MrlinkPc_PublishFeedback(PC_FEEDBACK_AUTO_ACTION, &pc_feedback);
+    return;
+  }
+
   pc_feedback.busy = (ore_busy || rod_busy || sick_busy) ? 1u : 0u;
   pc_feedback.action = (uint8_t)auto_action_last_action;
 
@@ -639,6 +709,18 @@ static void AutoCtrlFeed_PublishAutoActionFeedback(void) {
       AutoCtrlFeed_SetFeedbackFail(
           &pc_feedback, AutoCtrlFeed_OreFailureMask(auto_ore_last_action));
     } else if (result == AUTO_ORE_RESULT_ABORTED) {
+      AutoCtrlFeed_SetFeedbackFail(&pc_feedback,
+                                   PC_AUTO_ACTION_FAILURE_ABORTED);
+    }
+  } else if (AutoCtrlFeed_IsStepAction(auto_action_last_action) &&
+             auto_ctrl_inited) {
+    const auto_ctrl_result_e result = AutoCtrl_GetResult(&auto_ctrl);
+    if (result == AUTO_CTRL_RESULT_SUCCESS) {
+      AutoCtrlFeed_SetFeedbackSuccess(&pc_feedback);
+    } else if (result == AUTO_CTRL_RESULT_FAIL) {
+      AutoCtrlFeed_SetFeedbackFail(&pc_feedback,
+                                   PC_AUTO_ACTION_FAILURE_STEP);
+    } else if (result == AUTO_CTRL_RESULT_ABORTED) {
       AutoCtrlFeed_SetFeedbackFail(&pc_feedback,
                                    PC_AUTO_ACTION_FAILURE_ABORTED);
     }
@@ -1087,8 +1169,20 @@ bool Task_AutoOreStartStepPickStoreAscend400Head(void) {
       AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD);
 }
 
-bool Task_AutoOreStartStepPickStoreDescend400Head(void) {
-  return false;
+bool Task_AutoStepStartAscend200Head(void) {
+  return AutoCtrlFeed_StartStepAction(PC_AUTO_ACTION_STEP_ASCEND_200_HEAD);
+}
+
+bool Task_AutoStepStartDescend200Head(void) {
+  return AutoCtrlFeed_StartStepAction(PC_AUTO_ACTION_STEP_DESCEND_200_HEAD);
+}
+
+bool Task_AutoStepStartAscend400Head(void) {
+  return AutoCtrlFeed_StartStepAction(PC_AUTO_ACTION_STEP_ASCEND_400_HEAD);
+}
+
+bool Task_AutoStepStartDescend400Head(void) {
+  return AutoCtrlFeed_StartStepAction(PC_AUTO_ACTION_STEP_DESCEND_400_HEAD);
 }
 
 void Task_AutoOreAbort(void) {
@@ -1148,8 +1242,12 @@ static void AutoCtrlFeed_HandleAutoOreDebugRequest(void) {
     case AUTO_ORE_DEBUG_REQUEST_STEP_PICK_STORE_ASCEND_400_HEAD:
       result = Task_AutoOreStartStepPickStoreAscend400Head();
       break;
-    case AUTO_ORE_DEBUG_REQUEST_STEP_PICK_STORE_DESCEND_400_HEAD:
-      result = Task_AutoOreStartStepPickStoreDescend400Head();
+    case AUTO_ORE_DEBUG_REQUEST_STEP_ASCEND_200_HEAD:
+    case AUTO_ORE_DEBUG_REQUEST_STEP_DESCEND_200_HEAD:
+    case AUTO_ORE_DEBUG_REQUEST_STEP_ASCEND_400_HEAD:
+    case AUTO_ORE_DEBUG_REQUEST_STEP_DESCEND_400_HEAD:
+      result = AutoCtrlFeed_StartStepAction(
+          AutoCtrlFeed_MapStepRequest(request));
       break;
     case AUTO_ORE_DEBUG_REQUEST_ROD_SPEARHEAD:
       result = Task_AutoRodSpearheadStart();
@@ -1165,11 +1263,15 @@ static void AutoCtrlFeed_HandleAutoOreDebugRequest(void) {
       break;
     case AUTO_ORE_DEBUG_REQUEST_ABORT: {
       const bool any_auto_busy =
+          (auto_ctrl_inited && AutoCtrl_IsBusy(&auto_ctrl)) ||
           (auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl)) ||
           (auto_rod_spearhead_inited &&
            AutoRodSpearhead_IsBusy(&auto_rod_spearhead_ctrl)) ||
           (auto_sick_correct_inited &&
            AutoSickCorrect_IsBusy(&auto_sick_correct_ctrl));
+      if (auto_ctrl_inited) {
+        AutoCtrl_Abort(&auto_ctrl);
+      }
       Task_AutoOreAbort();
       Task_AutoRodSpearheadAbort();
       Task_AutoSickCorrectAbort();
@@ -1193,7 +1295,11 @@ static void AutoCtrlFeed_HandleAutoOreDebugRequest(void) {
         request != AUTO_ORE_DEBUG_REQUEST_ROD_SPEARHEAD &&
         request != AUTO_ORE_DEBUG_REQUEST_ROD_DOCK_WAIT &&
         request != AUTO_ORE_DEBUG_REQUEST_SICK_CORRECT_ROD_SPEARHEAD &&
-        request != AUTO_ORE_DEBUG_REQUEST_SICK_CORRECT_ORE_RELEASE;
+          request != AUTO_ORE_DEBUG_REQUEST_SICK_CORRECT_ORE_RELEASE &&
+          request != AUTO_ORE_DEBUG_REQUEST_STEP_ASCEND_200_HEAD &&
+          request != AUTO_ORE_DEBUG_REQUEST_STEP_DESCEND_200_HEAD &&
+          request != AUTO_ORE_DEBUG_REQUEST_STEP_ASCEND_400_HEAD &&
+          request != AUTO_ORE_DEBUG_REQUEST_STEP_DESCEND_400_HEAD;
   }
   if (request == AUTO_ORE_DEBUG_REQUEST_ABORT) {
     g_auto_ore_debug.force_output_enable = false;

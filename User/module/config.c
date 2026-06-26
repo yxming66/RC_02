@@ -137,9 +137,9 @@ Config_RobotParam_t robot_config = {
             .step_400_all_retract = {0.5f, 0.8f},
 
             /* 200mm 下台阶四杆全伸位。 */
-            .step_200_descend_all_extend = {13.8f, 13.8f},
+            .step_200_descend_all_extend = {13.3f, 13.3f},
             /* 200mm 下台阶前杆收回、后杆保持支撑位。 */
-            .step_200_descend_front_retract = {0.4f, 13.8f},
+            .step_200_descend_front_retract = {0.4f, 13.3f},
             /* 200mm 下台阶四杆全收位。 */
             .step_200_descend_all_retract = {0.4f, 0.4f},
             /* 200mm 下台阶起步/小抬升位。 */
@@ -542,8 +542,8 @@ Config_RobotParam_t robot_config = {
             .pole_extend_move_speed = 0.4f,    /* 撑杆伸出阶段 vx，单位 m/s。 */
             .front_retract_move_speed = 0.40f,  /* 前杆动作阶段 vx，单位 m/s。 */
             .front_retract_timeout_ms = 5000u,  /* 前光电触发后，等待前杆收回到位超时，单位 ms。 */
-            .mid_move_speed = 0.8f,             /* 前杆收回到位后的中段平移 vx，单位 m/s。 */
-            .mid_move_ms = 150u,               /* 中段角度门控兜底超时，单位 ms。 */
+            .mid_move_speed = 1.2f,             /* 前杆收回到位后的中段平移 vx，单位 m/s。 */
+            .mid_move_ms = 120u,               /* 中段角度门控兜底超时，单位 ms。 */
             .mid_move_wheel_delta_rad = 10.66f, /* 编码器门控的中段冲刺轮转角阈值，单位 rad；>0 优先按角度切步，<=0 使用 mid_move_ms。 */
             .timed_move_yaw_tolerance_rad = 0.35f, /* 中段移动切步 yaw 容差，约 10 deg。 */
             .rear_retract_move_speed = 0.40f,   /* 等待后光电触发的低速 vx，单位 m/s。 */
@@ -617,12 +617,12 @@ Config_RobotParam_t robot_config = {
              */
             /* AutoCtrlTemplate_RunHeadDescend200Optimized 使用的有效字段。 */
             .prealign_move_speed = 0.20f,       /* PREALIGN yaw 对正时叠加的前进 vx，单位 m/s。 */
-            .front_retract_move_speed = 0.2f,  /* step4 等待 PE13/photo1 下降沿的慢速 vx，单位 m/s。 */
-            .mid_move_speed = 0.5f,            /* step0/step3 两段固定快跑 vx，单位 m/s。 */
-            .mid_move_ms = 100u,                 /* step0 第一次固定快跑持续时间，单位 ms。 */ 
+            .front_retract_move_speed = 0.18f,  /* step4 等待 PE13/photo1 下降沿的慢速 vx，单位 m/s。 */
+            .mid_move_speed = 0.8f,            /* step0/step3 两段固定快跑 vx，单位 m/s。 */
+            .mid_move_ms = 150u,                 /* step0 第一次固定快跑持续时间，单位 ms。 */ 
             .timed_move_yaw_tolerance_rad = 0.35f, /* 中段定时移动切步 yaw 容差，约 10 deg。 */
-            .rear_retract_move_speed = 0.2f,   /* step1 等待 PA2/photo3 下降沿的慢速 vx，单位 m/s。 */
-            .rear_retract_move_ms = 100u,       /* step3 第二次固定快跑持续时间，单位 ms。 */
+            .rear_retract_move_speed = 0.18f,   /* step1 等待 PA2/photo3 下降沿的慢速 vx，单位 m/s。 */
+            .rear_retract_move_ms = 150u,       /* step3 第二次固定快跑持续时间，单位 ms。 */
             .rear_retract_move_wheel_delta_rad = 8.66f, /* step3 第二次固定快跑轮转角阈值，单位 rad；0 表示按时间切步。 */
             .second_photo_retract_move_speed = 0.5f, /* step7 第二个下降沿后保持全伸离开 vx，单位 m/s。 */
             .final_move_speed = 0.0f,          /* step7 离开 vx 的备用值；second_photo_retract_move_speed <= 0 时使用。 */
