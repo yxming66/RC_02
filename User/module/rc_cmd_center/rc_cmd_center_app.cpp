@@ -1598,7 +1598,7 @@ struct RcPoleDriveRoute {
 
 struct RcPolePcRoute {
   bool operator()(const RcRuntimeInput &, cmd::Context &, Pole_CMD_t &out) const {
-    if (!Rc_SetPolePcCommand(false)) {
+    if (!Rc_SetPolePcCommand(true)) {
       Rc_SetPoleHold();
     }
     out = pole_cmd;

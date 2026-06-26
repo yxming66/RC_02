@@ -181,9 +181,11 @@ void OnHeartbeat() {
 
 void OnChassis(const PC_ChassisCMD_t &cmd) {
   s_state.cmd.chassis = cmd;
+  s_pole_cmd_received = false;
   s_arm_simple_cmd_received = false;
   s_state.cmd.abstract_position.enable_mask &=
-      static_cast<uint8_t>(~PC_ABSTRACT_MODULE_ARM_SIMPLE);
+      static_cast<uint8_t>(~(PC_ABSTRACT_MODULE_POLE |
+                            PC_ABSTRACT_MODULE_ARM_SIMPLE));
   MarkRxFrame(PC_CMD_CHASSIS, sizeof(cmd), MRLINK_OK);
   TouchOnline(PC_CMD_CHASSIS);
 }
@@ -207,9 +209,11 @@ void OnArmSimple(const wire::ArmSimpleCmd &cmd) {
   s_state.cmd.arm_simple.suction = cmd.suction;
   s_state.cmd.arm_simple.target_joint1_rad = cmd.target_joint1_rad;
   s_state.cmd.arm_simple.target_joint2_rad = cmd.target_joint2_rad;
+  s_pole_cmd_received = false;
   s_arm_simple_cmd_received = true;
   s_state.cmd.abstract_position.enable_mask &=
-      static_cast<uint8_t>(~PC_ABSTRACT_MODULE_ARM_SIMPLE);
+      static_cast<uint8_t>(~(PC_ABSTRACT_MODULE_POLE |
+                            PC_ABSTRACT_MODULE_ARM_SIMPLE));
   MarkRxFrame(PC_CMD_ARM_SIMPLE, sizeof(cmd), MRLINK_OK);
   TouchOnline(PC_CMD_ARM_SIMPLE);
 }
@@ -219,9 +223,11 @@ void OnRodNew(const wire::RodNewCmd &cmd) {
   s_state.cmd.rod_new.pose = cmd.pose;
   s_state.cmd.rod_new.grip = cmd.grip;
   s_state.cmd.rod_new.target_angle_rad = cmd.target_angle_rad;
+  s_pole_cmd_received = false;
   s_arm_simple_cmd_received = false;
   s_state.cmd.abstract_position.enable_mask &=
       static_cast<uint8_t>(~(PC_ABSTRACT_MODULE_ROD_NEW |
+                            PC_ABSTRACT_MODULE_POLE |
                 PC_ABSTRACT_MODULE_ARM_SIMPLE));
   MarkRxFrame(PC_CMD_ROD_NEW, sizeof(cmd), MRLINK_OK);
   TouchOnline(PC_CMD_ROD_NEW);
@@ -231,9 +237,11 @@ void OnOreStore(const wire::OreStoreCmd &cmd) {
   s_state.cmd.ore_store.mode = cmd.mode;
   s_state.cmd.ore_store.force_rehome = cmd.force_rehome;
   s_state.cmd.ore_store.platform_target_rad = cmd.platform_target_rad;
+  s_pole_cmd_received = false;
   s_arm_simple_cmd_received = false;
   s_state.cmd.abstract_position.enable_mask &=
       static_cast<uint8_t>(~(PC_ABSTRACT_MODULE_ORE_STORE |
+                            PC_ABSTRACT_MODULE_POLE |
                 PC_ABSTRACT_MODULE_ARM_SIMPLE));
   MarkRxFrame(PC_CMD_ORE_STORE, sizeof(cmd), MRLINK_OK);
   TouchOnline(PC_CMD_ORE_STORE);
@@ -245,9 +253,11 @@ void OnAutoAction(const wire::AutoActionCmd &cmd) {
       s_auto_action_rx_latch != PC_AUTO_ACTION_NONE &&
       (now_ms - s_auto_action_rx_latch_tick) >= kAutoActionRepeatReleaseMs;
 
+  s_pole_cmd_received = false;
   s_arm_simple_cmd_received = false;
   s_state.cmd.abstract_position.enable_mask &=
-      static_cast<uint8_t>(~PC_ABSTRACT_MODULE_ARM_SIMPLE);
+      static_cast<uint8_t>(~(PC_ABSTRACT_MODULE_POLE |
+                            PC_ABSTRACT_MODULE_ARM_SIMPLE));
 
   /* Auto action is edge/latch based rather than a continuous setpoint:
    * - action=NONE clears the latch.
@@ -277,9 +287,11 @@ void OnCameraYaw(const wire::CameraYawCmd &cmd) {
     s_state.cmd.camera_yaw.mode[yaw] = cmd.mode[yaw];
     s_state.cmd.camera_yaw.target_yaw_rad[yaw] = cmd.target_yaw_rad[yaw];
   }
+  s_pole_cmd_received = false;
   s_arm_simple_cmd_received = false;
   s_state.cmd.abstract_position.enable_mask &=
-      static_cast<uint8_t>(~PC_ABSTRACT_MODULE_ARM_SIMPLE);
+      static_cast<uint8_t>(~(PC_ABSTRACT_MODULE_POLE |
+                            PC_ABSTRACT_MODULE_ARM_SIMPLE));
   MarkRxFrame(PC_CMD_CAMERA_YAW, sizeof(cmd), MRLINK_OK);
   TouchOnline(PC_CMD_CAMERA_YAW);
   s_state.camera_yaw_cmd_tick = BSP_TIME_Get_ms();
@@ -287,6 +299,7 @@ void OnCameraYaw(const wire::CameraYawCmd &cmd) {
 
 void OnAbstractPosition(const PC_AbstractPositionCMD_t &cmd) {
   s_state.cmd.abstract_position = cmd;
+  s_pole_cmd_received = false;
   s_arm_simple_cmd_received = false;
   MarkRxFrame(PC_CMD_ABSTRACT_POSITION, sizeof(cmd), MRLINK_OK);
   TouchOnline(PC_CMD_ABSTRACT_POSITION);
@@ -298,9 +311,11 @@ void OnStep(const wire::StepCmd &cmd) {
   s_state.cmd.step.travel_dir = static_cast<PC_StepDir_t>(cmd.travel_dir);
   s_state.cmd.step.target_yaw_rad = cmd.target_yaw_rad;
   s_state.cmd.step.yaw_tolerance_rad = cmd.yaw_tolerance_rad;
+  s_pole_cmd_received = false;
   s_arm_simple_cmd_received = false;
   s_state.cmd.abstract_position.enable_mask &=
-      static_cast<uint8_t>(~PC_ABSTRACT_MODULE_ARM_SIMPLE);
+      static_cast<uint8_t>(~(PC_ABSTRACT_MODULE_POLE |
+                            PC_ABSTRACT_MODULE_ARM_SIMPLE));
   MarkRxFrame(PC_CMD_STEP, sizeof(cmd), MRLINK_OK);
   TouchOnline(PC_CMD_STEP);
 }
