@@ -440,23 +440,15 @@ auto_ctrl_template_e MapTemplate(PC_StepTemplate_t pc_template) {
       return AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD;
     case PC_STEP_TEMPLATE_DESCEND_400_HEAD:
       return AUTO_CTRL_TEMPLATE_DESCEND_400_HEAD;
-    case PC_STEP_TEMPLATE_ASCEND_200_TAIL:
-      return AUTO_CTRL_TEMPLATE_ASCEND_200_TAIL;
-    case PC_STEP_TEMPLATE_ASCEND_400_TAIL:
-      return AUTO_CTRL_TEMPLATE_ASCEND_400_TAIL;
-    case PC_STEP_TEMPLATE_DESCEND_200_TAIL:
-      return AUTO_CTRL_TEMPLATE_DESCEND_200_TAIL;
-    case PC_STEP_TEMPLATE_DESCEND_400_TAIL:
-      return AUTO_CTRL_TEMPLATE_DESCEND_400_TAIL;
+    case PC_STEP_TEMPLATE_NONE:
     default:
       return AUTO_CTRL_TEMPLATE_NONE;
   }
 }
 
 auto_ctrl_travel_dir_e MapTravelDir(PC_StepDir_t pc_dir) {
-  return (pc_dir == PC_STEP_DIR_TAIL_FORWARD)
-             ? AUTO_CTRL_TRAVEL_DIR_TAIL_FORWARD
-             : AUTO_CTRL_TRAVEL_DIR_HEAD_FORWARD;
+  (void)pc_dir;
+  return AUTO_CTRL_TRAVEL_DIR_HEAD_FORWARD;
 }
 
 template <typename T>

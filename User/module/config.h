@@ -84,11 +84,6 @@ typedef struct {
   AutoCtrl_TemplateParam_t head_ascend_400;
   AutoCtrl_TemplateParam_t head_descend_200;
   AutoCtrl_TemplateParam_t head_descend_400;
-
-  AutoCtrl_TemplateParam_t tail_ascend_200;
-  AutoCtrl_TemplateParam_t tail_ascend_400;
-  AutoCtrl_TemplateParam_t tail_descend_200;
-  AutoCtrl_TemplateParam_t tail_descend_400;
 } AutoCtrl_Params_t;
 
 typedef struct {

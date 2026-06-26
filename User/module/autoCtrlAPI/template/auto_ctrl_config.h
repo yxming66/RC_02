@@ -21,11 +21,6 @@ AutoCtrl_TemplateParam_t *AutoCtrlConfig_GetHeadAscend400Params(void);
 AutoCtrl_TemplateParam_t *AutoCtrlConfig_GetHeadDescend200Params(void);
 AutoCtrl_TemplateParam_t *AutoCtrlConfig_GetHeadDescend400Params(void);
 
-AutoCtrl_TemplateParam_t *AutoCtrlConfig_GetTailAscend200Params(void);
-AutoCtrl_TemplateParam_t *AutoCtrlConfig_GetTailAscend400Params(void);
-AutoCtrl_TemplateParam_t *AutoCtrlConfig_GetTailDescend200Params(void);
-AutoCtrl_TemplateParam_t *AutoCtrlConfig_GetTailDescend400Params(void);
-
 #ifdef __cplusplus
 }
 #endif

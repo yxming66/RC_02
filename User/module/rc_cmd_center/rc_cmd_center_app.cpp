@@ -1208,23 +1208,13 @@ static bool Rc_PrepareLocalAutoYawFeedback(void) {
 
 static float Rc_SelectLocalAutoTargetYawRad(float head_yaw_rad,
                                            auto_ctrl_travel_dir_e travel_dir) {
-  /* 尾向前进任务优先按尾部朝向选择正交目标航向。 */
-  if (travel_dir == AUTO_CTRL_TRAVEL_DIR_TAIL_FORWARD) {
-    const float tail_yaw_rad =
-        AutoCtrlMath_WrapYawRad(head_yaw_rad + AUTO_CTRL_RC_PI_RAD);
-    const float tail_target_rad =
-        AutoCtrlMath_NearestCardinalYawRad(tail_yaw_rad);
-    return AutoCtrlMath_WrapYawRad(tail_target_rad + AUTO_CTRL_RC_PI_RAD);
-  }
-
+  (void)travel_dir;
   return AutoCtrlMath_NearestCardinalYawRad(head_yaw_rad);
 }
 
 static bool Rc_AutoCtrlTemplateIsAscend(auto_ctrl_template_e template_id) {
   return template_id == AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD ||
-         template_id == AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD ||
-         template_id == AUTO_CTRL_TEMPLATE_ASCEND_200_TAIL ||
-         template_id == AUTO_CTRL_TEMPLATE_ASCEND_400_TAIL;
+         template_id == AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD;
 }
 
 static bool Rc_StartAutoUpStepPickStore(void) {

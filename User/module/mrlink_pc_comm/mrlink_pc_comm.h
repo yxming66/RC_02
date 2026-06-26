@@ -238,15 +238,10 @@ typedef enum {
     PC_STEP_TEMPLATE_ASCEND_400_HEAD = 2,   /* 头向前上 400mm 台阶 */
     PC_STEP_TEMPLATE_DESCEND_200_HEAD = 3,  /* 头向前下 200mm 台阶 */
     PC_STEP_TEMPLATE_DESCEND_400_HEAD = 4,  /* 头向前下 400mm 台阶 */
-    PC_STEP_TEMPLATE_ASCEND_200_TAIL = 5,   /* 尾向前上 200mm 台阶 */
-    PC_STEP_TEMPLATE_ASCEND_400_TAIL = 6,   /* 尾向前上 400mm 台阶 */
-    PC_STEP_TEMPLATE_DESCEND_200_TAIL = 7,  /* 尾向前下 200mm 台阶 */
-    PC_STEP_TEMPLATE_DESCEND_400_TAIL = 8,  /* 尾向前下 400mm 台阶 */
 } PC_StepTemplate_t;
 
 typedef enum {
     PC_STEP_DIR_HEAD_FORWARD = 0,  /* 头向前行进 */
-    PC_STEP_DIR_TAIL_FORWARD = 1,  /* 尾向前行进 */
 } PC_StepDir_t;
 
 typedef struct {
@@ -439,7 +434,7 @@ typedef struct {
     PC_PoleFeedback_t pole;                /* 撑杆反馈缓存 */
     PC_ArmSimpleFeedback_t arm_simple;     /* 简易机械臂反馈缓存 */
     PC_RodNewFeedback_t rod_new;           /* 取矛头机构反馈缓存 */
-    PC_OreStoreFeedback_t ore_store;       /* 矿仓反馈缓存 */
+    PC_OreStoreFeedback_t ore_store;          /* 矿仓反馈缓存 */
     PC_CameraYawFeedback_t camera_yaw;     /* 相机云台 yaw 反馈缓存 */
     PC_StepFeedback_t step;                /* 自动台阶反馈缓存 */
     PC_StatusFeedback_t status;            /* 通信/系统状态反馈缓存 */

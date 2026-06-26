@@ -46,14 +46,6 @@ static const AutoCtrl_TemplateParam_t *AutoCtrl_GetTemplateParams(
       return &robot_param->auto_ctrl_param.head_descend_200;
     case AUTO_CTRL_TEMPLATE_DESCEND_400_HEAD:
       return &robot_param->auto_ctrl_param.head_descend_400;
-    case AUTO_CTRL_TEMPLATE_ASCEND_200_TAIL:
-      return &robot_param->auto_ctrl_param.tail_ascend_200;
-    case AUTO_CTRL_TEMPLATE_ASCEND_400_TAIL:
-      return &robot_param->auto_ctrl_param.tail_ascend_400;
-    case AUTO_CTRL_TEMPLATE_DESCEND_200_TAIL:
-      return &robot_param->auto_ctrl_param.tail_descend_200;
-    case AUTO_CTRL_TEMPLATE_DESCEND_400_TAIL:
-      return &robot_param->auto_ctrl_param.tail_descend_400;
     case AUTO_CTRL_TEMPLATE_NONE:
     default:
       return 0;
@@ -68,14 +60,10 @@ static const float *AutoCtrl_GetPrealignPoleTarget(
 
   switch (template_id) {
     case AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD:
-    case AUTO_CTRL_TEMPLATE_DESCEND_200_TAIL:
     case AUTO_CTRL_TEMPLATE_DESCEND_400_HEAD:
-    case AUTO_CTRL_TEMPLATE_DESCEND_400_TAIL:
       return robot_param->pole_param.preset.step_200_descend_small;
     case AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD:
-    case AUTO_CTRL_TEMPLATE_ASCEND_200_TAIL:
     case AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD:
-    case AUTO_CTRL_TEMPLATE_ASCEND_400_TAIL:
     case AUTO_CTRL_TEMPLATE_NONE:
     default:
       return robot_param->pole_param.preset.step_200_small;
@@ -323,7 +311,7 @@ bool AutoCtrl_StartTemplate(auto_ctrl_t *ctrl,
   if (ctrl == 0) return false;
 
   if (template_id <= AUTO_CTRL_TEMPLATE_NONE ||
-      template_id > AUTO_CTRL_TEMPLATE_DESCEND_400_TAIL) {
+      template_id > AUTO_CTRL_TEMPLATE_DESCEND_400_HEAD) {
     AutoCtrl_Finish(ctrl, AUTO_CTRL_RESULT_FAIL, AUTO_CTRL_FAULT_INVALID_TEMPLATE,
                     AUTO_CTRL_STATE_FAIL);
     return false;

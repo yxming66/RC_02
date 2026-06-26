@@ -28,14 +28,6 @@ static const AutoCtrl_TemplateParam_t *AutoCtrlPrimitive_GetTemplateParams(
       return &robot_param->auto_ctrl_param.head_descend_200;
     case AUTO_CTRL_TEMPLATE_DESCEND_400_HEAD:
       return &robot_param->auto_ctrl_param.head_descend_400;
-    case AUTO_CTRL_TEMPLATE_ASCEND_200_TAIL:
-      return &robot_param->auto_ctrl_param.tail_ascend_200;
-    case AUTO_CTRL_TEMPLATE_ASCEND_400_TAIL:
-      return &robot_param->auto_ctrl_param.tail_ascend_400;
-    case AUTO_CTRL_TEMPLATE_DESCEND_200_TAIL:
-      return &robot_param->auto_ctrl_param.tail_descend_200;
-    case AUTO_CTRL_TEMPLATE_DESCEND_400_TAIL:
-      return &robot_param->auto_ctrl_param.tail_descend_400;
     case AUTO_CTRL_TEMPLATE_NONE:
     default:
       return nullptr;

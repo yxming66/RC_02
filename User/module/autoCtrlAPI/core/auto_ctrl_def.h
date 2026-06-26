@@ -26,15 +26,10 @@ typedef enum {
 	AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD,       /* 头向上 400mm 台阶。 */
 	AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD,      /* 头向下 200mm 台阶。 */
 	AUTO_CTRL_TEMPLATE_DESCEND_400_HEAD,      /* 头向下 400mm 台阶。 */
-	AUTO_CTRL_TEMPLATE_ASCEND_200_TAIL,        /* 尾向上 200mm 台阶。 */
-	AUTO_CTRL_TEMPLATE_ASCEND_400_TAIL,        /* 尾向上 400mm 台阶。 */
-	AUTO_CTRL_TEMPLATE_DESCEND_200_TAIL,       /* 尾向下 200mm 台阶。 */
-	AUTO_CTRL_TEMPLATE_DESCEND_400_TAIL,       /* 尾向下 400mm 台阶。 */
 } auto_ctrl_template_e;
 
 typedef enum {
 	AUTO_CTRL_TRAVEL_DIR_HEAD_FORWARD = 0, /* 当前任务按头向作为前进方向。 */
-	AUTO_CTRL_TRAVEL_DIR_TAIL_FORWARD,     /* 当前任务按尾向作为前进方向。 */
 } auto_ctrl_travel_dir_e;
 
 typedef enum {
