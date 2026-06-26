@@ -280,16 +280,16 @@ void Task_blink(void *argument) {
     }
   }
 
-  CloudMusic_Config_t cloudmusic_config;
-  CloudMusic_GetDefaultConfig(&cloudmusic_config);
-  cloudmusic_config.enable_startup_music = true;
-  cloudmusic_config.enable_music_loop = true;
-  cloudmusic_config.start_music_loop_paused = true;
-  if (CloudMusic_Init(&cloudmusic, &buzzer, &cloudmusic_config) != DEVICE_OK) {
-    osThreadTerminate(osThreadGetId());
-    return;
-  }
-  (void)CloudMusic_Start(&cloudmusic, BSP_TIME_Get_ms());
+  // CloudMusic_Config_t cloudmusic_config;
+  // CloudMusic_GetDefaultConfig(&cloudmusic_config);
+  // cloudmusic_config.enable_startup_music = true;
+  // cloudmusic_config.enable_music_loop = true;
+  // cloudmusic_config.start_music_loop_paused = true;
+  // if (CloudMusic_Init(&cloudmusic, &buzzer, &cloudmusic_config) != DEVICE_OK) {
+  //   osThreadTerminate(osThreadGetId());
+  //   return;
+  // }
+  // (void)CloudMusic_Start(&cloudmusic, BSP_TIME_Get_ms());
 
   /* USER CODE INIT END */
 
@@ -299,7 +299,7 @@ void Task_blink(void *argument) {
     tick += delay_tick;
     /* USER CODE BEGIN */
     const uint32_t now_tick = BSP_TIME_Get_ms();
-    Blink_UpdateAudio(now_tick);
+    // Blink_UpdateAudio(now_tick);
 
     if (reset) {
       __set_FAULTMASK(1);

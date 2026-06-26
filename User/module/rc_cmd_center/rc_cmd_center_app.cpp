@@ -58,16 +58,8 @@
 #ifndef RC_LEFT_DOWN_MAPPING_AUTO_ORE
 #define RC_LEFT_DOWN_MAPPING_AUTO_ORE (0u) // 0单独控制上层，1一键存取
 #endif
-#ifndef RC_AUTO_UP_ASCEND_HEIGHT_MM
-#define RC_AUTO_UP_ASCEND_HEIGHT_MM (200)
-#endif
-
-#if RC_AUTO_UP_ASCEND_HEIGHT_MM == 200
-#define RC_AUTO_UP_ASCEND_TEMPLATE AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD
-#elif RC_AUTO_UP_ASCEND_HEIGHT_MM == 400
-#define RC_AUTO_UP_ASCEND_TEMPLATE AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD
-#else
-#error "RC_AUTO_UP_ASCEND_HEIGHT_MM must be 200 or 400"
+#ifndef RC_AUTO_STEP_CH_RES_THRESHOLD
+#define RC_AUTO_STEP_CH_RES_THRESHOLD (0.90f)
 #endif
 
 #ifndef RC_MANUAL_IO_CH_THRESHOLD
@@ -79,9 +71,8 @@
 #endif
 
 #define RC_POLE_CH_RES_DEADBAND (1.0e-4f)
-#ifndef RC_POLE_CH_RES_ENABLE
-#define RC_POLE_CH_RES_ENABLE (1u)
-#endif
+#undef RC_POLE_CH_RES_ENABLE
+#define RC_POLE_CH_RES_ENABLE (0u)
 
 /* USER STRUCT BEGIN */
 extern DR16_t dr16;
@@ -218,6 +209,19 @@ typedef struct {
   auto_ctrl_template_e template_id;
   auto_ctrl_travel_dir_e travel_dir;
 } RcAutoCtrlStartConfig_t;
+
+typedef enum {
+  RC_AUTO_STEP_PROFILE_FUSED_200,
+  RC_AUTO_STEP_PROFILE_FUSED_UP_400_NORMAL_DOWN_400,
+} RcAutoStepProfile_t;
+
+static RcAutoStepProfile_t Rc_SelectAutoStepProfile(void) {
+  if (dr16.data.ch_res <= -RC_AUTO_STEP_CH_RES_THRESHOLD) {
+    return RC_AUTO_STEP_PROFILE_FUSED_UP_400_NORMAL_DOWN_400;
+  }
+
+  return RC_AUTO_STEP_PROFILE_FUSED_200;
+}
 
 #if RC_MAPPING_ACTIVE_PRESET == RC_MAPPING_PRESET_PC_FIRST
 static const RcSwitchBehaviorMap_t rc_behavior_map_active[] = {
@@ -409,10 +413,13 @@ static RcAutoCtrlStartConfig_t Rc_SelectAutoCtrlStartConfig(void) {
     return config;
   }
 
-  if (dr16.data.sw_r == DR16_SW_UP) {
-    config.template_id = RC_AUTO_UP_ASCEND_TEMPLATE;
-  } else if (dr16.data.sw_r == DR16_SW_DOWN) {
-    config.template_id = AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD;
+  if (Rc_SelectAutoStepProfile() !=
+      RC_AUTO_STEP_PROFILE_FUSED_UP_400_NORMAL_DOWN_400) {
+    return config;
+  }
+
+  if (dr16.data.sw_r == DR16_SW_DOWN) {
+    config.template_id = AUTO_CTRL_TEMPLATE_DESCEND_400_HEAD;
   } 
 
   return config;
@@ -855,6 +862,83 @@ static void Rc_SetArmSimplePoint(ArmSimple_PointMode_t point,
   arm_simple_target_initialized = true;
 }
 
+static void Rc_SetArmSimpleStandby(void) {
+  const ArmSimple_Params_t* param = Rc_GetArmSimpleParam();
+  if (param != NULL &&
+      ArmSimple_MakeBehaviorCommand(param, ARM_SIMPLE_BEHAVIOR_STANDBY,
+                                    arm_simple_suction_latched,
+                                    &arm_simple_cmd)) {
+    arm_simple_target_initialized = true;
+    return;
+  }
+
+  Rc_SetArmSimplePoint(ARM_SIMPLE_POINT_SLEEP,
+                       RC_ARM_SIMPLE_POINT_SLEEP_J1,
+                       RC_ARM_SIMPLE_POINT_SLEEP_J2);
+  arm_simple_cmd.suction = arm_simple_suction_latched;
+}
+
+static bool Rc_SetArmSimplePcAbstractCommand(
+    const PC_AbstractPositionCMD_t *pc_abstract_cmd) {
+  if (pc_abstract_cmd == NULL ||
+      (pc_abstract_cmd->enable_mask & PC_ABSTRACT_MODULE_ARM_SIMPLE) == 0u) {
+    return false;
+  }
+
+  const Suction_State_t suction =
+      pc_abstract_cmd->arm_simple_suction != 0u ? SUCTION_ON : SUCTION_OFF;
+  const uint8_t position = pc_abstract_cmd->arm_simple_position;
+
+  switch ((PC_AbstractArmSimplePosition_t)position) {
+    case PC_ABSTRACT_ARM_SIMPLE_RELAX:
+      arm_simple_suction_latched = suction;
+      Rc_SetArmSimpleRelax();
+      return true;
+    case PC_ABSTRACT_ARM_SIMPLE_SLEEP:
+      Rc_SetArmSimplePoint(ARM_SIMPLE_POINT_SLEEP,
+                           RC_ARM_SIMPLE_POINT_SLEEP_J1,
+                           RC_ARM_SIMPLE_POINT_SLEEP_J2);
+      break;
+    case PC_ABSTRACT_ARM_SIMPLE_GRAB:
+      Rc_SetArmSimplePoint(ARM_SIMPLE_POINT_GRAB,
+                           RC_ARM_SIMPLE_POINT_GRAB_J1,
+                           RC_ARM_SIMPLE_POINT_GRAB_J2);
+      break;
+    case PC_ABSTRACT_ARM_SIMPLE_LIFT:
+      Rc_SetArmSimplePoint(ARM_SIMPLE_POINT_LIFT,
+                           RC_ARM_SIMPLE_POINT_LIFT_J1,
+                           RC_ARM_SIMPLE_POINT_LIFT_J2);
+      break;
+    case PC_ABSTRACT_ARM_SIMPLE_RELEASE:
+      Rc_SetArmSimplePoint(ARM_SIMPLE_POINT_RELEASE,
+                           RC_ARM_SIMPLE_POINT_RELEASE_J1,
+                           RC_ARM_SIMPLE_POINT_RELEASE_J2);
+      break;
+    default: {
+      const uint8_t behavior_index =
+          position - PC_ABSTRACT_ARM_SIMPLE_BEHAVIOR_STANDBY;
+      if (position < PC_ABSTRACT_ARM_SIMPLE_BEHAVIOR_STANDBY ||
+          behavior_index >= ARM_SIMPLE_BEHAVIOR_NUM) {
+        return false;
+      }
+
+      const ArmSimple_Params_t* param = Rc_GetArmSimpleParam();
+      if (param == NULL ||
+          !ArmSimple_MakeBehaviorCommand(
+              param, (ArmSimple_BehaviorPoint_t)behavior_index, suction,
+              &arm_simple_cmd)) {
+        return false;
+      }
+      break;
+    }
+  }
+
+  arm_simple_cmd.suction = suction;
+  arm_simple_suction_latched = suction;
+  arm_simple_target_initialized = true;
+  return true;
+}
+
 static void Rc_SetArmSimpleOperator(float scale) {
   const float dt_s = 1.0f / (float)RC_MAIN_FREQ;
   const float joint1_delta = Rc_ApplyDeadband(dr16.data.ch_r_y,
@@ -1144,11 +1228,15 @@ static bool Rc_AutoCtrlTemplateIsAscend(auto_ctrl_template_e template_id) {
 }
 
 static bool Rc_StartAutoUpStepPickStore(void) {
-#if RC_AUTO_UP_ASCEND_HEIGHT_MM == 200
+  if (Rc_SelectAutoStepProfile() ==
+      RC_AUTO_STEP_PROFILE_FUSED_UP_400_NORMAL_DOWN_400) {
+    return Task_AutoOreStartStepPickStoreAscend400Head();
+  }
   return Task_AutoOreStartStepPickStoreAscend200Head();
-#else
-  return Task_AutoOreStartStepPickStoreAscend400Head();
-#endif
+}
+
+static bool Rc_StartAutoDownStepPickStore(void) {
+  return Task_AutoOreStartStepPickStoreDescend200Head();
 }
 
 static void Rc_TryStartAutoCtrlBySwitch(uint32_t now_ms) {
@@ -1161,7 +1249,11 @@ static void Rc_TryStartAutoCtrlBySwitch(uint32_t now_ms) {
   if (last_sw_l == DR16_SW_MID && last_sw_r == DR16_SW_MID &&
       dr16.data.sw_l == DR16_SW_MID && dr16.data.sw_r == DR16_SW_UP) {
     g_rc_control_debug.auto_200_start_event = true;
-    g_rc_control_debug.auto_200_template = RC_AUTO_UP_ASCEND_TEMPLATE;
+    g_rc_control_debug.auto_200_template =
+        (Rc_SelectAutoStepProfile() ==
+         RC_AUTO_STEP_PROFILE_FUSED_UP_400_NORMAL_DOWN_400)
+            ? AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD
+            : AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD;
     if (!Rc_PrepareLocalAutoYawFeedback()) {
       g_rc_control_debug.auto_200_start_ok = false;
       return;
@@ -1174,15 +1266,15 @@ static void Rc_TryStartAutoCtrlBySwitch(uint32_t now_ms) {
   }
 
   if (last_sw_l == DR16_SW_MID && last_sw_r == DR16_SW_MID &&
-      dr16.data.sw_l == DR16_SW_MID && dr16.data.sw_r == DR16_SW_DOWN) {
+      dr16.data.sw_l == DR16_SW_MID && dr16.data.sw_r == DR16_SW_DOWN &&
+      Rc_SelectAutoStepProfile() == RC_AUTO_STEP_PROFILE_FUSED_200) {
     g_rc_control_debug.auto_200_start_event = true;
     g_rc_control_debug.auto_200_template = AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD;
     if (!Rc_PrepareLocalAutoYawFeedback()) {
       g_rc_control_debug.auto_200_start_ok = false;
       return;
     }
-    g_rc_control_debug.auto_200_start_ok =
-        Task_AutoOreStartStepPickStoreDescend200Head();
+    g_rc_control_debug.auto_200_start_ok = Rc_StartAutoDownStepPickStore();
     if (g_rc_control_debug.auto_200_start_ok) {
       g_auto_ore_debug.force_output_enable = true;
     }
@@ -1603,9 +1695,14 @@ struct RcArmSimpleOperatorRoute {
 struct RcArmSimplePcRoute {
   bool operator()(const RcRuntimeInput &, cmd::Context &,
                   ArmSimple_CMD_t &out) const {
+    const PC_AbstractPositionCMD_t *pc_abstract_cmd =
+        MrlinkPc_GetAbstractPositionCMD();
     const PC_ArmSimpleCMD_t *pc_arm_simple_cmd =
-        MrlinkPc_GetArmSimpleCMD();
-    if (pc_arm_simple_cmd != NULL) {
+        MrlinkPc_HasArmSimpleCMD() ? MrlinkPc_GetArmSimpleCMD() : NULL;
+    if (Rc_SetArmSimplePcAbstractCommand(pc_abstract_cmd)) {
+      out = arm_simple_cmd;
+      return true;
+    } else if (pc_arm_simple_cmd != NULL) {
       arm_simple_cmd.mode = (ArmSimple_Mode_t)pc_arm_simple_cmd->mode;
       arm_simple_cmd.point_mode =
           (ArmSimple_PointMode_t)pc_arm_simple_cmd->point_mode;
@@ -1618,7 +1715,7 @@ struct RcArmSimplePcRoute {
       arm_simple_suction_latched = arm_simple_cmd.suction;
       arm_simple_target_initialized = true;
     } else {
-      Rc_SetArmSimpleHold();
+      Rc_SetArmSimpleStandby();
     }
     out = arm_simple_cmd;
     return true;

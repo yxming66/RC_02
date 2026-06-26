@@ -51,8 +51,8 @@ typedef enum {
 } PC_CMD_t;
 
 typedef enum {
-    PC_FEEDBACK_START_MATCH = 0x02,  /* STM32 发给 PC 的开始比赛命令，payload: uint8 start */
     PC_FEEDBACK_HEARTBEAT = 0x81,    /* STM32 心跳反馈 */
+    PC_FEEDBACK_START_MATCH = 0x02,  /* STM32->PC 一次性开始比赛命令 */
     PC_FEEDBACK_CHASSIS = 0x90,      /* 底盘速度反馈 */
     PC_FEEDBACK_POLE = 0x91,         /* 撑杆位置/电机角度反馈 */
     PC_FEEDBACK_STEP = 0x92,         /* 自动上下台阶流程状态反馈 */
@@ -594,6 +594,8 @@ const PC_ArmCMD_t *MrlinkPc_GetArmCMD(void);
 /* 获取最近一次 PC 简易机械臂命令。 */
 const PC_ArmSimpleCMD_t *MrlinkPc_GetArmSimpleCMD(void);
 
+bool MrlinkPc_HasArmSimpleCMD(void);
+
 /* 获取最近一次 PC 取矛头机构命令。 */
 const PC_RodNewCMD_t *MrlinkPc_GetRodNewCMD(void);
 
@@ -621,18 +623,6 @@ const PC_IrOreAckCMD_t *MrlinkPc_GetIrOreAckCMD(void);
 /* 发布某个反馈 topic 的最新数据；topic 见 PC_FeedbackCMD_t，feedback 指向对应反馈结构体。 */
 bool MrlinkPc_PublishFeedback(uint8_t topic, const void *feedback);
 
-/* 请求发送开始比赛命令；start=0 默认等待，start=1 开始/启动。 */
-bool MrlinkPc_RequestStartMatch(uint8_t start);
-
-/* 是否有待发送的开始比赛命令。 */
-bool MrlinkPc_HasStartMatchRequest(void);
-
-/* 清除待发送的开始比赛命令，通常在实际发送成功后调用。 */
-void MrlinkPc_ClearStartMatchRequest(void);
-
-/* 构造待发送的开始比赛命令帧；无待发送命令或缓存不足时返回 0。 */
-uint16_t MrlinkPc_BuildStartMatchFrame(uint8_t *tx_buf, uint16_t buf_size);
-
 /* 将 PC_StepCMD_t 映射为 AutoCtrl 可直接使用的台阶参数；无有效模板时返回 NULL。 */
 const PC_AutoStepParams_t *MrlinkPc_GetAutoStepParams(void);
 
@@ -645,9 +635,26 @@ void MrlinkPc_ClearAutoActionCommand(void);
 /* 清除待转发红外对接 ACK 命令，通常在 ACK 成功提交或不可恢复失败后调用。 */
 void MrlinkPc_ClearIrOreAckCommand(void);
 
+/* 请求向 PC 发送一次开始比赛命令；start 非 0 表示开始。 */
+bool MrlinkPc_RequestStartMatch(uint8_t start);
+
+/* 返回是否有待发送的开始比赛命令。 */
+bool MrlinkPc_HasStartMatchRequest(void);
+
+/* 清除待发送的开始比赛命令，通常在发送成功后调用。 */
+void MrlinkPc_ClearStartMatchRequest(void);
+
+/* 构造开始比赛命令 mrlink 帧；无待发送命令或缓存不足时返回 0。 */
+uint16_t MrlinkPc_BuildStartMatchFrame(uint8_t *tx_buf, uint16_t buf_size);
+
 /* 构造指定反馈 cmd 的 mrlink 帧；tx_buf 为输出缓存，buf_size 为缓存字节数，返回帧长度。 */
 uint16_t MrlinkPc_BuildFeedbackFrame(uint8_t cmd, uint8_t *tx_buf,
                                      uint16_t buf_size);
+
+/* 构造指定 cmd/payload 的 mrlink 帧；用于向 PC 回传非反馈 topic 的当前命令镜像。 */
+uint16_t MrlinkPc_BuildPayloadFrame(uint8_t cmd, const void *payload,
+                                    uint16_t payload_len, uint8_t *tx_buf,
+                                    uint16_t buf_size);
 
 /* 发送已经打包好的 mrlink 数据；data 为帧缓存，len 为待发送字节数。 */
 int8_t MrlinkPc_SendFrame(uint8_t *data, uint16_t len);
