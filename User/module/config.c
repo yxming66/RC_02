@@ -704,8 +704,8 @@ Config_RobotParam_t robot_config = {
         [CAMERA_YAW_RIGHT] = {
             .motor_param = {
                 .can = BSP_CAN_2,
-                .master_id = 0x1A,
-                .can_id = 0x0A,
+                .master_id = 0x13,
+                .can_id = 0x03,
                 .module = MOTOR_DM_H3510,
                 .reverse = false,
             },
@@ -713,11 +713,11 @@ Config_RobotParam_t robot_config = {
             .pid = {
                 .yaw_pid = {
                     .k = 1.0f,
-                    .p = 2.0f,
+                    .p = 1.0f,
                     .i = 0.0f,
                     .d = 0.0f,
                     .i_limit = 0.0f,
-                    .out_limit = 0.5f,
+                    .out_limit = 0.45f,
                     .d_cutoff_freq = -1.0f,
                     .range = M_2PI,
                 },
