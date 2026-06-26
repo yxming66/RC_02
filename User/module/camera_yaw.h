@@ -11,7 +11,6 @@ extern "C" {
 #include <stdint.h>
 
 #include "component/pid.h"
-#include "device/motor.h"
 #include "device/motor_dm.h"
 
 #define CAMERA_YAW_OK (0)
@@ -83,12 +82,13 @@ typedef struct {
 } CameraYaw_DebugControl_t;
 
 typedef struct {
+  void *motor_protocol;
+  void *motor_state;
   uint32_t last_wakeup;
   float dt;
   float nominal_dt;
   const CameraYaw_Params_t *param;
   CameraYaw_Mode_t mode;
-  MOTOR_DM_t *motor;
   KPID_t yaw_pid;
   CameraYaw_CMD_t cmd;
   CameraYaw_Feedback_t feedback;

@@ -169,6 +169,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
 )
 
 set_source_files_properties(User/module/arm_simple.c PROPERTIES LANGUAGE CXX)
+set_source_files_properties(User/module/camera_yaw.c PROPERTIES LANGUAGE CXX)
 
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE

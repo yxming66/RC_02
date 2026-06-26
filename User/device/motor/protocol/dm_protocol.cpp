@@ -330,6 +330,31 @@ int8_t MotorProtocol<MotorKind::DM, Model>::SetMIT(float position, float velocit
 }
 
 template <MotorModel Model>
+int8_t MotorProtocol<MotorKind::DM, Model>::SetMITRawTorque(float position, float velocity, float kp, float kd, float raw_torque) {
+    constexpr float max_position_limit = MotorTraits<MotorKind::DM, Model>::kMaxPosition;
+    constexpr float max_velocity_limit = MotorTraits<MotorKind::DM, Model>::kMaxVelocity;
+    const MitCommandValues command = PrepareMitCommand(mapper_,
+                                                       position,
+                                                       velocity,
+                                                       raw_torque,
+                                                       max_position_limit,
+                                                       max_velocity_limit,
+                                                       kDmTorqueMax);
+    pending_mit_output_.angle = command.rotor_position;
+    pending_mit_output_.velocity = command.rotor_velocity;
+    pending_mit_output_.kp = kp;
+    pending_mit_output_.kd = kd;
+    pending_mit_output_.torque = command.torque_ff;
+    pending_type_ = PendingCommandType::Mit;
+    debug_.pending_type = pending_type_;
+    debug_.pending_position = pending_mit_output_.angle;
+    debug_.pending_velocity = pending_mit_output_.velocity;
+    debug_.pending_mit_torque = pending_mit_output_.torque;
+    state_.command_pending = true;
+    return DEVICE_OK;
+}
+
+template <MotorModel Model>
 const DmProtocolDebugSnapshot& MotorProtocol<MotorKind::DM, Model>::GetDebugSnapshot() const {
     return debug_;
 }

@@ -45,6 +45,7 @@ public:
     int8_t SetVelocity(float velocity);
     int8_t SetPosition(float position, float max_velocity);
     int8_t SetMIT(float position, float velocity, float kp, float kd, float torque_ff);
+    int8_t SetMITRawTorque(float position, float velocity, float kp, float kd, float raw_torque);
     const DmProtocolDebugSnapshot& GetDebugSnapshot() const;
 
 private:

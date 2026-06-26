@@ -5,10 +5,80 @@
 #include "module/camera_yaw.h"
 
 #include <math.h>
+#include <new>
 #include <string.h>
 
 #include "bsp/can.h"
 #include "component/user_math.h"
+#include "device/motor/core/motor_install_spec.hpp"
+#include "device/motor/core/motor_instance_config.hpp"
+#include "device/motor/core/motor_model.hpp"
+#include "device/motor/core/motor_state.hpp"
+#include "device/motor/protocol/dm_protocol.hpp"
+
+using CameraYawMotorProtocol =
+    mr::motor::MotorProtocol<mr::motor::MotorKind::DM,
+                             mr::motor::MotorModel::H3510>;
+
+struct CameraYawMotorSlot {
+  bool used;
+  CameraYaw_t *owner;
+  mr::motor::MotorState state;
+  alignas(CameraYawMotorProtocol) unsigned char protocol_storage[sizeof(CameraYawMotorProtocol)];
+};
+
+static CameraYawMotorSlot camera_yaw_motor_slots[CAMERA_YAW_NUM];
+
+static CameraYawMotorProtocol *CameraYaw_GetMotorProtocol(CameraYaw_t *c) {
+  return (c == NULL) ? NULL : (CameraYawMotorProtocol *)c->motor_protocol;
+}
+
+static const mr::motor::MotorState *CameraYaw_GetMotorStateConst(
+    const CameraYaw_t *c) {
+  return (c == NULL) ? NULL : (const mr::motor::MotorState *)c->motor_state;
+}
+
+static CameraYawMotorSlot *CameraYaw_FindSlot(CameraYaw_t *c) {
+  if (c == NULL) {
+    return NULL;
+  }
+  for (uint8_t i = 0u; i < CAMERA_YAW_NUM; ++i) {
+    if (camera_yaw_motor_slots[i].used &&
+        camera_yaw_motor_slots[i].owner == c) {
+      return &camera_yaw_motor_slots[i];
+    }
+  }
+  for (uint8_t i = 0u; i < CAMERA_YAW_NUM; ++i) {
+    if (!camera_yaw_motor_slots[i].used) {
+      camera_yaw_motor_slots[i].used = true;
+      camera_yaw_motor_slots[i].owner = c;
+      camera_yaw_motor_slots[i].state = {};
+      return &camera_yaw_motor_slots[i];
+    }
+  }
+  return NULL;
+}
+
+static CameraYawMotorProtocol *CameraYaw_ConstructMotorProtocol(
+    CameraYaw_t *c, const MOTOR_DM_Param_t *param) {
+  if (c == NULL || param == NULL) {
+    return NULL;
+  }
+  CameraYawMotorSlot *slot = CameraYaw_FindSlot(c);
+  if (slot == NULL) {
+    return NULL;
+  }
+
+  const mr::motor::MotorInstanceConfig<mr::motor::MotorKind::DM> config =
+      mr::motor::MotorInstanceConfig<mr::motor::MotorKind::DM>::FromVendorParam(
+          *param);
+  CameraYawMotorProtocol *protocol = new (slot->protocol_storage)
+      CameraYawMotorProtocol(config, mr::motor::kDirectDriveInstall,
+                             slot->state, param->module);
+  c->motor_protocol = protocol;
+  c->motor_state = &slot->state;
+  return protocol;
+}
 
 #define CAMERA_YAW_PID_EPSILON (1.0e-6f)
 
@@ -167,15 +237,17 @@ int8_t CameraYaw_Init(CameraYaw_t *c, const CameraYaw_Params_t *param,
     return CAMERA_YAW_ERR;
   }
 
-  if (MOTOR_DM_Register((MOTOR_DM_Param_t *)&param->motor_param) !=
-      DEVICE_OK) {
+  CameraYawMotorProtocol *protocol =
+      CameraYaw_ConstructMotorProtocol(c, &param->motor_param);
+  if (protocol == NULL) {
+    return CAMERA_YAW_ERR;
+  }
+  if (protocol->Register() != DEVICE_OK) {
     return CAMERA_YAW_ERR;
   }
 
-  (void)MOTOR_DM_Enable((MOTOR_DM_Param_t *)&param->motor_param);
-
-  c->motor = MOTOR_DM_GetMotor((MOTOR_DM_Param_t *)&param->motor_param);
-  return c->motor != NULL ? CAMERA_YAW_OK : CAMERA_YAW_ERR;
+  (void)protocol->Enable();
+  return CAMERA_YAW_OK;
 }
 
 int8_t CameraYaw_UpdateFeedback(CameraYaw_t *c) {
@@ -183,18 +255,19 @@ int8_t CameraYaw_UpdateFeedback(CameraYaw_t *c) {
     return CAMERA_YAW_ERR_NULL;
   }
 
-  const int8_t update_ret =
-      MOTOR_DM_Update((MOTOR_DM_Param_t *)&c->param->motor_param);
-  c->motor = MOTOR_DM_GetMotor((MOTOR_DM_Param_t *)&c->param->motor_param);
-  if (c->motor == NULL) {
+  CameraYawMotorProtocol *protocol = CameraYaw_GetMotorProtocol(c);
+  const mr::motor::MotorState *state = CameraYaw_GetMotorStateConst(c);
+  if (protocol == NULL || state == NULL) {
     c->feedback.motor_online = false;
     return CAMERA_YAW_ERR;
   }
 
-  c->feedback.motor_online = c->motor->motor.header.online;
-  c->feedback.motor_angle_rad = c->motor->motor.feedback.rotor_total_angle;
-  c->feedback.motor_velocity_rad_s = c->motor->motor.feedback.rotor_speed;
-  c->feedback.temperature_c = c->motor->motor.feedback.temp;
+  const int8_t update_ret = protocol->Update();
+
+  c->feedback.motor_online = state->online;
+  c->feedback.motor_angle_rad = state->position_rad;
+  c->feedback.motor_velocity_rad_s = state->velocity_rad_s;
+  c->feedback.temperature_c = state->device_temperature_c;
   c->feedback.feedback_yaw_rad =
       CameraYaw_BodyYawFromEncoder(c, c->feedback.motor_angle_rad);
 
@@ -237,7 +310,7 @@ int8_t CameraYaw_Control(CameraYaw_t *c, const CameraYaw_CMD_t *cmd,
 
   c->feedback.error_yaw_rad =
       CircleError(target_yaw_rad, feedback_yaw_rad, M_2PI);
-    c->output = CameraYaw_CalcMitCurrentFromError(
+  c->output = CameraYaw_CalcMitCurrentFromError(
       c, c->feedback.error_yaw_rad);
   c->output = CameraYaw_ClampSymmetric(c->output, c->param->limit.max_output);
   c->feedback.output = c->output;
@@ -259,15 +332,10 @@ void CameraYaw_SetOutput(CameraYaw_t *c) {
   output = CameraYaw_ClampSymmetric(output, c->param->limit.max_output);
   c->feedback.output = output;
 
-  MOTOR_MIT_Output_t mit_output = {
-      .torque = output,
-      .velocity = 0.0f,
-      .angle = 0.0f,
-      .kp = 0.0f,
-      .kd = 0.0f,
-  };
-  (void)MOTOR_DM_MITCtrl((MOTOR_DM_Param_t *)&c->param->motor_param,
-                         &mit_output);
+  CameraYawMotorProtocol *protocol = CameraYaw_GetMotorProtocol(c);
+  if (protocol != NULL) {
+    (void)protocol->SetMITRawTorque(0.0f, 0.0f, 0.0f, 0.0f, output);
+  }
 }
 
 void CameraYaw_FlushOutput(CameraYaw_t *c) {
@@ -275,7 +343,10 @@ void CameraYaw_FlushOutput(CameraYaw_t *c) {
     return;
   }
 
-  (void)c;
+  CameraYawMotorProtocol *protocol = CameraYaw_GetMotorProtocol(c);
+  if (protocol != NULL) {
+    (void)protocol->CommitCommand();
+  }
 }
 
 void CameraYaw_Output(CameraYaw_t *c) {
@@ -291,7 +362,10 @@ void CameraYaw_ResetOutput(CameraYaw_t *c) {
   c->output = 0.0f;
   c->feedback.output = 0.0f;
   PID_Reset(&c->yaw_pid);
-  (void)MOTOR_DM_Relax((MOTOR_DM_Param_t *)&c->param->motor_param);
+  CameraYawMotorProtocol *protocol = CameraYaw_GetMotorProtocol(c);
+  if (protocol != NULL) {
+    (void)protocol->Relax();
+  }
 }
 
 bool CameraYaw_IsAtTarget(const CameraYaw_t *c) {
