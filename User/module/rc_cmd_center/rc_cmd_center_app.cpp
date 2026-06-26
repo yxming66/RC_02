@@ -622,17 +622,10 @@ static bool Rc_SetPolePcCommand(bool require_received_cmd) {
   pole_cmd.auto_target_enable[1] = (pole_cmd.mode == POLE_MODE_ACTIVE);
   pole_cmd.auto_target_lift[0] = pc_pole_cmd->lift[0];
   pole_cmd.auto_target_lift[1] = pc_pole_cmd->lift[1];
-  const Config_RobotParam_t *robot_param = Config_GetRobotParam();
-  const float lift_speed = (robot_param != NULL)
-                               ? robot_param->pole_param.limit.support_lift_speed
-                               : 0.0f;
-  const float lift_accel = (robot_param != NULL)
-                               ? robot_param->pole_param.limit.support_lift_accel
-                               : 0.0f;
-  pole_cmd.auto_lift_speed[0] = lift_speed;
-  pole_cmd.auto_lift_speed[1] = lift_speed;
-  pole_cmd.auto_lift_accel[0] = lift_accel;
-  pole_cmd.auto_lift_accel[1] = lift_accel;
+  pole_cmd.auto_lift_speed[0] = -1.0f;
+  pole_cmd.auto_lift_speed[1] = -1.0f;
+  pole_cmd.auto_lift_accel[0] = -1.0f;
+  pole_cmd.auto_lift_accel[1] = -1.0f;
   pole_cmd.disable_lift_accel = false;
   return true;
 }
