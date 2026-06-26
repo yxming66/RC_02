@@ -265,8 +265,6 @@ void OnAutoAction(const wire::AutoActionCmd &cmd) {
   } else if (latch_expired) {
     s_state.cmd.auto_action.action = cmd.action;
     s_auto_action_rx_latch_tick = now_ms;
-  } else {
-    s_auto_action_rx_latch_tick = now_ms;
   }
   MarkRxFrame(PC_CMD_AUTO_ACTION, sizeof(cmd), MRLINK_OK);
   TouchOnline(PC_CMD_AUTO_ACTION);
