@@ -156,6 +156,10 @@ void Task_PoleMainUpdateRuntimeDebug(uint32_t now_ms) {
     g_pole_runtime_debug.cmd_lift[side] = pole_cmd.lift[side];
     g_pole_runtime_debug.cmd_auto_target_lift[side] =
         pole_cmd.auto_target_lift[side];
+    g_pole_runtime_debug.cmd_auto_lift_speed[side] =
+      pole_cmd.auto_lift_speed[side];
+    g_pole_runtime_debug.cmd_auto_lift_accel[side] =
+      pole_cmd.auto_lift_accel[side];
     g_pole_runtime_debug.tracked_target_lift[side] =
         pole.debug.tracked_target_lift[side];
     g_pole_runtime_debug.final_target_lift[side] =
@@ -163,6 +167,8 @@ void Task_PoleMainUpdateRuntimeDebug(uint32_t now_ms) {
     g_pole_runtime_debug.tracked_target_velocity[side] =
         pole.debug.tracked_target_velocity[side];
   }
+    g_pole_runtime_debug.cmd_disable_lift_accel =
+      pole_cmd.disable_lift_accel ? 1u : 0u;
   for (uint8_t i = 0u; i < POLE_MOTOR_NUM; i++) {
     g_pole_runtime_debug.motor_total_angle[i] =
         pole.feedback.motor[i].rotor_total_angle;

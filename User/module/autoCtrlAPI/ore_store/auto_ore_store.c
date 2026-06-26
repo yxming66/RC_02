@@ -59,6 +59,8 @@ static float AutoOre_AbsFloat(float value) {
 }
 
 static bool AutoOre_ActionIsFused(AutoOre_Action_t action);
+static auto_ctrl_template_e AutoOre_FusedStepTemplateId(
+  const AutoOre_t *ctrl);
 static float AutoOre_SelectPrealignWz(AutoOre_t *ctrl);
 
 static void AutoOre_EnterStep(AutoOre_t *ctrl, uint32_t now_ms) {
@@ -451,6 +453,19 @@ static bool AutoOre_CommandPoleTarget(AutoOre_t *ctrl,
   ctrl->pole_cmd.disable_lift_accel = false;
   ctrl->pole_cmd_valid = true;
   return true;
+}
+
+static void AutoOre_ApplyPoleCommandLimitsFromTemplate(
+    AutoOre_t *ctrl, const AutoCtrl_TemplateParam_t *template_param) {
+  if (ctrl == 0 || template_param == 0) {
+    return;
+  }
+
+  ctrl->pole_cmd.auto_lift_speed[0] = template_param->pole_all_extend_speed;
+  ctrl->pole_cmd.auto_lift_speed[1] = template_param->pole_all_extend_speed;
+  ctrl->pole_cmd.auto_lift_accel[0] = template_param->pole_lift_accel;
+  ctrl->pole_cmd.auto_lift_accel[1] = template_param->pole_lift_accel;
+  ctrl->pole_cmd.disable_lift_accel = template_param->pole_lift_accel < 0.0f;
 }
 
 static bool AutoOre_CommandReleasePoleTarget(AutoOre_t *ctrl) {
@@ -1288,8 +1303,37 @@ static const float *AutoOre_FusedStepStartPoleTarget(const AutoOre_t *ctrl) {
   }
 }
 
+static const AutoCtrl_TemplateParam_t *AutoOre_FusedStepTemplateParam(
+    const AutoOre_t *ctrl) {
+  const Config_RobotParam_t *robot_param = Config_GetRobotParam();
+  if (robot_param == 0) {
+    return 0;
+  }
+
+  switch (AutoOre_FusedStepTemplateId(ctrl)) {
+    case AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD:
+      return &robot_param->auto_ctrl_param.head_ascend_200;
+    case AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD:
+      return &robot_param->auto_ctrl_param.head_ascend_400;
+    case AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD:
+      return &robot_param->auto_ctrl_param.head_descend_200;
+    case AUTO_CTRL_TEMPLATE_DESCEND_400_HEAD:
+      return &robot_param->auto_ctrl_param.head_descend_400;
+    case AUTO_CTRL_TEMPLATE_NONE:
+    default:
+      return 0;
+  }
+}
+
 static bool AutoOre_CommandFusedStepStartPoleTarget(AutoOre_t *ctrl) {
-  return AutoOre_CommandPoleTarget(ctrl, AutoOre_FusedStepStartPoleTarget(ctrl));
+  if (!AutoOre_CommandPoleTarget(ctrl,
+                                 AutoOre_FusedStepStartPoleTarget(ctrl))) {
+    return false;
+  }
+
+  AutoOre_ApplyPoleCommandLimitsFromTemplate(
+      ctrl, AutoOre_FusedStepTemplateParam(ctrl));
+  return true;
 }
 
 static auto_ctrl_template_e AutoOre_FusedDefaultTemplate(
@@ -1419,6 +1463,17 @@ static const float *AutoOre_FusedPickPoleTarget(const AutoOre_t *ctrl) {
     default:
       return 0;
   }
+}
+
+static bool AutoOre_CommandFusedPickPoleTarget(AutoOre_t *ctrl,
+                                               const float target_lift[2]) {
+  if (!AutoOre_CommandPoleTarget(ctrl, target_lift)) {
+    return false;
+  }
+
+  AutoOre_ApplyPoleCommandLimitsFromTemplate(
+      ctrl, AutoOre_FusedStepTemplateParam(ctrl));
+  return true;
 }
 
 static ArmSimple_BehaviorPoint_t AutoOre_FusedPickArmPoint(
@@ -1927,7 +1982,7 @@ static void AutoOre_RunStepPickStoreFused(AutoOre_t *ctrl, uint32_t now_ms) {
       AutoOre_CommandChassisHold(ctrl);
       if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_STANDBY, SUCTION_ON,
                               &ctrl->param.arm_speed.pick_standby) ||
-          !AutoOre_CommandPoleTarget(ctrl, pole_target)) {
+          !AutoOre_CommandFusedPickPoleTarget(ctrl, pole_target)) {
         AutoOre_FailPickInvalidParam(ctrl);
         return;
       }
@@ -1944,7 +1999,7 @@ static void AutoOre_RunStepPickStoreFused(AutoOre_t *ctrl, uint32_t now_ms) {
       if (!AutoOre_CommandArm(ctrl, AutoOre_FusedPickArmPoint(ctrl),
                               SUCTION_ON,
                               &ctrl->param.arm_speed.pick_place) ||
-          !AutoOre_CommandPoleTarget(ctrl, pole_target)) {
+          !AutoOre_CommandFusedPickPoleTarget(ctrl, pole_target)) {
         AutoOre_FailPickInvalidParam(ctrl);
         return;
       }
@@ -1960,7 +2015,7 @@ static void AutoOre_RunStepPickStoreFused(AutoOre_t *ctrl, uint32_t now_ms) {
       if (!AutoOre_CommandArm(ctrl, AutoOre_FusedPickArmPoint(ctrl),
                               SUCTION_ON,
                               &ctrl->param.arm_speed.pick_fetch) ||
-          !AutoOre_CommandPoleTarget(ctrl, pole_target)) {
+          !AutoOre_CommandFusedPickPoleTarget(ctrl, pole_target)) {
         AutoOre_FailPickInvalidParam(ctrl);
         return;
       }
@@ -2008,7 +2063,7 @@ static void AutoOre_RunStepPickStoreFused(AutoOre_t *ctrl, uint32_t now_ms) {
       if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_PICK_LIFT_DETECT,
                               SUCTION_ON,
                               &ctrl->param.arm_speed.pick_lift_detect) ||
-          !AutoOre_CommandPoleTarget(ctrl, pole_target)) {
+          !AutoOre_CommandFusedPickPoleTarget(ctrl, pole_target)) {
         AutoOre_FailPickInvalidParam(ctrl);
         return;
       }

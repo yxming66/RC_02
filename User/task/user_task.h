@@ -298,6 +298,9 @@ typedef struct {
     volatile uint8_t auto_target_enable[2];
     volatile float cmd_lift[2];
     volatile float cmd_auto_target_lift[2];
+    volatile float cmd_auto_lift_speed[2];
+    volatile float cmd_auto_lift_accel[2];
+    volatile uint8_t cmd_disable_lift_accel;
     volatile float tracked_target_lift[2];
     volatile float final_target_lift[2];
     volatile float tracked_target_velocity[2];
