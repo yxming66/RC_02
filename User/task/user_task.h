@@ -291,6 +291,26 @@ typedef struct {
     volatile float vel_range;
 } PolePidDebugControl_t;
 
+typedef struct {
+    volatile uint32_t update_count;
+    volatile uint32_t last_update_ms;
+    volatile uint8_t mode;
+    volatile uint8_t auto_target_enable[2];
+    volatile float cmd_lift[2];
+    volatile float cmd_auto_target_lift[2];
+    volatile float tracked_target_lift[2];
+    volatile float final_target_lift[2];
+    volatile float tracked_target_velocity[2];
+    volatile float target_angle_rad[4];
+    volatile float feedback_angle_rad[4];
+    volatile float feedback_speed_rad_s[4];
+    volatile float torque_cmd_nm[4];
+    volatile float motor_total_angle[4];
+    volatile uint8_t motor_angle_valid[4];
+    volatile uint32_t motor_angle_lost_count[4];
+    volatile uint32_t motor_last_update_time[4];
+} PoleRuntimeDebug_t;
+
 /* 任务运行时结构体 */
 typedef struct {
     /* 各任务，也可以叫做线程 */
@@ -411,6 +431,7 @@ extern bool auto_ore_inited;
 extern volatile AutoOre_DebugControl_t g_auto_ore_debug;
 extern volatile Sick_Debug_t g_sick_debug;
 extern volatile PolePidDebugControl_t g_pole_pid_debug;
+extern volatile PoleRuntimeDebug_t g_pole_runtime_debug;
 extern volatile IrDock_Debug_t g_ir_dock_debug;
 extern AutoRodSpearhead_t auto_rod_spearhead_ctrl;
 extern bool auto_rod_spearhead_inited;

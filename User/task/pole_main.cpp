@@ -146,9 +146,49 @@ void PolePidDebugUpdate(Config_RobotParam_t *cfg) {
   }
 }
 
+void Task_PoleMainUpdateRuntimeDebug(uint32_t now_ms) {
+  g_pole_runtime_debug.update_count++;
+  g_pole_runtime_debug.last_update_ms = now_ms;
+  g_pole_runtime_debug.mode = static_cast<uint8_t>(pole_cmd.mode);
+  for (uint8_t side = 0u; side < 2u; side++) {
+    g_pole_runtime_debug.auto_target_enable[side] =
+        pole_cmd.auto_target_enable[side] ? 1u : 0u;
+    g_pole_runtime_debug.cmd_lift[side] = pole_cmd.lift[side];
+    g_pole_runtime_debug.cmd_auto_target_lift[side] =
+        pole_cmd.auto_target_lift[side];
+    g_pole_runtime_debug.tracked_target_lift[side] =
+        pole.debug.tracked_target_lift[side];
+    g_pole_runtime_debug.final_target_lift[side] =
+        pole.debug.final_target_lift[side];
+    g_pole_runtime_debug.tracked_target_velocity[side] =
+        pole.debug.tracked_target_velocity[side];
+  }
+  for (uint8_t i = 0u; i < POLE_MOTOR_NUM; i++) {
+    g_pole_runtime_debug.motor_total_angle[i] =
+        pole.feedback.motor[i].rotor_total_angle;
+    g_pole_runtime_debug.motor_angle_valid[i] =
+        pole.feedback.motor[i].angle_valid ? 1u : 0u;
+    g_pole_runtime_debug.motor_angle_lost_count[i] =
+        pole.feedback.motor[i].angle_lost_count;
+    g_pole_runtime_debug.motor_last_update_time[i] =
+        pole.feedback.motor[i].last_update_time;
+    if (i < POLE_SUPPORT_MOTOR_NUM) {
+      g_pole_runtime_debug.target_angle_rad[i] = pole.debug.target_angle_rad[i];
+      g_pole_runtime_debug.feedback_angle_rad[i] =
+          pole.debug.feedback_angle_rad[i];
+      g_pole_runtime_debug.feedback_speed_rad_s[i] =
+          pole.debug.feedback_speed_rad_s[i];
+      g_pole_runtime_debug.torque_cmd_nm[i] = pole.debug.torque_cmd_nm[i];
+    }
+  }
+}
+
 }  // namespace
 
-extern "C" volatile PolePidDebugControl_t g_pole_pid_debug = {0};
+extern "C" {
+volatile PolePidDebugControl_t g_pole_pid_debug = {0};
+volatile PoleRuntimeDebug_t g_pole_runtime_debug = {0};
+}
 
 extern "C" {
 
@@ -250,6 +290,7 @@ extern "C" void Task_pole_main(void *argument) {
     PolePidDebugUpdate(cfg);
     Pole_Control(&pole, &pole_cmd, now_ms);
     Pole_Output(&pole);
+    Task_PoleMainUpdateRuntimeDebug(now_ms);
 
     PC_PoleFeedback_t pole_fb = {0};
     pole_fb.lift[0] = pole.feedback.support_lift[0];
