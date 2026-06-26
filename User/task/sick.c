@@ -53,7 +53,6 @@ void Task_SickStep(void) {
 
   SICK_Update(BSP_TIME_Get_ms());
   Task_SickUpdateDebug();
-  task_runtime.stack_water_mark.sick = uxTaskGetStackHighWaterMark(NULL);
   task_runtime.heartbeat.sick++;
   Task_ProfilerLoopEnd(TASK_PROFILE_SICK, profile_start_us);
 }

@@ -560,8 +560,6 @@ void Task_OreStoreStep(void) {
   OreStoreTask_UpdateDebugView();
   ore_store_cmd.force_rehome = false;
 
-  task_runtime.stack_water_mark.ore_store =
-      uxTaskGetStackHighWaterMark(NULL);
   task_runtime.heartbeat.ore_store++;
   Task_ProfilerLoopEnd(TASK_PROFILE_ORE_STORE, profile_start_us);
 }
@@ -600,7 +598,6 @@ void Task_CameraYawStep(void) {
       g_camera_yaw_update_ret_by_channel[CAMERA_YAW_ACTIVE_CHANNEL];
   g_camera_yaw_control_ret =
       g_camera_yaw_control_ret_by_channel[CAMERA_YAW_ACTIVE_CHANNEL];
-  task_runtime.stack_water_mark.camera_yaw = uxTaskGetStackHighWaterMark(NULL);
   task_runtime.heartbeat.camera_yaw++;
   Task_ProfilerLoopEnd(TASK_PROFILE_CAMERA_YAW, profile_start_us);
 }

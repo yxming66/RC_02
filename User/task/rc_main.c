@@ -57,8 +57,6 @@ void Task_rc_main(void *argument) {
 
     RcCmdCenterApp_Update(BSP_TIME_Get_ms());
 
-    task_runtime.stack_water_mark.rc_main =
-        uxTaskGetStackHighWaterMark(NULL);
     task_runtime.heartbeat.rc_main++;
     Task_ProfilerLoopEnd(TASK_PROFILE_RC_MAIN, profile_start_us);
     Task_DelayUntil(TASK_PROFILE_RC_MAIN, &tick, delay_tick);

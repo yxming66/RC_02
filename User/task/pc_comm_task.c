@@ -519,7 +519,6 @@ void Task_PcCommStep(void) {
     const uint32_t profile_start_us =
         Task_ProfilerLoopBegin(TASK_PROFILE_PC_COMM,
                                PC_COMM_LOOP_PERIOD_MS * 1000U);
-    task_runtime.stack_water_mark.pc_comm = uxTaskGetStackHighWaterMark(NULL);
 
     uint32_t now = BSP_TIME_Get_ms();
 
@@ -627,8 +626,6 @@ void Task_pc_comm_sick(void *argument) {
             }
         }
 
-        task_runtime.stack_water_mark.pc_comm_sick =
-            uxTaskGetStackHighWaterMark(NULL);
         task_runtime.heartbeat.pc_comm_sick++;
         Task_ProfilerLoopEnd(TASK_PROFILE_PC_COMM_SICK, profile_start_us);
         Task_DelayUntil(TASK_PROFILE_PC_COMM_SICK, &tick, base_delay_tick);
@@ -656,7 +653,6 @@ static void Task_pc_comm_legacy(void *argument) {
         const uint32_t profile_start_us =
             Task_ProfilerLoopBegin(TASK_PROFILE_PC_COMM,
                                    PC_COMM_LOOP_PERIOD_MS * 1000U);
-        task_runtime.stack_water_mark.pc_comm = uxTaskGetStackHighWaterMark(NULL);
 
         uint32_t now = BSP_TIME_Get_ms();
 

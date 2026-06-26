@@ -73,8 +73,6 @@ void Task_ChassisMainStep(void) {
   chassis_fb.wz = fb.chassis_vel.wz;
   (void)MrlinkPc_Bus().StoreLatest(chassis_fb);
 
-  task_runtime.stack_water_mark.chassis_main =
-      uxTaskGetStackHighWaterMark(nullptr);
   task_runtime.heartbeat.chassis_main++;
   Task_ProfilerLoopEnd(TASK_PROFILE_CHASSIS_MAIN, profile_start_us);
 }
@@ -148,8 +146,6 @@ void Task_chassis_ore(void *argument) {
       Task_ChassisMainStep();
     }
 
-    task_runtime.stack_water_mark.chassis_ore =
-        uxTaskGetStackHighWaterMark(nullptr);
     task_runtime.heartbeat.chassis_ore++;
     Task_ProfilerLoopEnd(TASK_PROFILE_CHASSIS_ORE, profile_start_us);
     Task_DelayUntil(TASK_PROFILE_CHASSIS_ORE, &tick, base_delay_tick);

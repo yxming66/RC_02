@@ -1531,7 +1531,6 @@ void Task_auto_ctrl(void *argument) {
       }
     }
 
-    task_runtime.stack_water_mark.auto_ctrl = uxTaskGetStackHighWaterMark(NULL);
     task_runtime.heartbeat.auto_ctrl++;
     Task_ProfilerLoopEnd(TASK_PROFILE_AUTO_CTRL, profile_start_us);
     Task_DelayUntil(TASK_PROFILE_AUTO_CTRL, &tick, delay_tick);

@@ -143,8 +143,6 @@ static void Task_arm_simple_legacy(void *argument)
 
         ArmSimple_Output(&arm_simple);
 
-        task_runtime.stack_water_mark.arm_simple =
-            uxTaskGetStackHighWaterMark(NULL);
         task_runtime.heartbeat.arm_simple++;
         Task_ProfilerLoopEnd(TASK_PROFILE_ARM_SIMPLE, profile_start_us);
 
@@ -272,7 +270,6 @@ void Task_ArmSimpleStep(void) {
 
     ArmSimple_Output(&arm_simple);
 
-    task_runtime.stack_water_mark.arm_simple = uxTaskGetStackHighWaterMark(NULL);
     task_runtime.heartbeat.arm_simple++;
     Task_ProfilerLoopEnd(TASK_PROFILE_ARM_SIMPLE, profile_start_us);
 }

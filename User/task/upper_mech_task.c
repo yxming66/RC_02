@@ -80,8 +80,6 @@ void Task_upper_mech(void *argument) {
       Task_RodNewStep();
     }
 
-    task_runtime.stack_water_mark.upper_mech =
-        uxTaskGetStackHighWaterMark(NULL);
     task_runtime.heartbeat.upper_mech++;
     Task_ProfilerLoopEnd(TASK_PROFILE_UPPER_MECH, profile_start_us);
     Task_DelayUntil(TASK_PROFILE_UPPER_MECH, &tick, base_delay_tick);

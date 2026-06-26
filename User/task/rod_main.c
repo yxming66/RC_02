@@ -78,7 +78,6 @@ void Task_RodNewStep(void) {
   RodNew_Output(&rod_new);
   SharedValve_Output();
 
-  task_runtime.stack_water_mark.rod = uxTaskGetStackHighWaterMark(NULL);
   task_runtime.heartbeat.rod++;
   Task_ProfilerLoopEnd(TASK_PROFILE_ROD, profile_start_us);
 }
@@ -147,7 +146,6 @@ static void Task_rod_legacy(void *argument) {
     RodNew_Output(&rod_new);
     SharedValve_Output();
 
-    task_runtime.stack_water_mark.rod = uxTaskGetStackHighWaterMark(NULL);
     task_runtime.heartbeat.rod++;
     Task_ProfilerLoopEnd(TASK_PROFILE_ROD, profile_start_us);
     Task_DelayUntil(TASK_PROFILE_ROD, &tick, delay_tick);

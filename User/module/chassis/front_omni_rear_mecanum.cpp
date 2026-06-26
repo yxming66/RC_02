@@ -143,33 +143,24 @@ int8_t FrontOmniRearMecanumController::Init(const Chassis_Params_t *param,
 }
 
 int8_t FrontOmniRearMecanumController::UpdateFeedback() {
-  const uint64_t start_us = BSP_TIME_Get_us();
   for (uint8_t i = 0; i < kWheelCount; ++i) {
     Wheel *wheel = wheels_[i];
     if (wheel == nullptr) {
-      debug_.update_feedback_us =
-          static_cast<uint32_t>(BSP_TIME_Get_us() - start_us);
       return CHASSIS_ERR_NULL;
     }
     if (wheel->UpdateFeedback() != DEVICE_OK) {
-      debug_.update_feedback_us =
-          static_cast<uint32_t>(BSP_TIME_Get_us() - start_us);
       return CHASSIS_ERR;
     }
     StoreWheelState(i, wheel->State());
   }
 
   UpdateBodyVelocityFeedback();
-  debug_.update_feedback_us =
-      static_cast<uint32_t>(BSP_TIME_Get_us() - start_us);
   return CHASSIS_OK;
 }
 
 int8_t FrontOmniRearMecanumController::Control(const Chassis_CMD_t &cmd,
                                                uint32_t now) {
-  const uint64_t start_us = BSP_TIME_Get_us();
   if (param_ == nullptr) {
-    debug_.control_us = static_cast<uint32_t>(BSP_TIME_Get_us() - start_us);
     return CHASSIS_ERR_NULL;
   }
 
@@ -179,7 +170,6 @@ int8_t FrontOmniRearMecanumController::Control(const Chassis_CMD_t &cmd,
 
   const int8_t mode_ret = SetMode(cmd.mode, now);
   if (mode_ret != CHASSIS_OK) {
-    debug_.control_us = static_cast<uint32_t>(BSP_TIME_Get_us() - start_us);
     return mode_ret;
   }
 
@@ -270,7 +260,6 @@ int8_t FrontOmniRearMecanumController::Control(const Chassis_CMD_t &cmd,
         wheel_hold_active_ || UpdateWheelHoldEntryReady();
     if (hold_ready) {
       const int8_t ret = ControlWheelHold();
-      debug_.control_us = static_cast<uint32_t>(BSP_TIME_Get_us() - start_us);
       return ret;
     }
   } else {
@@ -282,7 +271,6 @@ int8_t FrontOmniRearMecanumController::Control(const Chassis_CMD_t &cmd,
 
   const int8_t ik_ret = ComputeWheelSpeeds();
   if (ik_ret != CHASSIS_OK) {
-    debug_.control_us = static_cast<uint32_t>(BSP_TIME_Get_us() - start_us);
     return ik_ret;
   }
 
@@ -322,7 +310,6 @@ int8_t FrontOmniRearMecanumController::Control(const Chassis_CMD_t &cmd,
   for (uint8_t i = 0; i < kWheelCount; ++i) {
     Wheel *wheel = wheels_[i];
     if (wheel == nullptr) {
-      debug_.control_us = static_cast<uint32_t>(BSP_TIME_Get_us() - start_us);
       return CHASSIS_ERR_NULL;
     }
 
@@ -344,18 +331,15 @@ int8_t FrontOmniRearMecanumController::Control(const Chassis_CMD_t &cmd,
     StoreWheelDebug(i);
     if (out_.set_torque_ret[i] != DEVICE_OK ||
         out_.controller_update_ret[i] != DEVICE_OK) {
-      debug_.control_us = static_cast<uint32_t>(BSP_TIME_Get_us() - start_us);
       return CHASSIS_ERR;
     }
     out_.command_pending[i] = wheel->HasPendingCommand();
   }
 
-  debug_.control_us = static_cast<uint32_t>(BSP_TIME_Get_us() - start_us);
   return CHASSIS_OK;
 }
 
 void FrontOmniRearMecanumController::Output() {
-  const uint64_t start_us = BSP_TIME_Get_us();
   for (uint8_t i = 0; i < kWheelCount; ++i) {
     Wheel *wheel = wheels_[i];
     if (wheel == nullptr) {
@@ -375,7 +359,6 @@ void FrontOmniRearMecanumController::Output() {
     (void)MOTOR_RM_Ctrl(
         const_cast<MOTOR_RM_Param_t *>(&param_->motor_param[0]));
   }
-  debug_.output_us = static_cast<uint32_t>(BSP_TIME_Get_us() - start_us);
 }
 
 void FrontOmniRearMecanumController::ResetOutput() {

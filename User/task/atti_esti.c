@@ -351,7 +351,6 @@ void Task_atti_esti(void *argument) {
     BSP_PWM_SetComp(BSP_PWM_IMU_HEAT, PID_Calc(&imu_temp_ctrl_pid, 40.0f, bmi088.temp, 0.0f, 0.0f));
     
     /* USER CODE END */
-    task_runtime.stack_water_mark.atti_esti = uxTaskGetStackHighWaterMark(NULL);
     task_runtime.heartbeat.atti_esti++;
     Task_ProfilerLoopEnd(TASK_PROFILE_ATTI_ESTI, profile_start_us);
     Task_DelayUntil(TASK_PROFILE_ATTI_ESTI, &tick, delay_tick); /* 运行结束，等待下一次唤醒 */

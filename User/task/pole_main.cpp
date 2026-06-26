@@ -11,6 +11,9 @@
 
 #define POLE_TEMP_WARNING_ALARM_MS (3000u)
 #define POLE_TEMP_OVER_LIMIT_ALARM_MS (5000u)
+#define POLE_TEMP_ALARM_UPDATE_PERIOD_MS (50u)
+#define POLE_PID_DEBUG_UPDATE_PERIOD_MS (10u)
+#define POLE_PC_FEEDBACK_PERIOD_MS (20u)
 
 namespace {
 
@@ -146,54 +149,23 @@ void PolePidDebugUpdate(Config_RobotParam_t *cfg) {
   }
 }
 
-void Task_PoleMainUpdateRuntimeDebug(uint32_t now_ms) {
-  g_pole_runtime_debug.update_count++;
-  g_pole_runtime_debug.last_update_ms = now_ms;
-  g_pole_runtime_debug.mode = static_cast<uint8_t>(pole_cmd.mode);
-  for (uint8_t side = 0u; side < 2u; side++) {
-    g_pole_runtime_debug.auto_target_enable[side] =
-        pole_cmd.auto_target_enable[side] ? 1u : 0u;
-    g_pole_runtime_debug.cmd_lift[side] = pole_cmd.lift[side];
-    g_pole_runtime_debug.cmd_auto_target_lift[side] =
-        pole_cmd.auto_target_lift[side];
-    g_pole_runtime_debug.cmd_auto_lift_speed[side] =
-      pole_cmd.auto_lift_speed[side];
-    g_pole_runtime_debug.cmd_auto_lift_accel[side] =
-      pole_cmd.auto_lift_accel[side];
-    g_pole_runtime_debug.tracked_target_lift[side] =
-        pole.debug.tracked_target_lift[side];
-    g_pole_runtime_debug.final_target_lift[side] =
-        pole.debug.final_target_lift[side];
-    g_pole_runtime_debug.tracked_target_velocity[side] =
-        pole.debug.tracked_target_velocity[side];
+bool PolePeriodicDue(uint32_t now_ms, uint32_t *last_ms, uint32_t period_ms) {
+  if (last_ms == nullptr || period_ms == 0u) {
+    return true;
   }
-    g_pole_runtime_debug.cmd_disable_lift_accel =
-      pole_cmd.disable_lift_accel ? 1u : 0u;
-  for (uint8_t i = 0u; i < POLE_MOTOR_NUM; i++) {
-    g_pole_runtime_debug.motor_total_angle[i] =
-        pole.feedback.motor[i].rotor_total_angle;
-    g_pole_runtime_debug.motor_angle_valid[i] =
-        pole.feedback.motor[i].angle_valid ? 1u : 0u;
-    g_pole_runtime_debug.motor_angle_lost_count[i] =
-        pole.feedback.motor[i].angle_lost_count;
-    g_pole_runtime_debug.motor_last_update_time[i] =
-        pole.feedback.motor[i].last_update_time;
-    if (i < POLE_SUPPORT_MOTOR_NUM) {
-      g_pole_runtime_debug.target_angle_rad[i] = pole.debug.target_angle_rad[i];
-      g_pole_runtime_debug.feedback_angle_rad[i] =
-          pole.debug.feedback_angle_rad[i];
-      g_pole_runtime_debug.feedback_speed_rad_s[i] =
-          pole.debug.feedback_speed_rad_s[i];
-      g_pole_runtime_debug.torque_cmd_nm[i] = pole.debug.torque_cmd_nm[i];
-    }
+
+  if (*last_ms == 0u || (uint32_t)(now_ms - *last_ms) >= period_ms) {
+    *last_ms = now_ms;
+    return true;
   }
+
+  return false;
 }
 
 }  // namespace
 
 extern "C" {
 volatile PolePidDebugControl_t g_pole_pid_debug = {0};
-volatile PoleRuntimeDebug_t g_pole_runtime_debug = {0};
 }
 
 extern "C" {
@@ -282,6 +254,10 @@ extern "C" void Task_pole_main(void *argument) {
   }
   PolePidDebugInit(cfg);
 
+  uint32_t last_temp_alarm_update_ms = 0u;
+  uint32_t last_pid_debug_update_ms = 0u;
+  uint32_t last_pc_feedback_ms = 0u;
+
   while (1) {
     const uint32_t profile_start_us =
         Task_ProfilerLoopBegin(TASK_PROFILE_POLE_MAIN,
@@ -292,22 +268,27 @@ extern "C" void Task_pole_main(void *argument) {
     Pole_UpdateFeedback(&pole);
 
     const uint32_t now_ms = BSP_TIME_Get_ms();
-    Task_PoleMainUpdateTemperatureAlarm(now_ms);
-    PolePidDebugUpdate(cfg);
+    if (PolePeriodicDue(now_ms, &last_temp_alarm_update_ms,
+                        POLE_TEMP_ALARM_UPDATE_PERIOD_MS)) {
+      Task_PoleMainUpdateTemperatureAlarm(now_ms);
+    }
+    if (PolePeriodicDue(now_ms, &last_pid_debug_update_ms,
+                        POLE_PID_DEBUG_UPDATE_PERIOD_MS)) {
+      PolePidDebugUpdate(cfg);
+    }
     Pole_Control(&pole, &pole_cmd, now_ms);
     Pole_Output(&pole);
-    Task_PoleMainUpdateRuntimeDebug(now_ms);
 
-    PC_PoleFeedback_t pole_fb = {0};
-    pole_fb.lift[0] = pole.feedback.support_lift[0];
-    pole_fb.lift[1] = pole.feedback.support_lift[1];
-    for (uint8_t i = 0u; i < POLE_MOTOR_NUM; i++) {
-      pole_fb.motor_total_angle[i] = pole.feedback.motor[i].rotor_total_angle;
+    if (PolePeriodicDue(now_ms, &last_pc_feedback_ms,
+                        POLE_PC_FEEDBACK_PERIOD_MS)) {
+      PC_PoleFeedback_t pole_fb = {0};
+      pole_fb.lift[0] = pole.feedback.support_lift[0];
+      pole_fb.lift[1] = pole.feedback.support_lift[1];
+      for (uint8_t i = 0u; i < POLE_MOTOR_NUM; i++) {
+        pole_fb.motor_total_angle[i] = pole.feedback.motor[i].rotor_total_angle;
+      }
+      (void)MrlinkPc_Bus().StoreLatest(pole_fb);
     }
-    (void)MrlinkPc_Bus().StoreLatest(pole_fb);
-
-    task_runtime.stack_water_mark.pole_main =
-        uxTaskGetStackHighWaterMark(nullptr);
     task_runtime.heartbeat.pole_main++;
     Task_ProfilerLoopEnd(TASK_PROFILE_POLE_MAIN, profile_start_us);
     Task_DelayUntil(TASK_PROFILE_POLE_MAIN, &tick, delay_tick);
