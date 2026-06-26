@@ -45,6 +45,18 @@ void Task_Init(void *argument) {
   task_runtime.msgq.ore_store.cmd =
       osMessageQueueNew(1u, sizeof(OreStore_CMD_t), NULL);
 
+    if (task_runtime.msgq.chassis.imu == NULL ||
+            task_runtime.msgq.chassis.cmd == NULL ||
+            task_runtime.msgq.pole.cmd == NULL ||
+            task_runtime.msgq.arm_simple.cmd == NULL ||
+            task_runtime.msgq.rod.cmd == NULL ||
+            task_runtime.msgq.camera_yaw.cmd == NULL ||
+            task_runtime.msgq.ore_store.cmd == NULL) {
+        osKernelUnlock();
+        osThreadTerminate(osThreadGetId());
+        return;
+    }
+
   BUZZER_Init(&buzzer, BSP_PWM_BUZZER);
 
     SharedValve_Init(BSP_GPIO_SPEARHEAD_RELAY);
