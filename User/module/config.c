@@ -310,8 +310,10 @@ Config_RobotParam_t robot_config = {
             .joint2_max = 2.356194f,    /* 舵机中心0点向正方向最大约+135° */
         },
         .vel_limit = {
-            .joint1_max_vel = 10.5f,
-            .joint2_max_vel = 10.0f,
+            .joint1_max_vel = 6.5f,
+            .joint2_max_vel = 6.0f,
+            .joint1_max_accel = 20.0f,
+            .joint2_max_accel = 20.0f,
         },
         .preset = {
             .behavior_point = {
@@ -347,22 +349,22 @@ Config_RobotParam_t robot_config = {
         .arm_speed = {
             /* store_*：一键存矿流程，wait=等待/预备位，place=伸到存矿位，standby=回待机位。 */
             .store_wait = {.joint1_max_vel_rad_s = 3.0f, .joint2_max_vel_rad_s = 5.0f},
-            .store_place = {.joint1_max_vel_rad_s = 1.0f, .joint2_max_vel_rad_s = 2.0f},
-            .store_standby = {.joint1_max_vel_rad_s = 1.0f, .joint2_max_vel_rad_s = 2.0f},
+            .store_place = {.joint1_max_vel_rad_s = 2.5f, .joint2_max_vel_rad_s = 3.0f},
+            .store_standby = {.joint1_max_vel_rad_s =2.5f, .joint2_max_vel_rad_s = 2.0f},
             /* release_*：一键放矿流程，wait=放矿前等待位，assist=放矿辅助进位，place=放矿位，standby=放矿后回待机位。 */
-            .release_wait = {.joint1_max_vel_rad_s = 1.0f, .joint2_max_vel_rad_s = 2.0f},
-            .release_assist = {.joint1_max_vel_rad_s = 1.0f, .joint2_max_vel_rad_s = 2.0f},
-            .release_place = {.joint1_max_vel_rad_s = 1.0f, .joint2_max_vel_rad_s = 2.0f},
-            .release_standby = {.joint1_max_vel_rad_s = 1.0f, .joint2_max_vel_rad_s = 2.0f},
+            .release_wait = {.joint1_max_vel_rad_s = 3.0f, .joint2_max_vel_rad_s = 2.0f},
+            .release_assist = {.joint1_max_vel_rad_s = 3.0f, .joint2_max_vel_rad_s = 2.0f},
+            .release_place = {.joint1_max_vel_rad_s = 3.0f, .joint2_max_vel_rad_s = 2.0f},
+            .release_standby = {.joint1_max_vel_rad_s = 3.0f, .joint2_max_vel_rad_s = 2.0f},
             /* chamber_*：一键上膛流程，wait=对接等待位，place=取/交接位，standby=上膛后回待机位。 */
-            .chamber_wait = {.joint1_max_vel_rad_s = 5.0f, .joint2_max_vel_rad_s = 8.0f},
-            .chamber_place = {.joint1_max_vel_rad_s = 1.0f, .joint2_max_vel_rad_s = 4.0f},
-            .chamber_standby = {.joint1_max_vel_rad_s = 1.0f, .joint2_max_vel_rad_s = 2.0f},
+            .chamber_wait = {.joint1_max_vel_rad_s = 8.0f, .joint2_max_vel_rad_s = 8.0f},
+            .chamber_place = {.joint1_max_vel_rad_s = 8.0f, .joint2_max_vel_rad_s = 6.0f},
+            .chamber_standby = {.joint1_max_vel_rad_s = 8.0f, .joint2_max_vel_rad_s = 4.0f},
             /* pick_*：一键取矿流程，standby=取矿前/后待机位，place=伸到取矿位，fetch=底盘前进取矿时保持取矿位。 */
             .pick_standby = {.joint1_max_vel_rad_s = 4.0f, .joint2_max_vel_rad_s = 2.0f},
-            .pick_place = {.joint1_max_vel_rad_s = 4.0f, .joint2_max_vel_rad_s = 4.0f},
-            .pick_fetch = {.joint1_max_vel_rad_s = 3.0f, .joint2_max_vel_rad_s = 2.0f},
-            .pick_lift_detect = {.joint1_max_vel_rad_s = 4.0f, .joint2_max_vel_rad_s = 2.0f},
+            .pick_place = {.joint1_max_vel_rad_s = 8.0f, .joint2_max_vel_rad_s = 20.0f},
+            .pick_fetch = {.joint1_max_vel_rad_s = 3.0f, .joint2_max_vel_rad_s = 20.0f},
+            .pick_lift_detect = {.joint1_max_vel_rad_s = 4.0f, .joint2_max_vel_rad_s = 20.0f},
         },
         /* 一键存/放/上膛/取矿流程中的动作延时，单位 ms；<=0 时使用状态机内置默认值。 */
         .timing = {

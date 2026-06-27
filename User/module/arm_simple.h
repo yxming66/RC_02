@@ -154,6 +154,8 @@ typedef struct {
     struct {
         float joint1_max_vel;
         float joint2_max_vel;
+        float joint1_max_accel;
+        float joint2_max_accel;
     } vel_limit;
 
     struct {
@@ -197,9 +199,13 @@ typedef struct {
         float joint2_target;
         float joint1_output_target;
         float joint2_output_target;
+        float joint1_output_vel;
+        float joint2_output_vel;
         float joint1_vel_target;
         float joint1_max_vel_rad_s;
         float joint2_max_vel_rad_s;
+        float joint1_max_accel_rad_s2;
+        float joint2_max_accel_rad_s2;
         bool output_target_initialized;
     } target;
 

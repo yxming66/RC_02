@@ -52,6 +52,14 @@ static float ArmSimple_ResolveMaxVel(float command_max_vel,
                : -1.0f;
 }
 
+static float ArmSimple_ResolveMaxAccel(float default_max_accel)
+{
+    if (default_max_accel > 0.0f && isfinite(default_max_accel)) {
+        return default_max_accel;
+    }
+    return -1.0f;
+}
+
 static float ArmSimple_MoveToward(float current, float target,
                                   float max_delta)
 {
@@ -70,6 +78,62 @@ static float ArmSimple_MoveToward(float current, float target,
     return current + ((delta > 0.0f) ? max_delta : -max_delta);
 }
 
+static float ArmSimple_Sign(float value)
+{
+    if (value > 0.0f) return 1.0f;
+    if (value < 0.0f) return -1.0f;
+    return 0.0f;
+}
+
+static float ArmSimple_TrapezoidStep(float current_position,
+                                     float target_position,
+                                     float *current_velocity,
+                                     float max_velocity,
+                                     float max_acceleration,
+                                     float dt)
+{
+    if (current_velocity == NULL || dt <= 0.0f || !isfinite(dt)) {
+        return target_position;
+    }
+
+    if (max_velocity <= 0.0f || max_acceleration <= 0.0f ||
+        !isfinite(max_velocity) || !isfinite(max_acceleration)) {
+        const float next = ArmSimple_MoveToward(
+            current_position, target_position,
+            (max_velocity > 0.0f && isfinite(max_velocity))
+                ? max_velocity * dt
+                : -1.0f);
+        *current_velocity = (next - current_position) / dt;
+        return next;
+    }
+
+    const float error = target_position - current_position;
+    const float distance = fabsf(error);
+    if (distance <= 1.0e-5f && fabsf(*current_velocity) <= max_acceleration * dt) {
+        *current_velocity = 0.0f;
+        return target_position;
+    }
+
+    const float direction = (distance > 1.0e-6f) ? ArmSimple_Sign(error)
+                                                 : -ArmSimple_Sign(*current_velocity);
+    const float distance_limited_speed = sqrtf(2.0f * max_acceleration * distance);
+    const float desired_speed = fminf(max_velocity, distance_limited_speed);
+    const float desired_velocity = direction * desired_speed;
+    const float max_velocity_delta = max_acceleration * dt;
+
+    *current_velocity = ArmSimple_MoveToward(
+        *current_velocity, desired_velocity, max_velocity_delta);
+    *current_velocity = ClampFloat(*current_velocity, -max_velocity, max_velocity);
+
+    const float next_position = current_position + (*current_velocity * dt);
+    const float next_error = target_position - next_position;
+    if (ArmSimple_Sign(error) != 0.0f && ArmSimple_Sign(next_error) != ArmSimple_Sign(error)) {
+        *current_velocity = 0.0f;
+        return target_position;
+    }
+    return next_position;
+}
+
 static void ArmSimple_UpdateOutputTargets(ArmSimple_t *a)
 {
     if (a == NULL || a->param == NULL) {
@@ -85,23 +149,28 @@ static void ArmSimple_UpdateOutputTargets(ArmSimple_t *a)
             a->feedback.joint2_angle,
             a->param->soft_limit.joint2_min,
             a->param->soft_limit.joint2_max);
+        a->target.joint1_output_vel = 0.0f;
+        a->target.joint2_output_vel = 0.0f;
         a->target.output_target_initialized = true;
     }
 
     const float dt = (a->timer.dt > 0.0f && isfinite(a->timer.dt))
                          ? a->timer.dt
                          : 0.001f;
-    const float joint1_max_delta = a->target.joint1_max_vel_rad_s * dt;
-    const float joint2_max_delta = a->target.joint2_max_vel_rad_s * dt;
-
-    a->target.joint1_output_target = ArmSimple_MoveToward(
+    a->target.joint1_output_target = ArmSimple_TrapezoidStep(
         a->target.joint1_output_target,
         a->target.joint1_target,
-        joint1_max_delta);
-    a->target.joint2_output_target = ArmSimple_MoveToward(
+        &a->target.joint1_output_vel,
+        a->target.joint1_max_vel_rad_s,
+        a->target.joint1_max_accel_rad_s2,
+        dt);
+    a->target.joint2_output_target = ArmSimple_TrapezoidStep(
         a->target.joint2_output_target,
         a->target.joint2_target,
-        joint2_max_delta);
+        &a->target.joint2_output_vel,
+        a->target.joint2_max_vel_rad_s,
+        a->target.joint2_max_accel_rad_s2,
+        dt);
 
     a->target.joint1_output_target = ClampAngle(
         a->target.joint1_output_target,
@@ -186,11 +255,17 @@ int8_t ArmSimple_Init(ArmSimple_t *a, ArmSimple_Params_t *param, float target_fr
     a->target.joint2_target = 0.0f;
     a->target.joint1_output_target = 0.0f;
     a->target.joint2_output_target = 0.0f;
+    a->target.joint1_output_vel = 0.0f;
+    a->target.joint2_output_vel = 0.0f;
     a->target.joint1_vel_target = 0.0f;
     a->target.joint1_max_vel_rad_s = ArmSimple_ResolveMaxVel(
         0.0f, param->vel_limit.joint1_max_vel);
     a->target.joint2_max_vel_rad_s = ArmSimple_ResolveMaxVel(
         0.0f, param->vel_limit.joint2_max_vel);
+    a->target.joint1_max_accel_rad_s2 = ArmSimple_ResolveMaxAccel(
+        param->vel_limit.joint1_max_accel);
+    a->target.joint2_max_accel_rad_s2 = ArmSimple_ResolveMaxAccel(
+        param->vel_limit.joint2_max_accel);
     a->target.output_target_initialized = false;
 
     const auto dm_config =
@@ -276,6 +351,8 @@ int8_t ArmSimple_Control(ArmSimple_t *a, const ArmSimple_CMD_t *cmd)
 
     if (cmd->mode == ARM_SIMPLE_MODE_RELAX) {
         a->target.joint1_vel_target = 0.0f;
+        a->target.joint1_output_vel = 0.0f;
+        a->target.joint2_output_vel = 0.0f;
         a->target.output_target_initialized = false;
         ArmSimple_SetSuction(a, cmd->suction);
         return ARM_SIMPLE_OK;
@@ -290,6 +367,8 @@ int8_t ArmSimple_Control(ArmSimple_t *a, const ArmSimple_CMD_t *cmd)
             a->feedback.joint2_angle,
             a->param->soft_limit.joint2_min,
             a->param->soft_limit.joint2_max);
+        a->target.joint1_output_vel = 0.0f;
+        a->target.joint2_output_vel = 0.0f;
         a->target.output_target_initialized = true;
     }
 
@@ -311,6 +390,10 @@ int8_t ArmSimple_Control(ArmSimple_t *a, const ArmSimple_CMD_t *cmd)
         cmd->joint1_max_vel_rad_s, a->param->vel_limit.joint1_max_vel);
     a->target.joint2_max_vel_rad_s = ArmSimple_ResolveMaxVel(
         cmd->joint2_max_vel_rad_s, a->param->vel_limit.joint2_max_vel);
+    a->target.joint1_max_accel_rad_s2 = ArmSimple_ResolveMaxAccel(
+        a->param->vel_limit.joint1_max_accel);
+    a->target.joint2_max_accel_rad_s2 = ArmSimple_ResolveMaxAccel(
+        a->param->vel_limit.joint2_max_accel);
 
     /* 吸盘控制 */
     ArmSimple_SetSuction(a, cmd->suction);
@@ -332,12 +415,14 @@ int8_t ArmSimple_Output(ArmSimple_t *a)
     if (a->mode == ARM_SIMPLE_MODE_RELAX) {
         (void)motor->Relax();
         a->dm_enabled = false;
+        a->target.joint1_output_vel = 0.0f;
+        a->target.joint2_output_vel = 0.0f;
         a->target.output_target_initialized = false;
     } else {
         ArmSimple_UpdateOutputTargets(a);
         a->feedback.joint2_angle = a->target.joint2_output_target;
         (void)motor->SetMIT(a->target.joint1_output_target,
-                            a->target.joint1_vel_target,
+                            a->target.joint1_output_vel,
                             a->param->mit.joint1_kp,
                             a->param->mit.joint1_kd,
                             a->param->mit.joint1_torque_ff +
