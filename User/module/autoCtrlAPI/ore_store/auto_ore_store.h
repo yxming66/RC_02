@@ -136,6 +136,7 @@ typedef struct {
   AutoOre_ArmSpeedLimit_t store_place;
   AutoOre_ArmSpeedLimit_t store_standby;
   AutoOre_ArmSpeedLimit_t release_wait;
+  AutoOre_ArmSpeedLimit_t release_assist;
   AutoOre_ArmSpeedLimit_t release_place;
   AutoOre_ArmSpeedLimit_t release_standby;
   AutoOre_ArmSpeedLimit_t chamber_wait;

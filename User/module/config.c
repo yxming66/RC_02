@@ -324,9 +324,9 @@ Config_RobotParam_t robot_config = {
                 /* ArmSimple 存矿等待位，等待平台到位后再伸到存矿位。 */
                 [ARM_SIMPLE_BEHAVIOR_WAIT_STORE_ORE] = {.joint1_pos = 0.246562153f, .joint2_pos = -1.82005286f},
                 /* ArmSimple 放矿等待位，放矿动作前的预备/稳定位置。 */
-                [ARM_SIMPLE_BEHAVIOR_WAIT_RELEASE_ORE] = {.joint1_pos = -0.164476007f, .joint2_pos = 1.64204562f},
+                [ARM_SIMPLE_BEHAVIOR_WAIT_RELEASE_ORE] = {.joint1_pos = -0.239599288f, .joint2_pos =1.68926358f},
                 /* ArmSimple 放矿位，吸盘关闭后从该位置把矿释放出去。 */
-                [ARM_SIMPLE_BEHAVIOR_RELEASE_ORE] = {.joint1_pos = 0.191354722f, .joint2_pos = 1.44863617f},
+                [ARM_SIMPLE_BEHAVIOR_RELEASE_ORE] = {.joint1_pos = 0.224118978f, .joint2_pos = 0.963034928f},
                 /* ArmSimple 正向 400mm 取矿位，配合 pole 的 step_400_all_extend 使用。 */
                 [ARM_SIMPLE_BEHAVIOR_PICK_POS_400] = {.joint1_pos = 1.53361797f, .joint2_pos = 0.0f},
                 /* ArmSimple 正向 200mm 取矿位，配合 pole 的 step_200_all_extend 使用。 */
@@ -335,6 +335,8 @@ Config_RobotParam_t robot_config = {
                 [ARM_SIMPLE_BEHAVIOR_PICK_NEG_200] = {.joint1_pos = 1.92628717f, .joint2_pos = -0.39897722f},
                 /* 融合取矿：抬矿检测/安全携带位，实车确认矿石离地间隙后再标定。 */
                 [ARM_SIMPLE_BEHAVIOR_PICK_LIFT_DETECT] = {.joint1_pos = 1.20f, .joint2_pos = -0.35f},
+                     /* ArmSimple 放矿辅助进位，放矿流程从等待位先经过该位置再进放矿位。 */
+                     [ARM_SIMPLE_BEHAVIOR_RELEASE_ORE_ASSIST] = {.joint1_pos = 0.0225189831f, .joint2_pos = 1.30412614f},
             },
             .arrive_threshold_rad = 0.05f,
         },
@@ -347,8 +349,9 @@ Config_RobotParam_t robot_config = {
             .store_wait = {.joint1_max_vel_rad_s = 3.0f, .joint2_max_vel_rad_s = 5.0f},
             .store_place = {.joint1_max_vel_rad_s = 1.0f, .joint2_max_vel_rad_s = 2.0f},
             .store_standby = {.joint1_max_vel_rad_s = 1.0f, .joint2_max_vel_rad_s = 2.0f},
-            /* release_*：一键放矿流程，wait=放矿前等待位，place=放矿位，standby=放矿后回待机位。 */
+            /* release_*：一键放矿流程，wait=放矿前等待位，assist=放矿辅助进位，place=放矿位，standby=放矿后回待机位。 */
             .release_wait = {.joint1_max_vel_rad_s = 1.0f, .joint2_max_vel_rad_s = 2.0f},
+            .release_assist = {.joint1_max_vel_rad_s = 1.0f, .joint2_max_vel_rad_s = 2.0f},
             .release_place = {.joint1_max_vel_rad_s = 1.0f, .joint2_max_vel_rad_s = 2.0f},
             .release_standby = {.joint1_max_vel_rad_s = 1.0f, .joint2_max_vel_rad_s = 2.0f},
             /* chamber_*：一键上膛流程，wait=对接等待位，place=取/交接位，standby=上膛后回待机位。 */
@@ -558,7 +561,7 @@ Config_RobotParam_t robot_config = {
             .second_photo_retract_move_speed = 0.40f, /* 后一个光电触发收腿时向头向移动 vx，单位 m/s。 */
             .final_move_speed = 0.8f,          /* 收尾离开台阶 vx，单位 m/s。 */
             .final_move_ms = 1200u,              /* 收尾离开台阶角度门控兜底超时，单位 ms。 */
-            .final_photo_sprint_ms = 300u,       /* 末尾光电触发后继续冲刺时间，单位 ms。 */
+            .final_photo_sprint_ms = 150u,       /* 末尾光电触发后继续冲刺时间，单位 ms。 */
             .final_move_wheel_delta_rad = 0.0f, /* 编码器门控的收尾离开轮转角阈值，单位 rad；>0 优先按角度切步，<=0 使用 final_move_ms。 */
             .pole_all_extend_speed = 0.0f,     /* 四杆全伸目标跟随速度，单位 rad/s。 */
             .pole_front_extend_speed = 0.0f,   /* 前杆伸出目标跟随速度，单位 rad/s。 */
