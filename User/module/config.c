@@ -711,13 +711,13 @@ Config_RobotParam_t robot_config = {
                 .module = MOTOR_DM_H3510,
                 .reverse = false,
             },
-            .encoder_zero_offset_rad = 1.61221385f,
+            .encoder_zero_offset_rad = -0.476500511f,
             .pid = {
                 .yaw_pid = {
                     .k = 1.0f,
-                    .p = 0.45f,
+                    .p = 2.0f,
                     .i = 0.0f,
-                    .d = 0.0f,
+                    .d = 0.1f,
                     .i_limit = 0.0f,
                     .out_limit = 0.45f,
                     .d_cutoff_freq = -1.0f,

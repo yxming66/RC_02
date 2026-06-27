@@ -274,8 +274,15 @@ static bool PcComm_CameraYawCommandFresh(const MrlinkPc_State_t *state,
 }
 
 static bool PcComm_ShouldRelaxCameraYawByRcSwitch(void) {
-    return !dr16.header.online || dr16.data.sw_l != DR16_SW_UP ||
-           dr16.data.sw_r != DR16_SW_UP || !MrlinkPc_IsPCControlMode();
+    return !dr16.header.online ||
+           (dr16.data.sw_l == DR16_SW_UP &&
+            (dr16.data.sw_r == DR16_SW_MID ||
+             dr16.data.sw_r == DR16_SW_DOWN));
+}
+
+static bool PcComm_ShouldUsePcCameraYawCommand(void) {
+    return dr16.header.online && dr16.data.sw_l == DR16_SW_UP &&
+           dr16.data.sw_r == DR16_SW_UP && MrlinkPc_IsPCControlMode();
 }
 
 static float PcComm_GetCameraYawFeedbackRad(uint8_t yaw, float fallback) {
@@ -310,7 +317,8 @@ static void PcComm_UpdateCameraYawCommand(uint32_t now_ms) {
 
     const PC_CameraYawCMD_t *pc_cmd = MrlinkPc_GetCameraYawCMD();
     const MrlinkPc_State_t *state = MrlinkPc_GetState();
-    if (pc_cmd != NULL && PcComm_CameraYawCommandFresh(state, now_ms)) {
+    if (PcComm_ShouldUsePcCameraYawCommand() && pc_cmd != NULL &&
+        PcComm_CameraYawCommandFresh(state, now_ms)) {
         for (uint8_t yaw = 0u; yaw < CAMERA_YAW_NUM &&
                                   yaw < PC_CAMERA_YAW_COUNT;
              ++yaw) {
