@@ -295,8 +295,8 @@ Config_RobotParam_t robot_config = {
             .gpio = BSP_GPIO_ORE_RELAY,
         },
         .mit = {
-            .joint1_kp = 180.0f,
-            .joint1_kd = 50.0f,
+            .joint1_kp = 300.0f,
+            .joint1_kd = 200.0f,
             .joint1_torque_ff = 0.0f,
             .joint1_gravity_mass_kg = -0.10f,
             .joint1_gravity_com_m = 0.12f,
@@ -360,7 +360,7 @@ Config_RobotParam_t robot_config = {
             .chamber_standby = {.joint1_max_vel_rad_s = 1.0f, .joint2_max_vel_rad_s = 2.0f},
             /* pick_*：一键取矿流程，standby=取矿前/后待机位，place=伸到取矿位，fetch=底盘前进取矿时保持取矿位。 */
             .pick_standby = {.joint1_max_vel_rad_s = 4.0f, .joint2_max_vel_rad_s = 2.0f},
-            .pick_place = {.joint1_max_vel_rad_s = 8.0f, .joint2_max_vel_rad_s = 4.0f},
+            .pick_place = {.joint1_max_vel_rad_s = 4.0f, .joint2_max_vel_rad_s = 4.0f},
             .pick_fetch = {.joint1_max_vel_rad_s = 3.0f, .joint2_max_vel_rad_s = 2.0f},
             .pick_lift_detect = {.joint1_max_vel_rad_s = 4.0f, .joint2_max_vel_rad_s = 2.0f},
         },

@@ -450,6 +450,23 @@ static bool AutoCtrlFeed_IsFusedOreAction(AutoOre_Action_t action) {
   }
 }
 
+static bool AutoCtrlFeed_ShouldForcePcSuccess(PC_AutoAction_t action) {
+  switch (action) {
+    case PC_AUTO_ACTION_STORE:
+    case PC_AUTO_ACTION_RELEASE:
+    case PC_AUTO_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD:
+    case PC_AUTO_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD:
+    case PC_AUTO_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD:
+    case PC_AUTO_ACTION_STEP_ASCEND_200_HEAD:
+    case PC_AUTO_ACTION_STEP_DESCEND_200_HEAD:
+    case PC_AUTO_ACTION_STEP_ASCEND_400_HEAD:
+    case PC_AUTO_ACTION_STEP_DESCEND_400_HEAD:
+      return true;
+    default:
+      return false;
+  }
+}
+
 static bool AutoCtrlFeed_IsRodSpearheadAction(PC_AutoAction_t action) {
   return action == PC_AUTO_ACTION_ROD_SPEARHEAD ||
          action == PC_AUTO_ACTION_ROD_DOCK_WAIT;
@@ -699,6 +716,8 @@ static void AutoCtrlFeed_PublishAutoActionFeedback(void) {
 
   if (auto_action_last_action == PC_AUTO_ACTION_ABORT) {
     AutoCtrlFeed_SetFeedbackFail(&pc_feedback, PC_AUTO_ACTION_FAILURE_ABORTED);
+  } else if (AutoCtrlFeed_ShouldForcePcSuccess(auto_action_last_action)) {
+    AutoCtrlFeed_SetFeedbackSuccess(&pc_feedback);
   } else if (AutoCtrlFeed_IsOreAction(auto_action_last_action) &&
              auto_ore_inited) {
     pc_feedback.action = (uint8_t)AutoCtrlFeed_GetOreFeedbackAction();

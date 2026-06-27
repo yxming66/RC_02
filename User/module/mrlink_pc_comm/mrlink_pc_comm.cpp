@@ -22,7 +22,7 @@ constexpr uint16_t kRxDmaBufSize = MRLINK_PC_RX_DMA_BUF_SIZE;
 constexpr uint16_t kMrlinkRxBufSize = MRLINK_PC_RX_STREAM_BUF_SIZE;
 constexpr uint16_t kMrlinkTxBufSize = MRLINK_PC_MAX_FRAME_SIZE;
 constexpr uint32_t kAutoActionRepeatReleaseMs = 300u;
-constexpr uint32_t kModuleCommandTimeoutMs = 1000u;
+constexpr uint32_t kModuleCommandTimeoutMs = 10000u;
 
 static_assert(kRxDmaSlotCount >= 2u, "MRLINK_PC_RX_DMA_SLOT_COUNT must be >= 2");
 static_assert(kRxDmaBufSize >= MRLINK_PC_MAX_FRAME_SIZE,
