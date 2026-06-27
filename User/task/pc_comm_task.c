@@ -48,21 +48,6 @@ static const uint8_t s_feedback_cmds[] = {
      * 判定变更或心跳到期后单独追加，避免 50Hz 重复发送。 */
 };
 
-static uint16_t PcComm_DebugCopyRaw(volatile uint8_t *dst, uint16_t dst_size,
-                                    const uint8_t *src, uint16_t src_len) {
-    uint16_t copy_len = src_len;
-    if (copy_len > dst_size) {
-        copy_len = dst_size;
-    }
-    for (uint16_t i = 0; i < copy_len; ++i) {
-        dst[i] = src[i];
-    }
-    for (uint16_t i = copy_len; i < dst_size; ++i) {
-        dst[i] = 0;
-    }
-    return copy_len;
-}
-
 static void PcComm_DebugRecordInitFail(int8_t reason) {
     g_pc_comm_debug.init_fail_count++;
     g_pc_comm_debug.last_init_error = reason;
@@ -75,8 +60,6 @@ static void PcComm_DebugRecordTx(const uint8_t *data, uint16_t len,
     g_pc_comm_debug.tx_frame_count = frame_count;
     g_pc_comm_debug.tx_result = tx_result;
     g_pc_comm_debug.tx_dma_busy = s_tx_dma_busy ? 1u : 0u;
-    g_pc_comm_debug.tx_raw_len = PcComm_DebugCopyRaw(
-        g_pc_comm_debug.tx_raw, PC_COMM_DEBUG_TX_RAW_SIZE, data, len);
 }
 
 static void PcComm_TxDoneCallback(void) {

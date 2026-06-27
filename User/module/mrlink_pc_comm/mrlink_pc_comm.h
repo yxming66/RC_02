@@ -68,8 +68,6 @@ typedef enum {
  
 #define MRLINK_PC_MAX_PAYLOAD_SIZE (64u)    /* 单帧 payload 最大字节数，上位机结构体不能超过该值 */
 #define MRLINK_PC_MAX_FRAME_SIZE (2u + 1u + 1u + MRLINK_PC_MAX_PAYLOAD_SIZE + 2u) /* 完整 mrlink 帧最大长度：帧头+长度+命令+payload+CRC */
-#define PC_COMM_DEBUG_RX_RAW_SIZE (256u)    /* 调试缓存：最近接收原始数据最大保存字节数 */
-#define PC_COMM_DEBUG_TX_RAW_SIZE (384u)    /* 调试缓存：最近发送原始数据最大保存字节数，匹配 pc_comm_task 的发送打包缓存 */
 
 #ifndef MRLINK_PC_RX_DMA_SLOT_COUNT
 #define MRLINK_PC_RX_DMA_SLOT_COUNT (4u)    /* UART RX DMA 环形接收槽数量 */
@@ -510,8 +508,6 @@ typedef struct {
     uint32_t rx_batch_count;           /* 从底层通道弹出的接收批次数 */
     uint16_t rx_batch_len;             /* 最近一批接收数据长度 */
     uint8_t rx_batch_frame_count;      /* 最近一批数据中成功解析出的帧数 */
-    uint16_t rx_batch_raw_len;         /* rx_batch_raw 中保存的有效字节数 */
-    uint8_t rx_batch_raw[PC_COMM_DEBUG_RX_RAW_SIZE];    /* 最近一批原始接收数据 */
 
     uint8_t last_rx_cmd;               /* 最近一次接收帧命令字 */
     uint8_t last_rx_len;               /* 最近一次接收帧 payload 长度 */
@@ -519,8 +515,6 @@ typedef struct {
     uint16_t last_rx_frame_size;       /* 最近一次接收帧完整长度 */
     uint16_t last_rx_crc_received;     /* 最近一次接收帧携带的 CRC */
     uint16_t last_rx_crc_calculated;   /* 最近一次接收帧计算出的 CRC */
-    uint16_t last_rx_raw_len;          /* last_rx_raw 中保存的有效字节数 */
-    uint8_t last_rx_raw[MRLINK_PC_MAX_FRAME_SIZE];      /* 最近一次原始接收帧 */
 
     PC_ChassisCMD_t rx_chassis;             /* 调试用：最近一次底盘命令 */
     PC_PoleCMD_t rx_pole;                   /* 调试用：最近一次撑杆命令 */
@@ -540,8 +534,6 @@ typedef struct {
     uint16_t tx_len;                  /* 最近一次发送总长度 */
     uint8_t tx_frame_count;           /* 最近一次发送中打包的反馈帧数量 */
     int8_t tx_result;                 /* 最近一次发送结果，MRLINK_CHANNEL_OK/错误码 */
-    uint16_t tx_raw_len;              /* tx_raw 中保存的有效字节数 */
-    uint8_t tx_raw[PC_COMM_DEBUG_TX_RAW_SIZE];          /* 最近一次原始发送数据 */
 
     MrLink_Stats_t mrlink_stats;      /* mrlink 协议层统计快照 */
     uint32_t rx_ir_ore_ack_count;              /* 收到 PC_CMD_IR_ORE_ACK 的次数 */

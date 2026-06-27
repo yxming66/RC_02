@@ -62,6 +62,10 @@
 #define RC_AUTO_STEP_CH_RES_THRESHOLD (0.90f)
 #endif
 
+#ifndef RC_DEBUG_UPDATE_PERIOD_MS
+#define RC_DEBUG_UPDATE_PERIOD_MS (50u)
+#endif
+
 #ifndef RC_MANUAL_IO_CH_THRESHOLD
 #define RC_MANUAL_IO_CH_THRESHOLD (0.90f)
 
@@ -202,6 +206,7 @@ static Suction_State_t arm_simple_suction_latched = SUCTION_OFF;
 static RcBehavior_t rc_current_behavior = RC_BEHAVIOR_SAFE;
 static RcCommandPlan_t rc_current_plan = RC_CMD_PLAN_SAFE;
 static bool rc_cmd_center_configured = false;
+static uint32_t rc_debug_last_update_ms = 0u;
 
 static cmd::Center<1, 5, 96, 20, 64, 512, 128> rc_cmd_center;
 
@@ -216,7 +221,7 @@ typedef enum {
 } RcAutoStepProfile_t;
 
 static RcAutoStepProfile_t Rc_SelectAutoStepProfile(void) {
-  return RC_AUTO_STEP_PROFILE_FUSED_200;
+  return RC_AUTO_STEP_PROFILE_FUSED_UP_400_NORMAL_DOWN_400;
 }
 
 #if RC_MAPPING_ACTIVE_PRESET == RC_MAPPING_PRESET_PC_FIRST
@@ -1060,7 +1065,16 @@ static bool Rc_BehaviorAllowsAutoCtrlOutput(RcBehavior_t behavior) {
          behavior == RC_BEHAVIOR_AUTO_200_DOWN_STANDBY;
 }
 
-static void Rc_ResetFrameDebug(void) {
+static bool Rc_DebugPeriodicDue(uint32_t now_ms) {
+  if (rc_debug_last_update_ms == 0u ||
+      (uint32_t)(now_ms - rc_debug_last_update_ms) >= RC_DEBUG_UPDATE_PERIOD_MS) {
+    rc_debug_last_update_ms = now_ms;
+    return true;
+  }
+  return false;
+}
+
+static void Rc_ResetFrameDebugEvents(void) {
   g_pc_command_source = PC_COMMAND_SOURCE_RC;
   g_rc_control_debug.page = RC_CONTROL_PAGE_SAFE;
   g_rc_control_debug.reset_event = false;
@@ -1072,36 +1086,39 @@ static void Rc_ResetFrameDebug(void) {
   g_rc_control_debug.ore_store_active = false;
   g_rc_control_debug.auto_ore_start_event = false;
   g_rc_control_debug.auto_ore_start_ok = false;
+  g_rc_ore_store_debug.assume_home_event = false;
+}
+
+static void Rc_UpdateDebugSnapshot(void) {
   g_rc_control_debug.auto_ore_state = AutoOre_GetState(&auto_ore_ctrl);
   g_rc_control_debug.auto_ore_result = AutoOre_GetResult(&auto_ore_ctrl);
   g_rc_control_debug.auto_ore_fault = AutoOre_GetFault(&auto_ore_ctrl);
   g_rc_control_debug.auto_ore_action = auto_ore_ctrl.action;
-    g_rc_control_debug.auto_ore_active_position =
+  g_rc_control_debug.auto_ore_active_position =
       AutoOre_GetActivePosition(&auto_ore_ctrl);
-    g_rc_control_debug.auto_ore_occupancy_mask =
+  g_rc_control_debug.auto_ore_occupancy_mask =
       AutoOre_GetOccupancyMask(&auto_ore_ctrl);
   g_rc_control_debug.auto_ore_step_index = AutoOre_GetStepIndex(&auto_ore_ctrl);
-    g_rc_control_debug.auto_rod_spearhead_state =
+  g_rc_control_debug.auto_rod_spearhead_state =
       AutoRodSpearhead_GetState(&auto_rod_spearhead_ctrl);
-    g_rc_control_debug.auto_rod_spearhead_result =
+  g_rc_control_debug.auto_rod_spearhead_result =
       AutoRodSpearhead_GetResult(&auto_rod_spearhead_ctrl);
-    g_rc_control_debug.auto_rod_spearhead_fault =
+  g_rc_control_debug.auto_rod_spearhead_fault =
       AutoRodSpearhead_GetFault(&auto_rod_spearhead_ctrl);
-    g_rc_control_debug.auto_rod_spearhead_action =
+  g_rc_control_debug.auto_rod_spearhead_action =
       AutoRodSpearhead_GetAction(&auto_rod_spearhead_ctrl);
-    g_rc_control_debug.auto_rod_spearhead_step_index =
+  g_rc_control_debug.auto_rod_spearhead_step_index =
       AutoRodSpearhead_GetStepIndex(&auto_rod_spearhead_ctrl);
-    g_rc_control_debug.auto_sick_correct_state =
+  g_rc_control_debug.auto_sick_correct_state =
       AutoSickCorrect_GetState(&auto_sick_correct_ctrl);
-    g_rc_control_debug.auto_sick_correct_result =
+  g_rc_control_debug.auto_sick_correct_result =
       AutoSickCorrect_GetResult(&auto_sick_correct_ctrl);
-    g_rc_control_debug.auto_sick_correct_fault =
+  g_rc_control_debug.auto_sick_correct_fault =
       AutoSickCorrect_GetFault(&auto_sick_correct_ctrl);
-    g_rc_control_debug.auto_sick_correct_action =
+  g_rc_control_debug.auto_sick_correct_action =
       AutoSickCorrect_GetAction(&auto_sick_correct_ctrl);
-    g_rc_control_debug.auto_sick_correct_step_index =
+  g_rc_control_debug.auto_sick_correct_step_index =
       AutoSickCorrect_GetStepIndex(&auto_sick_correct_ctrl);
-  g_rc_ore_store_debug.assume_home_event = false;
 }
 
 static void Rc_HandleResetEvent(void) {
@@ -1165,7 +1182,7 @@ static void Rc_HandleBehaviorEvents(RcBehavior_t behavior) {
   }
 }
 
-static void Rc_PublishCommandsAndDebug(void) {
+static void Rc_PublishCommandsAndDebug(bool update_debug) {
   osMessageQueueReset(task_runtime.msgq.chassis.cmd);
   osMessageQueuePut(task_runtime.msgq.chassis.cmd, &chassis_cmd, 0, 0);
   osMessageQueueReset(task_runtime.msgq.pole.cmd);
@@ -1175,6 +1192,10 @@ static void Rc_PublishCommandsAndDebug(void) {
   osMessageQueueReset(task_runtime.msgq.rod.cmd);
   osMessageQueuePut(task_runtime.msgq.rod.cmd, &rod_cmd, 0, 0);
   g_rc_ore_store_post_ret = Task_OreStorePostCommand(&ore_store_cmd);
+
+  if (!update_debug) {
+    return;
+  }
 
   g_rc_ore_store_debug.online = dr16.header.online;
   g_rc_ore_store_debug.sw_l = dr16.data.sw_l;
@@ -2059,8 +2080,12 @@ void RcCmdCenterApp_Init(void) {
 
 void RcCmdCenterApp_Update(uint32_t now_ms) {
   RcBehavior_t behavior;
+  const bool update_debug = Rc_DebugPeriodicDue(now_ms);
 
-  Rc_ResetFrameDebug();
+  Rc_ResetFrameDebugEvents();
+  if (update_debug) {
+    Rc_UpdateDebugSnapshot();
+  }
   Rc_HandleResetEvent();
 
   Rc_LatchFinishedAutoTargets();
@@ -2077,7 +2102,7 @@ void RcCmdCenterApp_Update(uint32_t now_ms) {
   }
   rc_pc_behavior_was_active = pc_behavior_active;
   rc_cmd_center.tick(now_ms).publish();
-  Rc_PublishCommandsAndDebug();
+  Rc_PublishCommandsAndDebug(update_debug);
   Rc_UpdateAutoBusyHistory();
   last_sw_l = dr16.data.sw_l;
   last_sw_r = dr16.data.sw_r;

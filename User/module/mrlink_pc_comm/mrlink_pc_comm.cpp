@@ -81,21 +81,6 @@ void ClearModuleCommands() {
   s_rod_new_cmd_tick = 0u;
 }
 
-uint16_t DebugCopyRaw(volatile uint8_t *dst, uint16_t dst_size,
-                      const uint8_t *src, uint16_t src_len) {
-  uint16_t copy_len = src_len;
-  if (copy_len > dst_size) {
-    copy_len = dst_size;
-  }
-  for (uint16_t i = 0; i < copy_len; ++i) {
-    dst[i] = src[i];
-  }
-  for (uint16_t i = copy_len; i < dst_size; ++i) {
-    dst[i] = 0;
-  }
-  return copy_len;
-}
-
 void MarkLastRxFrame(uint8_t cmd, uint16_t payload_len, int8_t result,
                      uint16_t crc_received, uint16_t crc_calculated);
 
@@ -610,12 +595,6 @@ extern "C" void MrlinkPc_CommProcess(uint32_t now_ms) {
     g_pc_comm_debug.rx_batch_count++;
     g_pc_comm_debug.rx_batch_len = rx_len;
     g_pc_comm_debug.rx_batch_frame_count = 0;
-    g_pc_comm_debug.rx_batch_raw_len = DebugCopyRaw(
-        g_pc_comm_debug.rx_batch_raw, PC_COMM_DEBUG_RX_RAW_SIZE,
-        s_rx_parse_buf, rx_len);
-    g_pc_comm_debug.last_rx_raw_len = DebugCopyRaw(
-        g_pc_comm_debug.last_rx_raw, MRLINK_PC_MAX_FRAME_SIZE,
-        s_rx_parse_buf, rx_len);
 
     DispatchPendingRxFrames();
   }
