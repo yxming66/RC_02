@@ -134,10 +134,6 @@ class Instance {
     return MrLink_Dispatch(&proto_);
   }
 
-  int8_t FeedBytes(const uint8_t* data, uint16_t len) {
-    return MrLink_FeedBytes(&proto_, data, len);
-  }
-
   int8_t Parse(uint8_t* out_cmd,
                const uint8_t** out_payload,
                uint16_t* out_payload_len) {

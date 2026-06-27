@@ -134,9 +134,9 @@ typedef struct {
   uint32_t frame_rx_unknown_cmd;   /**< 收到但无 handler 的 cmd 帧数 */
   uint32_t frame_rx_size_mismatch; /**< typed handler 期望长度不匹配 (comm_rx_size_mismatch) */
   uint32_t frame_tx_ok;            /**< 成功 build 的帧数 */
-  uint32_t feed_bytes_total;       /**< FeedBytes 喂入字节总数 */
+  uint32_t feed_bytes_total;       /**< PushBytes 喂入字节总数 */
   uint32_t feed_bytes_dropped;     /**< RX ring buffer 满导致丢弃的字节数 */
-  uint32_t feed_calls;             /**< FeedBytes 调用次数 */
+  uint32_t feed_calls;             /**< PushBytes 调用次数 */
 } MrLink_Stats_t;
 
 /**
@@ -172,7 +172,7 @@ typedef void (*MrLink_ErrorHandler_t)(const MrLink_ErrorInfo_t *info,
 /**
  * @brief 帧回调 / Frame handler callback.
  *
- * 每次成功解析出一帧 (FeedBytes 内部或 Parse 触发) 时调用一次。
+ * 每次成功解析出一帧 (Dispatch 或 Parse 触发) 时调用一次。
  * 回调内应**短小可重入**，不要做长阻塞。
  *
  * @param cmd          帧命令字
@@ -274,7 +274,7 @@ uint16_t MrLink_MaxFrameSizeForConfig(const MrLink_Config_t *cfg);
 /**
  * @brief  重置 (清空 RX 缓冲、清零 stats、清除 handler) / Reset.
  *
- * 调用方需保证此时没有并发的 FeedBytes 在执行。
+ * 调用方需保证此时没有并发的 PushBytes/Dispatch/Parse 在执行。
  */
 void MrLink_Reset(MrLink_t *proto);
 
@@ -307,17 +307,14 @@ int8_t MrLink_PushBytes(MrLink_t *proto,
  */
 int8_t MrLink_Dispatch(MrLink_t *proto);
 
-int8_t MrLink_FeedBytes(MrLink_t *proto,
-                        const uint8_t *data, uint16_t len);
-
 /**
  * @brief  拉取一帧 / Pull one frame from the RX stream.
  *
  * 任务上下文调用。无完整帧时返回 MRLINK_ERR。
  * payload 指针指向库内临时缓冲，**仅本次调用有效**；调用方需在下次调用前消费。
  *
- * 注册了 handler 时，handler 已在 FeedBytes 时被触发过；此处 Parse 仍能再拉一次。
- * 二者可同时存在。
+ * 若使用 handler 派发，请调用 MrLink_Dispatch()；若使用拉取模式，请循环调用 Parse。
+ * 两种模式可同时存在，但同一帧只会被先执行的解析入口消费一次。
  */
 int8_t MrLink_Parse(MrLink_t *proto, uint8_t *out_cmd,
                        const uint8_t **out_payload,
@@ -375,7 +372,7 @@ int8_t MrLink_RegisterTypedHandler(MrLink_t *proto, uint8_t cmd,
 /**
  * @brief  注册错误事件回调 / Register error event handler.
  *
- * handler = NULL 表示清除错误回调。回调在 FeedBytes/Parse 上下文触发，
+ * handler = NULL 表示清除错误回调。回调在 Dispatch/Parse 上下文触发，
  * 应保持短小、非阻塞。
  */
 int8_t MrLink_SetErrorHandler(MrLink_t *proto,

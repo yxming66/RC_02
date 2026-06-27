@@ -218,10 +218,6 @@ class Instance {
     return MrLink_Dispatch(&proto_);
   }
 
-  int8_t FeedBytes(const uint8_t* data, uint16_t len) {
-    return MrLink_FeedBytes(&proto_, data, len);
-  }
-
   /** 拉取一帧 (任务上下文) / Pull one frame. */
   int8_t Parse(uint8_t* out_cmd,
                const uint8_t** out_payload,
@@ -338,10 +334,9 @@ class Instance {
     }
     const uint16_t len = MrLink_Channel_PopRx(channel_, scratch, scratch_size);
     if (len > 0u) {
+      (void)PushBytes(scratch, len);
       if (dispatch) {
-        (void)FeedBytes(scratch, len);
-      } else {
-        (void)PushBytes(scratch, len);
+        (void)Dispatch();
       }
     }
     return len;

@@ -333,9 +333,9 @@ void MrLink_Reset(MrLink_t *p) {
  *   2. 写入 ring buffer (Put, 满了截断, 返回实际写入数)
  *   3. 调 Proto_ProcessRx 扫描所有可解析字节, 自动派发 handler
  *
- * 两种用法:
- *   - 纯回调模式: 注册 handler → FeedBytes (ISR/任务) 自动派发
- *   - 拉取模式: 不注册 handler → FeedBytes (ISR) → MrLink_Parse (任务)
+ * 典型用法:
+ *   - RX/ISR/channel 回调: MrLink_PushBytes 只入队
+ *   - 任务上下文: MrLink_Dispatch 自动派发 handler, 或 MrLink_Parse 拉取一帧
  * ISR/任务上下文均可调用 (ring buffer Put 用 PRIMASK 临界区互斥)
  */
 int8_t MrLink_PushBytes(MrLink_t *p, const uint8_t *data, uint16_t len) {
@@ -376,17 +376,6 @@ int8_t MrLink_Dispatch(MrLink_t *p) {
   return (p->stats.frame_rx_ok != prev_frame_rx_ok) ? MRLINK_OK : MRLINK_ERR;
 }
 
-int8_t MrLink_FeedBytes(MrLink_t *p, const uint8_t *data, uint16_t len) {
-  const int8_t ret = MrLink_PushBytes(p, data, len);
-  if (ret != MRLINK_OK) {
-    return ret;
-  }
-
-  /* Backward-compatible behavior: push and immediately dispatch handlers. */
-  (void)MrLink_Dispatch(p);
-  return MRLINK_OK;
-}
-
 /**
  * @brief 拉取一帧 (拉取模式, 任务上下文).
  *
@@ -394,8 +383,8 @@ int8_t MrLink_FeedBytes(MrLink_t *p, const uint8_t *data, uint16_t len) {
  *   调 Proto_ProcessRx(want_one_frame=true)
  *     - 找到: 写 *out_cmd / *out_payload / *out_payload_len, 返回 MRLINK_OK
  *     - 无完整帧: 返回 MRLINK_ERR
- *   注意: payload 指针指向实例内 frame_buf, 下次 Parse/Feed 前有效。
- *   配合: ISR 里 FeedBytes, 任务里循环 Parse (适用于不注册 handler 的场景)
+ *   注意: payload 指针指向实例内 frame_buf, 下次 Parse/Dispatch 前有效。
+ *   配合: ISR 里 PushBytes, 任务里循环 Parse (适用于不注册 handler 的场景)
  */
 int8_t MrLink_Parse(MrLink_t *p, uint8_t *out_cmd,
                         const uint8_t **out_payload,

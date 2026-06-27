@@ -157,6 +157,6 @@ const osThreadAttr_t attr_pc_comm_sick = {
 };
 const osThreadAttr_t attr_ir_dock = {
     .name = "ir_dock",
-    .priority = osPriorityLow,
+    .priority = osPriorityHigh,
     .stack_size = 256 * 4,
 };

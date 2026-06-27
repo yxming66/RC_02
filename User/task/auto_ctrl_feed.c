@@ -58,13 +58,18 @@ static bool photo_transfer_inited = false;
 #define AUTO_CTRL_POLE_TARGET_STABLE_CYCLES (5u)
 #endif
 
+#ifndef AUTO_ORE_DEBUG_UPDATE_PERIOD_MS
+#define AUTO_ORE_DEBUG_UPDATE_PERIOD_MS (50u)
+#endif
+
 static uint8_t pole_front_at_target_stable_count = 0u;
 static uint8_t pole_rear_at_target_stable_count = 0u;
 static uint8_t pole_all_at_target_stable_count = 0u;
+static uint32_t auto_ore_debug_last_update_ms = 0u;
 /* USER STRUCT END */
 
 /* Private function --------------------------------------------------------- */
-static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms);
+static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms, bool update_debug);
 
 static float AutoCtrlFeed_SelectYawRad(void) {
   if (AutoCtrl_GetYawSource(&auto_ctrl) == AUTO_CTRL_YAW_SOURCE_PC &&
@@ -560,7 +565,7 @@ static bool AutoCtrlFeed_StartOreAction(AutoOre_Action_t action) {
 
   bool result = false;
   const uint32_t now_ms = BSP_TIME_Get_ms();
-  AutoCtrlFeed_UpdateAutoOre(now_ms);
+  AutoCtrlFeed_UpdateAutoOre(now_ms, true);
   switch (action) {
     case AUTO_ORE_ACTION_STORE:
       result = AutoOre_StartStore(&auto_ore_ctrl, now_ms);
@@ -848,7 +853,17 @@ static void AutoCtrlFeed_InitAutoOre(void) {
   auto_ore_inited = true;
 }
 
-static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms) {
+static bool AutoCtrlFeed_DebugPeriodicDue(uint32_t now_ms) {
+  if (auto_ore_debug_last_update_ms == 0u ||
+      (uint32_t)(now_ms - auto_ore_debug_last_update_ms) >=
+          AUTO_ORE_DEBUG_UPDATE_PERIOD_MS) {
+    auto_ore_debug_last_update_ms = now_ms;
+    return true;
+  }
+  return false;
+}
+
+static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms, bool update_debug) {
   if (!auto_ore_inited) {
     return;
   }
@@ -922,6 +937,15 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms) {
   }
   AutoOre_Update(&auto_ore_ctrl, &auto_ore_feedback, now_ms);
 
+  const AutoOre_Occupancy_t occupancy = AutoOre_GetOccupancy(&auto_ore_ctrl);
+  g_auto_ore_debug.transform_low_has_ore = occupancy.transform_low_has_ore;
+  g_auto_ore_debug.transform_high_has_ore = occupancy.transform_high_has_ore;
+  g_auto_ore_debug.arm_has_ore = occupancy.arm_has_ore;
+
+  if (!update_debug) {
+    return;
+  }
+
   g_auto_ore_debug.busy = AutoOre_IsBusy(&auto_ore_ctrl);
   g_auto_ore_debug.state = AutoOre_GetState(&auto_ore_ctrl);
   g_auto_ore_debug.result = AutoOre_GetResult(&auto_ore_ctrl);
@@ -933,11 +957,7 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms) {
   }
   g_auto_ore_debug.step_index = AutoOre_GetStepIndex(&auto_ore_ctrl);
   g_auto_ore_debug.step_phase = auto_ore_ctrl.step_phase;
-  const AutoOre_Occupancy_t occupancy = AutoOre_GetOccupancy(&auto_ore_ctrl);
   g_auto_ore_debug.occupancy_mask = AutoOre_GetOccupancyMask(&auto_ore_ctrl);
-  g_auto_ore_debug.transform_low_has_ore = occupancy.transform_low_has_ore;
-  g_auto_ore_debug.transform_high_has_ore = occupancy.transform_high_has_ore;
-  g_auto_ore_debug.arm_has_ore = occupancy.arm_has_ore;
   g_auto_ore_debug.checkphoto_spear_triggered = spear_photo_triggered;
   g_auto_ore_debug.checkphoto_orelow_triggered = ore_low_photo_triggered;
   g_auto_ore_debug.checkphoto_orehigh_triggered = ore_high_photo_triggered;
@@ -1013,7 +1033,8 @@ static void AutoCtrlFeed_InitAutoRodSpearhead(void) {
   auto_rod_spearhead_inited = true;
 }
 
-static void AutoCtrlFeed_UpdateAutoRodSpearhead(uint32_t now_ms) {
+static void AutoCtrlFeed_UpdateAutoRodSpearhead(uint32_t now_ms,
+                                                bool update_debug) {
   if (!auto_rod_spearhead_inited) {
     return;
   }
@@ -1036,6 +1057,10 @@ static void AutoCtrlFeed_UpdateAutoRodSpearhead(uint32_t now_ms) {
         auto_ore_ctrl.param.ore_store_arrive_threshold_rad);
   }
   AutoRodSpearhead_Update(&auto_rod_spearhead_ctrl, &feedback, now_ms);
+
+  if (!update_debug) {
+    return;
+  }
 
   g_auto_ore_debug.auto_rod_spearhead_busy =
       AutoRodSpearhead_IsBusy(&auto_rod_spearhead_ctrl);
@@ -1088,7 +1113,8 @@ static void AutoCtrlFeed_InitAutoSickCorrect(void) {
   auto_sick_correct_inited = true;
 }
 
-static void AutoCtrlFeed_UpdateAutoSickCorrect(uint32_t now_ms) {
+static void AutoCtrlFeed_UpdateAutoSickCorrect(uint32_t now_ms,
+                                               bool update_debug) {
   if (!auto_sick_correct_inited) {
     return;
   }
@@ -1101,6 +1127,10 @@ static void AutoCtrlFeed_UpdateAutoSickCorrect(uint32_t now_ms) {
   sick_feedback.pole_all_at_target = feedback.pole_all_at_target;
 
   AutoSickCorrect_Update(&auto_sick_correct_ctrl, &sick_feedback, now_ms);
+
+  if (!update_debug) {
+    return;
+  }
 
   g_auto_ore_debug.auto_sick_correct_busy =
       AutoSickCorrect_IsBusy(&auto_sick_correct_ctrl);
@@ -1533,9 +1563,10 @@ void Task_auto_ctrl(void *argument) {
 
       AutoCtrl_Update(&auto_ctrl, now_ms);
       AutoCtrlFeed_HandleAutoOreDebugRequest();
-      AutoCtrlFeed_UpdateAutoOre(now_ms);
-      AutoCtrlFeed_UpdateAutoRodSpearhead(now_ms);
-      AutoCtrlFeed_UpdateAutoSickCorrect(now_ms);
+      const bool update_auto_ore_debug = AutoCtrlFeed_DebugPeriodicDue(now_ms);
+      AutoCtrlFeed_UpdateAutoOre(now_ms, update_auto_ore_debug);
+      AutoCtrlFeed_UpdateAutoRodSpearhead(now_ms, update_auto_ore_debug);
+      AutoCtrlFeed_UpdateAutoSickCorrect(now_ms, update_auto_ore_debug);
       AutoCtrlFeed_PublishAutoActionFeedback();
 
       if (MrlinkPc_GetState() != NULL) {
