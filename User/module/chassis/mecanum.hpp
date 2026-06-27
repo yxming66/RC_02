@@ -57,9 +57,7 @@ class MecanumController final {
   int8_t RegisterWheels(float target_freq);
   float WheelSpeedFeedback(uint8_t idx) const;
   float FilteredWheelSpeedFeedback(uint8_t idx);
-  float FilteredObservedTorque(uint8_t idx, float torque_nm);
   void StoreWheelState(uint8_t idx, const WheelState &state);
-  void StoreWheelDebug(uint8_t idx);
   float CalcDt(uint32_t now);
 
   const Chassis_Params_t *param_ = nullptr;
@@ -78,7 +76,6 @@ class MecanumController final {
   KPID_t follow_pid_{};
   std::array<LowPassFilter2p_t, kWheelCount> wheel_speed_filter_{};
   std::array<LowPassFilter2p_t, kWheelCount> output_filter_{};
-  std::array<LowPassFilter2p_t, kWheelCount> torque_filter_{};
   std::array<LowPassFilter2p_t, 3U> body_velocity_filter_{};
   uint64_t last_wakeup_us_ = 0U;
   float dt_ = 0.0f;

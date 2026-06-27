@@ -166,12 +166,14 @@ int8_t FrontOmniRearMecanumController::Control(const Chassis_CMD_t &cmd,
 
   dt_ = CalcDt(now);
   debug_.dt_s = dt_;
-  debug_.cmd_vec_raw = cmd.ctrl_vec;
+  debug_.target_vec = cmd.ctrl_vec;
 
   const int8_t mode_ret = SetMode(cmd.mode, now);
   if (mode_ret != CHASSIS_OK) {
     return mode_ret;
   }
+  debug_.mode = mode_;
+  debug_.wheel_high_pole_pid_active = false;
 
   switch (mode_) {
     case CHASSIS_MODE_BREAK:
@@ -181,7 +183,6 @@ int8_t FrontOmniRearMecanumController::Control(const Chassis_CMD_t &cmd,
     case CHASSIS_MODE_INDEPENDENT:
       move_vec_.vx = cmd.ctrl_vec.vx;
       move_vec_.vy = cmd.ctrl_vec.vy;
-      debug_.gimbal_beta_rad = 0.0f;
       break;
     default: {
       float beta = feedback_.encoder_gimbalYawMotor - mech_zero_;
@@ -190,15 +191,11 @@ int8_t FrontOmniRearMecanumController::Control(const Chassis_CMD_t &cmd,
       }
       const float cos_beta = std::cos(beta);
       const float sin_beta = std::sin(beta);
-      debug_.gimbal_beta_rad = beta;
       move_vec_.vx = cos_beta * cmd.ctrl_vec.vx - sin_beta * cmd.ctrl_vec.vy;
       move_vec_.vy = sin_beta * cmd.ctrl_vec.vx + cos_beta * cmd.ctrl_vec.vy;
       break;
     }
   }
-
-  debug_.cmd_vec_body.vx = move_vec_.vx;
-  debug_.cmd_vec_body.vy = move_vec_.vy;
 
   switch (mode_) {
     case CHASSIS_MODE_RELAX:
@@ -226,34 +223,20 @@ int8_t FrontOmniRearMecanumController::Control(const Chassis_CMD_t &cmd,
       break;
   }
 
-  debug_.lateral_wz_feedforward = 0.0f;
-  debug_.lateral_heading_hold_enabled = LateralHeadingHoldEnabled(param_);
-  debug_.lateral_heading_hold_active = lateral_heading_hold_active_;
-  debug_.lateral_heading_error_rad = 0.0f;
-  debug_.lateral_yaw_rate_rad_s =
-      scalar::is_finite_scalar(yaw_rate_rad_s_) ? yaw_rate_rad_s_ : 0.0f;
-  debug_.lateral_heading_wz_correction = 0.0f;
-
   if (ShouldUseLateralYawCorrection(cmd.ctrl_vec.wz)) {
-    debug_.lateral_wz_feedforward = CalcLateralWzFeedforward();
-    move_vec_.wz += debug_.lateral_wz_feedforward;
+    move_vec_.wz += CalcLateralWzFeedforward();
   }
 
   if (ShouldUseLateralHeadingHold(cmd.ctrl_vec.wz)) {
     if (!lateral_heading_hold_active_) {
       EnterLateralHeadingHold();
     }
-    debug_.lateral_heading_wz_correction = CalcLateralHeadingHoldWz();
-    move_vec_.wz += debug_.lateral_heading_wz_correction;
+    move_vec_.wz += CalcLateralHeadingHoldWz();
   } else if (lateral_heading_hold_active_) {
     ExitLateralHeadingHold();
   }
-  debug_.lateral_heading_hold_active = lateral_heading_hold_active_;
-
-  debug_.cmd_vec_body.wz = move_vec_.wz;
-  debug_.rotor_wz_cmd = (mode_ == CHASSIS_MODE_ROTOR) ? move_vec_.wz : 0.0f;
   LimitMoveVector();
-  debug_.cmd_vec_limited = move_vec_;
+  debug_.output_vec = move_vec_;
 
   if (ShouldHoldZeroCommand()) {
     const bool hold_ready =
@@ -276,13 +259,12 @@ int8_t FrontOmniRearMecanumController::Control(const Chassis_CMD_t &cmd,
 
   for (uint8_t i = 0; i < kWheelCount; ++i) {
     const float ref_speed = wheel_speed_ref_[i];
-    const float raw_feedback = WheelSpeedFeedback(i);
     const float feedback = FilteredWheelSpeedFeedback(i);
     float torque_cmd = 0.0f;
+    float pid_out = 0.0f;
 
     debug_.wheel_speed_ref_mps[i] = ref_speed;
-    debug_.wheel_speed_fdb_mps[i] = raw_feedback;
-    debug_.wheel_speed_fdb_filtered_mps[i] = feedback;
+    debug_.wheel_speed_fdb_mps[i] = feedback;
 
     switch (mode_) {
       case CHASSIS_MODE_BREAK:
@@ -290,8 +272,8 @@ int8_t FrontOmniRearMecanumController::Control(const Chassis_CMD_t &cmd,
       case CHASSIS_MODE_FOLLOW_GIMBAL_35:
       case CHASSIS_MODE_ROTOR:
       case CHASSIS_MODE_INDEPENDENT:
-        torque_cmd =
-            PID_Calc(&wheel_pid_[i], ref_speed, feedback, 0.0f, dt_);
+        pid_out = PID_Calc(&wheel_pid_[i], ref_speed, feedback, 0.0f, dt_);
+        torque_cmd = pid_out;
         break;
       case CHASSIS_MODE_OPEN:
         torque_cmd = ref_speed;
@@ -301,7 +283,9 @@ int8_t FrontOmniRearMecanumController::Control(const Chassis_CMD_t &cmd,
         break;
     }
 
-    debug_.wheel_torque_pid_out[i] = torque_cmd;
+    debug_.wheel_pid_error[i] = wheel_pid_[i].last.err;
+    debug_.wheel_pid_integral[i] = wheel_pid_[i].i;
+    debug_.wheel_torque_pid_out[i] = pid_out;
     out_.motor[i] = LowPassFilter2p_Apply(&output_filter_[i], torque_cmd);
     out_.motor[i] = ClampSymmetric(out_.motor[i], param_->limit.max_torque_cmd);
     debug_.wheel_torque_cmd_nm[i] = out_.motor[i];
@@ -315,7 +299,6 @@ int8_t FrontOmniRearMecanumController::Control(const Chassis_CMD_t &cmd,
 
     if (mode_ == CHASSIS_MODE_RELAX) {
       out_.set_torque_ret[i] = wheel->Relax();
-      StoreWheelDebug(i);
       out_.controller_update_ret[i] = DEVICE_OK;
       out_.motor[i] = 0.0f;
       out_.command_pending[i] = false;
@@ -328,7 +311,6 @@ int8_t FrontOmniRearMecanumController::Control(const Chassis_CMD_t &cmd,
     } else {
       out_.controller_update_ret[i] = out_.set_torque_ret[i];
     }
-    StoreWheelDebug(i);
     if (out_.set_torque_ret[i] != DEVICE_OK ||
         out_.controller_update_ret[i] != DEVICE_OK) {
       return CHASSIS_ERR;
@@ -352,7 +334,6 @@ void FrontOmniRearMecanumController::Output() {
     out_.commit_ret[i] = wheel->CommitCommand();
     out_.command_pending[i] = wheel->HasPendingCommand();
     out_.last_commit_ok[i] = (out_.commit_ret[i] == DEVICE_OK);
-    StoreWheelDebug(i);
   }
 
   if (param_ != nullptr) {
@@ -404,8 +385,6 @@ void FrontOmniRearMecanumController::ResetRuntime() {
     out_.set_torque_ret[i] = DEVICE_ERR;
     out_.controller_update_ret[i] = DEVICE_ERR;
     out_.commit_ret[i] = DEVICE_ERR;
-    debug_.wheel_last_set_torque_ret[i] = DEVICE_ERR;
-    debug_.wheel_last_commit_ret[i] = DEVICE_ERR;
   }
 }
 
@@ -419,9 +398,6 @@ void FrontOmniRearMecanumController::InitFiltersAndPid(float target_freq) {
                          param_->low_pass_cutoff_freq.in);
     LowPassFilter2p_Init(&output_filter_[i], target_freq,
                          param_->low_pass_cutoff_freq.out);
-    LowPassFilter2p_Init(&torque_filter_[i], target_freq,
-                         param_->low_pass_cutoff_freq.in);
-    LowPassFilter2p_Reset(&torque_filter_[i], 0.0f);
   }
 
   for (uint8_t i = 0; i < 3U; ++i) {
@@ -436,9 +412,6 @@ void FrontOmniRearMecanumController::InitFiltersAndPid(float target_freq) {
 void FrontOmniRearMecanumController::ResetControlStateOnModeChange() {
   ResetWheelVelocityControlState();
   ResetWheelHoldControlState();
-  for (uint8_t i = 0; i < kWheelCount; ++i) {
-    LowPassFilter2p_Reset(&torque_filter_[i], feedback_.motor[i].torque_nm);
-  }
   for (uint8_t i = 0; i < 3U; ++i) {
     LowPassFilter2p_Reset(&body_velocity_filter_[i], 0.0f);
   }
@@ -500,15 +473,13 @@ void FrontOmniRearMecanumController::UpdateBodyVelocityFeedback() {
     return;
   }
 
-  debug_.body_vel_raw_vx = raw_velocity.vx_mps;
-  debug_.body_vel_raw_vy = raw_velocity.vy_mps;
-  debug_.body_vel_raw_wz = raw_velocity.wz_rad_s;
   feedback_.chassis_vel.vx =
       LowPassFilter2p_Apply(&body_velocity_filter_[0], raw_velocity.vx_mps);
   feedback_.chassis_vel.vy =
       LowPassFilter2p_Apply(&body_velocity_filter_[1], raw_velocity.vy_mps);
   feedback_.chassis_vel.wz =
       LowPassFilter2p_Apply(&body_velocity_filter_[2], raw_velocity.wz_rad_s);
+  debug_.feedback_vec = feedback_.chassis_vel;
 }
 
 int8_t FrontOmniRearMecanumController::ComputeWheelSpeeds() {
@@ -645,8 +616,6 @@ float FrontOmniRearMecanumController::CalcLateralHeadingHoldWz() {
       param_->front_omni_rear_mecanum.lateral_heading_hold_max_wz,
       param_->limit.max_wz);
 
-  debug_.lateral_heading_error_rad = yaw_error;
-  debug_.lateral_yaw_rate_rad_s = yaw_rate;
   return ClampSymmetric(correction_wz, limit);
 }
 
@@ -676,7 +645,6 @@ int8_t FrontOmniRearMecanumController::ControlWheelHold() {
 
     debug_.wheel_speed_ref_mps[i] = 0.0f;
     debug_.wheel_speed_fdb_mps[i] = WheelSpeedFeedback(i);
-    debug_.wheel_speed_fdb_filtered_mps[i] = FilteredWheelSpeedFeedback(i);
     const float position_rad = wheel->State().position_rad;
     float torque_cmd = 0.0f;
     if (!scalar::is_finite_scalar(position_rad)) {
@@ -691,6 +659,8 @@ int8_t FrontOmniRearMecanumController::ControlWheelHold() {
                             position_rad, 0.0f, dt_);
       wheel_hold_last_position_rad_[i] = position_rad;
     }
+    debug_.wheel_pid_error[i] = wheel_hold_pid_[i].last.err;
+    debug_.wheel_pid_integral[i] = wheel_hold_pid_[i].i;
     debug_.wheel_torque_pid_out[i] = torque_cmd;
     out_.motor[i] = ClampSymmetric(torque_cmd, param_->limit.max_torque_cmd);
     debug_.wheel_torque_cmd_nm[i] = out_.motor[i];
@@ -701,7 +671,6 @@ int8_t FrontOmniRearMecanumController::ControlWheelHold() {
     } else {
       out_.controller_update_ret[i] = out_.set_torque_ret[i];
     }
-    StoreWheelDebug(i);
     if (out_.set_torque_ret[i] != DEVICE_OK ||
         out_.controller_update_ret[i] != DEVICE_OK) {
       return CHASSIS_ERR;
@@ -758,13 +727,6 @@ float FrontOmniRearMecanumController::FilteredWheelSpeedFeedback(uint8_t idx) {
                                WheelSpeedFeedback(idx));
 }
 
-float FrontOmniRearMecanumController::FilteredObservedTorque(uint8_t idx,
-                                                            float torque_nm) {
-  if (idx >= kWheelCount) {
-    return torque_nm;
-  }
-  return LowPassFilter2p_Apply(&torque_filter_[idx], torque_nm);
-}
 
 void FrontOmniRearMecanumController::StoreWheelState(
     uint8_t idx,
@@ -778,24 +740,8 @@ void FrontOmniRearMecanumController::StoreWheelState(
   feedback_.motor[idx].temperature_limit_latched =
       state.temperature_limit_latched;
   feedback_.motor[idx].online = state.online;
-  debug_.wheel_motor_velocity_rad_s[idx] = state.angular_velocity_rad_s;
-  debug_.wheel_motor_torque_nm[idx] =
-      FilteredObservedTorque(idx, state.torque_nm);
 }
 
-void FrontOmniRearMecanumController::StoreWheelDebug(uint8_t idx) {
-  if (idx >= kWheelCount || wheels_[idx] == nullptr) {
-    return;
-  }
-
-  const auto &debug = wheels_[idx]->Debug();
-  debug_.wheel_pending_valid[idx] = debug.pending_valid;
-  debug_.wheel_pending_torque_current[idx] = debug.pending_torque_current;
-  debug_.wheel_last_set_torque_nm[idx] = debug.last_set_torque_nm;
-  debug_.wheel_last_set_torque_ret[idx] = debug.last_set_torque_ret;
-  debug_.wheel_last_commit_ret[idx] = debug.last_commit_ret;
-  debug_.wheel_last_commit_skipped[idx] = debug.last_commit_skipped;
-}
 
 float FrontOmniRearMecanumController::CalcDt(uint32_t now_ms) {
   float dt = nominal_dt_;

@@ -133,40 +133,18 @@ typedef struct {
 } Chassis_Feedback_t;
 
 typedef struct {
+  Chassis_Mode_t mode;
   float dt_s;
-  uint32_t update_feedback_us;
-  uint32_t control_us;
-  uint32_t output_us;
-  float gimbal_beta_rad;
-  MoveVector_t cmd_vec_raw;
-  MoveVector_t cmd_vec_body;
-  MoveVector_t cmd_vec_limited;
-  float lateral_wz_feedforward;
-  bool lateral_heading_hold_enabled;
-  bool lateral_heading_hold_active;
-  float lateral_heading_error_rad;
-  float lateral_yaw_rate_rad_s;
-  float lateral_heading_wz_correction;
-  float rotor_wz_cmd;
+  MoveVector_t target_vec;
+  MoveVector_t feedback_vec;
+  MoveVector_t output_vec;
   float wheel_speed_ref_mps[4];
   float wheel_speed_fdb_mps[4];
-  float wheel_speed_fdb_filtered_mps[4];
-  float wheel_pid_switch_pole_lift;
   bool wheel_high_pole_pid_active;
+  float wheel_pid_error[4];
+  float wheel_pid_integral[4];
   float wheel_torque_pid_out[4];
-  float wheel_static_friction_ff_nm[4];
   float wheel_torque_cmd_nm[4];
-  float wheel_motor_velocity_rad_s[4];
-  float wheel_motor_torque_nm[4];
-  bool wheel_pending_valid[4];
-  float wheel_pending_torque_current[4];
-  float wheel_last_set_torque_nm[4];
-  int8_t wheel_last_set_torque_ret[4];
-  int8_t wheel_last_commit_ret[4];
-  bool wheel_last_commit_skipped[4];
-  float body_vel_raw_vx;
-  float body_vel_raw_vy;
-  float body_vel_raw_wz;
 } Chassis_Debug_t;
 
 typedef struct {

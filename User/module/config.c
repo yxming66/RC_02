@@ -137,9 +137,9 @@ Config_RobotParam_t robot_config = {
             .step_400_all_retract = {0.5f, 0.8f},
 
             /* 200mm 下台阶四杆全伸位。 */
-            .step_200_descend_all_extend = {13.3f, 13.3f},
+            .step_200_descend_all_extend = {13.0f, 13.0f},
             /* 200mm 下台阶前杆收回、后杆保持支撑位。 */
-            .step_200_descend_front_retract = {0.4f, 13.3f},
+            .step_200_descend_front_retract = {0.4f, 13.0f},
             /* 200mm 下台阶四杆全收位。 */
             .step_200_descend_all_retract = {0.4f, 0.4f},
             /* 200mm 下台阶起步/小抬升位。 */
