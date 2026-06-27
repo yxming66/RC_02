@@ -976,6 +976,13 @@ static bool AutoOre_CommandReleaseOreStoreHold(
   return AutoOre_CommandOreStore(ctrl, transform, cylinder_closed);
 }
 
+static bool AutoOre_CommandReleasePoleDuringChamber(AutoOre_t *ctrl) {
+  if (ctrl->action != AUTO_ORE_ACTION_RELEASE) {
+    return true;
+  }
+  return AutoOre_CommandReleasePoleTarget(ctrl);
+}
+
 static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
   AutoOre_CommandChassisZeroVector(ctrl);
 
@@ -992,7 +999,7 @@ static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
         AutoOre_FailInvalidParam(ctrl);
         return;
       }
-        if (AutoOre_StepElapsed(ctrl, now_ms) > 0u &&
+      if (AutoOre_StepElapsed(ctrl, now_ms) > 0u &&
           AutoOre_ReleasePoleAtTarget(ctrl)) {
         AutoOre_NextStep(ctrl);
       } else {
@@ -1083,6 +1090,11 @@ static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
 }
 
 static void AutoOre_RunChamberHigh(AutoOre_t *ctrl, uint32_t now_ms) {
+  if (!AutoOre_CommandReleasePoleDuringChamber(ctrl)) {
+    AutoOre_FailInvalidParam(ctrl);
+    return;
+  }
+
   switch (ctrl->step_index) {
     case 0:
       AutoOre_EnterStep(ctrl, now_ms);
@@ -1153,6 +1165,11 @@ static void AutoOre_RunChamberHigh(AutoOre_t *ctrl, uint32_t now_ms) {
 }
 
 static void AutoOre_RunChamberLow(AutoOre_t *ctrl, uint32_t now_ms) {
+  if (!AutoOre_CommandReleasePoleDuringChamber(ctrl)) {
+    AutoOre_FailInvalidParam(ctrl);
+    return;
+  }
+
   switch (ctrl->step_index) {
     case 0:
       AutoOre_EnterStep(ctrl, now_ms);
