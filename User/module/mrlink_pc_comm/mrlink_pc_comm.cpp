@@ -22,7 +22,7 @@ constexpr uint16_t kRxDmaBufSize = MRLINK_PC_RX_DMA_BUF_SIZE;
 constexpr uint16_t kMrlinkRxBufSize = MRLINK_PC_RX_STREAM_BUF_SIZE;
 constexpr uint16_t kMrlinkTxBufSize = MRLINK_PC_MAX_FRAME_SIZE;
 constexpr uint32_t kAutoActionRepeatReleaseMs = 300u;
-constexpr uint32_t kModuleCommandTimeoutMs = 10000u;
+constexpr uint32_t kModuleCommandTimeoutMs = 1000u;
 
 static_assert(kRxDmaSlotCount >= 2u, "MRLINK_PC_RX_DMA_SLOT_COUNT must be >= 2");
 static_assert(kRxDmaBufSize >= MRLINK_PC_MAX_FRAME_SIZE,
@@ -648,8 +648,7 @@ extern "C" void MrlinkPc_DebugUpdate(void) {
       MrLink_Channel_GetRxOverflowCount(s_bus.Channel());
   g_pc_comm_debug.rx_dma_start_fail_count =
       MrLink_Channel_GetRxStartFailCount(s_bus.Channel());
-  g_pc_comm_debug.pole_cmd_recent =
-      IsRecentCommand(s_pole_cmd_received, s_pole_cmd_tick, now_ms) ? 1u : 0u;
+  g_pc_comm_debug.pole_cmd_recent = s_pole_cmd_received ? 1u : 0u;
   g_pc_comm_debug.arm_simple_cmd_recent =
       IsRecentCommand(s_arm_simple_cmd_received, s_arm_simple_cmd_tick, now_ms)
           ? 1u
@@ -699,8 +698,7 @@ extern "C" const PC_PoleCMD_t *MrlinkPc_GetPoleCMD(void) {
 }
 
 extern "C" bool MrlinkPc_HasPoleCMD(void) {
-  return IsRecentCommand(s_pole_cmd_received, s_pole_cmd_tick,
-                         BSP_TIME_Get_ms());
+  return s_pole_cmd_received;
 }
 
 extern "C" const PC_ArmCMD_t *MrlinkPc_GetArmCMD(void) {

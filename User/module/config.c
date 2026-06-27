@@ -359,10 +359,10 @@ Config_RobotParam_t robot_config = {
             .chamber_place = {.joint1_max_vel_rad_s = 1.0f, .joint2_max_vel_rad_s = 4.0f},
             .chamber_standby = {.joint1_max_vel_rad_s = 1.0f, .joint2_max_vel_rad_s = 2.0f},
             /* pick_*：一键取矿流程，standby=取矿前/后待机位，place=伸到取矿位，fetch=底盘前进取矿时保持取矿位。 */
-            .pick_standby = {.joint1_max_vel_rad_s = 2.0f, .joint2_max_vel_rad_s = 2.0f},
+            .pick_standby = {.joint1_max_vel_rad_s = 4.0f, .joint2_max_vel_rad_s = 2.0f},
             .pick_place = {.joint1_max_vel_rad_s = 8.0f, .joint2_max_vel_rad_s = 4.0f},
             .pick_fetch = {.joint1_max_vel_rad_s = 3.0f, .joint2_max_vel_rad_s = 2.0f},
-            .pick_lift_detect = {.joint1_max_vel_rad_s = 2.0f, .joint2_max_vel_rad_s = 2.0f},
+            .pick_lift_detect = {.joint1_max_vel_rad_s = 4.0f, .joint2_max_vel_rad_s = 2.0f},
         },
         /* 一键存/放/上膛/取矿流程中的动作延时，单位 ms；<=0 时使用状态机内置默认值。 */
         .timing = {
@@ -561,7 +561,7 @@ Config_RobotParam_t robot_config = {
             .second_photo_retract_move_speed = 0.40f, /* 后一个光电触发收腿时向头向移动 vx，单位 m/s。 */
             .final_move_speed = 0.8f,          /* 收尾离开台阶 vx，单位 m/s。 */
             .final_move_ms = 1200u,              /* 收尾离开台阶角度门控兜底超时，单位 ms。 */
-            .final_photo_sprint_ms = 150u,       /* 末尾光电触发后继续冲刺时间，单位 ms。 */
+            .final_photo_sprint_ms = 100u,       /* 末尾光电触发后继续冲刺时间，单位 ms。 */
             .final_move_wheel_delta_rad = 0.0f, /* 编码器门控的收尾离开轮转角阈值，单位 rad；>0 优先按角度切步，<=0 使用 final_move_ms。 */
             .pole_all_extend_speed = 0.0f,     /* 四杆全伸目标跟随速度，单位 rad/s。 */
             .pole_front_extend_speed = 0.0f,   /* 前杆伸出目标跟随速度，单位 rad/s。 */
