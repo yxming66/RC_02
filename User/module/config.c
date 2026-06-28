@@ -318,7 +318,7 @@ Config_RobotParam_t robot_config = {
         .preset = {
             .behavior_point = {
                 /* ArmSimple 待机/安全收回位，一键动作开始和结束常用位置。 */
-                [ARM_SIMPLE_BEHAVIOR_STANDBY] = {.joint1_pos = 0.0f, .joint2_pos = 0.0f},
+                [ARM_SIMPLE_BEHAVIOR_STANDBY] = {.joint1_pos = 0.0f, .joint2_pos = 0.896505594f},
                 /* ArmSimple 存矿位，arm 伸到 ore_store 交接处释放矿。 */
                 [ARM_SIMPLE_BEHAVIOR_STORE_ORE] = {.joint1_pos = 0.0f, .joint2_pos = -1.51068195f},
                 /* ArmSimple 上膛位，arm 伸到 ore_store 上膛交接处吸取矿。 */

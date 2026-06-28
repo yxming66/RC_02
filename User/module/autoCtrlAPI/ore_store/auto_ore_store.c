@@ -906,6 +906,20 @@ static void AutoOre_RunStoreLow(AutoOre_t *ctrl, uint32_t now_ms) {
         return;
       }
       if (AutoOre_WaitOreStoreCommandTarget(ctrl, now_ms)) {
+        AutoOre_NextStep(ctrl);
+      } else {
+        (void)AutoOre_CheckTimeout(ctrl, now_ms);
+      }
+      return;
+    case 7:
+      AutoOre_EnterStep(ctrl, now_ms);
+      if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_STANDBY,
+          SUCTION_OFF, &ctrl->param.arm_speed.store_standby) ||
+          !AutoOre_CommandOreStore(ctrl, ORE_STORE_TRANSFORM_STANDBY, false)) {
+        AutoOre_FailInvalidParam(ctrl);
+        return;
+      }
+      if (AutoOre_WaitArmCommandTarget(ctrl, now_ms)) {
         AutoOre_FinishSuccess(ctrl);
       } else {
         (void)AutoOre_CheckTimeout(ctrl, now_ms);
@@ -945,6 +959,20 @@ static void AutoOre_RunStoreHigh(AutoOre_t *ctrl, uint32_t now_ms) {
       }
       if (AutoOre_WaitConditionThenDelay(ctrl, now_ms, true,
                                          AutoOre_StoreCylinderCloseMs(ctrl))) {
+        AutoOre_NextStep(ctrl);
+      } else {
+        (void)AutoOre_CheckTimeout(ctrl, now_ms);
+      }
+      return;
+    case 2:
+      AutoOre_EnterStep(ctrl, now_ms);
+      if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_STANDBY,
+          SUCTION_OFF, &ctrl->param.arm_speed.store_standby) ||
+          !AutoOre_CommandOreStore(ctrl, ORE_STORE_TRANSFORM_STANDBY, true)) {
+        AutoOre_FailInvalidParam(ctrl);
+        return;
+      }
+      if (AutoOre_WaitArmCommandTarget(ctrl, now_ms)) {
         AutoOre_FinishSuccess(ctrl);
       } else {
         (void)AutoOre_CheckTimeout(ctrl, now_ms);
@@ -1689,6 +1717,18 @@ static void AutoOre_RunFusedStoreLow(AutoOre_t *ctrl, uint32_t now_ms) {
         return;
       }
       if (AutoOre_WaitOreStoreCommandTarget(ctrl, now_ms)) {
+        AutoOre_FusedStoreNextStep(ctrl);
+      }
+      return;
+    case 7:
+      if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_STANDBY,
+                              SUCTION_OFF,
+                              &ctrl->param.arm_speed.store_standby) ||
+          !AutoOre_CommandOreStore(ctrl, ORE_STORE_TRANSFORM_STANDBY, false)) {
+        AutoOre_FailStoreInvalidParam(ctrl);
+        return;
+      }
+      if (AutoOre_WaitArmCommandTarget(ctrl, now_ms)) {
         AutoOre_FusedStoreMarkDone(ctrl);
       }
       return;
@@ -1724,6 +1764,18 @@ static void AutoOre_RunFusedStoreHigh(AutoOre_t *ctrl, uint32_t now_ms) {
       }
       if (AutoOre_WaitConditionThenDelay(ctrl, now_ms, true,
                                          AutoOre_StoreCylinderCloseMs(ctrl))) {
+        AutoOre_FusedStoreNextStep(ctrl);
+      }
+      return;
+    case 2:
+      if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_STANDBY,
+                              SUCTION_OFF,
+                              &ctrl->param.arm_speed.store_standby) ||
+          !AutoOre_CommandOreStore(ctrl, ORE_STORE_TRANSFORM_STANDBY, true)) {
+        AutoOre_FailStoreInvalidParam(ctrl);
+        return;
+      }
+      if (AutoOre_WaitArmCommandTarget(ctrl, now_ms)) {
         AutoOre_FusedStoreMarkDone(ctrl);
       }
       return;
