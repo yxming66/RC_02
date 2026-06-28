@@ -747,7 +747,6 @@ int8_t OreStore_UpdateFeedback(OreStore_t *store) {
     if (!store->feedback.homed[axis]) {
       all_homed = false;
     }
-    RefreshDebugAxis(store, axis);
   }
 
   store->feedback.all_homed = all_homed;
@@ -829,7 +828,6 @@ int8_t OreStore_Control(OreStore_t *store, const OreStore_CMD_t *cmd,
     if (ret != DEVICE_OK && ret != ORE_STORE_OK) {
       result = ORE_STORE_ERR;
     }
-    RefreshDebugAxis(store, axis);
   }
 
   return result;
