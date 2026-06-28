@@ -924,6 +924,8 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms, bool update_debug) {
       .pe9_photo2_triggered = feedback.pe9_photo2_triggered,
       .pa2_photo3_triggered = feedback.pa2_photo3_triggered,
       .pa0_photo4_triggered = feedback.pa0_photo4_triggered,
+      .ore_store_fixed_ore_cylinder_closed =
+          ore_store_fb != NULL && ore_store_fb->fixed_ore_cylinder_closed,
       .yaw_source = AutoCtrl_GetYawSource(&auto_ctrl),
       .yaw_auto_rad = feedback.yaw_auto_rad,
       .yaw_rate_cmd_rad_s = auto_ctrl.yaw_rate_cmd_rad_s,

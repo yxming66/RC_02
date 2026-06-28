@@ -1655,7 +1655,12 @@ static bool AutoOre_FusedArmPhotoConfirmed(AutoOre_t *ctrl,
 }
 
 static AutoOre_Position_t AutoOre_FusedSelectStorePosition(AutoOre_t *ctrl) {
-  const AutoOre_Position_t position = AutoOre_SelectStorePosition(&ctrl->occupancy);
+  AutoOre_Occupancy_t occupancy = ctrl->occupancy;
+  if (ctrl->feedback.ore_store_fixed_ore_cylinder_closed) {
+    occupancy.transform_low_has_ore = true;
+    occupancy.transform_high_has_ore = true;
+  }
+  const AutoOre_Position_t position = AutoOre_SelectStorePosition(&occupancy);
   return AutoOre_IsPositionValid(position) ? position : AUTO_ORE_POSITION_ARM;
 }
 

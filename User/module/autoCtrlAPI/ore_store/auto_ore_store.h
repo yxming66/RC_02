@@ -93,6 +93,7 @@ typedef struct {
   bool pe9_photo2_triggered;
   bool pa2_photo3_triggered;
   bool pa0_photo4_triggered;
+  bool ore_store_fixed_ore_cylinder_closed;
   auto_ctrl_yaw_source_e yaw_source;
   float yaw_auto_rad;
   float yaw_rate_cmd_rad_s;

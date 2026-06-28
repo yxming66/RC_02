@@ -13,7 +13,7 @@ typedef struct {
 } auto_ctrl_pole_targets_t;
 
 #define AUTO_CTRL_PHOTO_STABLE_MS (5u) /* 光电稳定触发时间，单位 ms。 */
-#define AUTO_CTRL_TIMED_MOVE_YAW_TOLERANCE_DEFAULT_RAD (0.1745329252f)
+#define AUTO_CTRL_TIMED_MOVE_YAW_TOLERANCE_DEFAULT_RAD (0.3490329252f)
 
 static void AutoCtrlTemplate_EnterStep(auto_ctrl_t *ctrl, uint32_t now_ms) {
   if (!ctrl->template_ctx.step_entered) {
