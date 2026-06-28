@@ -670,16 +670,6 @@ static bool Rc_SetPolePcCommand(bool require_received_cmd) {
   return true;
 }
 
-static void Rc_SetPoleHold(void) {
-  if (pole_cmd.mode == POLE_MODE_ACTIVE) {
-    pole_cmd.lift[0] = 0.0f;
-    pole_cmd.lift[1] = 0.0f;
-    return;
-  }
-
-  Rc_SetPoleManual(0.0f, 0.0f);
-}
-
 #if RC_POLE_CH_RES_ENABLE
 static bool Rc_PoleCommandIsManual(void) {
   return pole_cmd.mode == POLE_MODE_ACTIVE &&
@@ -727,10 +717,7 @@ static void Rc_LatchPoleCurrentTarget(void) {
   Pole_CMD_t hold_cmd;
   if (Task_PoleMainGetHoldCommand(&hold_cmd)) {
     pole_cmd = hold_cmd;
-    return;
   }
-
-  Rc_SetPoleHold();
 }
 
 static void Rc_LatchArmSimpleCurrentTarget(void) {
@@ -1636,9 +1623,8 @@ struct RcPoleKeepRoute {
   }
 };
 
-struct RcPoleHoldRoute {
+struct RcPoleFallbackKeepRoute {
   bool operator()(cmd::Context &, Pole_CMD_t &out) const {
-    Rc_SetPoleHold();
     Rc_ApplyPoleChResControlForCurrentPlan();
     out = pole_cmd;
     return true;
@@ -1656,9 +1642,7 @@ struct RcPoleDriveRoute {
 
 struct RcPolePcRoute {
   bool operator()(const RcRuntimeInput &, cmd::Context &, Pole_CMD_t &out) const {
-    if (!Rc_SetPolePcCommand(false)) {
-      Rc_SetPoleHold();
-    }
+    (void)Rc_SetPolePcCommand(false);
     out = pole_cmd;
     return true;
   }
@@ -1682,7 +1666,6 @@ struct RcPoleAutoOreRoute {
     if (auto_pole_cmd != NULL) {
       out = *auto_pole_cmd;
     } else {
-      Rc_SetPoleHold();
       out = pole_cmd;
     }
     return true;
@@ -1695,7 +1678,6 @@ struct RcPoleAutoSickCorrectRoute {
     if (auto_pole_cmd != NULL) {
       out = *auto_pole_cmd;
     } else {
-      Rc_SetPoleHold();
       out = pole_cmd;
     }
     return true;
@@ -2008,7 +1990,7 @@ static void Rc_ConfigureCmdCenter(void) {
   rc_cmd_center
       .output<Pole_CMD_t>("pole", RcStoreCommandSink<Pole_CMD_t>{&pole_cmd})
       .safe<RcPoleSafeRoute>()
-      .hold<RcPoleHoldRoute>()
+      .hold<RcPoleFallbackKeepRoute>()
       .arbitrate<cmd::HighestPriority>()
       .routes(
           cmd::from<RcRuntimeInput, RcPoleDriveRoute>()
@@ -2031,7 +2013,7 @@ static void Rc_ConfigureCmdCenter(void) {
           cmd::from<RcRuntimeInput, RcPoleAutoRodRoute>()
               .when<RcPlanIn<RC_CMD_PLAN_AUTO_ROD_OUTPUT> >()
               .priority(cmd::Priority::Auto),
-          cmd::from<RcRuntimeInput, RcPoleHoldRoute>()
+          cmd::from<RcRuntimeInput, RcPoleFallbackKeepRoute>()
               .when<RcPlanIn<RC_CMD_PLAN_AUTO_STANDBY,
                              RC_CMD_PLAN_ARM_SIMPLE,
                              RC_CMD_PLAN_ORE_STORE,
