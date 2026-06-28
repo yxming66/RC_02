@@ -405,7 +405,7 @@ Config_RobotParam_t robot_config = {
         /* 取 -200 矿时底盘前进速度，单位 m/s；可设为 0 禁止底盘前进。 */
         .fetch_neg_200_chassis_vx_mps = 0.20f,
         /* 低位存矿完成后，transform 从高位 LIFT 回低位 STANDBY 的速度，单位 rad/s；<=0 使用默认值。 */
-        .store_low_return_velocity_rad_s = 80.0f,
+        .store_low_return_velocity_rad_s = 60.0f,
         /*
          * 融合动作轮转角阈值说明：
          * - *_wheel_delta_rad 使用四轮累计转角变化绝对值的平均值，单位 rad。
