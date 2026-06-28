@@ -738,7 +738,13 @@ static void Rc_LatchOreStoreCurrentTarget(void) {
     return;
   }
 
+  const bool keep_cylinder_cmd = ore_store_active_initialized;
+  const bool latched_cylinder_closed =
+      ore_store_cmd.fixed_ore_cylinder_closed;
   Rc_InitOreStoreActiveTargets();
+  if (keep_cylinder_cmd) {
+    ore_store_cmd.fixed_ore_cylinder_closed = latched_cylinder_closed;
+  }
 }
 
 static void Rc_LatchAutoCtrlCurrentTargets(void) {
