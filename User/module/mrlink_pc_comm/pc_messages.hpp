@@ -61,7 +61,6 @@ struct __attribute__((packed)) PoleCmd {
 struct __attribute__((packed)) ArmSimpleCmd {
   uint8_t mode;                /* 简易机械臂模式，见 ArmSimple_Mode_t */
   uint8_t point_mode;          /* 点位模式，见 ArmSimple_PointMode_t */
-  uint8_t suction;             /* 吸盘控制，0=关闭，1=开启 */
   float target_joint1_rad;     /* 关节 1 目标角度，单位 rad */
   float target_joint2_rad;     /* 关节 2 目标角度，单位 rad */
 };
@@ -69,7 +68,6 @@ struct __attribute__((packed)) ArmSimpleCmd {
 struct __attribute__((packed)) RodNewCmd {
   uint8_t mode;              /* 取矛头机构模式，见 RodNew_Mode_t */
   uint8_t pose;              /* 取矛头机构姿态，见 RodNew_Pose_t */
-  uint8_t grip;              /* 夹爪控制，0=松开，1=夹紧 */
   float target_angle_rad;    /* 舵机目标角度，单位 rad */
 };
 
@@ -183,12 +181,12 @@ static_assert(sizeof(PC_ImuCMD_t) == 28u, "PC_CMD_IMU wire size changed");
 static_assert(sizeof(PC_IrOreAckCMD_t) == 6u, "PC_CMD_IR_ORE_ACK wire size changed");
 static_assert(sizeof(StartMatchCmd) == 1u, "PC_FEEDBACK_START_MATCH wire size changed");
 static_assert(sizeof(PoleCmd) == 9u, "PC_CMD_POLE wire size changed");
-static_assert(sizeof(ArmSimpleCmd) == 11u, "PC_CMD_ARM_SIMPLE wire size changed");
-static_assert(sizeof(RodNewCmd) == 7u, "PC_CMD_ROD_NEW wire size changed");
+static_assert(sizeof(ArmSimpleCmd) == 10u, "PC_CMD_ARM_SIMPLE wire size changed");
+static_assert(sizeof(RodNewCmd) == 6u, "PC_CMD_ROD_NEW wire size changed");
 static_assert(sizeof(OreStoreCmd) == 6u, "PC_CMD_ORE_STORE wire size changed");
 static_assert(sizeof(AutoActionCmd) == 1u, "PC_CMD_AUTO_ACTION wire size changed");
 static_assert(sizeof(CameraYawCmd) == 10u, "PC_CMD_CAMERA_YAW wire size changed");
-static_assert(sizeof(PC_AbstractPositionCMD_t) == 8u,
+static_assert(sizeof(PC_AbstractPositionCMD_t) == 5u,
               "PC_CMD_ABSTRACT_POSITION wire size changed");
 static_assert(sizeof(StepCmd) == 10u, "PC_CMD_STEP wire size changed");
 static_assert(sizeof(PC_ChassisFeedback_t) == 12u,

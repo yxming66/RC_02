@@ -87,12 +87,12 @@ def build_mrlink_frame(cmd: int, payload: bytes = b"") -> bytes:
 | `0x10` | `PC_CMD_CHASSIS` | 12 | `<fff` | 底盘速度 |
 | `0x11` | `PC_CMD_POLE` | 9 | `<Bff` | 撑杆目标 |
 | `0x12` | `PC_CMD_STEP` | 10 | `<BBff` | 启动自动台阶流程 |
-| `0x13` | `PC_CMD_ARM_SIMPLE` | 11 | `<BBBff` | 简易机械臂 |
-| `0x14` | `PC_CMD_ROD_NEW` | 7 | `<BBBf` | 取矛头机构 |
+| `0x13` | `PC_CMD_ARM_SIMPLE` | 10 | `<BBff` | 简易机械臂 |
+| `0x14` | `PC_CMD_ROD_NEW` | 6 | `<BBf` | 取矛头机构 |
 | `0x15` | `PC_CMD_ORE_STORE` | 6 | `<BBf` | 矿仓平台 |
 | `0x16` | `PC_CMD_AUTO_ACTION` | 1 | `<B` | 一键动作 |
 | `0x17` | `PC_CMD_CAMERA_YAW` | 10 | `<BBff` | 相机云台 yaw |
-| `0x18` | `PC_CMD_ABSTRACT_POSITION` | 8 | `<BBBBBBBB` | 多机构抽象点位 |
+| `0x18` | `PC_CMD_ABSTRACT_POSITION` | 5 | `<BBBBB` | 多机构抽象点位 |
 | `0x20` | `PC_CMD_IMU` | 28 | `<fffffff` | PC 姿态 |
 | `0x21` | `PC_CMD_IR_ORE_ACK` | 6 | `<6B` | 红外对接 ACK 透传 |
 
@@ -135,11 +135,10 @@ def build_mrlink_frame(cmd: int, payload: bytes = b"") -> bytes:
 |---:|---|---|---|---|
 | 0 | u8 | `mode` | - | `0=RELAX`，`1=JOINT`，`2=POS_VEL(兼容，按角度控制)` |
 | 1 | u8 | `point_mode` | - | `0=SLEEP`，`1=GRAB`，`2=LIFT`，`3=RELEASE`，`4=NONE` |
-| 2 | u8 | `suction` | - | `0=关闭`，`1=开启` |
-| 3 | f32 | `target_joint1_rad` | rad | 关节 1 目标 |
-| 7 | f32 | `target_joint2_rad` | rad | 关节 2 目标 |
+| 2 | f32 | `target_joint1_rad` | rad | 关节 1 目标 |
+| 6 | f32 | `target_joint2_rad` | rad | 关节 2 目标 |
 
-`point_mode != NONE` 时业务层可使用预设点位；`point_mode == NONE` 时使用两个目标角度。发送直接机械臂命令会清除抽象位置命令中 `ARM_SIMPLE` 模块 bit。
+`point_mode != NONE` 时业务层可使用预设点位；`point_mode == NONE` 时使用两个目标角度。PC 不再控制吸盘，吸盘由遥控器/自动流程内部控制。发送直接机械臂命令会清除抽象位置命令中 `ARM_SIMPLE` 模块 bit。
 
 ### 4.6 取矛头机构 `0x14`
 
@@ -147,10 +146,9 @@ def build_mrlink_frame(cmd: int, payload: bytes = b"") -> bytes:
 |---:|---|---|---|---|
 | 0 | u8 | `mode` | - | `0=RELAX`，`1=ACTIVE` |
 | 1 | u8 | `pose` | - | `0=STANDBY`，`1=GRAB_HIGH`，`2=DOCK_WAIT`，`3=MANUAL` |
-| 2 | u8 | `grip` | - | `0=松开`，`1=夹紧` |
-| 3 | f32 | `target_angle_rad` | rad | `pose=MANUAL` 时的舵机目标角度 |
+| 2 | f32 | `target_angle_rad` | rad | `pose=MANUAL` 时的舵机目标角度 |
 
-发送直接取矛头命令会清除抽象位置命令中 `ROD_NEW` 模块 bit。
+PC 不再控制取矛头夹爪，夹爪由遥控器/自动流程内部控制。发送直接取矛头命令会清除抽象位置命令中 `ROD_NEW` 模块 bit。
 
 ### 4.7 矿仓 `0x15`
 
@@ -192,12 +190,11 @@ def build_mrlink_frame(cmd: int, payload: bytes = b"") -> bytes:
 |---:|---|---|---|
 | 0 | u8 | `enable_mask` | 模块 bitmask |
 | 1 | u8 | `arm_simple_position` | 机械臂抽象点位 |
-| 2 | u8 | `arm_simple_suction` | `0=关闭`，非 0=开启 |
-| 3 | u8 | `rod_new_position` | 取矛头抽象点位 |
-| 4 | u8 | `rod_new_grip` | `0=松开`，非 0=夹紧 |
-| 5 | u8 | `ore_store_position` | 矿仓抽象点位 |
-| 6 | u8 | `ore_store_cylinder_closed` | `0=打开`，非 0=关闭 |
-| 7 | u8 | `pole_position` | 撑杆抽象点位 |
+| 2 | u8 | `rod_new_position` | 取矛头抽象点位 |
+| 3 | u8 | `ore_store_position` | 矿仓抽象点位 |
+| 4 | u8 | `pole_position` | 撑杆抽象点位 |
+
+抽象位置命令不控制机械臂吸盘、取矛头夹爪和矿仓固定气缸；这些外设由遥控器/自动流程内部控制。
 
 `enable_mask`：
 

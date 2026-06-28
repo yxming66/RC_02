@@ -207,7 +207,6 @@ void OnPole(const wire::PoleCmd &cmd) {
 void OnArmSimple(const wire::ArmSimpleCmd &cmd) {
   s_state.cmd.arm_simple.mode = cmd.mode;
   s_state.cmd.arm_simple.point_mode = cmd.point_mode;
-  s_state.cmd.arm_simple.suction = cmd.suction;
   s_state.cmd.arm_simple.target_joint1_rad = cmd.target_joint1_rad;
   s_state.cmd.arm_simple.target_joint2_rad = cmd.target_joint2_rad;
   s_arm_simple_cmd_received = true;
@@ -222,7 +221,6 @@ void OnArmSimple(const wire::ArmSimpleCmd &cmd) {
 void OnRodNew(const wire::RodNewCmd &cmd) {
   s_state.cmd.rod_new.mode = cmd.mode;
   s_state.cmd.rod_new.pose = cmd.pose;
-  s_state.cmd.rod_new.grip = cmd.grip;
   s_state.cmd.rod_new.target_angle_rad = cmd.target_angle_rad;
   s_rod_new_cmd_received = true;
   s_rod_new_cmd_tick = BSP_TIME_Get_ms();

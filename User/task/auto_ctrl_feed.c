@@ -34,7 +34,9 @@ bool auto_ctrl_inited = false;
 AutoOre_t auto_ore_ctrl;
 bool auto_ore_inited = false;
 
-/* Ozone/调试器手动触发一键动作：request=1存矿，2放矿，3上膛，4中止，5取正400，6取正200，7取负200，8取矛头，9矛头sick校正，10放矿sick校正，11等待对接。 */
+/* Ozone/调试器手动触发一键动作：request=1存矿，2放矿，3上膛，4中止，5取正400，6取正200，7取负200，8完整取矛头，9矛头sick校正，
+10放矿sick校正，11等待对接，12融合200上台阶取矿存矿，13融合200下台阶取矿存矿，14融合400上台阶取矿存矿，15取矛头step1分步调试，
+16单独200上台阶，17单独200下台阶，18单独400上台阶，19单独400下台阶，20取矛头step2分步调试。 */
 volatile AutoOre_DebugControl_t g_auto_ore_debug = {0};//手动调用一键函数
 
 AutoRodSpearhead_t auto_rod_spearhead_ctrl;
@@ -1380,9 +1382,13 @@ static bool AutoCtrlFeed_StartRodSpearheadAction(
 
   if (auto_rod_spearhead_inited &&
       AutoRodSpearhead_IsBusy(&auto_rod_spearhead_ctrl)) {
-    AutoCtrlFeed_RememberRodSpearheadAction(
-        AutoRodSpearhead_GetAction(&auto_rod_spearhead_ctrl));
-    return true;
+    const AutoRodSpearhead_Action_t running_action =
+        AutoRodSpearhead_GetAction(&auto_rod_spearhead_ctrl);
+    if (running_action == action) {
+      AutoCtrlFeed_RememberRodSpearheadAction(running_action);
+      return true;
+    }
+    AutoRodSpearhead_Abort(&auto_rod_spearhead_ctrl);
   }
 
   bool result = false;

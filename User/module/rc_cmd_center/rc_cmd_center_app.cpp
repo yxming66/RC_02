@@ -901,13 +901,10 @@ static bool Rc_SetArmSimplePcAbstractCommand(
     return false;
   }
 
-  const Suction_State_t suction =
-      pc_abstract_cmd->arm_simple_suction != 0u ? SUCTION_ON : SUCTION_OFF;
   const uint8_t position = pc_abstract_cmd->arm_simple_position;
 
   switch ((PC_AbstractArmSimplePosition_t)position) {
     case PC_ABSTRACT_ARM_SIMPLE_RELAX:
-      arm_simple_suction_latched = suction;
       Rc_SetArmSimpleRelax();
       return true;
     case PC_ABSTRACT_ARM_SIMPLE_SLEEP:
@@ -941,7 +938,8 @@ static bool Rc_SetArmSimplePcAbstractCommand(
       const ArmSimple_Params_t* param = Rc_GetArmSimpleParam();
       if (param == NULL ||
           !ArmSimple_MakeBehaviorCommand(
-              param, (ArmSimple_BehaviorPoint_t)behavior_index, suction,
+              param, (ArmSimple_BehaviorPoint_t)behavior_index,
+              arm_simple_suction_latched,
               &arm_simple_cmd)) {
         return false;
       }
@@ -949,8 +947,7 @@ static bool Rc_SetArmSimplePcAbstractCommand(
     }
   }
 
-  arm_simple_cmd.suction = suction;
-  arm_simple_suction_latched = suction;
+  arm_simple_cmd.suction = arm_simple_suction_latched;
   arm_simple_target_initialized = true;
   return true;
 }
@@ -1629,7 +1626,7 @@ struct RcPoleDriveRoute {
 
 struct RcPolePcRoute {
   bool operator()(const RcRuntimeInput &, cmd::Context &, Pole_CMD_t &out) const {
-    if (!Rc_SetPolePcCommand(true)) {
+    if (!Rc_SetPolePcCommand(false)) {
       Rc_SetPoleHold();
     }
     out = pole_cmd;
@@ -1730,13 +1727,12 @@ struct RcArmSimplePcRoute {
       arm_simple_cmd.mode = (ArmSimple_Mode_t)pc_arm_simple_cmd->mode;
       arm_simple_cmd.point_mode =
           (ArmSimple_PointMode_t)pc_arm_simple_cmd->point_mode;
-      arm_simple_cmd.suction = (Suction_State_t)pc_arm_simple_cmd->suction;
+      arm_simple_cmd.suction = arm_simple_suction_latched;
       arm_simple_cmd.target_joint.joint1 =
           pc_arm_simple_cmd->target_joint1_rad;
       arm_simple_cmd.target_joint.joint2 =
           pc_arm_simple_cmd->target_joint2_rad;
       arm_simple_cmd.joint1_vel = 0.0f;
-      arm_simple_suction_latched = arm_simple_cmd.suction;
       arm_simple_target_initialized = true;
     } else {
       Rc_SetArmSimpleStandby();
@@ -1897,10 +1893,9 @@ struct RcRodNewPcRoute {
       auto_rod_spearhead_hold_after_finish = false;
       rod_cmd.mode = (RodNew_Mode_t)pc_rod_new_cmd->mode;
       rod_cmd.pose = (RodNew_Pose_t)pc_rod_new_cmd->pose;
-      rod_cmd.grip = (RodNew_GripState_t)pc_rod_new_cmd->grip;
+      rod_cmd.grip = rod_grip_latched;
       rod_cmd.target_angle_rad =
           Rc_ClampRodNewTarget(pc_rod_new_cmd->target_angle_rad);
-      rod_grip_latched = rod_cmd.grip;
       rod_target_angle_latched_rad = rod_cmd.target_angle_rad;
     } else {
       Rc_SetRodHold();

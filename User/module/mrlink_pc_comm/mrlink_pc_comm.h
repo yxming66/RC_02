@@ -101,7 +101,6 @@ typedef struct {
 typedef struct {
     uint8_t mode;                /* 简易机械臂模式，见 ArmSimple_Mode_t */
     uint8_t point_mode;          /* 简易机械臂点位模式，见 ArmSimple_PointMode_t */
-    uint8_t suction;             /* 吸盘控制，0=关闭，1=开启 */
     float target_joint1_rad;     /* 关节 1 目标角度，单位 rad */
     float target_joint2_rad;     /* 关节 2 目标角度，单位 rad */
 } PC_ArmSimpleCMD_t;
@@ -109,7 +108,6 @@ typedef struct {
 typedef struct {
     uint8_t mode;              /* 取矛头机构模式，见 RodNew_Mode_t */
     uint8_t pose;              /* 取矛头机构姿态，见 RodNew_Pose_t */
-    uint8_t grip;              /* 夹爪控制，0=松开，1=夹紧 */
     float target_angle_rad;    /* 手动模式下舵机目标角度，单位 rad */
 } PC_RodNewCMD_t;
 
@@ -182,11 +180,8 @@ typedef enum {
 typedef struct {
     uint8_t enable_mask;               /* PC_AbstractModuleMask_t 位掩码 */
     uint8_t arm_simple_position;       /* PC_AbstractArmSimplePosition_t */
-    uint8_t arm_simple_suction;        /* 0=关闭，非 0=开启 */
     uint8_t rod_new_position;          /* PC_AbstractRodNewPosition_t */
-    uint8_t rod_new_grip;              /* 0=松开，非 0=夹紧 */
     uint8_t ore_store_position;        /* PC_AbstractOreStorePosition_t */
-    uint8_t ore_store_cylinder_closed; /* 0=打开，非 0=关闭 */
     uint8_t pole_position;             /* PC_AbstractPolePosition_t */
 } PC_AbstractPositionCMD_t;
 
