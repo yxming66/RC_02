@@ -96,13 +96,22 @@ static void Task_arm_simple_legacy(void *argument)
         arm_simple_feedback.mode = arm_simple.mode;
         arm_simple_feedback.point_mode = arm_simple.cmd.point_mode;
         arm_simple_feedback.suction = arm_simple.suction;
+        arm_simple_feedback.joint1_temperature_warning =
+            arm_simple.feedback.joint1_temperature_warning;
+        arm_simple_feedback.joint1_temperature_over_limit =
+            arm_simple.feedback.joint1_temperature_over_limit;
+        arm_simple_feedback.joint1_temperature_limit_latched =
+            arm_simple.feedback.joint1_temperature_limit_latched;
         arm_simple_feedback.joint1_angle_rad = arm_simple.feedback.joint1_angle;
         arm_simple_feedback.joint1_velocity_rad_s = arm_simple.feedback.joint1_vel;
+        arm_simple_feedback.joint1_temperature_c = arm_simple.feedback.joint1_temp;
         arm_simple_feedback.joint2_angle_rad = arm_simple.feedback.joint2_angle;
         arm_simple_feedback.target_joint1_rad = arm_simple.target.joint1_target;
         arm_simple_feedback.target_joint2_rad = arm_simple.target.joint2_target;
         arm_simple_feedback.output_target_joint1_rad = arm_simple.target.joint1_output_target;
         arm_simple_feedback.output_target_joint2_rad = arm_simple.target.joint2_output_target;
+        arm_simple_feedback.joint1_max_vel_rad_s = arm_simple.target.joint1_max_vel_rad_s;
+        arm_simple_feedback.joint2_max_vel_rad_s = arm_simple.target.joint2_max_vel_rad_s;
 
         ArmSimple_CMD_t cmd;
         if (task_runtime.msgq.arm_simple.cmd != NULL &&
@@ -210,8 +219,15 @@ void Task_ArmSimpleStep(void) {
     arm_simple_feedback.mode = arm_simple.mode;
     arm_simple_feedback.point_mode = arm_simple.cmd.point_mode;
     arm_simple_feedback.suction = arm_simple.suction;
+    arm_simple_feedback.joint1_temperature_warning =
+        arm_simple.feedback.joint1_temperature_warning;
+    arm_simple_feedback.joint1_temperature_over_limit =
+        arm_simple.feedback.joint1_temperature_over_limit;
+    arm_simple_feedback.joint1_temperature_limit_latched =
+        arm_simple.feedback.joint1_temperature_limit_latched;
     arm_simple_feedback.joint1_angle_rad = arm_simple.feedback.joint1_angle;
     arm_simple_feedback.joint1_velocity_rad_s = arm_simple.feedback.joint1_vel;
+    arm_simple_feedback.joint1_temperature_c = arm_simple.feedback.joint1_temp;
     arm_simple_feedback.joint2_angle_rad = arm_simple.feedback.joint2_angle;
     arm_simple_feedback.target_joint1_rad = arm_simple.target.joint1_target;
     arm_simple_feedback.target_joint2_rad = arm_simple.target.joint2_target;
@@ -219,6 +235,10 @@ void Task_ArmSimpleStep(void) {
         arm_simple.target.joint1_output_target;
     arm_simple_feedback.output_target_joint2_rad =
         arm_simple.target.joint2_output_target;
+    arm_simple_feedback.joint1_max_vel_rad_s =
+        arm_simple.target.joint1_max_vel_rad_s;
+    arm_simple_feedback.joint2_max_vel_rad_s =
+        arm_simple.target.joint2_max_vel_rad_s;
 
     ArmSimple_CMD_t cmd;
     if (task_runtime.msgq.arm_simple.cmd != NULL &&

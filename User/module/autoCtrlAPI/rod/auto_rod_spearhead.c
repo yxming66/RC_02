@@ -316,23 +316,30 @@ static void AutoRodSpearhead_RunPickupStep2(
       if (!rod_at_target) {
         ctrl->photo_stable_started = false;
         ctrl->photo_stable_state = false;
+        ctrl->photo_stable_start_time_ms = now_ms;
         if (AutoRodSpearhead_StepElapsed(ctrl, now_ms) >=
             AutoRodSpearhead_DockWaitDelayMs(ctrl)) {
           AutoRodSpearhead_FinishTimeout(ctrl);
         }
         return;
       }
-      if (!rod_photo_triggered) {
-        ctrl->photo_stable_started = false;
-        ctrl->photo_stable_state = false;
-        if (AutoRodSpearhead_StepElapsed(ctrl, now_ms) >=
-            AutoRodSpearhead_DockWaitDelayMs(ctrl)) {
-          AutoRodSpearhead_FinishNoSpearhead(ctrl);
-        }
+      if (!ctrl->photo_stable_started) {
+        ctrl->photo_stable_started = true;
+        ctrl->photo_stable_state = rod_photo_triggered;
+        ctrl->photo_stable_start_time_ms = now_ms;
         return;
       }
-      if (!AutoRodSpearhead_PhotoStateStable(ctrl, rod_photo_triggered,
-                                             now_ms)) {
+
+      if (rod_photo_triggered) {
+        ctrl->photo_stable_state = true;
+      }
+      if ((now_ms - ctrl->photo_stable_start_time_ms) <
+          AutoRodSpearhead_PhotoCheckMs(ctrl)) {
+        return;
+      }
+
+      if (!ctrl->photo_stable_state) {
+        AutoRodSpearhead_FinishNoSpearhead(ctrl);
         return;
       }
       AutoRodSpearhead_FinishSuccess(ctrl);

@@ -63,9 +63,11 @@ static bool s_comm_initialized = false;
 static bool s_pole_cmd_received = false;
 static bool s_arm_simple_cmd_received = false;
 static bool s_rod_new_cmd_received = false;
+static bool s_ore_store_cmd_received = false;
 static uint32_t s_pole_cmd_tick = 0u;
 static uint32_t s_arm_simple_cmd_tick = 0u;
 static uint32_t s_rod_new_cmd_tick = 0u;
+static uint32_t s_ore_store_cmd_tick = 0u;
 static bool s_ir_ore_ack_pending = false;
 
 bool IsRecentCommand(bool received, uint32_t tick, uint32_t now_ms) {
@@ -76,9 +78,11 @@ void ClearModuleCommands() {
   s_pole_cmd_received = false;
   s_arm_simple_cmd_received = false;
   s_rod_new_cmd_received = false;
+  s_ore_store_cmd_received = false;
   s_pole_cmd_tick = 0u;
   s_arm_simple_cmd_tick = 0u;
   s_rod_new_cmd_tick = 0u;
+  s_ore_store_cmd_tick = 0u;
 }
 
 void MarkLastRxFrame(uint8_t cmd, uint16_t payload_len, int8_t result,
@@ -236,6 +240,8 @@ void OnOreStore(const wire::OreStoreCmd &cmd) {
   s_state.cmd.ore_store.mode = cmd.mode;
   s_state.cmd.ore_store.force_rehome = cmd.force_rehome;
   s_state.cmd.ore_store.platform_target_rad = cmd.platform_target_rad;
+  s_ore_store_cmd_received = true;
+  s_ore_store_cmd_tick = BSP_TIME_Get_ms();
   s_state.cmd.abstract_position.enable_mask &=
       static_cast<uint8_t>(~(PC_ABSTRACT_MODULE_ORE_STORE |
                             PC_ABSTRACT_MODULE_POLE |
@@ -702,6 +708,11 @@ extern "C" bool MrlinkPc_HasRodNewCMD(void) {
 
 extern "C" const PC_OreStoreCMD_t *MrlinkPc_GetOreStoreCMD(void) {
   return &s_state.cmd.ore_store;
+}
+
+extern "C" bool MrlinkPc_HasOreStoreCMD(void) {
+  return IsRecentCommand(s_ore_store_cmd_received, s_ore_store_cmd_tick,
+                         BSP_TIME_Get_ms());
 }
 
 extern "C" const PC_CameraYawCMD_t *MrlinkPc_GetCameraYawCMD(void) {

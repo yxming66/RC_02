@@ -599,6 +599,8 @@ bool MrlinkPc_HasRodNewCMD(void);
 /* 获取最近一次 PC 矿仓命令。 */
 const PC_OreStoreCMD_t *MrlinkPc_GetOreStoreCMD(void);
 
+bool MrlinkPc_HasOreStoreCMD(void);
+
 /* 获取最近一次 PC 相机云台 yaw 命令。 */
 const PC_CameraYawCMD_t *MrlinkPc_GetCameraYawCMD(void);
 

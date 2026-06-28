@@ -218,7 +218,7 @@ Config_RobotParam_t robot_config = {
                 /* 平台等待矛头对接位置，待实机标定。 */
                 [ORE_STORE_TRANSFORM_SPEARHEAD_DOCK_WAIT] = 0.666363478f,
                 /* 取矛头平台预设位，待实机标定。 */
-                [ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP] = 22.5139351f,
+                [ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP] = 23.7524891f,
             },
         },
         .fixed_ore_cylinder = {    
@@ -601,7 +601,7 @@ Config_RobotParam_t robot_config = {
             .second_photo_retract_move_speed = 0.0f, /* 后一个光电触发收腿时向头向移动 vx，单位 m/s。*/
             .final_move_speed = 1.0f,           /* 收尾离开台阶 vx，单位 m/s。 */
             .final_move_ms = 1000u,              /* 收尾离开台阶持续时间，单位 ms。 */
-            .final_photo_sprint_ms = 300u,       /* 末尾光电触发后继续冲刺时间，单位 ms。 */
+            .final_photo_sprint_ms = 150u,       /* 末尾光电触发后继续冲刺时间，单位 ms。 */
             .final_move_wheel_delta_rad = 0.0f, /* 0 表示该模板继续按时间切步。 */
             .pole_all_extend_speed = 0.0f,     /* 四杆全伸目标跟随速度，单位 rad/s。 */
             .pole_front_extend_speed = 0.0f,   /* 前杆伸出目标跟随速度，单位 rad/s。 */

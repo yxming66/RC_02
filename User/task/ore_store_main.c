@@ -95,6 +95,22 @@ volatile CameraYaw_DebugControl_t g_camera_yaw_debug = {
 #define ORE_STORE_TEMP_OVER_LIMIT_ALARM_MS (5000u)
 #define ORE_STORE_POWER_ON_HOME_READY_TIMEOUT_MS (10000u)
 
+#ifndef ORE_STORE_DEBUG_UPDATE_PERIOD_MS
+#define ORE_STORE_DEBUG_UPDATE_PERIOD_MS (50u)
+#endif
+
+static uint32_t ore_store_debug_last_update_ms = 0u;
+
+static bool OreStoreTask_DebugPeriodicDue(uint32_t now_ms) {
+  if (ore_store_debug_last_update_ms == 0u ||
+      (uint32_t)(now_ms - ore_store_debug_last_update_ms) >=
+          ORE_STORE_DEBUG_UPDATE_PERIOD_MS) {
+    ore_store_debug_last_update_ms = now_ms;
+    return true;
+  }
+  return false;
+}
+
 static void OreStoreTask_SetDefaultCommand(OreStore_CMD_t *cmd) {
   if (cmd == NULL) {
     return;
@@ -557,7 +573,9 @@ void Task_OreStoreStep(void) {
       OreStore_Control(&ore_store, &control_cmd, now_tick);
   OreStore_Output(&ore_store);
   OreStoreTask_ApplyDirectDebugOutput();
-  OreStoreTask_UpdateDebugView();
+  if (OreStoreTask_DebugPeriodicDue(now_tick)) {
+    OreStoreTask_UpdateDebugView();
+  }
   ore_store_cmd.force_rehome = false;
 
   task_runtime.heartbeat.ore_store++;

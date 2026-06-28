@@ -355,6 +355,30 @@ static float Rc_ClampRodNewTarget(float target_rad) {
   return target_rad;
 }
 
+static Suction_State_t Rc_GetArmSimpleFeedbackSuction(void) {
+  const ArmSimple_Feedback_t* feedback = Task_ArmSimpleGetFeedback();
+  if (feedback != NULL) {
+    return feedback->suction;
+  }
+  return arm_simple_suction_latched;
+}
+
+static RodNew_GripState_t Rc_GetRodFeedbackGrip(void) {
+  const RodNew_Feedback_t *feedback = Task_RodNewGetFeedback();
+  if (feedback != NULL) {
+    return feedback->grip;
+  }
+  return rod_grip_latched;
+}
+
+static bool Rc_GetOreStoreFeedbackFixedCylinderClosed(void) {
+  const OreStore_Feedback_t* feedback = Task_OreStoreGetFeedback();
+  if (feedback != NULL) {
+    return feedback->fixed_ore_cylinder_closed;
+  }
+  return ore_store_cmd.fixed_ore_cylinder_closed;
+}
+
 static void Rc_SetRodRelax(void) {
   rod_cmd.mode = ROD_NEW_MODE_RELAX;
   rod_cmd.pose = ROD_NEW_POSE_DOCK_WAIT;
@@ -646,16 +670,6 @@ static bool Rc_SetPolePcCommand(bool require_received_cmd) {
   return true;
 }
 
-static void Rc_SetPoleHold(void) {
-  if (pole_cmd.mode == POLE_MODE_ACTIVE) {
-    pole_cmd.lift[0] = 0.0f;
-    pole_cmd.lift[1] = 0.0f;
-    return;
-  }
-
-  Rc_SetPoleManual(0.0f, 0.0f);
-}
-
 #if RC_POLE_CH_RES_ENABLE
 static bool Rc_PoleCommandIsManual(void) {
   return pole_cmd.mode == POLE_MODE_ACTIVE &&
@@ -703,10 +717,7 @@ static void Rc_LatchPoleCurrentTarget(void) {
   Pole_CMD_t hold_cmd;
   if (Task_PoleMainGetHoldCommand(&hold_cmd)) {
     pole_cmd = hold_cmd;
-    return;
   }
-
-  Rc_SetPoleHold();
 }
 
 static void Rc_LatchArmSimpleCurrentTarget(void) {
@@ -1396,6 +1407,11 @@ static void Rc_PrepareSafePlanSideEffects(void) {
   }
 }
 
+static bool Rc_AutoOreReleaseIsBusy(void) {
+  return auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl) &&
+         auto_ore_ctrl.action == AUTO_ORE_ACTION_RELEASE;
+}
+
 static RcCommandPlan_t Rc_SelectCommandPlan(RcBehavior_t behavior) {
   rc_current_behavior = behavior;
 
@@ -1443,7 +1459,7 @@ static RcCommandPlan_t Rc_SelectCommandPlan(RcBehavior_t behavior) {
   }
 
   if (auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl)) {
-    if (behavior == RC_BEHAVIOR_AUTO_ORE) {
+    if (behavior == RC_BEHAVIOR_AUTO_ORE || Rc_AutoOreReleaseIsBusy()) {
       g_rc_control_debug.ore_store_active = true;
       g_rc_control_debug.arm_simple_active = true;
       return RC_CMD_PLAN_AUTO_ORE_OUTPUT;
@@ -1612,9 +1628,8 @@ struct RcPoleKeepRoute {
   }
 };
 
-struct RcPoleHoldRoute {
+struct RcPoleFallbackKeepRoute {
   bool operator()(cmd::Context &, Pole_CMD_t &out) const {
-    Rc_SetPoleHold();
     Rc_ApplyPoleChResControlForCurrentPlan();
     out = pole_cmd;
     return true;
@@ -1630,11 +1645,26 @@ struct RcPoleDriveRoute {
   }
 };
 
+static const Pole_CMD_t *Rc_GetAutoOreReleasePoleCommand(void) {
+  if (!Rc_AutoOreReleaseIsBusy()) {
+    return NULL;
+  }
+  return AutoOre_GetPoleCommand(&auto_ore_ctrl);
+}
+
 struct RcPolePcRoute {
   bool operator()(const RcRuntimeInput &, cmd::Context &, Pole_CMD_t &out) const {
-    if (!Rc_SetPolePcCommand(false)) {
-      Rc_SetPoleHold();
+    const Pole_CMD_t *auto_release_pole_cmd =
+        Rc_GetAutoOreReleasePoleCommand();
+    if (auto_release_pole_cmd != NULL) {
+      out = *auto_release_pole_cmd;
+      return true;
     }
+    if (Rc_AutoOreReleaseIsBusy()) {
+      out = pole_cmd;
+      return true;
+    }
+    (void)Rc_SetPolePcCommand(false);
     out = pole_cmd;
     return true;
   }
@@ -1658,7 +1688,6 @@ struct RcPoleAutoOreRoute {
     if (auto_pole_cmd != NULL) {
       out = *auto_pole_cmd;
     } else {
-      Rc_SetPoleHold();
       out = pole_cmd;
     }
     return true;
@@ -1671,7 +1700,6 @@ struct RcPoleAutoSickCorrectRoute {
     if (auto_pole_cmd != NULL) {
       out = *auto_pole_cmd;
     } else {
-      Rc_SetPoleHold();
       out = pole_cmd;
     }
     return true;
@@ -1722,18 +1750,21 @@ struct RcArmSimpleOperatorRoute {
 struct RcArmSimplePcRoute {
   bool operator()(const RcRuntimeInput &, cmd::Context &,
                   ArmSimple_CMD_t &out) const {
+    const Suction_State_t pc_hold_suction = Rc_GetArmSimpleFeedbackSuction();
     const PC_AbstractPositionCMD_t *pc_abstract_cmd =
         MrlinkPc_GetAbstractPositionCMD();
     const PC_ArmSimpleCMD_t *pc_arm_simple_cmd =
         MrlinkPc_HasArmSimpleCMD() ? MrlinkPc_GetArmSimpleCMD() : NULL;
+    arm_simple_suction_latched = pc_hold_suction;
     if (Rc_SetArmSimplePcAbstractCommand(pc_abstract_cmd)) {
+      arm_simple_cmd.suction = pc_hold_suction;
       out = arm_simple_cmd;
       return true;
     } else if (pc_arm_simple_cmd != NULL) {
       arm_simple_cmd.mode = (ArmSimple_Mode_t)pc_arm_simple_cmd->mode;
       arm_simple_cmd.point_mode =
           (ArmSimple_PointMode_t)pc_arm_simple_cmd->point_mode;
-      arm_simple_cmd.suction = arm_simple_suction_latched;
+      arm_simple_cmd.suction = pc_hold_suction;
       arm_simple_cmd.target_joint.joint1 =
           pc_arm_simple_cmd->target_joint1_rad;
       arm_simple_cmd.target_joint.joint2 =
@@ -1742,6 +1773,7 @@ struct RcArmSimplePcRoute {
       arm_simple_target_initialized = true;
     } else {
       Rc_SetArmSimpleStandby();
+      arm_simple_cmd.suction = pc_hold_suction;
     }
     out = arm_simple_cmd;
     return true;
@@ -1801,8 +1833,10 @@ struct RcOreStoreManualRoute {
 struct RcOreStorePcRoute {
   bool operator()(const RcRuntimeInput &, cmd::Context &,
                   OreStore_CMD_t &out) const {
+    const bool pc_hold_fixed_cylinder_closed =
+        Rc_GetOreStoreFeedbackFixedCylinderClosed();
     const PC_OreStoreCMD_t *pc_ore_store_cmd =
-        MrlinkPc_GetOreStoreCMD();
+        MrlinkPc_HasOreStoreCMD() ? MrlinkPc_GetOreStoreCMD() : NULL;
     if (pc_ore_store_cmd != NULL) {
       if (Task_OreStorePowerOnHomeInProgress()) {
         Rc_SetOreStoreRelax();
@@ -1818,6 +1852,7 @@ struct RcOreStorePcRoute {
     } else {
       Rc_SetOreStoreHold();
     }
+    ore_store_cmd.fixed_ore_cylinder_closed = pc_hold_fixed_cylinder_closed;
     out = ore_store_cmd;
     return true;
   }
@@ -1893,18 +1928,21 @@ struct RcRodNewOperatorRoute {
 
 struct RcRodNewPcRoute {
   bool operator()(const RcRuntimeInput &, cmd::Context &, RodNew_CMD_t &out) const {
+    const RodNew_GripState_t pc_hold_grip = Rc_GetRodFeedbackGrip();
     const PC_RodNewCMD_t *pc_rod_new_cmd =
         MrlinkPc_HasRodNewCMD() ? MrlinkPc_GetRodNewCMD() : NULL;
+    rod_grip_latched = pc_hold_grip;
     if (pc_rod_new_cmd != NULL) {
       auto_rod_spearhead_hold_after_finish = false;
       rod_cmd.mode = (RodNew_Mode_t)pc_rod_new_cmd->mode;
       rod_cmd.pose = (RodNew_Pose_t)pc_rod_new_cmd->pose;
-      rod_cmd.grip = rod_grip_latched;
+      rod_cmd.grip = pc_hold_grip;
       rod_cmd.target_angle_rad =
           Rc_ClampRodNewTarget(pc_rod_new_cmd->target_angle_rad);
       rod_target_angle_latched_rad = rod_cmd.target_angle_rad;
     } else {
       Rc_SetRodHold();
+      rod_cmd.grip = pc_hold_grip;
     }
     out = rod_cmd;
     return true;
@@ -1974,7 +2012,7 @@ static void Rc_ConfigureCmdCenter(void) {
   rc_cmd_center
       .output<Pole_CMD_t>("pole", RcStoreCommandSink<Pole_CMD_t>{&pole_cmd})
       .safe<RcPoleSafeRoute>()
-      .hold<RcPoleHoldRoute>()
+      .hold<RcPoleFallbackKeepRoute>()
       .arbitrate<cmd::HighestPriority>()
       .routes(
           cmd::from<RcRuntimeInput, RcPoleDriveRoute>()
@@ -1997,7 +2035,7 @@ static void Rc_ConfigureCmdCenter(void) {
           cmd::from<RcRuntimeInput, RcPoleAutoRodRoute>()
               .when<RcPlanIn<RC_CMD_PLAN_AUTO_ROD_OUTPUT> >()
               .priority(cmd::Priority::Auto),
-          cmd::from<RcRuntimeInput, RcPoleHoldRoute>()
+          cmd::from<RcRuntimeInput, RcPoleFallbackKeepRoute>()
               .when<RcPlanIn<RC_CMD_PLAN_AUTO_STANDBY,
                              RC_CMD_PLAN_ARM_SIMPLE,
                              RC_CMD_PLAN_ORE_STORE,
