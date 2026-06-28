@@ -322,7 +322,7 @@ Config_RobotParam_t robot_config = {
                 /* ArmSimple 存矿位，arm 伸到 ore_store 交接处释放矿。 */
                 [ARM_SIMPLE_BEHAVIOR_STORE_ORE] = {.joint1_pos = 0.0f, .joint2_pos = -1.51068195f},
                 /* ArmSimple 上膛位，arm 伸到 ore_store 上膛交接处吸取矿。 */
-                [ARM_SIMPLE_BEHAVIOR_CHAMBER_ORE] = {.joint1_pos = -0.216335908f, .joint2_pos = -1.64886379f},
+                [ARM_SIMPLE_BEHAVIOR_CHAMBER_ORE] = {.joint1_pos = -0.0577173643f, .joint2_pos = -1.39655161f},
                 /* ArmSimple 存矿等待位，等待平台到位后再伸到存矿位。 */
                 [ARM_SIMPLE_BEHAVIOR_WAIT_STORE_ORE] = {.joint1_pos = 0.246562153f, .joint2_pos = -1.82005286f},
                 /* ArmSimple 放矿等待位，放矿动作前的预备/稳定位置。 */
