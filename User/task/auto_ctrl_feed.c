@@ -195,6 +195,8 @@ static AutoOre_Action_t AutoCtrlFeed_RequestToOreAction(
     case AUTO_ORE_DEBUG_REQUEST_NONE:
     case AUTO_ORE_DEBUG_REQUEST_ABORT:
     case AUTO_ORE_DEBUG_REQUEST_ROD_SPEARHEAD:
+    case AUTO_ORE_DEBUG_REQUEST_ROD_SPEARHEAD_STEP1:
+    case AUTO_ORE_DEBUG_REQUEST_ROD_SPEARHEAD_STEP2:
     case AUTO_ORE_DEBUG_REQUEST_SICK_CORRECT_ROD_SPEARHEAD:
     case AUTO_ORE_DEBUG_REQUEST_SICK_CORRECT_ORE_RELEASE:
     case AUTO_ORE_DEBUG_REQUEST_ROD_DOCK_WAIT:
@@ -219,6 +221,10 @@ static PC_AutoAction_t AutoCtrlFeed_MapRodAction(
   switch (action) {
     case AUTO_ROD_SPEARHEAD_ACTION_PICKUP:
       return PC_AUTO_ACTION_ROD_SPEARHEAD;
+    case AUTO_ROD_SPEARHEAD_ACTION_PICKUP_STEP1:
+      return PC_AUTO_ACTION_ROD_SPEARHEAD_STEP1;
+    case AUTO_ROD_SPEARHEAD_ACTION_PICKUP_STEP2:
+      return PC_AUTO_ACTION_ROD_SPEARHEAD_STEP2;
     case AUTO_ROD_SPEARHEAD_ACTION_DOCK_WAIT:
       return PC_AUTO_ACTION_ROD_DOCK_WAIT;
     case AUTO_ROD_SPEARHEAD_ACTION_NONE:
@@ -474,6 +480,8 @@ static bool AutoCtrlFeed_ShouldForcePcSuccess(PC_AutoAction_t action) {
 
 static bool AutoCtrlFeed_IsRodSpearheadAction(PC_AutoAction_t action) {
   return action == PC_AUTO_ACTION_ROD_SPEARHEAD ||
+         action == PC_AUTO_ACTION_ROD_SPEARHEAD_STEP1 ||
+         action == PC_AUTO_ACTION_ROD_SPEARHEAD_STEP2 ||
          action == PC_AUTO_ACTION_ROD_DOCK_WAIT;
 }
 
@@ -1301,6 +1309,12 @@ static void AutoCtrlFeed_HandleAutoOreDebugRequest(void) {
     case AUTO_ORE_DEBUG_REQUEST_ROD_SPEARHEAD:
       result = Task_AutoRodSpearheadStart();
       break;
+    case AUTO_ORE_DEBUG_REQUEST_ROD_SPEARHEAD_STEP1:
+      result = Task_AutoRodSpearheadStartStep1();
+      break;
+    case AUTO_ORE_DEBUG_REQUEST_ROD_SPEARHEAD_STEP2:
+      result = Task_AutoRodSpearheadStartStep2();
+      break;
     case AUTO_ORE_DEBUG_REQUEST_ROD_DOCK_WAIT:
       result = Task_AutoRodSpearheadStartDockWait();
       break;
@@ -1342,6 +1356,8 @@ static void AutoCtrlFeed_HandleAutoOreDebugRequest(void) {
     g_auto_ore_debug.force_output_enable =
         request != AUTO_ORE_DEBUG_REQUEST_ABORT &&
         request != AUTO_ORE_DEBUG_REQUEST_ROD_SPEARHEAD &&
+        request != AUTO_ORE_DEBUG_REQUEST_ROD_SPEARHEAD_STEP1 &&
+        request != AUTO_ORE_DEBUG_REQUEST_ROD_SPEARHEAD_STEP2 &&
         request != AUTO_ORE_DEBUG_REQUEST_ROD_DOCK_WAIT &&
         request != AUTO_ORE_DEBUG_REQUEST_SICK_CORRECT_ROD_SPEARHEAD &&
           request != AUTO_ORE_DEBUG_REQUEST_SICK_CORRECT_ORE_RELEASE &&
@@ -1377,6 +1393,14 @@ static bool AutoCtrlFeed_StartRodSpearheadAction(
         result = AutoRodSpearhead_StartPickup(&auto_rod_spearhead_ctrl,
                                               now_ms);
         break;
+      case AUTO_ROD_SPEARHEAD_ACTION_PICKUP_STEP1:
+        result = AutoRodSpearhead_StartPickupStep1(&auto_rod_spearhead_ctrl,
+                                                   now_ms);
+        break;
+      case AUTO_ROD_SPEARHEAD_ACTION_PICKUP_STEP2:
+        result = AutoRodSpearhead_StartPickupStep2(&auto_rod_spearhead_ctrl,
+                                                   now_ms);
+        break;
       case AUTO_ROD_SPEARHEAD_ACTION_DOCK_WAIT:
         result = AutoRodSpearhead_StartDockWait(&auto_rod_spearhead_ctrl,
                                                 now_ms);
@@ -1400,6 +1424,16 @@ bool Task_AutoRodSpearheadStart(void) {
       AUTO_ROD_SPEARHEAD_ACTION_PICKUP);
 }
 
+bool Task_AutoRodSpearheadStartStep1(void) {
+  return AutoCtrlFeed_StartRodSpearheadAction(
+      AUTO_ROD_SPEARHEAD_ACTION_PICKUP_STEP1);
+}
+
+bool Task_AutoRodSpearheadStartStep2(void) {
+  return AutoCtrlFeed_StartRodSpearheadAction(
+      AUTO_ROD_SPEARHEAD_ACTION_PICKUP_STEP2);
+}
+
 bool Task_AutoRodSpearheadStartDockWait(void) {
   return AutoCtrlFeed_StartRodSpearheadAction(
       AUTO_ROD_SPEARHEAD_ACTION_DOCK_WAIT);
@@ -1418,6 +1452,13 @@ void Task_AutoRodSpearheadAbort(void) {
 bool Task_AutoRodSpearheadIsBusy(void) {
   return auto_rod_spearhead_inited &&
          AutoRodSpearhead_IsBusy(&auto_rod_spearhead_ctrl);
+}
+
+bool Task_AutoRodSpearheadIsPickupStep1(void) {
+  return auto_rod_spearhead_inited &&
+         AutoRodSpearhead_IsBusy(&auto_rod_spearhead_ctrl) &&
+         AutoRodSpearhead_GetAction(&auto_rod_spearhead_ctrl) ==
+             AUTO_ROD_SPEARHEAD_ACTION_PICKUP_STEP1;
 }
 
 const RodNew_CMD_t *Task_AutoRodSpearheadGetCommand(void) {

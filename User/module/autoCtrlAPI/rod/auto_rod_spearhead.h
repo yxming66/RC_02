@@ -37,6 +37,8 @@ typedef enum {
 typedef enum {
   AUTO_ROD_SPEARHEAD_ACTION_NONE = 0,
   AUTO_ROD_SPEARHEAD_ACTION_PICKUP,
+  AUTO_ROD_SPEARHEAD_ACTION_PICKUP_STEP1,
+  AUTO_ROD_SPEARHEAD_ACTION_PICKUP_STEP2,
   AUTO_ROD_SPEARHEAD_ACTION_DOCK_WAIT,
 } AutoRodSpearhead_Action_t;
 
@@ -80,6 +82,10 @@ void AutoRodSpearhead_Init(AutoRodSpearhead_t *ctrl,
                            const AutoRodSpearhead_Params_t *param);
 bool AutoRodSpearhead_Start(AutoRodSpearhead_t *ctrl, uint32_t now_ms);
 bool AutoRodSpearhead_StartPickup(AutoRodSpearhead_t *ctrl, uint32_t now_ms);
+bool AutoRodSpearhead_StartPickupStep1(AutoRodSpearhead_t *ctrl,
+                                       uint32_t now_ms);
+bool AutoRodSpearhead_StartPickupStep2(AutoRodSpearhead_t *ctrl,
+                                       uint32_t now_ms);
 bool AutoRodSpearhead_StartDockWait(AutoRodSpearhead_t *ctrl,
                                     uint32_t now_ms);
 void AutoRodSpearhead_Update(AutoRodSpearhead_t *ctrl,

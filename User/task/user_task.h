@@ -132,10 +132,12 @@ typedef enum {
     AUTO_ORE_DEBUG_REQUEST_STEP_PICK_STORE_ASCEND_200_HEAD = 12,
     AUTO_ORE_DEBUG_REQUEST_STEP_PICK_STORE_DESCEND_200_HEAD = 13,
     AUTO_ORE_DEBUG_REQUEST_STEP_PICK_STORE_ASCEND_400_HEAD = 14,
+    AUTO_ORE_DEBUG_REQUEST_ROD_SPEARHEAD_STEP1 = 15,
     AUTO_ORE_DEBUG_REQUEST_STEP_ASCEND_200_HEAD = 16,
     AUTO_ORE_DEBUG_REQUEST_STEP_DESCEND_200_HEAD = 17,
     AUTO_ORE_DEBUG_REQUEST_STEP_ASCEND_400_HEAD = 18,
     AUTO_ORE_DEBUG_REQUEST_STEP_DESCEND_400_HEAD = 19,
+    AUTO_ORE_DEBUG_REQUEST_ROD_SPEARHEAD_STEP2 = 20,
 } AutoOre_DebugRequest_t;
 
 typedef struct {
@@ -471,9 +473,12 @@ bool Task_AutoStepStartAscend400Head(void);
 bool Task_AutoStepStartDescend400Head(void);
 void Task_AutoOreAbort(void);
 bool Task_AutoRodSpearheadStart(void);
+bool Task_AutoRodSpearheadStartStep1(void);
+bool Task_AutoRodSpearheadStartStep2(void);
 bool Task_AutoRodSpearheadStartDockWait(void);
 void Task_AutoRodSpearheadAbort(void);
 bool Task_AutoRodSpearheadIsBusy(void);
+bool Task_AutoRodSpearheadIsPickupStep1(void);
 const RodNew_CMD_t *Task_AutoRodSpearheadGetCommand(void);
 const OreStore_CMD_t *Task_AutoRodSpearheadGetOreStoreCommand(void);
 bool Task_AutoSickCorrectStartRodSpearhead(void);

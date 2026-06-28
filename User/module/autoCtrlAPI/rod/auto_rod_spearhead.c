@@ -211,10 +211,136 @@ bool AutoRodSpearhead_StartPickup(AutoRodSpearhead_t *ctrl,
       ctrl, AUTO_ROD_SPEARHEAD_ACTION_PICKUP, now_ms);
 }
 
+bool AutoRodSpearhead_StartPickupStep1(AutoRodSpearhead_t *ctrl,
+                                       uint32_t now_ms) {
+  return AutoRodSpearhead_StartAction(
+      ctrl, AUTO_ROD_SPEARHEAD_ACTION_PICKUP_STEP1, now_ms);
+}
+
+bool AutoRodSpearhead_StartPickupStep2(AutoRodSpearhead_t *ctrl,
+                                       uint32_t now_ms) {
+  return AutoRodSpearhead_StartAction(
+      ctrl, AUTO_ROD_SPEARHEAD_ACTION_PICKUP_STEP2, now_ms);
+}
+
 bool AutoRodSpearhead_StartDockWait(AutoRodSpearhead_t *ctrl,
                                     uint32_t now_ms) {
   return AutoRodSpearhead_StartAction(
       ctrl, AUTO_ROD_SPEARHEAD_ACTION_DOCK_WAIT, now_ms);
+}
+
+static void AutoRodSpearhead_RunPickupStep1(
+    AutoRodSpearhead_t *ctrl,
+    const AutoRodSpearhead_Feedback_t *feedback,
+    uint32_t now_ms) {
+  const bool ore_store_at_target =
+      feedback != 0 && feedback->ore_store_at_target;
+
+  switch (ctrl->step_index) {
+    case 0:
+      AutoRodSpearhead_EnterStep(ctrl, now_ms);
+      if (!AutoRodSpearhead_CommandOreStore(
+              ctrl, ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP, false)) {
+        return;
+      }
+      if (ore_store_at_target) {
+        AutoRodSpearhead_NextStep(ctrl);
+        return;
+      }
+      if (AutoRodSpearhead_StepElapsed(ctrl, now_ms) >=
+          AutoRodSpearhead_DockWaitDelayMs(ctrl)) {
+        AutoRodSpearhead_FinishTimeout(ctrl);
+      }
+      return;
+    case 1:
+      AutoRodSpearhead_EnterStep(ctrl, now_ms);
+      if (!AutoRodSpearhead_CommandOreStore(
+              ctrl, ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP, false) ||
+          !AutoRodSpearhead_CommandRod(ctrl, ROD_NEW_POSE_STANDBY,
+                                       ROD_NEW_GRIP_RELEASE)) {
+        return;
+      }
+      if (AutoRodSpearhead_StepElapsed(ctrl, now_ms) >=
+          AutoRodSpearhead_OpenDelayMs(ctrl)) {
+        AutoRodSpearhead_FinishSuccess(ctrl);
+      }
+      return;
+    default:
+      AutoRodSpearhead_FinishSuccess(ctrl);
+      return;
+  }
+}
+
+static void AutoRodSpearhead_RunPickupStep2(
+    AutoRodSpearhead_t *ctrl,
+    const AutoRodSpearhead_Feedback_t *feedback,
+    uint32_t now_ms) {
+  const bool rod_photo_triggered =
+      feedback != 0 && feedback->rod_photo_triggered;
+  const bool rod_at_target = feedback != 0 && feedback->rod_at_target;
+
+  switch (ctrl->step_index) {
+    case 0:
+      AutoRodSpearhead_EnterStep(ctrl, now_ms);
+      if (!AutoRodSpearhead_CommandOreStore(
+              ctrl, ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP, false) ||
+          !AutoRodSpearhead_CommandRod(ctrl, ROD_NEW_POSE_GRAB_HIGH,
+                                       ROD_NEW_GRIP_GRAB)) {
+        return;
+      }
+      if (AutoRodSpearhead_StepElapsed(ctrl, now_ms) >=
+          AutoRodSpearhead_GrabHighDelayMs(ctrl)) {
+        AutoRodSpearhead_NextStep(ctrl);
+      }
+      return;
+    case 1:
+      AutoRodSpearhead_EnterStep(ctrl, now_ms);
+      if (!AutoRodSpearhead_CommandOreStore(
+              ctrl, ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP, false) ||
+          !AutoRodSpearhead_CommandRod(ctrl, ROD_NEW_POSE_GRAB_HIGH,
+                                       ROD_NEW_GRIP_GRAB)) {
+        return;
+      }
+      if (AutoRodSpearhead_StepElapsed(ctrl, now_ms) == 0u) {
+        return;
+      }
+      if (!ctrl->param.use_photo_check) {
+        if (rod_at_target) {
+          AutoRodSpearhead_FinishSuccess(ctrl);
+        } else if (AutoRodSpearhead_StepElapsed(ctrl, now_ms) >=
+                   AutoRodSpearhead_DockWaitDelayMs(ctrl)) {
+          AutoRodSpearhead_FinishTimeout(ctrl);
+        }
+        return;
+      }
+      if (!rod_at_target) {
+        ctrl->photo_stable_started = false;
+        ctrl->photo_stable_state = false;
+        if (AutoRodSpearhead_StepElapsed(ctrl, now_ms) >=
+            AutoRodSpearhead_DockWaitDelayMs(ctrl)) {
+          AutoRodSpearhead_FinishTimeout(ctrl);
+        }
+        return;
+      }
+      if (!rod_photo_triggered) {
+        ctrl->photo_stable_started = false;
+        ctrl->photo_stable_state = false;
+        if (AutoRodSpearhead_StepElapsed(ctrl, now_ms) >=
+            AutoRodSpearhead_DockWaitDelayMs(ctrl)) {
+          AutoRodSpearhead_FinishNoSpearhead(ctrl);
+        }
+        return;
+      }
+      if (!AutoRodSpearhead_PhotoStateStable(ctrl, rod_photo_triggered,
+                                             now_ms)) {
+        return;
+      }
+      AutoRodSpearhead_FinishSuccess(ctrl);
+      return;
+    default:
+      AutoRodSpearhead_FinishSuccess(ctrl);
+      return;
+  }
 }
 
 static void AutoRodSpearhead_RunPickup(
@@ -373,6 +499,12 @@ void AutoRodSpearhead_Update(AutoRodSpearhead_t *ctrl,
   switch (ctrl->action) {
     case AUTO_ROD_SPEARHEAD_ACTION_PICKUP:
       AutoRodSpearhead_RunPickup(ctrl, feedback, now_ms);
+      return;
+    case AUTO_ROD_SPEARHEAD_ACTION_PICKUP_STEP1:
+      AutoRodSpearhead_RunPickupStep1(ctrl, feedback, now_ms);
+      return;
+    case AUTO_ROD_SPEARHEAD_ACTION_PICKUP_STEP2:
+      AutoRodSpearhead_RunPickupStep2(ctrl, feedback, now_ms);
       return;
     case AUTO_ROD_SPEARHEAD_ACTION_DOCK_WAIT:
       AutoRodSpearhead_RunDockWait(ctrl, feedback, now_ms);
