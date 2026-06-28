@@ -74,6 +74,7 @@
 #define RC_CHASSIS_WZ_SCALE (3.0f)
 #endif
 
+#define RC_POLE_MANUAL_INPUT_SCALE (1.5f)
 #define RC_POLE_CH_RES_DEADBAND (1.0e-4f)
 #undef RC_POLE_CH_RES_ENABLE
 #define RC_POLE_CH_RES_ENABLE (0u)
@@ -216,12 +217,19 @@ typedef struct {
 } RcAutoCtrlStartConfig_t;
 
 typedef enum {
+  RC_AUTO_STEP_PROFILE_NONE,
   RC_AUTO_STEP_PROFILE_FUSED_200,
   RC_AUTO_STEP_PROFILE_FUSED_UP_400_NORMAL_DOWN_400,
 } RcAutoStepProfile_t;
 
 static RcAutoStepProfile_t Rc_SelectAutoStepProfile(void) {
-  return RC_AUTO_STEP_PROFILE_FUSED_200;
+  if (dr16.data.ch_res <= -RC_AUTO_STEP_CH_RES_THRESHOLD) {
+    return RC_AUTO_STEP_PROFILE_FUSED_200;
+  }
+  if (dr16.data.ch_res >= RC_AUTO_STEP_CH_RES_THRESHOLD) {
+    return RC_AUTO_STEP_PROFILE_FUSED_UP_400_NORMAL_DOWN_400;
+  }
+  return RC_AUTO_STEP_PROFILE_NONE;
 }
 
 #if RC_MAPPING_ACTIVE_PRESET == RC_MAPPING_PRESET_PC_FIRST
@@ -565,14 +573,16 @@ static void Rc_SetOreStoreActiveManual(void) {
 
 static void Rc_SetPoleManual(float left, float right) {
   pole_cmd.mode = POLE_MODE_ACTIVE;
-  pole_cmd.lift[0] = left;
-  pole_cmd.lift[1] = right;
+  pole_cmd.lift[0] = left * RC_POLE_MANUAL_INPUT_SCALE;
+  pole_cmd.lift[1] = right * RC_POLE_MANUAL_INPUT_SCALE;
   pole_cmd.auto_target_enable[0] = false;
   pole_cmd.auto_target_enable[1] = false;
   pole_cmd.auto_target_lift[0] = 0.0f;
   pole_cmd.auto_target_lift[1] = 0.0f;
   pole_cmd.auto_lift_speed[0] = 0.0f;
   pole_cmd.auto_lift_speed[1] = 0.0f;
+  pole_cmd.auto_lift_accel[0] = 0.0f;
+  pole_cmd.auto_lift_accel[1] = 0.0f;
   pole_cmd.disable_lift_accel = false;
 }
 
@@ -1239,11 +1249,14 @@ static bool Rc_AutoCtrlTemplateIsAscend(auto_ctrl_template_e template_id) {
 }
 
 static bool Rc_StartAutoUpStepPickStore(void) {
-  if (Rc_SelectAutoStepProfile() ==
-      RC_AUTO_STEP_PROFILE_FUSED_UP_400_NORMAL_DOWN_400) {
+  const RcAutoStepProfile_t profile = Rc_SelectAutoStepProfile();
+  if (profile == RC_AUTO_STEP_PROFILE_FUSED_200) {
+    return Task_AutoOreStartStepPickStoreAscend200Head();
+  }
+  if (profile == RC_AUTO_STEP_PROFILE_FUSED_UP_400_NORMAL_DOWN_400) {
     return Task_AutoOreStartStepPickStoreAscend400Head();
   }
-  return Task_AutoOreStartStepPickStoreAscend200Head();
+  return false;
 }
 
 static bool Rc_StartAutoDownStepPickStore(void) {
@@ -1257,12 +1270,14 @@ static void Rc_TryStartAutoCtrlBySwitch(uint32_t now_ms) {
     return;
   }
 
+  const RcAutoStepProfile_t auto_step_profile = Rc_SelectAutoStepProfile();
+
   if (last_sw_l == DR16_SW_MID && last_sw_r == DR16_SW_MID &&
-      dr16.data.sw_l == DR16_SW_MID && dr16.data.sw_r == DR16_SW_UP) {
+      dr16.data.sw_l == DR16_SW_MID && dr16.data.sw_r == DR16_SW_UP &&
+      auto_step_profile != RC_AUTO_STEP_PROFILE_NONE) {
     g_rc_control_debug.auto_200_start_event = true;
     g_rc_control_debug.auto_200_template =
-        (Rc_SelectAutoStepProfile() ==
-         RC_AUTO_STEP_PROFILE_FUSED_UP_400_NORMAL_DOWN_400)
+        (auto_step_profile == RC_AUTO_STEP_PROFILE_FUSED_UP_400_NORMAL_DOWN_400)
             ? AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD
             : AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD;
     if (!Rc_PrepareLocalAutoYawFeedback()) {
@@ -1278,7 +1293,7 @@ static void Rc_TryStartAutoCtrlBySwitch(uint32_t now_ms) {
 
   if (last_sw_l == DR16_SW_MID && last_sw_r == DR16_SW_MID &&
       dr16.data.sw_l == DR16_SW_MID && dr16.data.sw_r == DR16_SW_DOWN &&
-      Rc_SelectAutoStepProfile() == RC_AUTO_STEP_PROFILE_FUSED_200) {
+      auto_step_profile == RC_AUTO_STEP_PROFILE_FUSED_200) {
     g_rc_control_debug.auto_200_start_event = true;
     g_rc_control_debug.auto_200_template = AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD;
     if (!Rc_PrepareLocalAutoYawFeedback()) {

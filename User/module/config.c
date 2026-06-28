@@ -101,7 +101,7 @@ Config_RobotParam_t robot_config = {
         .pid = {
             .support_pos_pid = {
                 .k = 30.0f,
-                .p = 5.0f,
+                .p = 10.0f,
                 .i = 0.0f,
                 .d = 0.0f,
                 .i_limit = 0.15f,
@@ -158,8 +158,8 @@ Config_RobotParam_t robot_config = {
         .limit = {
             .max_current = 1.0f,
             .support_total_travel = 26.7f,//26.7//27.3
-            .support_lift_speed = 40.0f,
-            .support_lift_accel = 300.0f,
+            .support_lift_speed = 0.0f,
+            .support_lift_accel = 0.0f,
         },
     },
     /* 模块参数：矿仓 ore_store_param，矿仓平台电机、回零、预设位置和气缸。 */
@@ -348,9 +348,9 @@ Config_RobotParam_t robot_config = {
         /* ArmSimple 一键行为速度上限，单位 rad/s；<=0 表示使用 arm_simple_param.vel_limit 默认值。 */
         .arm_speed = {
             /* store_*：一键存矿流程，wait=等待/预备位，place=伸到存矿位，standby=回待机位。 */
-            .store_wait = {.joint1_max_vel_rad_s = 3.0f, .joint2_max_vel_rad_s = 5.0f},
-            .store_place = {.joint1_max_vel_rad_s = 2.5f, .joint2_max_vel_rad_s = 3.0f},
-            .store_standby = {.joint1_max_vel_rad_s =2.5f, .joint2_max_vel_rad_s = 2.0f},
+            .store_wait = {.joint1_max_vel_rad_s = 2.5f, .joint2_max_vel_rad_s = 8.0f},
+            .store_place = {.joint1_max_vel_rad_s = 2.5f, .joint2_max_vel_rad_s = 8.0f},
+            .store_standby = {.joint1_max_vel_rad_s =2.5f, .joint2_max_vel_rad_s = 8.0f},
             /* release_*：一键放矿流程，wait=放矿前等待位，assist=放矿辅助进位，place=放矿位，standby=放矿后回待机位。 */
             .release_wait = {.joint1_max_vel_rad_s = 3.0f, .joint2_max_vel_rad_s = 2.0f},
             .release_assist = {.joint1_max_vel_rad_s = 3.0f, .joint2_max_vel_rad_s = 2.0f},
@@ -361,10 +361,10 @@ Config_RobotParam_t robot_config = {
             .chamber_place = {.joint1_max_vel_rad_s = 8.0f, .joint2_max_vel_rad_s = 6.0f},
             .chamber_standby = {.joint1_max_vel_rad_s = 8.0f, .joint2_max_vel_rad_s = 4.0f},
             /* pick_*：一键取矿流程，standby=取矿前/后待机位，place=伸到取矿位，fetch=底盘前进取矿时保持取矿位。 */
-            .pick_standby = {.joint1_max_vel_rad_s = 4.0f, .joint2_max_vel_rad_s = 2.0f},
+            .pick_standby = {.joint1_max_vel_rad_s = 2.0f, .joint2_max_vel_rad_s = 1.0f},
             .pick_place = {.joint1_max_vel_rad_s = 8.0f, .joint2_max_vel_rad_s = 20.0f},
-            .pick_fetch = {.joint1_max_vel_rad_s = 3.0f, .joint2_max_vel_rad_s = 20.0f},
-            .pick_lift_detect = {.joint1_max_vel_rad_s = 4.0f, .joint2_max_vel_rad_s = 20.0f},
+            .pick_fetch = {.joint1_max_vel_rad_s = 2.0f, .joint2_max_vel_rad_s = 20.0f},
+            .pick_lift_detect = {.joint1_max_vel_rad_s = 2.0f, .joint2_max_vel_rad_s = 20.0f},
         },
         /* 一键存/放/上膛/取矿流程中的动作延时，单位 ms；<=0 时使用状态机内置默认值。 */
         .timing = {
@@ -405,7 +405,7 @@ Config_RobotParam_t robot_config = {
         /* 取 -200 矿时底盘前进速度，单位 m/s；可设为 0 禁止底盘前进。 */
         .fetch_neg_200_chassis_vx_mps = 0.20f,
         /* 低位存矿完成后，transform 从高位 LIFT 回低位 STANDBY 的速度，单位 rad/s；<=0 使用默认值。 */
-        .store_low_return_velocity_rad_s = 1.0f,
+        .store_low_return_velocity_rad_s = 25.0f,
         /*
          * 融合动作轮转角阈值说明：
          * - *_wheel_delta_rad 使用四轮累计转角变化绝对值的平均值，单位 rad。
@@ -601,12 +601,12 @@ Config_RobotParam_t robot_config = {
             .final_move_ms = 1000u,              /* 收尾离开台阶持续时间，单位 ms。 */
             .final_photo_sprint_ms = 300u,       /* 末尾光电触发后继续冲刺时间，单位 ms。 */
             .final_move_wheel_delta_rad = 0.0f, /* 0 表示该模板继续按时间切步。 */
-            .pole_all_extend_speed = 80.0f,     /* 四杆全伸目标跟随速度，单位 rad/s。 */
-            .pole_front_extend_speed = 80.0f,   /* 前杆伸出目标跟随速度，单位 rad/s。 */
-            .pole_front_retract_speed = 80.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
-            .pole_rear_extend_speed = 80.0f,    /* 后杆伸出目标跟随速度，单位 rad/s。 */
-            .pole_rear_retract_speed = 80.0f,   /* 后杆回收目标跟随速度，单位 rad/s。 */
-            .pole_lift_accel = 180.0f,          /* 当前模板撑杆加速度限幅，单位 rad/s^2。 */
+            .pole_all_extend_speed = 0.0f,     /* 四杆全伸目标跟随速度，单位 rad/s。 */
+            .pole_front_extend_speed = 0.0f,   /* 前杆伸出目标跟随速度，单位 rad/s。 */
+            .pole_front_retract_speed = 0.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
+            .pole_rear_extend_speed = 0.0f,    /* 后杆伸出目标跟随速度，单位 rad/s。 */
+            .pole_rear_retract_speed = 0.0f,   /* 后杆回收目标跟随速度，单位 rad/s。 */
+            .pole_lift_accel = 0.0f,          /* 当前模板撑杆加速度限幅，单位 rad/s^2。 */
             .front_photo_timeout_ms = 5000u,    /* 等待前光电触发/下降沿超时，单位 ms。 */
             .rear_photo_timeout_ms = 10000u,     /* 等待后光电触发/下降沿超时，单位 ms。 */
         },
@@ -674,11 +674,11 @@ Config_RobotParam_t robot_config = {
             .second_photo_retract_move_speed = 0.50f, /* step7 第二个下降沿后保持全伸离开 vx，单位 m/s。 */
             .final_move_speed = 0.5f,          /* 收尾离开台阶 vx，单位 m/s。 */
             .final_move_ms = 200u,             /* 收尾离开台阶持续时间，单位 ms。 */
-            .pole_front_extend_speed = 50.0f,   /* 前杆伸出目标跟随速度，单位 rad/s。 */
-            .pole_front_retract_speed = 50.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
-            .pole_rear_extend_speed = 50.0f,    /* 后杆伸出目标跟随速度，单位 rad/s。 */
-            .pole_rear_retract_speed = 50.0f,   /* 后杆回收目标跟随速度   ，单位 rad/s。 */
-            .pole_lift_accel = 100.0f,          /* 当前模板撑杆加速度限幅，单位 rad/s^2。 */
+            .pole_front_extend_speed = 0.0f,   /* 前杆伸出目标跟随速度，单位 rad/s。 */
+            .pole_front_retract_speed = 0.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
+            .pole_rear_extend_speed = 0.0f,    /* 后杆伸出目标跟随速度，单位 rad/s。 */
+            .pole_rear_retract_speed = 0.0f,   /* 后杆回收目标跟随速度   ，单位 rad/s。 */
+            .pole_lift_accel = 0.0f,          /* 当前模板撑杆加速度限幅，单位 rad/s^2。 */
             .front_photo_timeout_ms = 5000u,    /* 等待前光电触发/下降沿超时，单位 ms。 */
             .rear_photo_timeout_ms = 5000u,     /* 等待后光电触发/下降沿超时，单位 ms。 */
             .pole_extend_move_speed = 1.0f,    /* step6 四杆全伸行走 vx，单位 m/s。 */

@@ -31,7 +31,7 @@ extern "C" {
 #define BLINK_FREQ (100.0)
 #define ATTI_ESTI_FREQ (100.0)
 #define CHASSIS_MAIN_FREQ (200.0)
-#define POLE_MAIN_FREQ (750.0)
+#define POLE_MAIN_FREQ (1000.0)
 #define RC_MAIN_FREQ (500.0)
 #define SICK_FREQ (100.0)
 #define AUTO_CTRL_FREQ (100.0)

@@ -357,14 +357,14 @@ int8_t Pole_Control(Pole_t *c, const Pole_CMD_t *c_cmd, uint32_t now) {
         c->support_angle.final_target_lift[side] =
             c->support_angle.tracked_target_lift[side];
       } else {
-        if (default_speed > 0.0f) {
+        const float manual_speed =
+            (auto_speed > 0.0f) ? auto_speed : default_speed;
+        if (manual_speed > 0.0f) {
           c->support_angle.final_target_lift[side] +=
-              c_cmd->lift[side] * default_speed * c->dt;
+              c_cmd->lift[side] * manual_speed * c->dt;
         } else {
-          c->support_angle.final_target_lift[side] =
-              (c_cmd->lift[side] > 0.0f)
-                  ? c->param->limit.support_total_travel
-                  : 0.0f;
+          c->support_angle.final_target_lift[side] +=
+              c_cmd->lift[side] * c->param->limit.support_total_travel * c->dt;
         }
       }
       c->support_angle.manual_target_was_moving[side] = manual_target_moving;
