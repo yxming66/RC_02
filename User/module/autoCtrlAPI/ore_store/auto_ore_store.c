@@ -3,6 +3,7 @@
 #include "module/autoCtrlAPI/core/auto_ctrl_math.h"
 #include "module/config.h"
 
+#include <math.h>
 #include <string.h>
 
 #define AUTO_ORE_DEFAULT_STORE_ARM_SETTLE_MS (100u)
@@ -10,6 +11,9 @@
 #define AUTO_ORE_DEFAULT_STORE_ARM_SUCTION_OFF_MS (300u)
 #define AUTO_ORE_DEFAULT_STORE_CYLINDER_OPEN_MS (50u)
 #define AUTO_ORE_DEFAULT_STORE_LOW_RETURN_VELOCITY_RAD_S (80.0f)
+#define AUTO_ORE_DEFAULT_STORE_LOW_RETURN_ACCEL_RAD_S2 (80.0f)
+#define AUTO_ORE_DEFAULT_STORE_LOW_RETURN_DECEL_RAD_S2 (80.0f)
+#define AUTO_ORE_STORE_LOW_RETURN_MIN_VELOCITY_RAD_S (0.05f)
 #define AUTO_ORE_DEFAULT_RELEASE_WAIT_MS (50u)
 #define AUTO_ORE_DEFAULT_RELEASE_ARM_SETTLE_MS (10u)
 #define AUTO_ORE_DEFAULT_RELEASE_SUCTION_OFF_MS (100u)
@@ -62,6 +66,7 @@ static bool AutoOre_ActionIsFused(AutoOre_Action_t action);
 static auto_ctrl_template_e AutoOre_FusedStepTemplateId(
   const AutoOre_t *ctrl);
 static float AutoOre_SelectPrealignWz(AutoOre_t *ctrl);
+static float AutoOre_OreStoreArriveThresholdRad(const AutoOre_t *ctrl);
 static void AutoOre_FinishSuccess(AutoOre_t *ctrl);
 
 static void AutoOre_EnterStep(AutoOre_t *ctrl, uint32_t now_ms) {
@@ -126,6 +131,51 @@ static float AutoOre_StoreLowReturnVelocityRadS(const AutoOre_t *ctrl) {
   return (ctrl->param.store_low_return_velocity_rad_s > 0.0f)
              ? ctrl->param.store_low_return_velocity_rad_s
              : AUTO_ORE_DEFAULT_STORE_LOW_RETURN_VELOCITY_RAD_S;
+}
+
+static float AutoOre_StoreLowReturnAccelRadS2(const AutoOre_t *ctrl) {
+  return (ctrl->param.store_low_return_accel_rad_s2 > 0.0f)
+             ? ctrl->param.store_low_return_accel_rad_s2
+             : AUTO_ORE_DEFAULT_STORE_LOW_RETURN_ACCEL_RAD_S2;
+}
+
+static float AutoOre_StoreLowReturnDecelRadS2(const AutoOre_t *ctrl) {
+  return (ctrl->param.store_low_return_decel_rad_s2 > 0.0f)
+             ? ctrl->param.store_low_return_decel_rad_s2
+             : AUTO_ORE_DEFAULT_STORE_LOW_RETURN_DECEL_RAD_S2;
+}
+
+static float AutoOre_MinPositiveFloat(float a, float b) {
+  if (a <= 0.0f) {
+    return b;
+  }
+  if (b <= 0.0f) {
+    return a;
+  }
+  return (a < b) ? a : b;
+}
+
+static float AutoOre_StoreLowReturnTrapezoidVelocityRadS(
+    const AutoOre_t *ctrl, uint32_t now_ms) {
+  const float max_velocity = AutoOre_StoreLowReturnVelocityRadS(ctrl);
+  const float accel = AutoOre_StoreLowReturnAccelRadS2(ctrl);
+  const float decel = AutoOre_StoreLowReturnDecelRadS2(ctrl);
+  const float elapsed_s = (float)AutoOre_StepElapsed(ctrl, now_ms) * 0.001f;
+  const float target_rad =
+      ctrl->param.ore_store_param->preset
+          .transform_position_rad[ORE_STORE_TRANSFORM_STANDBY];
+  const float remaining_rad =
+      AutoOre_AbsFloat(ctrl->feedback.ore_store_platform_position_rad -
+                       target_rad);
+  const float accel_limited_velocity = accel * elapsed_s;
+  const float decel_limited_velocity = sqrtf(2.0f * decel * remaining_rad);
+  float velocity = max_velocity;
+  velocity = AutoOre_MinPositiveFloat(velocity, accel_limited_velocity);
+  velocity = AutoOre_MinPositiveFloat(velocity, decel_limited_velocity);
+  if (velocity < AUTO_ORE_STORE_LOW_RETURN_MIN_VELOCITY_RAD_S) {
+    velocity = AUTO_ORE_STORE_LOW_RETURN_MIN_VELOCITY_RAD_S;
+  }
+  return velocity;
 }
 
 static uint32_t AutoOre_ReleaseWaitMs(const AutoOre_t *ctrl) {
@@ -901,7 +951,7 @@ static void AutoOre_RunStoreLow(AutoOre_t *ctrl, uint32_t now_ms) {
           SUCTION_OFF, &ctrl->param.arm_speed.store_wait) ||
           !AutoOre_CommandOreStoreWithVelocity(
               ctrl, ORE_STORE_TRANSFORM_STANDBY, false,
-              AutoOre_StoreLowReturnVelocityRadS(ctrl))) {
+              AutoOre_StoreLowReturnTrapezoidVelocityRadS(ctrl, now_ms))) {
         AutoOre_FailInvalidParam(ctrl);
         return;
       }
@@ -1712,7 +1762,7 @@ static void AutoOre_RunFusedStoreLow(AutoOre_t *ctrl, uint32_t now_ms) {
                               &ctrl->param.arm_speed.store_wait) ||
           !AutoOre_CommandOreStoreWithVelocity(
               ctrl, ORE_STORE_TRANSFORM_STANDBY, false,
-              AutoOre_StoreLowReturnVelocityRadS(ctrl))) {
+              AutoOre_StoreLowReturnTrapezoidVelocityRadS(ctrl, now_ms))) {
         AutoOre_FailStoreInvalidParam(ctrl);
         return;
       }

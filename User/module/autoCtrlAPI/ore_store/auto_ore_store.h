@@ -178,6 +178,8 @@ typedef struct {
   float fetch_chassis_vx_mps;
   float fetch_neg_200_chassis_vx_mps;
   float store_low_return_velocity_rad_s;
+  float store_low_return_accel_rad_s2;
+  float store_low_return_decel_rad_s2;
   AutoOre_FusedParam_t fused_step_pick_store_ascend_200_head;
   AutoOre_FusedParam_t fused_step_pick_store_descend_200_head;
   AutoOre_FusedParam_t fused_step_pick_store_ascend_400_head;
