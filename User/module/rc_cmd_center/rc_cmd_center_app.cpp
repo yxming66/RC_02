@@ -355,6 +355,30 @@ static float Rc_ClampRodNewTarget(float target_rad) {
   return target_rad;
 }
 
+static Suction_State_t Rc_GetArmSimpleFeedbackSuction(void) {
+  const ArmSimple_Feedback_t* feedback = Task_ArmSimpleGetFeedback();
+  if (feedback != NULL) {
+    return feedback->suction;
+  }
+  return arm_simple_suction_latched;
+}
+
+static RodNew_GripState_t Rc_GetRodFeedbackGrip(void) {
+  const RodNew_Feedback_t *feedback = Task_RodNewGetFeedback();
+  if (feedback != NULL) {
+    return feedback->grip;
+  }
+  return rod_grip_latched;
+}
+
+static bool Rc_GetOreStoreFeedbackFixedCylinderClosed(void) {
+  const OreStore_Feedback_t* feedback = Task_OreStoreGetFeedback();
+  if (feedback != NULL) {
+    return feedback->fixed_ore_cylinder_closed;
+  }
+  return ore_store_cmd.fixed_ore_cylinder_closed;
+}
+
 static void Rc_SetRodRelax(void) {
   rod_cmd.mode = ROD_NEW_MODE_RELAX;
   rod_cmd.pose = ROD_NEW_POSE_DOCK_WAIT;
@@ -1722,18 +1746,21 @@ struct RcArmSimpleOperatorRoute {
 struct RcArmSimplePcRoute {
   bool operator()(const RcRuntimeInput &, cmd::Context &,
                   ArmSimple_CMD_t &out) const {
+    const Suction_State_t pc_hold_suction = Rc_GetArmSimpleFeedbackSuction();
     const PC_AbstractPositionCMD_t *pc_abstract_cmd =
         MrlinkPc_GetAbstractPositionCMD();
     const PC_ArmSimpleCMD_t *pc_arm_simple_cmd =
         MrlinkPc_HasArmSimpleCMD() ? MrlinkPc_GetArmSimpleCMD() : NULL;
+    arm_simple_suction_latched = pc_hold_suction;
     if (Rc_SetArmSimplePcAbstractCommand(pc_abstract_cmd)) {
+      arm_simple_cmd.suction = pc_hold_suction;
       out = arm_simple_cmd;
       return true;
     } else if (pc_arm_simple_cmd != NULL) {
       arm_simple_cmd.mode = (ArmSimple_Mode_t)pc_arm_simple_cmd->mode;
       arm_simple_cmd.point_mode =
           (ArmSimple_PointMode_t)pc_arm_simple_cmd->point_mode;
-      arm_simple_cmd.suction = arm_simple_suction_latched;
+      arm_simple_cmd.suction = pc_hold_suction;
       arm_simple_cmd.target_joint.joint1 =
           pc_arm_simple_cmd->target_joint1_rad;
       arm_simple_cmd.target_joint.joint2 =
@@ -1742,6 +1769,7 @@ struct RcArmSimplePcRoute {
       arm_simple_target_initialized = true;
     } else {
       Rc_SetArmSimpleStandby();
+      arm_simple_cmd.suction = pc_hold_suction;
     }
     out = arm_simple_cmd;
     return true;
@@ -1801,8 +1829,10 @@ struct RcOreStoreManualRoute {
 struct RcOreStorePcRoute {
   bool operator()(const RcRuntimeInput &, cmd::Context &,
                   OreStore_CMD_t &out) const {
+    const bool pc_hold_fixed_cylinder_closed =
+        Rc_GetOreStoreFeedbackFixedCylinderClosed();
     const PC_OreStoreCMD_t *pc_ore_store_cmd =
-        MrlinkPc_GetOreStoreCMD();
+        MrlinkPc_HasOreStoreCMD() ? MrlinkPc_GetOreStoreCMD() : NULL;
     if (pc_ore_store_cmd != NULL) {
       if (Task_OreStorePowerOnHomeInProgress()) {
         Rc_SetOreStoreRelax();
@@ -1818,6 +1848,7 @@ struct RcOreStorePcRoute {
     } else {
       Rc_SetOreStoreHold();
     }
+    ore_store_cmd.fixed_ore_cylinder_closed = pc_hold_fixed_cylinder_closed;
     out = ore_store_cmd;
     return true;
   }
@@ -1893,18 +1924,21 @@ struct RcRodNewOperatorRoute {
 
 struct RcRodNewPcRoute {
   bool operator()(const RcRuntimeInput &, cmd::Context &, RodNew_CMD_t &out) const {
+    const RodNew_GripState_t pc_hold_grip = Rc_GetRodFeedbackGrip();
     const PC_RodNewCMD_t *pc_rod_new_cmd =
         MrlinkPc_HasRodNewCMD() ? MrlinkPc_GetRodNewCMD() : NULL;
+    rod_grip_latched = pc_hold_grip;
     if (pc_rod_new_cmd != NULL) {
       auto_rod_spearhead_hold_after_finish = false;
       rod_cmd.mode = (RodNew_Mode_t)pc_rod_new_cmd->mode;
       rod_cmd.pose = (RodNew_Pose_t)pc_rod_new_cmd->pose;
-      rod_cmd.grip = rod_grip_latched;
+      rod_cmd.grip = pc_hold_grip;
       rod_cmd.target_angle_rad =
           Rc_ClampRodNewTarget(pc_rod_new_cmd->target_angle_rad);
       rod_target_angle_latched_rad = rod_cmd.target_angle_rad;
     } else {
       Rc_SetRodHold();
+      rod_cmd.grip = pc_hold_grip;
     }
     out = rod_cmd;
     return true;

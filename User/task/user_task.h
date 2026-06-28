@@ -40,7 +40,7 @@ extern "C" {
 #define ROD_FREQ (200.0)
 #define PC_COMM_FREQ (100.0)
 #define ORE_STORE_FREQ (200.0)
-#define IR_DOCK_FREQ (4.0)
+#define IR_DOCK_FREQ (100.0)
 #define TASK_FUSED_LOOP_FREQ (200.0)
 /* 任务初始化延时ms */
 #define TASK_INIT_DELAY (100u)
