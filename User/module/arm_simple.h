@@ -98,19 +98,13 @@ typedef struct {
     ArmSimple_Mode_t mode;
     ArmSimple_PointMode_t point_mode;
     Suction_State_t suction;
-    bool joint1_temperature_warning;
-    bool joint1_temperature_over_limit;
-    bool joint1_temperature_limit_latched;
     float joint1_angle_rad;
     float joint1_velocity_rad_s;
-    float joint1_temperature_c;
     float joint2_angle_rad;
     float target_joint1_rad;
     float target_joint2_rad;
     float output_target_joint1_rad;
     float output_target_joint2_rad;
-    float joint1_max_vel_rad_s;
-    float joint2_max_vel_rad_s;
 } ArmSimple_Feedback_t;
 
 /* 初始化参数 */
