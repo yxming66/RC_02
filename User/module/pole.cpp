@@ -61,7 +61,13 @@ float Pole_UpdateTrackedLift(Pole_t *c, uint8_t side, float speed_limit) {
       ? 0.0f
       : Pole_PositiveOrZero(c->setpoint.lift_accel[side]);
 
-  if (max_velocity <= 0.0f || max_acceleration <= 0.0f) {
+  if (max_velocity <= 0.0f) {
+    c->support_angle.tracked_target_velocity[side] = 0.0f;
+    return Pole_ClampTrackedLiftAtLimit(
+        c, side, c->support_angle.final_target_lift[side]);
+  }
+
+  if (max_acceleration <= 0.0f) {
     c->support_angle.tracked_target_velocity[side] = 0.0f;
     const float next_lift = mr::component::math::move_towards(
         c->support_angle.tracked_target_lift[side],
@@ -351,8 +357,15 @@ int8_t Pole_Control(Pole_t *c, const Pole_CMD_t *c_cmd, uint32_t now) {
         c->support_angle.final_target_lift[side] =
             c->support_angle.tracked_target_lift[side];
       } else {
-        c->support_angle.final_target_lift[side] +=
-            c_cmd->lift[side] * default_speed * c->dt;
+        if (default_speed > 0.0f) {
+          c->support_angle.final_target_lift[side] +=
+              c_cmd->lift[side] * default_speed * c->dt;
+        } else {
+          c->support_angle.final_target_lift[side] =
+              (c_cmd->lift[side] > 0.0f)
+                  ? c->param->limit.support_total_travel
+                  : 0.0f;
+        }
       }
       c->support_angle.manual_target_was_moving[side] = manual_target_moving;
     }

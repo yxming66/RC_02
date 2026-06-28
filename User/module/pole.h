@@ -101,7 +101,7 @@ typedef struct {
     float max_torque_nm; /* Nm, <=0 means fallback to max_current */
     float max_current;   /* legacy fallback */
     float support_total_travel;   /* rad */
-    float support_lift_speed;     /* rad/s */
+    float support_lift_speed;     /* rad/s, <=0 表示不限制目标跟随速度 */
     float support_lift_accel;     /* rad/s^2, target lift acceleration limit; <=0 disables soft start */
     float support_limit_soft_zone; /* rad, slow down near lower/upper limit */
     float support_hold_zone;      /* rad, near lower limit hold target */

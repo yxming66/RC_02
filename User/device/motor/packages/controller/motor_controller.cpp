@@ -23,7 +23,7 @@
 //     电机协议原生支持位置闭环时，直接 motor_.SetPosition(target_position, velocity_limit)。
 //
 //   EmulatedPosition:
-//     velocity_cmd = position_pid(target_position - feedback_position)
+//     velocity_cmd = clip(position_pid(target_position - feedback_position), velocity_limit)
 //     u_torque     = velocity_pid(velocity_cmd - feedback_velocity)
 //     位置环输出速度目标，速度环输出力矩目标，是当前通用软件串级闭环。
 //
@@ -279,6 +279,10 @@ int8_t MotorControllerT<MotorType>::UpdateCommandFromState(
         }
         float velocity_cmd =
             position_pid_.Update(target_position_, state.position_rad, dt);
+        const float velocity_limit = ClampLimit(target_velocity_);
+        if (velocity_limit > 0.0f) {
+            velocity_cmd = scalar::abs_clip_scalar(velocity_cmd, velocity_limit);
+        }
         float torque_cmd =
             velocity_pid_.Update(velocity_cmd, state.velocity_rad_s, dt);
         return motor_.SetTorque(FilterOutputTorque(torque_cmd, dt));
