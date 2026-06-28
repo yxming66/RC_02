@@ -430,6 +430,14 @@ static bool AutoOre_OreStorePlatformAtTarget(const AutoOre_t *ctrl,
              threshold_rad;
 }
 
+static bool AutoOre_ChamberWaitPlatformReady(const AutoOre_t *ctrl,
+                                             float threshold_rad) {
+  if (ctrl != 0 && ctrl->action == AUTO_ORE_ACTION_RELEASE) {
+    return true;
+  }
+  return AutoOre_OreStorePlatformAtTarget(ctrl, threshold_rad);
+}
+
 static void AutoOre_SetStepPhase(AutoOre_t *ctrl, uint8_t phase,
                                  uint32_t now_ms) {
   ctrl->step_phase = phase;
@@ -1204,7 +1212,7 @@ static void AutoOre_RunChamberHigh(AutoOre_t *ctrl, uint32_t now_ms) {
       if (AutoOre_WaitConditionThenDelay(
               ctrl, now_ms,
               AutoOre_ArmCommandAtTarget(ctrl) &&
-                  AutoOre_OreStorePlatformAtTarget(
+              AutoOre_ChamberWaitPlatformReady(
                       ctrl, AutoOre_OreStoreArriveThresholdRad(ctrl)),
               AutoOre_ChamberArmSettleMs(ctrl))) {
         AutoOre_NextStep(ctrl);
@@ -1279,7 +1287,7 @@ static void AutoOre_RunChamberLow(AutoOre_t *ctrl, uint32_t now_ms) {
       if (AutoOre_WaitConditionThenDelay(
             ctrl, now_ms,
             AutoOre_ArmCommandAtTarget(ctrl) &&
-                AutoOre_OreStorePlatformAtTarget(
+            AutoOre_ChamberWaitPlatformReady(
                     ctrl, AutoOre_ChamberLowPlatformThresholdRad(ctrl)),
               AutoOre_ChamberLowClampMs(ctrl))) {
         AutoOre_NextStep(ctrl);

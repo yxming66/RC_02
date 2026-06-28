@@ -1407,6 +1407,11 @@ static void Rc_PrepareSafePlanSideEffects(void) {
   }
 }
 
+static bool Rc_AutoOreReleaseIsBusy(void) {
+  return auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl) &&
+         auto_ore_ctrl.action == AUTO_ORE_ACTION_RELEASE;
+}
+
 static RcCommandPlan_t Rc_SelectCommandPlan(RcBehavior_t behavior) {
   rc_current_behavior = behavior;
 
@@ -1454,7 +1459,7 @@ static RcCommandPlan_t Rc_SelectCommandPlan(RcBehavior_t behavior) {
   }
 
   if (auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl)) {
-    if (behavior == RC_BEHAVIOR_AUTO_ORE) {
+    if (behavior == RC_BEHAVIOR_AUTO_ORE || Rc_AutoOreReleaseIsBusy()) {
       g_rc_control_debug.ore_store_active = true;
       g_rc_control_debug.arm_simple_active = true;
       return RC_CMD_PLAN_AUTO_ORE_OUTPUT;
@@ -1640,8 +1645,25 @@ struct RcPoleDriveRoute {
   }
 };
 
+static const Pole_CMD_t *Rc_GetAutoOreReleasePoleCommand(void) {
+  if (!Rc_AutoOreReleaseIsBusy()) {
+    return NULL;
+  }
+  return AutoOre_GetPoleCommand(&auto_ore_ctrl);
+}
+
 struct RcPolePcRoute {
   bool operator()(const RcRuntimeInput &, cmd::Context &, Pole_CMD_t &out) const {
+    const Pole_CMD_t *auto_release_pole_cmd =
+        Rc_GetAutoOreReleasePoleCommand();
+    if (auto_release_pole_cmd != NULL) {
+      out = *auto_release_pole_cmd;
+      return true;
+    }
+    if (Rc_AutoOreReleaseIsBusy()) {
+      out = pole_cmd;
+      return true;
+    }
     (void)Rc_SetPolePcCommand(false);
     out = pole_cmd;
     return true;
