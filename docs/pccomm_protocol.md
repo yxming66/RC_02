@@ -517,8 +517,9 @@ AA 55 02 msg_id side ore_type[12] crc8
 | 19 | STEP_DESCEND_400_HEAD |
 | 20 | ROD_SPEARHEAD_STEP2 |
 | 21 | RELEASE_LIFT_DETECT，Pole 到放矿目标后比较预留 SICK 原始 ADC 阈值，确认被抬起后继续放矿 |
-| 22 | RELEASE_STEP1，需要上膛则上膛，Pole 伸出，Arm 到待放矿位后结束 |
-| 23 | RELEASE_STEP2，Arm 从待放矿位到放矿辅助进位、放矿位并断开吸盘 |
+| 22 | PICK_STORE_POS_400，取正 400mm 矿后并行存矿和后退 |
+| 23 | PICK_STORE_POS_200，取正 200mm 矿后并行存矿和后退 |
+| 24 | PICK_STORE_NEG_200，取反 200mm 矿后并行存矿和后退 |
 
 ### 6.3 红外对接
 
