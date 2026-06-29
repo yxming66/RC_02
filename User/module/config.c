@@ -373,8 +373,10 @@ Config_RobotParam_t robot_config = {
             .store_cylinder_close_ms = 200u,
             .store_arm_suction_off_ms = 300u,
             .store_cylinder_open_ms = 200u, 
-            /* 放矿：放矿前等待、到放矿位后短暂停稳、吸盘关闭后矿石脱离等待。 */
+            /* 放矿：放矿前等待、Pole 到位后抬升观测超时、抬升确认后稳定等待、到放矿位后短暂停稳、吸盘关闭后矿石脱离等待。 */
             .release_wait_ms = 400u,
+            .release_lift_detect_timeout_ms = 10000u,
+            .release_lift_detect_settle_ms = 500u,
             .release_arm_settle_ms = 10u,
             .release_suction_off_ms = 400u,
             /* 上膛：低位矿夹紧等待、arm 到交接位稳定等待、气缸打开释放等待。 */
@@ -400,6 +402,7 @@ Config_RobotParam_t robot_config = {
         .pole_arrive_threshold_rad = 0.30f,
         .prealign_yaw_tolerance_rad =
             CONFIG_AUTO_ORE_PREALIGN_YAW_TOLERANCE_RAD,
+        .release_lift_detect_height_m = 0.35f,
         /* 取矿流程中正向 200/400 取矿的底盘前进速度，单位 m/s。 */
         .fetch_chassis_vx_mps = 0.50f,
         /* 取 -200 矿时底盘前进速度，单位 m/s；可设为 0 禁止底盘前进。 */

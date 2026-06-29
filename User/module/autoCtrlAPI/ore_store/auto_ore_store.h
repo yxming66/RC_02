@@ -97,6 +97,7 @@ typedef struct {
   auto_ctrl_yaw_source_e yaw_source;
   float yaw_auto_rad;
   float yaw_rate_cmd_rad_s;
+  float imu_accl_z_g;
   float arm_joint1_rad;
   float arm_joint2_rad;
   float pole_front_lift_rad;
@@ -113,6 +114,8 @@ typedef struct {
   uint32_t store_arm_suction_off_ms;
   uint32_t store_cylinder_open_ms;
   uint32_t release_wait_ms;
+  uint32_t release_lift_detect_timeout_ms;
+  uint32_t release_lift_detect_settle_ms;
   uint32_t release_arm_settle_ms;
   uint32_t release_suction_off_ms;
   uint32_t chamber_low_clamp_ms;
@@ -176,6 +179,7 @@ typedef struct {
   float ore_store_arrive_threshold_rad;
   float pole_arrive_threshold_rad;
   float prealign_yaw_tolerance_rad;
+  float release_lift_detect_height_m;
   float fetch_chassis_vx_mps;
   float fetch_neg_200_chassis_vx_mps;
   float store_low_return_velocity_rad_s;
@@ -230,6 +234,14 @@ typedef struct {
   uint8_t fused_store_step_phase;
   uint8_t fused_step_template_start_step_index;
   AutoOre_Position_t fused_store_position;
+  bool release_lift_observer_active;
+  bool release_lift_detected;
+  uint32_t release_lift_observer_start_ms;
+  uint32_t release_lift_observer_last_ms;
+  uint32_t release_lift_detect_time_ms;
+  float release_lift_base_accl_z_g;
+  float release_lift_velocity_mps;
+  float release_lift_height_m;
   AutoOre_Params_t param;
   AutoOre_Feedback_t feedback;
 } AutoOre_t;

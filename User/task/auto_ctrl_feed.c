@@ -927,6 +927,7 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms, bool update_debug) {
       .yaw_source = AutoCtrl_GetYawSource(&auto_ctrl),
       .yaw_auto_rad = feedback.yaw_auto_rad,
       .yaw_rate_cmd_rad_s = auto_ctrl.yaw_rate_cmd_rad_s,
+      .imu_accl_z_g = chassis_imu.accl.z,
       .arm_joint1_rad = (arm_fb != NULL) ? arm_fb->joint1_angle_rad : 0.0f,
       .arm_joint2_rad = (arm_fb != NULL) ? arm_fb->joint2_angle_rad : 0.0f,
       .pole_front_lift_rad = feedback.pole_front_lift_rad,
@@ -1028,6 +1029,11 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms, bool update_debug) {
       auto_ore_ctrl.pole_cmd.auto_target_lift[1];
   g_auto_ore_debug.chassis_cmd_vx_mps =
       auto_ore_ctrl.chassis_cmd.ctrl_vec.vx;
+    g_auto_ore_debug.release_lift_height_m = auto_ore_ctrl.release_lift_height_m;
+    g_auto_ore_debug.release_lift_velocity_mps =
+      auto_ore_ctrl.release_lift_velocity_mps;
+    g_auto_ore_debug.release_lift_detected = auto_ore_ctrl.release_lift_detected;
+    g_auto_ore_debug.imu_accl_z_g = auto_ore_feedback.imu_accl_z_g;
 }
 
 static void AutoCtrlFeed_InitAutoRodSpearhead(void) {

@@ -343,6 +343,7 @@ void Task_atti_esti(void *argument) {
     /* 创建修改后的数据副本用于发送到消息队列 */
 
 
+    chassis_to_send.accl = bmi088.accl;
     chassis_to_send.eulr = eulr_chassis;
     chassis_to_send.gyro = bmi088.gyro;
     osMessageQueueReset(task_runtime.msgq.chassis.imu);

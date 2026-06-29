@@ -113,6 +113,7 @@ typedef struct {
 } Chassis_Params_t;
 
 typedef struct {
+  AHRS_Accl_t accl;
   AHRS_Gyro_t gyro;
   AHRS_Eulr_t eulr;
 } Chassis_IMU_t;
