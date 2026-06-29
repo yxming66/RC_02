@@ -64,6 +64,7 @@ typedef enum {
     ARM_SIMPLE_BEHAVIOR_PICK_NEG_200,     /* 一键取矿：取负200矿位置 */
     ARM_SIMPLE_BEHAVIOR_PICK_LIFT_DETECT, /* 融合取矿：吸起后抬矿检测/安全携带位置 */
     ARM_SIMPLE_BEHAVIOR_RELEASE_ORE_ASSIST, /* 一键放矿：放矿辅助进位位置 */
+    ARM_SIMPLE_BEHAVIOR_VERTICAL,         /* 一键放矿：竖直避障位置 */
     ARM_SIMPLE_BEHAVIOR_NUM,
 } ArmSimple_BehaviorPoint_t;
 

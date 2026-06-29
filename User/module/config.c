@@ -311,9 +311,9 @@ Config_RobotParam_t robot_config = {
         },
         .vel_limit = {
             .joint1_max_vel = 6.5f,
-            .joint2_max_vel = 6.0f,
+            .joint2_max_vel = 20.0f,
             .joint1_max_accel = 20.0f,
-            .joint2_max_accel = 20.0f,
+            .joint2_max_accel = 60.0f,
         },
         .preset = {
             .behavior_point = {
@@ -339,6 +339,8 @@ Config_RobotParam_t robot_config = {
                 [ARM_SIMPLE_BEHAVIOR_PICK_LIFT_DETECT] = {.joint1_pos = 1.20f, .joint2_pos = -0.35f},
                      /* ArmSimple 放矿辅助进位，放矿流程从等待位先经过该位置再进放矿位。 */
                      [ARM_SIMPLE_BEHAVIOR_RELEASE_ORE_ASSIST] = {.joint1_pos = 0.0225189831f, .joint2_pos = 1.30412614f},
+                 /* ArmSimple 竖直避障位，三层放矿抬升过程中保持矿石不与前方场地干涉。 */
+                 [ARM_SIMPLE_BEHAVIOR_VERTICAL] = {.joint1_pos = 0.0f, .joint2_pos = 0.0f},
             },
             .arrive_threshold_rad = 0.05f,
         },
@@ -376,7 +378,7 @@ Config_RobotParam_t robot_config = {
             /* 放矿：放矿前等待、Pole 到位后抬升观测超时、抬升确认后稳定等待、到放矿位后短暂停稳、吸盘关闭后矿石脱离等待。 */
             .release_wait_ms = 400u,
             .release_lift_detect_timeout_ms = 10000u,
-            .release_lift_detect_settle_ms = 500u,
+            .release_lift_detect_settle_ms = 500u,//三层矿触发观测阈值延时放矿
             .release_arm_settle_ms = 10u,
             .release_suction_off_ms = 400u,
             /* 上膛：低位矿夹紧等待、arm 到交接位稳定等待、气缸打开释放等待。 */
@@ -402,7 +404,7 @@ Config_RobotParam_t robot_config = {
         .pole_arrive_threshold_rad = 0.30f,
         .prealign_yaw_tolerance_rad =
             CONFIG_AUTO_ORE_PREALIGN_YAW_TOLERANCE_RAD,
-        .release_lift_detect_height_m = 0.35f,
+        .release_lift_detect_height_m = 0.35f,//三层放矿观测高度
         /* 取矿流程中正向 200/400 取矿的底盘前进速度，单位 m/s。 */
         .fetch_chassis_vx_mps = 0.50f,
         /* 取 -200 矿时底盘前进速度，单位 m/s；可设为 0 禁止底盘前进。 */
@@ -604,7 +606,7 @@ Config_RobotParam_t robot_config = {
             .second_photo_retract_move_speed = 0.0f, /* 后一个光电触发收腿时向头向移动 vx，单位 m/s。*/
             .final_move_speed = 1.0f,           /* 收尾离开台阶 vx，单位 m/s。 */
             .final_move_ms = 1000u,              /* 收尾离开台阶持续时间，单位 ms。 */
-            .final_photo_sprint_ms = 150u,       /* 末尾光电触发后继续冲刺时间，单位 ms。 */
+            .final_photo_sprint_ms = 100u,       /* 末尾光电触发后继续冲刺时间，单位 ms。 */
             .final_move_wheel_delta_rad = 0.0f, /* 0 表示该模板继续按时间切步。 */
             .pole_all_extend_speed = 0.0f,     /* 四杆全伸目标跟随速度，单位 rad/s。 */
             .pole_front_extend_speed = 0.0f,   /* 前杆伸出目标跟随速度，单位 rad/s。 */
@@ -703,8 +705,8 @@ Config_RobotParam_t robot_config = {
             .angle_min_rad = 0.0f,
             .angle_max_rad = 1.0f,
             .arrive_threshold_rad = 0.05f,  /* 到位判定阈值 */
-            .max_vel_rad_s = 2.0f,           /* 最大角速度 */
-            .max_acc_rad_s = 5.0f,          /* 最大角加速度 */
+            .max_vel_rad_s = 8.0f,           /* 最大角速度 */
+            .max_acc_rad_s = 16.0f,          /* 最大角加速度 */
         },
         .gripper = {
             .gripper_gpio = BSP_GPIO_SPEARHEAD_RELAY,
