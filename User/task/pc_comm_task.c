@@ -18,6 +18,7 @@
 #define PC_COMM_LOOP_PERIOD_MS (10u)
 #define PC_COMM_TX_DMA_TIMEOUT_MS (100u)
 #define PC_COMM_CAMERA_YAW_CMD_TIMEOUT_MS (1000u)
+#define PC_COMM_CAMERA_YAW_CHANNEL CAMERA_YAW_RIGHT
 /* IR_ORE 12 位置矿种类只在对端发来时变一次，正常状态几乎不变。
  * 仅在数据变化或距上次发送超过心跳周期时才发，避免 50Hz 重复刷屏。 */
 #define PC_COMM_IR_ORE_HEARTBEAT_MS (500u)
@@ -235,21 +236,19 @@ static void PcComm_UpdateModuleFeedback(void) {
     const CameraYaw_GroupFeedback_t *camera_fb = Task_CameraYawGetGroupFeedback();
     if (camera_fb != NULL) {
         PC_CameraYawFeedback_t pc_camera = {0};
-        for (uint8_t yaw = 0u; yaw < CAMERA_YAW_NUM && yaw < PC_CAMERA_YAW_COUNT;
-             ++yaw) {
-            const CameraYaw_Feedback_t *fb = &camera_fb->yaw[yaw];
-            pc_camera.mode[yaw] = (uint8_t)fb->mode;
-            pc_camera.motor_online[yaw] = fb->motor_online ? 1u : 0u;
-            pc_camera.feedback_valid[yaw] = fb->feedback_valid ? 1u : 0u;
-            pc_camera.at_target[yaw] = fb->at_target ? 1u : 0u;
-            pc_camera.target_yaw_rad[yaw] = fb->target_yaw_rad;
-            pc_camera.feedback_yaw_rad[yaw] = fb->feedback_yaw_rad;
-            pc_camera.error_yaw_rad[yaw] = fb->error_yaw_rad;
-            pc_camera.motor_angle_rad[yaw] = fb->motor_angle_rad;
-            pc_camera.motor_velocity_rad_s[yaw] = fb->motor_velocity_rad_s;
-            pc_camera.output[yaw] = fb->output;
-            pc_camera.feedback_age_ms[yaw] = fb->feedback_age_ms;
-        }
+        const CameraYaw_Feedback_t *fb =
+            &camera_fb->yaw[PC_COMM_CAMERA_YAW_CHANNEL];
+        pc_camera.mode = (uint8_t)fb->mode;
+        pc_camera.motor_online = fb->motor_online ? 1u : 0u;
+        pc_camera.feedback_valid = fb->feedback_valid ? 1u : 0u;
+        pc_camera.at_target = fb->at_target ? 1u : 0u;
+        pc_camera.target_yaw_rad = fb->target_yaw_rad;
+        pc_camera.feedback_yaw_rad = fb->feedback_yaw_rad;
+        pc_camera.error_yaw_rad = fb->error_yaw_rad;
+        pc_camera.motor_angle_rad = fb->motor_angle_rad;
+        pc_camera.motor_velocity_rad_s = fb->motor_velocity_rad_s;
+        pc_camera.output = fb->output;
+        pc_camera.feedback_age_ms = fb->feedback_age_ms;
         (void)MrlinkPc_PublishFeedback(PC_FEEDBACK_CAMERA_YAW, &pc_camera);
     }
 }
@@ -308,17 +307,14 @@ static void PcComm_UpdateCameraYawCommand(uint32_t now_ms) {
     const MrlinkPc_State_t *state = MrlinkPc_GetState();
     if (PcComm_ShouldUsePcCameraYawCommand() && pc_cmd != NULL &&
         PcComm_CameraYawCommandFresh(state, now_ms)) {
-        for (uint8_t yaw = 0u; yaw < CAMERA_YAW_NUM &&
-                                  yaw < PC_CAMERA_YAW_COUNT;
-             ++yaw) {
-            cmd.yaw[yaw].mode = CAMERA_YAW_MODE_ACTIVE;
-            cmd.yaw[yaw].target_yaw_rad =
-                isfinite(pc_cmd->target_yaw_rad[yaw])
-                    ? pc_cmd->target_yaw_rad[yaw]
-                    : PcComm_GetCameraYawFeedbackRad(yaw, 0.0f);
-            cmd.yaw[yaw].feedback_tick_ms = now_ms;
-            cmd.yaw[yaw].feedback_valid = true;
-        }
+        cmd.yaw[PC_COMM_CAMERA_YAW_CHANNEL].mode = CAMERA_YAW_MODE_ACTIVE;
+        cmd.yaw[PC_COMM_CAMERA_YAW_CHANNEL].target_yaw_rad =
+            isfinite(pc_cmd->target_yaw_rad)
+                ? pc_cmd->target_yaw_rad
+                : PcComm_GetCameraYawFeedbackRad(PC_COMM_CAMERA_YAW_CHANNEL,
+                                                 0.0f);
+        cmd.yaw[PC_COMM_CAMERA_YAW_CHANNEL].feedback_tick_ms = now_ms;
+        cmd.yaw[PC_COMM_CAMERA_YAW_CHANNEL].feedback_valid = true;
         (void)Task_CameraYawPostGroupCommand(&cmd);
         return;
     }

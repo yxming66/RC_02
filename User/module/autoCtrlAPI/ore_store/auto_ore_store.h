@@ -240,7 +240,6 @@ typedef struct {
   uint32_t release_lift_observer_start_ms;
   uint32_t release_lift_observer_last_ms;
   uint32_t release_lift_detect_time_ms;
-  float release_lift_base_accl_z_g;
   float release_lift_velocity_mps;
   float release_lift_height_m;
   AutoOre_Params_t param;

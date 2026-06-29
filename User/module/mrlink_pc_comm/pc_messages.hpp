@@ -78,8 +78,8 @@ struct __attribute__((packed)) OreStoreCmd {
 };
 
 struct __attribute__((packed)) CameraYawCmd {
-  uint8_t mode[PC_CAMERA_YAW_COUNT];              /* [0]=左云台，[1]=右云台；当前接收缓存保留，控制任务固定按 ACTIVE 使用 */
-  float target_yaw_rad[PC_CAMERA_YAW_COUNT];      /* 车身系目标 yaw，单位 rad */
+  uint8_t mode;              /* 云台模式；当前接收缓存保留，控制任务固定按 ACTIVE 使用 */
+  float target_yaw_rad;      /* 车身系目标 yaw，单位 rad */
 };
 
 struct __attribute__((packed)) AutoActionCmd {
@@ -185,7 +185,7 @@ static_assert(sizeof(ArmSimpleCmd) == 10u, "PC_CMD_ARM_SIMPLE wire size changed"
 static_assert(sizeof(RodNewCmd) == 6u, "PC_CMD_ROD_NEW wire size changed");
 static_assert(sizeof(OreStoreCmd) == 6u, "PC_CMD_ORE_STORE wire size changed");
 static_assert(sizeof(AutoActionCmd) == 1u, "PC_CMD_AUTO_ACTION wire size changed");
-static_assert(sizeof(CameraYawCmd) == 10u, "PC_CMD_CAMERA_YAW wire size changed");
+static_assert(sizeof(CameraYawCmd) == 5u, "PC_CMD_CAMERA_YAW wire size changed");
 static_assert(sizeof(PC_AbstractPositionCMD_t) == 5u,
               "PC_CMD_ABSTRACT_POSITION wire size changed");
 static_assert(sizeof(StepCmd) == 10u, "PC_CMD_STEP wire size changed");
@@ -199,7 +199,7 @@ static_assert(sizeof(PC_IrOreFeedback_t) == 24u,
               "PC_FEEDBACK_IR_ORE wire size changed");
 static_assert(sizeof(PC_IrOreBridgeFeedback_t) == 56u,
               "PC_FEEDBACK_IR_ORE_BRIDGE wire size changed");
-static_assert(sizeof(PC_CameraYawFeedback_t) == 64u,
+static_assert(sizeof(PC_CameraYawFeedback_t) == 32u,
               "PC_FEEDBACK_CAMERA_YAW wire size changed");
 static_assert(sizeof(ArmSimpleFeedback) == 15u,
               "PC_FEEDBACK_ARM_SIMPLE wire size changed");

@@ -18,6 +18,7 @@
 #define AUTO_ORE_DEFAULT_RELEASE_LIFT_DETECT_TIMEOUT_MS (10000u)
 #define AUTO_ORE_DEFAULT_RELEASE_LIFT_DETECT_SETTLE_MS (500u)
 #define AUTO_ORE_DEFAULT_RELEASE_LIFT_DETECT_HEIGHT_M (0.35f)
+#define AUTO_ORE_DEFAULT_RELEASE_LIFT_HEIGHT_DRIFT_MPS (0.0f)
 #define AUTO_ORE_RELEASE_LIFT_GRAVITY_MPS2 (9.80665f)
 #define AUTO_ORE_DEFAULT_RELEASE_ARM_SETTLE_MS (10u)
 #define AUTO_ORE_DEFAULT_RELEASE_SUCTION_OFF_MS (100u)
@@ -214,13 +215,17 @@ static float AutoOre_ReleaseLiftDetectHeightM(const AutoOre_t *ctrl) {
              : AUTO_ORE_DEFAULT_RELEASE_LIFT_DETECT_HEIGHT_M;
 }
 
+static float AutoOre_ReleaseLiftHeightDriftRateMps(const AutoOre_t *ctrl) {
+  (void)ctrl;
+  return AUTO_ORE_DEFAULT_RELEASE_LIFT_HEIGHT_DRIFT_MPS;
+}
+
 static void AutoOre_ResetReleaseLiftObserver(AutoOre_t *ctrl) {
   ctrl->release_lift_observer_active = false;
   ctrl->release_lift_detected = false;
   ctrl->release_lift_observer_start_ms = 0u;
   ctrl->release_lift_observer_last_ms = 0u;
   ctrl->release_lift_detect_time_ms = 0u;
-  ctrl->release_lift_base_accl_z_g = 0.0f;
   ctrl->release_lift_velocity_mps = 0.0f;
   ctrl->release_lift_height_m = 0.0f;
 }
@@ -233,7 +238,6 @@ static bool AutoOre_UpdateReleaseLiftObserver(AutoOre_t *ctrl,
     ctrl->release_lift_observer_start_ms = now_ms;
     ctrl->release_lift_observer_last_ms = now_ms;
     ctrl->release_lift_detect_time_ms = 0u;
-    ctrl->release_lift_base_accl_z_g = ctrl->feedback.imu_accl_z_g;
     ctrl->release_lift_velocity_mps = 0.0f;
     ctrl->release_lift_height_m = 0.0f;
     return false;
@@ -250,10 +254,13 @@ static bool AutoOre_UpdateReleaseLiftObserver(AutoOre_t *ctrl,
     dt_s = 0.05f;
   }
   const float linear_accel_mps2 =
-      (ctrl->feedback.imu_accl_z_g - ctrl->release_lift_base_accl_z_g) *
-      AUTO_ORE_RELEASE_LIFT_GRAVITY_MPS2;
+      (ctrl->feedback.imu_accl_z_g - 0.99054f) *
+        AUTO_ORE_RELEASE_LIFT_GRAVITY_MPS2;
   ctrl->release_lift_velocity_mps += linear_accel_mps2 * dt_s;
   ctrl->release_lift_height_m += ctrl->release_lift_velocity_mps * dt_s;
+  ctrl->release_lift_height_m -=
+      AutoOre_ReleaseLiftHeightDriftRateMps(ctrl) *
+      ((float)delta_ms * 0.001f);
   if (!ctrl->release_lift_detected &&
       ctrl->release_lift_height_m >= AutoOre_ReleaseLiftDetectHeightM(ctrl)) {
     ctrl->release_lift_detected = true;
@@ -1168,10 +1175,18 @@ static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
         AutoOre_FailInvalidParam(ctrl);
         return;
       }
-      if (AutoOre_StepElapsed(ctrl, now_ms) > 0u &&
-          AutoOre_ReleasePoleAtTarget(ctrl) &&
-          (!AutoOre_ActionUsesReleaseLiftDetect(ctrl->action) ||
-           AutoOre_WaitArmCommandTarget(ctrl, now_ms))) {
+      const bool pole_ready = AutoOre_ReleasePoleAtTarget(ctrl);
+      if (AutoOre_ActionUsesReleaseLiftDetect(ctrl->action)) {
+        if (pole_ready) {
+          (void)AutoOre_UpdateReleaseLiftObserver(ctrl, now_ms);
+          AutoOre_NextStep(ctrl);
+        } else {
+          AutoOre_ResetReleaseLiftObserver(ctrl);
+          (void)AutoOre_CheckTimeout(ctrl, now_ms);
+        }
+        return;
+      }
+      if (AutoOre_StepElapsed(ctrl, now_ms) > 0u && pole_ready) {
         AutoOre_NextStep(ctrl);
       } else {
         (void)AutoOre_CheckTimeout(ctrl, now_ms);
@@ -1203,15 +1218,11 @@ static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
         }
         return;
       }
-      if (!arm_ready) {
-        (void)AutoOre_CheckTimeout(ctrl, now_ms);
-        return;
-      }
       const bool lift_ready = AutoOre_UpdateReleaseLiftObserver(ctrl, now_ms);
       const bool lift_settled = lift_ready &&
           (now_ms - ctrl->release_lift_detect_time_ms) >=
               AutoOre_ReleaseLiftDetectSettleMs(ctrl);
-      if (lift_settled) {
+      if (lift_settled && arm_ready) {
         AutoOre_NextStep(ctrl);
       } else if (ctrl->release_lift_observer_active &&
                  (now_ms - ctrl->release_lift_observer_start_ms) >=
@@ -1220,6 +1231,8 @@ static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
         ctrl->result = AUTO_ORE_RESULT_FAIL;
         ctrl->fault = AUTO_ORE_FAULT_TIMEOUT;
         ctrl->failure_mask |= AUTO_ORE_FAILURE_RELEASE_ORE;
+      } else if (!arm_ready) {
+        (void)AutoOre_CheckTimeout(ctrl, now_ms);
       }
       return;
     case 2:

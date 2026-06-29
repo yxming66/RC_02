@@ -282,10 +282,8 @@ void OnAutoAction(const wire::AutoActionCmd &cmd) {
 }
 
 void OnCameraYaw(const wire::CameraYawCmd &cmd) {
-  for (uint8_t yaw = 0u; yaw < PC_CAMERA_YAW_COUNT; ++yaw) {
-    s_state.cmd.camera_yaw.mode[yaw] = cmd.mode[yaw];
-    s_state.cmd.camera_yaw.target_yaw_rad[yaw] = cmd.target_yaw_rad[yaw];
-  }
+  s_state.cmd.camera_yaw.mode = cmd.mode;
+  s_state.cmd.camera_yaw.target_yaw_rad = cmd.target_yaw_rad;
   s_state.cmd.abstract_position.enable_mask &=
       static_cast<uint8_t>(~(PC_ABSTRACT_MODULE_POLE |
                             PC_ABSTRACT_MODULE_ARM_SIMPLE));

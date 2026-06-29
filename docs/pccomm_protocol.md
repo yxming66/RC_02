@@ -91,7 +91,7 @@ def build_mrlink_frame(cmd: int, payload: bytes = b"") -> bytes:
 | `0x14` | `PC_CMD_ROD_NEW` | 6 | `<BBf` | 取矛头机构 |
 | `0x15` | `PC_CMD_ORE_STORE` | 6 | `<BBf` | 矿仓平台 |
 | `0x16` | `PC_CMD_AUTO_ACTION` | 1 | `<B` | 一键动作 |
-| `0x17` | `PC_CMD_CAMERA_YAW` | 10 | `<BBff` | 相机云台 yaw |
+| `0x17` | `PC_CMD_CAMERA_YAW` | 5 | `<Bf` | 相机云台 yaw |
 | `0x18` | `PC_CMD_ABSTRACT_POSITION` | 5 | `<BBBBB` | 多机构抽象点位 |
 | `0x20` | `PC_CMD_IMU` | 28 | `<fffffff` | PC 姿态 |
 | `0x21` | `PC_CMD_IR_ORE_ACK` | 6 | `<6B` | 红外对接 ACK 透传 |
@@ -280,7 +280,7 @@ def build_ir_ack(msg_id: int, status: int) -> bytes:
 | `0x95` | `PC_FEEDBACK_ORE_STORE` | 12 | `<BBBBfBBBB` | 矿仓状态 |
 | `0x96` | `PC_FEEDBACK_AUTO_ACTION` | 6 | `<BBBBH` | 一键动作简化结果 |
 | `0x97` | `PC_FEEDBACK_IR_ORE` | 24 | `<BBBB12BII` | 红外矿种简表 |
-| `0x98` | `PC_FEEDBACK_CAMERA_YAW` | 64 | `<2B2B2B2B2f2f2f2f2f2f2I` | 云台状态 |
+| `0x98` | `PC_FEEDBACK_CAMERA_YAW` | 32 | `<BBBBffffffI` | 云台状态 |
 | `0x99` | `PC_FEEDBACK_IR_ORE_BRIDGE` | 56 | `<BBBBBBBB12B18BxxIIII` | 红外桥接调试 |
 | `0xA0` | `PC_FEEDBACK_STATUS` | 10 | `<BIfB` | 通信/系统状态 |
 
