@@ -18,7 +18,6 @@
 #define PC_COMM_LOOP_PERIOD_MS (10u)
 #define PC_COMM_TX_DMA_TIMEOUT_MS (100u)
 #define PC_COMM_CAMERA_YAW_CMD_TIMEOUT_MS (1000u)
-#define PC_COMM_CAMERA_YAW_CHANNEL CAMERA_YAW_RIGHT
 /* IR_ORE 12 位置矿种类只在对端发来时变一次，正常状态几乎不变。
  * 仅在数据变化或距上次发送超过心跳周期时才发，避免 50Hz 重复刷屏。 */
 #define PC_COMM_IR_ORE_HEARTBEAT_MS (500u)
@@ -80,10 +79,6 @@ static AutoOre_DebugRequest_t PcComm_MapAutoAction(uint8_t action) {
             return AUTO_ORE_DEBUG_REQUEST_STORE;
         case PC_AUTO_ACTION_RELEASE:
             return AUTO_ORE_DEBUG_REQUEST_RELEASE;
-        case PC_AUTO_ACTION_RELEASE_STEP1:
-            return AUTO_ORE_DEBUG_REQUEST_RELEASE_STEP1;
-        case PC_AUTO_ACTION_RELEASE_STEP2:
-            return AUTO_ORE_DEBUG_REQUEST_RELEASE_STEP2;
         case PC_AUTO_ACTION_RELEASE_LIFT_DETECT:
             return AUTO_ORE_DEBUG_REQUEST_RELEASE_LIFT_DETECT;
         case PC_AUTO_ACTION_CHAMBER:
@@ -240,8 +235,7 @@ static void PcComm_UpdateModuleFeedback(void) {
     const CameraYaw_GroupFeedback_t *camera_fb = Task_CameraYawGetGroupFeedback();
     if (camera_fb != NULL) {
         PC_CameraYawFeedback_t pc_camera = {0};
-        const CameraYaw_Feedback_t *fb =
-            &camera_fb->yaw[PC_COMM_CAMERA_YAW_CHANNEL];
+        const CameraYaw_Feedback_t *fb = &camera_fb->yaw[CAMERA_YAW_RIGHT];
         pc_camera.mode = (uint8_t)fb->mode;
         pc_camera.motor_online = fb->motor_online ? 1u : 0u;
         pc_camera.feedback_valid = fb->feedback_valid ? 1u : 0u;
@@ -311,14 +305,13 @@ static void PcComm_UpdateCameraYawCommand(uint32_t now_ms) {
     const MrlinkPc_State_t *state = MrlinkPc_GetState();
     if (PcComm_ShouldUsePcCameraYawCommand() && pc_cmd != NULL &&
         PcComm_CameraYawCommandFresh(state, now_ms)) {
-        cmd.yaw[PC_COMM_CAMERA_YAW_CHANNEL].mode = CAMERA_YAW_MODE_ACTIVE;
-        cmd.yaw[PC_COMM_CAMERA_YAW_CHANNEL].target_yaw_rad =
+        cmd.yaw[CAMERA_YAW_RIGHT].mode = CAMERA_YAW_MODE_ACTIVE;
+        cmd.yaw[CAMERA_YAW_RIGHT].target_yaw_rad =
             isfinite(pc_cmd->target_yaw_rad)
                 ? pc_cmd->target_yaw_rad
-                : PcComm_GetCameraYawFeedbackRad(PC_COMM_CAMERA_YAW_CHANNEL,
-                                                 0.0f);
-        cmd.yaw[PC_COMM_CAMERA_YAW_CHANNEL].feedback_tick_ms = now_ms;
-        cmd.yaw[PC_COMM_CAMERA_YAW_CHANNEL].feedback_valid = true;
+                : PcComm_GetCameraYawFeedbackRad(CAMERA_YAW_RIGHT, 0.0f);
+        cmd.yaw[CAMERA_YAW_RIGHT].feedback_tick_ms = now_ms;
+        cmd.yaw[CAMERA_YAW_RIGHT].feedback_valid = true;
         (void)Task_CameraYawPostGroupCommand(&cmd);
         return;
     }

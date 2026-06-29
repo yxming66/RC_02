@@ -7,6 +7,8 @@
 #include "module/autoCtrlAPI/core/auto_ctrl_def.h"
 #include "mrlink/mrlink.h"
 
+#define PC_CAMERA_YAW_COUNT (1u)
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -116,8 +118,8 @@ typedef struct {
 } PC_OreStoreCMD_t;
 
 typedef struct {
-    uint8_t mode;                  /* 云台模式，当前仅缓存/调试，控制任务固定按 ACTIVE 使用新鲜 yaw */
-    float target_yaw_rad;          /* 车身系目标 yaw，单位 rad */
+    uint8_t mode;              /* 云台模式；单云台协议映射到右云台 */
+    float target_yaw_rad;      /* 车身系目标 yaw，单位 rad */
 } PC_CameraYawCMD_t;
 
 typedef enum {
@@ -144,7 +146,6 @@ typedef enum {
     PC_ABSTRACT_ARM_SIMPLE_BEHAVIOR_PICK_NEG_200 = 24,
     PC_ABSTRACT_ARM_SIMPLE_BEHAVIOR_PICK_LIFT_DETECT = 25,
     PC_ABSTRACT_ARM_SIMPLE_BEHAVIOR_RELEASE_ORE_ASSIST = 26,
-    PC_ABSTRACT_ARM_SIMPLE_BEHAVIOR_VERTICAL = 27,
 } PC_AbstractArmSimplePosition_t;
 
 typedef enum {
@@ -207,8 +208,6 @@ typedef enum {
     PC_AUTO_ACTION_STEP_DESCEND_400_HEAD = 19, /* 普通头向下 400mm 台阶 */
     PC_AUTO_ACTION_ROD_SPEARHEAD_STEP2 = 20, /* 取矛头 step2：夹取抬高并确认 */
     PC_AUTO_ACTION_RELEASE_LIFT_DETECT = 21, /* 一键放矿：Pole 到位后检测抬升再放矿 */
-    PC_AUTO_ACTION_RELEASE_STEP1 = 22, /* 放矿 step1：需要上膛则上膛，Pole 伸出，Arm 到待放矿位 */
-    PC_AUTO_ACTION_RELEASE_STEP2 = 23, /* 放矿 step2：待放矿位->辅助进位->放矿位->吸盘断开 */
 } PC_AutoAction_t;
 
 typedef enum {
@@ -304,15 +303,15 @@ typedef struct {
 } PC_OreStoreFeedback_t;
 
 typedef struct {
-    uint8_t mode;                    /* 云台当前模式 */
+    uint8_t mode;                    /* 右云台当前模式，见 CameraYaw_Mode_t */
     uint8_t motor_online;            /* 云台电机在线标志，0=离线，1=在线 */
     uint8_t feedback_valid;          /* PC yaw 命令是否仍在有效期内，0=超时/无效，1=有效 */
     uint8_t at_target;               /* 当前 yaw 是否到达目标，0=未到位，1=已到位 */
     float target_yaw_rad;            /* 当前控制目标 yaw，单位 rad */
     float feedback_yaw_rad;          /* 反馈 yaw，单位 rad */
     float error_yaw_rad;             /* target_yaw_rad - feedback_yaw_rad，单位 rad */
-    float motor_angle_rad;           /* 云台电机机械角/累计角反馈，单位 rad */
-    float motor_velocity_rad_s;      /* 云台电机速度反馈，单位 rad/s */
+    float motor_angle_rad;           /* 6020 电机机械角/累计角反馈，单位 rad */
+    float motor_velocity_rad_s;      /* 6020 电机速度反馈，单位 rad/s */
     float output;                    /* yaw 闭环输出量，单位取决于电机控制层 */
     uint32_t feedback_age_ms;        /* 距最近一次有效 PC yaw 命令的时间，单位 ms */
 } PC_CameraYawFeedback_t;

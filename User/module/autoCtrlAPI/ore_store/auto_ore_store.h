@@ -3,7 +3,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "device/sick.h"
 #include "module/arm_simple.h"
 #include "module/autoCtrlAPI/api/auto_ctrl_api.h"
 #include "module/chassis.h"
@@ -18,8 +17,6 @@ typedef enum {
   AUTO_ORE_ACTION_NONE = 0,
   AUTO_ORE_ACTION_STORE,
   AUTO_ORE_ACTION_RELEASE,
-  AUTO_ORE_ACTION_RELEASE_STEP1,
-  AUTO_ORE_ACTION_RELEASE_STEP2,
   AUTO_ORE_ACTION_RELEASE_LIFT_DETECT,
   AUTO_ORE_ACTION_CHAMBER,
   AUTO_ORE_ACTION_PICK_POS_400,
@@ -101,8 +98,9 @@ typedef struct {
   auto_ctrl_yaw_source_e yaw_source;
   float yaw_auto_rad;
   float yaw_rate_cmd_rad_s;
-  uint16_t sick_adc_raw[SICK_OUTPUT_CHANNEL_COUNT];
-  bool sick_valid[SICK_OUTPUT_CHANNEL_COUNT];
+  float imu_accl_z_g;
+  uint16_t release_lift_sick_adc_raw;
+  bool release_lift_sick_valid;
   float arm_joint1_rad;
   float arm_joint2_rad;
   float pole_front_lift_rad;
@@ -244,6 +242,7 @@ typedef struct {
   bool release_lift_observer_active;
   bool release_lift_detected;
   uint32_t release_lift_observer_start_ms;
+  uint32_t release_lift_observer_last_ms;
   uint32_t release_lift_detect_time_ms;
   uint8_t release_lift_sick_index;
   uint16_t release_lift_sick_adc_raw;
@@ -262,8 +261,6 @@ bool AutoOre_StartStoreAtPosition(AutoOre_t *ctrl,
                                   AutoOre_Position_t position,
                                   uint32_t now_ms);
 bool AutoOre_StartRelease(AutoOre_t *ctrl, uint32_t now_ms);
-bool AutoOre_StartReleaseStep1(AutoOre_t *ctrl, uint32_t now_ms);
-bool AutoOre_StartReleaseStep2(AutoOre_t *ctrl, uint32_t now_ms);
 bool AutoOre_StartReleaseLiftDetect(AutoOre_t *ctrl, uint32_t now_ms);
 bool AutoOre_StartChamber(AutoOre_t *ctrl, uint32_t now_ms);
 bool AutoOre_StartPickPos400(AutoOre_t *ctrl, uint32_t now_ms);

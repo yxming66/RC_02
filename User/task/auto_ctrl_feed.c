@@ -36,7 +36,7 @@ bool auto_ore_inited = false;
 
 /* Ozone/调试器手动触发一键动作：request=1存矿，2放矿，3上膛，4中止，5取正400，6取正200，7取负200，8完整取矛头，9矛头sick校正，
 10放矿sick校正，11等待对接，12融合200上台阶取矿存矿，13融合200下台阶取矿存矿，14融合400上台阶取矿存矿，15取矛头step1分步调试，
-16单独200上台阶，17单独200下台阶，18单独400上台阶，19单独400下台阶，20取矛头step2分步调试。 21放三层矿（观测陀螺仪）*/
+16单独200上台阶，17单独200下台阶，18单独400上台阶，19单独400下台阶，20取矛头step2分步调试。 */
 volatile AutoOre_DebugControl_t g_auto_ore_debug = {0};//手动调用一键函数
 
 AutoRodSpearhead_t auto_rod_spearhead_ctrl;
@@ -153,10 +153,6 @@ static PC_AutoAction_t AutoCtrlFeed_MapOreAction(AutoOre_Action_t action) {
       return PC_AUTO_ACTION_STORE;
     case AUTO_ORE_ACTION_RELEASE:
       return PC_AUTO_ACTION_RELEASE;
-    case AUTO_ORE_ACTION_RELEASE_STEP1:
-      return PC_AUTO_ACTION_RELEASE_STEP1;
-    case AUTO_ORE_ACTION_RELEASE_STEP2:
-      return PC_AUTO_ACTION_RELEASE_STEP2;
     case AUTO_ORE_ACTION_RELEASE_LIFT_DETECT:
       return PC_AUTO_ACTION_RELEASE_LIFT_DETECT;
     case AUTO_ORE_ACTION_CHAMBER:
@@ -186,10 +182,6 @@ static AutoOre_Action_t AutoCtrlFeed_RequestToOreAction(
       return AUTO_ORE_ACTION_STORE;
     case AUTO_ORE_DEBUG_REQUEST_RELEASE:
       return AUTO_ORE_ACTION_RELEASE;
-    case AUTO_ORE_DEBUG_REQUEST_RELEASE_STEP1:
-      return AUTO_ORE_ACTION_RELEASE_STEP1;
-    case AUTO_ORE_DEBUG_REQUEST_RELEASE_STEP2:
-      return AUTO_ORE_ACTION_RELEASE_STEP2;
     case AUTO_ORE_DEBUG_REQUEST_RELEASE_LIFT_DETECT:
       return AUTO_ORE_ACTION_RELEASE_LIFT_DETECT;
     case AUTO_ORE_DEBUG_REQUEST_CHAMBER:
@@ -415,8 +407,6 @@ static bool AutoCtrlFeed_IsOreAction(PC_AutoAction_t action) {
   switch (action) {
     case PC_AUTO_ACTION_STORE:
     case PC_AUTO_ACTION_RELEASE:
-    case PC_AUTO_ACTION_RELEASE_STEP1:
-    case PC_AUTO_ACTION_RELEASE_STEP2:
     case PC_AUTO_ACTION_RELEASE_LIFT_DETECT:
     case PC_AUTO_ACTION_CHAMBER:
     case PC_AUTO_ACTION_PICK_POS_400:
@@ -482,8 +472,6 @@ static bool AutoCtrlFeed_ShouldForcePcSuccess(PC_AutoAction_t action) {
   switch (action) {
     case PC_AUTO_ACTION_STORE:
     case PC_AUTO_ACTION_RELEASE:
-    case PC_AUTO_ACTION_RELEASE_STEP1:
-    case PC_AUTO_ACTION_RELEASE_STEP2:
     case PC_AUTO_ACTION_RELEASE_LIFT_DETECT:
     case PC_AUTO_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD:
     case PC_AUTO_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD:
@@ -535,8 +523,6 @@ static uint16_t AutoCtrlFeed_OreActionFailureMask(AutoOre_Action_t action) {
     case AUTO_ORE_ACTION_STORE:
       return PC_AUTO_ACTION_FAILURE_STORE_ORE;
     case AUTO_ORE_ACTION_RELEASE:
-    case AUTO_ORE_ACTION_RELEASE_STEP1:
-    case AUTO_ORE_ACTION_RELEASE_STEP2:
     case AUTO_ORE_ACTION_RELEASE_LIFT_DETECT:
       return PC_AUTO_ACTION_FAILURE_RELEASE_ORE;
     case AUTO_ORE_ACTION_CHAMBER:
@@ -603,12 +589,6 @@ static bool AutoCtrlFeed_StartOreAction(AutoOre_Action_t action) {
       break;
     case AUTO_ORE_ACTION_RELEASE:
       result = AutoOre_StartRelease(&auto_ore_ctrl, now_ms);
-      break;
-    case AUTO_ORE_ACTION_RELEASE_STEP1:
-      result = AutoOre_StartReleaseStep1(&auto_ore_ctrl, now_ms);
-      break;
-    case AUTO_ORE_ACTION_RELEASE_STEP2:
-      result = AutoOre_StartReleaseStep2(&auto_ore_ctrl, now_ms);
       break;
     case AUTO_ORE_ACTION_RELEASE_LIFT_DETECT:
       result = AutoOre_StartReleaseLiftDetect(&auto_ore_ctrl, now_ms);
@@ -957,6 +937,10 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms, bool update_debug) {
       .yaw_source = AutoCtrl_GetYawSource(&auto_ctrl),
       .yaw_auto_rad = feedback.yaw_auto_rad,
       .yaw_rate_cmd_rad_s = auto_ctrl.yaw_rate_cmd_rad_s,
+      .imu_accl_z_g = chassis_imu.accl.z,
+        .release_lift_sick_adc_raw =
+          auto_ctrl_sick_output.adc_raw[SICK_REAR_INDEX],
+        .release_lift_sick_valid = auto_ctrl_sick_output.valid[SICK_REAR_INDEX],
       .arm_joint1_rad = (arm_fb != NULL) ? arm_fb->joint1_angle_rad : 0.0f,
       .arm_joint2_rad = (arm_fb != NULL) ? arm_fb->joint2_angle_rad : 0.0f,
       .pole_front_lift_rad = feedback.pole_front_lift_rad,
@@ -974,10 +958,6 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms, bool update_debug) {
       auto_ore_feedback.wheel_position_rad[i] =
           chassis_feedback->motor[i].position_rad;
     }
-  }
-  for (uint8_t i = 0u; i < SICK_OUTPUT_CHANNEL_COUNT; ++i) {
-    auto_ore_feedback.sick_adc_raw[i] = auto_ctrl_sick_output.adc_raw[i];
-    auto_ore_feedback.sick_valid[i] = auto_ctrl_sick_output.valid[i];
   }
   AutoOre_Update(&auto_ore_ctrl, &auto_ore_feedback, now_ms);
 
@@ -1071,6 +1051,7 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms, bool update_debug) {
     g_auto_ore_debug.release_lift_sick_valid =
       auto_ore_ctrl.release_lift_sick_valid;
     g_auto_ore_debug.release_lift_detected = auto_ore_ctrl.release_lift_detected;
+    g_auto_ore_debug.imu_accl_z_g = auto_ore_feedback.imu_accl_z_g;
 }
 
 static void AutoCtrlFeed_InitAutoRodSpearhead(void) {
@@ -1240,14 +1221,6 @@ bool Task_AutoOreStartRelease(void) {
   return AutoCtrlFeed_StartOreAction(AUTO_ORE_ACTION_RELEASE);
 }
 
-bool Task_AutoOreStartReleaseStep1(void) {
-  return AutoCtrlFeed_StartOreAction(AUTO_ORE_ACTION_RELEASE_STEP1);
-}
-
-bool Task_AutoOreStartReleaseStep2(void) {
-  return AutoCtrlFeed_StartOreAction(AUTO_ORE_ACTION_RELEASE_STEP2);
-}
-
 bool Task_AutoOreStartReleaseLiftDetect(void) {
   return AutoCtrlFeed_StartOreAction(AUTO_ORE_ACTION_RELEASE_LIFT_DETECT);
 }
@@ -1334,12 +1307,6 @@ static void AutoCtrlFeed_HandleAutoOreDebugRequest(void) {
       break;
     case AUTO_ORE_DEBUG_REQUEST_RELEASE:
       result = Task_AutoOreStartRelease();
-      break;
-    case AUTO_ORE_DEBUG_REQUEST_RELEASE_STEP1:
-      result = Task_AutoOreStartReleaseStep1();
-      break;
-    case AUTO_ORE_DEBUG_REQUEST_RELEASE_STEP2:
-      result = Task_AutoOreStartReleaseStep2();
       break;
     case AUTO_ORE_DEBUG_REQUEST_RELEASE_LIFT_DETECT:
       result = Task_AutoOreStartReleaseLiftDetect();

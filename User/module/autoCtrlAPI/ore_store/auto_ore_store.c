@@ -1,5 +1,6 @@
 #include "module/autoCtrlAPI/ore_store/auto_ore_store.h"
 
+#include "device/sick.h"
 #include "module/autoCtrlAPI/core/auto_ctrl_math.h"
 #include "module/config.h"
 
@@ -17,8 +18,7 @@
 #define AUTO_ORE_DEFAULT_RELEASE_WAIT_MS (50u)
 #define AUTO_ORE_DEFAULT_RELEASE_LIFT_DETECT_TIMEOUT_MS (10000u)
 #define AUTO_ORE_DEFAULT_RELEASE_LIFT_DETECT_SETTLE_MS (500u)
-#define AUTO_ORE_DEFAULT_RELEASE_LIFT_DETECT_SICK_INDEX (SICK_REAR_INDEX)
-#define AUTO_ORE_DEFAULT_RELEASE_LIFT_DETECT_SICK_ADC_THRESHOLD (0xFFFFu)
+#define AUTO_ORE_DEFAULT_RELEASE_LIFT_DETECT_SICK_ADC_THRESHOLD (3200u)
 #define AUTO_ORE_DEFAULT_RELEASE_ARM_SETTLE_MS (10u)
 #define AUTO_ORE_DEFAULT_RELEASE_SUCTION_OFF_MS (100u)
 #define AUTO_ORE_DEFAULT_CHAMBER_LOW_CLAMP_MS (50u)
@@ -75,13 +75,7 @@ static void AutoOre_FinishSuccess(AutoOre_t *ctrl);
 
 static bool AutoOre_ActionIsReleaseLike(AutoOre_Action_t action) {
   return action == AUTO_ORE_ACTION_RELEASE ||
-         action == AUTO_ORE_ACTION_RELEASE_STEP1 ||
-         action == AUTO_ORE_ACTION_RELEASE_STEP2 ||
          action == AUTO_ORE_ACTION_RELEASE_LIFT_DETECT;
-}
-
-static bool AutoOre_ActionIsReleaseStep1(AutoOre_Action_t action) {
-  return action == AUTO_ORE_ACTION_RELEASE_STEP1;
 }
 
 static bool AutoOre_ActionUsesReleaseLiftDetect(AutoOre_Action_t action) {
@@ -218,25 +212,26 @@ static uint8_t AutoOre_ReleaseLiftDetectSickIndex(const AutoOre_t *ctrl) {
   return (ctrl->param.release_lift_detect_sick_index <
           SICK_OUTPUT_CHANNEL_COUNT)
              ? ctrl->param.release_lift_detect_sick_index
-             : AUTO_ORE_DEFAULT_RELEASE_LIFT_DETECT_SICK_INDEX;
+             : SICK_REAR_INDEX;
 }
 
-static uint16_t AutoOre_ReleaseLiftDetectSickThreshold(
+static uint16_t AutoOre_ReleaseLiftDetectSickAdcThreshold(
     const AutoOre_t *ctrl) {
   return (ctrl->param.release_lift_detect_sick_adc_threshold > 0u)
              ? ctrl->param.release_lift_detect_sick_adc_threshold
-             : (uint16_t)AUTO_ORE_DEFAULT_RELEASE_LIFT_DETECT_SICK_ADC_THRESHOLD;
+             : AUTO_ORE_DEFAULT_RELEASE_LIFT_DETECT_SICK_ADC_THRESHOLD;
 }
 
 static void AutoOre_ResetReleaseLiftObserver(AutoOre_t *ctrl) {
   ctrl->release_lift_observer_active = false;
   ctrl->release_lift_detected = false;
   ctrl->release_lift_observer_start_ms = 0u;
+  ctrl->release_lift_observer_last_ms = 0u;
   ctrl->release_lift_detect_time_ms = 0u;
   ctrl->release_lift_sick_index = AutoOre_ReleaseLiftDetectSickIndex(ctrl);
   ctrl->release_lift_sick_adc_raw = 0u;
   ctrl->release_lift_sick_adc_threshold =
-      AutoOre_ReleaseLiftDetectSickThreshold(ctrl);
+      AutoOre_ReleaseLiftDetectSickAdcThreshold(ctrl);
   ctrl->release_lift_sick_valid = false;
 }
 
@@ -246,34 +241,23 @@ static bool AutoOre_UpdateReleaseLiftObserver(AutoOre_t *ctrl,
     ctrl->release_lift_observer_active = true;
     ctrl->release_lift_detected = false;
     ctrl->release_lift_observer_start_ms = now_ms;
+    ctrl->release_lift_observer_last_ms = now_ms;
     ctrl->release_lift_detect_time_ms = 0u;
     ctrl->release_lift_sick_index = AutoOre_ReleaseLiftDetectSickIndex(ctrl);
     ctrl->release_lift_sick_adc_threshold =
-        AutoOre_ReleaseLiftDetectSickThreshold(ctrl);
+        AutoOre_ReleaseLiftDetectSickAdcThreshold(ctrl);
   }
 
-  const uint8_t sick_index = AutoOre_ReleaseLiftDetectSickIndex(ctrl);
-  ctrl->release_lift_sick_index = sick_index;
-  ctrl->release_lift_sick_adc_threshold =
-      AutoOre_ReleaseLiftDetectSickThreshold(ctrl);
-  if (sick_index >= SICK_OUTPUT_CHANNEL_COUNT) {
-    ctrl->release_lift_sick_valid = false;
-    return false;
-  }
-
-  ctrl->release_lift_sick_adc_raw = ctrl->feedback.sick_adc_raw[sick_index];
-  ctrl->release_lift_sick_valid = ctrl->feedback.sick_valid[sick_index];
-  if (!ctrl->release_lift_sick_valid) {
-    return ctrl->release_lift_detected;
-  }
-
-  const bool threshold_met =
-      ctrl->param.release_lift_detect_sick_greater_than_threshold
-          ? (ctrl->release_lift_sick_adc_raw >=
-             ctrl->release_lift_sick_adc_threshold)
-          : (ctrl->release_lift_sick_adc_raw <=
-             ctrl->release_lift_sick_adc_threshold);
-  if (!ctrl->release_lift_detected && threshold_met) {
+  ctrl->release_lift_observer_last_ms = now_ms;
+  ctrl->release_lift_sick_adc_raw = ctrl->feedback.release_lift_sick_adc_raw;
+  ctrl->release_lift_sick_valid = ctrl->feedback.release_lift_sick_valid;
+  if (!ctrl->release_lift_detected &&
+      ctrl->release_lift_sick_valid &&
+      (ctrl->param.release_lift_detect_sick_greater_than_threshold
+           ? (ctrl->release_lift_sick_adc_raw >=
+              ctrl->release_lift_sick_adc_threshold)
+           : (ctrl->release_lift_sick_adc_raw <=
+              ctrl->release_lift_sick_adc_threshold))) {
     ctrl->release_lift_detected = true;
     ctrl->release_lift_detect_time_ms = now_ms;
   }
@@ -930,8 +914,6 @@ static void AutoOre_FinishSuccess(AutoOre_t *ctrl) {
   const AutoOre_Fault_t fault_before_finish = ctrl->fault;
   if (ctrl->action == AUTO_ORE_ACTION_STORE) {
     AutoOre_SetActivePositionHasOre(ctrl, true);
-  } else if (AutoOre_ActionIsReleaseStep1(ctrl->action)) {
-    AutoOre_SetActivePositionHasOre(ctrl, true);
   } else if (AutoOre_ActionIsReleaseLike(ctrl->action)) {
     AutoOre_SetActivePositionHasOre(ctrl, false);
   } else if (ctrl->action == AUTO_ORE_ACTION_CHAMBER) {
@@ -1174,12 +1156,8 @@ static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
   switch (ctrl->step_index) {
     case 0:
       AutoOre_EnterStep(ctrl, now_ms);
-      const ArmSimple_BehaviorPoint_t release_prepare_point =
-        AutoOre_ActionUsesReleaseLiftDetect(ctrl->action)
-          ? ARM_SIMPLE_BEHAVIOR_VERTICAL
-          : ARM_SIMPLE_BEHAVIOR_WAIT_RELEASE_ORE;
       if (!AutoOre_CommandReleasePoleTarget(ctrl) ||
-        !AutoOre_CommandArm(ctrl, release_prepare_point,
+          !AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_WAIT_RELEASE_ORE,
               SUCTION_ON,
               &ctrl->param.arm_speed.release_wait) ||
           !AutoOre_CommandReleaseOreStoreHold(ctrl,
@@ -1188,18 +1166,8 @@ static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
         AutoOre_FailInvalidParam(ctrl);
         return;
       }
-      const bool pole_ready = AutoOre_ReleasePoleAtTarget(ctrl);
-      if (AutoOre_ActionUsesReleaseLiftDetect(ctrl->action)) {
-        if (pole_ready) {
-          (void)AutoOre_UpdateReleaseLiftObserver(ctrl, now_ms);
-          AutoOre_NextStep(ctrl);
-        } else {
-          AutoOre_ResetReleaseLiftObserver(ctrl);
-          (void)AutoOre_CheckTimeout(ctrl, now_ms);
-        }
-        return;
-      }
-      if (AutoOre_StepElapsed(ctrl, now_ms) > 0u && pole_ready) {
+      if (AutoOre_StepElapsed(ctrl, now_ms) > 0u &&
+          AutoOre_ReleasePoleAtTarget(ctrl)) {
         AutoOre_NextStep(ctrl);
       } else {
         (void)AutoOre_CheckTimeout(ctrl, now_ms);
@@ -1208,10 +1176,7 @@ static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
     case 1:
       AutoOre_EnterStep(ctrl, now_ms);
       if (!AutoOre_CommandReleasePoleTarget(ctrl) ||
-          !AutoOre_CommandArm(ctrl,
-            AutoOre_ActionUsesReleaseLiftDetect(ctrl->action)
-              ? ARM_SIMPLE_BEHAVIOR_VERTICAL
-              : ARM_SIMPLE_BEHAVIOR_WAIT_RELEASE_ORE,
+          !AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_WAIT_RELEASE_ORE,
               SUCTION_ON,
               &ctrl->param.arm_speed.release_wait) ||
           !AutoOre_CommandReleaseOreStoreHold(ctrl,
@@ -1225,11 +1190,7 @@ static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
           AutoOre_ReleaseWaitMs(ctrl));
       if (!AutoOre_ActionUsesReleaseLiftDetect(ctrl->action)) {
         if (arm_ready) {
-          if (AutoOre_ActionIsReleaseStep1(ctrl->action)) {
-            AutoOre_FinishSuccess(ctrl);
-          } else {
-            AutoOre_NextStep(ctrl);
-          }
+          AutoOre_NextStep(ctrl);
         } else {
           (void)AutoOre_CheckTimeout(ctrl, now_ms);
         }
@@ -1239,8 +1200,12 @@ static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
       const bool lift_settled = lift_ready &&
           (now_ms - ctrl->release_lift_detect_time_ms) >=
               AutoOre_ReleaseLiftDetectSettleMs(ctrl);
-      if (lift_settled && arm_ready) {
-        AutoOre_NextStep(ctrl);
+      if (lift_settled) {
+        if (arm_ready) {
+          AutoOre_NextStep(ctrl);
+        } else {
+          (void)AutoOre_CheckTimeout(ctrl, now_ms);
+        }
       } else if (ctrl->release_lift_observer_active &&
                  (now_ms - ctrl->release_lift_observer_start_ms) >=
                      AutoOre_ReleaseLiftDetectTimeoutMs(ctrl)) {
@@ -1254,26 +1219,6 @@ static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
       return;
     case 2:
       AutoOre_EnterStep(ctrl, now_ms);
-      if (AutoOre_ActionUsesReleaseLiftDetect(ctrl->action)) {
-        if (!AutoOre_CommandReleasePoleTarget(ctrl) ||
-            !AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_WAIT_RELEASE_ORE,
-                SUCTION_ON,
-                &ctrl->param.arm_speed.release_wait) ||
-            !AutoOre_CommandReleaseOreStoreHold(ctrl,
-                                                ORE_STORE_TRANSFORM_STANDBY,
-                                                true)) {
-          AutoOre_FailInvalidParam(ctrl);
-          return;
-        }
-        if (AutoOre_WaitConditionThenDelay(ctrl, now_ms,
-                                           ctrl->feedback.arm_at_target,
-                                           AutoOre_ReleaseWaitMs(ctrl))) {
-          AutoOre_NextStep(ctrl);
-        } else {
-          (void)AutoOre_CheckTimeout(ctrl, now_ms);
-        }
-        return;
-      }
       if (!AutoOre_CommandReleasePoleTarget(ctrl) ||
           !AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_RELEASE_ORE_ASSIST,
               SUCTION_ON,
@@ -1292,24 +1237,6 @@ static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
       return;
     case 3:
       AutoOre_EnterStep(ctrl, now_ms);
-      if (AutoOre_ActionUsesReleaseLiftDetect(ctrl->action)) {
-        if (!AutoOre_CommandReleasePoleTarget(ctrl) ||
-            !AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_RELEASE_ORE_ASSIST,
-                SUCTION_ON,
-                &ctrl->param.arm_speed.release_assist) ||
-            !AutoOre_CommandReleaseOreStoreHold(ctrl,
-                                                ORE_STORE_TRANSFORM_STANDBY,
-                                                true)) {
-          AutoOre_FailInvalidParam(ctrl);
-          return;
-        }
-        if (AutoOre_WaitArmCommandTarget(ctrl, now_ms)) {
-          AutoOre_NextStep(ctrl);
-        } else {
-          (void)AutoOre_CheckTimeout(ctrl, now_ms);
-        }
-        return;
-      }
       if (!AutoOre_CommandReleasePoleTarget(ctrl) ||
           !AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_RELEASE_ORE,
               SUCTION_ON,
@@ -1332,7 +1259,7 @@ static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
       AutoOre_EnterStep(ctrl, now_ms);
       if (!AutoOre_CommandReleasePoleTarget(ctrl) ||
           !AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_RELEASE_ORE,
-              AutoOre_ActionUsesReleaseLiftDetect(ctrl->action) ? SUCTION_ON : SUCTION_OFF,
+              SUCTION_OFF,
               &ctrl->param.arm_speed.release_place) ||
           !AutoOre_CommandReleaseOreStoreHold(ctrl,
                                               ORE_STORE_TRANSFORM_STANDBY,
@@ -1340,56 +1267,14 @@ static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
         AutoOre_FailInvalidParam(ctrl);
         return;
       }
-      const bool release_place_ready = AutoOre_ActionUsesReleaseLiftDetect(ctrl->action)
-          ? AutoOre_WaitConditionThenDelay(ctrl, now_ms,
-                                           ctrl->feedback.arm_at_target,
-                                           AutoOre_ReleaseArmSettleMs(ctrl))
-          : AutoOre_WaitConditionThenDelay(ctrl, now_ms, true,
-                                           AutoOre_ReleaseSuctionOffMs(ctrl));
-      if (release_place_ready) {
+      if (AutoOre_WaitConditionThenDelay(ctrl, now_ms, true,
+                                         AutoOre_ReleaseSuctionOffMs(ctrl))) {
         AutoOre_NextStep(ctrl);
       } else {
         (void)AutoOre_CheckTimeout(ctrl, now_ms);
       }
       return;
     case 5:
-      AutoOre_EnterStep(ctrl, now_ms);
-      if (AutoOre_ActionUsesReleaseLiftDetect(ctrl->action)) {
-        if (!AutoOre_CommandReleasePoleTarget(ctrl) ||
-            !AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_RELEASE_ORE,
-                SUCTION_OFF,
-                &ctrl->param.arm_speed.release_place) ||
-            !AutoOre_CommandReleaseOreStoreHold(ctrl,
-                                                ORE_STORE_TRANSFORM_STANDBY,
-                                                true)) {
-          AutoOre_FailInvalidParam(ctrl);
-          return;
-        }
-        if (AutoOre_WaitConditionThenDelay(ctrl, now_ms, true,
-                                           AutoOre_ReleaseSuctionOffMs(ctrl))) {
-          AutoOre_NextStep(ctrl);
-        } else {
-          (void)AutoOre_CheckTimeout(ctrl, now_ms);
-        }
-        return;
-      }
-      if (!AutoOre_CommandReleasePoleTarget(ctrl) ||
-          !AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_STANDBY,
-              SUCTION_OFF,
-              &ctrl->param.arm_speed.release_standby) ||
-          !AutoOre_CommandReleaseOreStoreHold(ctrl,
-                                              ORE_STORE_TRANSFORM_STANDBY,
-                                              true)) {
-        AutoOre_FailInvalidParam(ctrl);
-        return;
-      }
-      if (AutoOre_WaitArmCommandTarget(ctrl, now_ms)) {
-        AutoOre_FinishSuccess(ctrl);
-      } else {
-        (void)AutoOre_CheckTimeout(ctrl, now_ms);
-      }
-      return;
-    case 6:
       AutoOre_EnterStep(ctrl, now_ms);
       if (!AutoOre_CommandReleasePoleTarget(ctrl) ||
           !AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_STANDBY,
@@ -1422,7 +1307,7 @@ static void AutoOre_RunChamberHigh(AutoOre_t *ctrl, uint32_t now_ms) {
   switch (ctrl->step_index) {
     case 0:
       AutoOre_EnterStep(ctrl, now_ms);
-        if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_WAIT_STORE_ORE,
+      if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_WAIT_STORE_ORE,
               SUCTION_ON,
               &ctrl->param.arm_speed.chamber_wait) ||
           !AutoOre_CommandOreStore(ctrl, ORE_STORE_TRANSFORM_STANDBY, true)) {
@@ -1497,7 +1382,7 @@ static void AutoOre_RunChamberLow(AutoOre_t *ctrl, uint32_t now_ms) {
   switch (ctrl->step_index) {
     case 0:
       AutoOre_EnterStep(ctrl, now_ms);
-        if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_WAIT_STORE_ORE,
+      if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_WAIT_STORE_ORE,
               SUCTION_ON,
               &ctrl->param.arm_speed.chamber_wait) ||
           !AutoOre_CommandOreStore(ctrl, ORE_STORE_TRANSFORM_LIFT, false)) {
@@ -2678,27 +2563,6 @@ bool AutoOre_StartStoreAtPosition(AutoOre_t *ctrl,
 
 bool AutoOre_StartRelease(AutoOre_t *ctrl, uint32_t now_ms) {
   return AutoOre_Start(ctrl, AUTO_ORE_ACTION_RELEASE, now_ms);
-}
-
-bool AutoOre_StartReleaseStep1(AutoOre_t *ctrl, uint32_t now_ms) {
-  return AutoOre_Start(ctrl, AUTO_ORE_ACTION_RELEASE_STEP1, now_ms);
-}
-
-bool AutoOre_StartReleaseStep2(AutoOre_t *ctrl, uint32_t now_ms) {
-  if (ctrl == 0 || AutoOre_IsBusy(ctrl)) {
-    return false;
-  }
-  AutoOre_ApplyFeedbackOccupancy(ctrl);
-  if (!ctrl->occupancy.arm_has_ore) {
-    return false;
-  }
-  const bool started = AutoOre_StartResolved(
-      ctrl, AUTO_ORE_ACTION_RELEASE_STEP2, AUTO_ORE_POSITION_ARM, false,
-      now_ms);
-  if (started) {
-    ctrl->step_index = 2u;
-  }
-  return started;
 }
 
 bool AutoOre_StartReleaseLiftDetect(AutoOre_t *ctrl, uint32_t now_ms) {

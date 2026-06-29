@@ -371,9 +371,9 @@ Config_RobotParam_t robot_config = {
         /* 一键存/放/上膛/取矿流程中的动作延时，单位 ms；<=0 时使用状态机内置默认值。 */
         .timing = {
             /* 存矿：arm 到存矿位后的稳定等待、固矿气缸关闭等待、气缸重新打开等待。 */
-            .store_arm_settle_ms = 400u,
+            .store_arm_settle_ms = 300u,
             .store_cylinder_close_ms = 200u,
-            .store_arm_suction_off_ms = 300u,
+            .store_arm_suction_off_ms = 2000u,
             .store_cylinder_open_ms = 200u, 
             /* 放矿：放矿前等待、Pole 到位后抬升观测超时、抬升确认后稳定等待、到放矿位后短暂停稳、吸盘关闭后矿石脱离等待。 */
             .release_wait_ms = 400u,
@@ -404,8 +404,8 @@ Config_RobotParam_t robot_config = {
         .pole_arrive_threshold_rad = 0.30f,
         .prealign_yaw_tolerance_rad =
             CONFIG_AUTO_ORE_PREALIGN_YAW_TOLERANCE_RAD,
-        .release_lift_detect_sick_index = SICK_REAR_INDEX, /* auto21 使用原来的后 SICK。 */
-        .release_lift_detect_sick_adc_threshold = 2500u,
+        .release_lift_detect_sick_index = SICK_REAR_INDEX,
+        .release_lift_detect_sick_adc_threshold = 3200u,
         .release_lift_detect_sick_greater_than_threshold = true,
         /* 取矿流程中正向 200/400 取矿的底盘前进速度，单位 m/s。 */
         .fetch_chassis_vx_mps = 0.50f,
@@ -413,8 +413,8 @@ Config_RobotParam_t robot_config = {
         .fetch_neg_200_chassis_vx_mps = 0.20f,
         /* 低位存矿完成后，transform 从高位 LIFT 回低位 STANDBY 的梯形速度规划；<=0 使用默认值。 */
         .store_low_return_velocity_rad_s = 30.0f,
-        .store_low_return_accel_rad_s2 = 80.0f,
-        .store_low_return_decel_rad_s2 = 80.0f,
+        .store_low_return_accel_rad_s2 = 60.0f,
+        .store_low_return_decel_rad_s2 = 60.0f,
         /*
          * 融合动作轮转角阈值说明：
          * - *_wheel_delta_rad 使用四轮累计转角变化绝对值的平均值，单位 rad。
