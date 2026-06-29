@@ -17,9 +17,8 @@
 #define AUTO_ORE_DEFAULT_RELEASE_WAIT_MS (50u)
 #define AUTO_ORE_DEFAULT_RELEASE_LIFT_DETECT_TIMEOUT_MS (10000u)
 #define AUTO_ORE_DEFAULT_RELEASE_LIFT_DETECT_SETTLE_MS (500u)
-#define AUTO_ORE_DEFAULT_RELEASE_LIFT_DETECT_HEIGHT_M (0.35f)
-#define AUTO_ORE_DEFAULT_RELEASE_LIFT_HEIGHT_DRIFT_MPS (0.0f)
-#define AUTO_ORE_RELEASE_LIFT_GRAVITY_MPS2 (9.80665f)
+#define AUTO_ORE_DEFAULT_RELEASE_LIFT_DETECT_SICK_INDEX (SICK_REAR_INDEX)
+#define AUTO_ORE_DEFAULT_RELEASE_LIFT_DETECT_SICK_ADC_THRESHOLD (0xFFFFu)
 #define AUTO_ORE_DEFAULT_RELEASE_ARM_SETTLE_MS (10u)
 #define AUTO_ORE_DEFAULT_RELEASE_SUCTION_OFF_MS (100u)
 #define AUTO_ORE_DEFAULT_CHAMBER_LOW_CLAMP_MS (50u)
@@ -215,25 +214,30 @@ static uint32_t AutoOre_ReleaseLiftDetectSettleMs(const AutoOre_t *ctrl) {
       AUTO_ORE_DEFAULT_RELEASE_LIFT_DETECT_SETTLE_MS);
 }
 
-static float AutoOre_ReleaseLiftDetectHeightM(const AutoOre_t *ctrl) {
-  return (ctrl->param.release_lift_detect_height_m > 0.0f)
-             ? ctrl->param.release_lift_detect_height_m
-             : AUTO_ORE_DEFAULT_RELEASE_LIFT_DETECT_HEIGHT_M;
+static uint8_t AutoOre_ReleaseLiftDetectSickIndex(const AutoOre_t *ctrl) {
+  return (ctrl->param.release_lift_detect_sick_index <
+          SICK_OUTPUT_CHANNEL_COUNT)
+             ? ctrl->param.release_lift_detect_sick_index
+             : AUTO_ORE_DEFAULT_RELEASE_LIFT_DETECT_SICK_INDEX;
 }
 
-static float AutoOre_ReleaseLiftHeightDriftRateMps(const AutoOre_t *ctrl) {
-  (void)ctrl;
-  return AUTO_ORE_DEFAULT_RELEASE_LIFT_HEIGHT_DRIFT_MPS;
+static uint16_t AutoOre_ReleaseLiftDetectSickThreshold(
+    const AutoOre_t *ctrl) {
+  return (ctrl->param.release_lift_detect_sick_adc_threshold > 0u)
+             ? ctrl->param.release_lift_detect_sick_adc_threshold
+             : (uint16_t)AUTO_ORE_DEFAULT_RELEASE_LIFT_DETECT_SICK_ADC_THRESHOLD;
 }
 
 static void AutoOre_ResetReleaseLiftObserver(AutoOre_t *ctrl) {
   ctrl->release_lift_observer_active = false;
   ctrl->release_lift_detected = false;
   ctrl->release_lift_observer_start_ms = 0u;
-  ctrl->release_lift_observer_last_ms = 0u;
   ctrl->release_lift_detect_time_ms = 0u;
-  ctrl->release_lift_velocity_mps = 0.0f;
-  ctrl->release_lift_height_m = 0.0f;
+  ctrl->release_lift_sick_index = AutoOre_ReleaseLiftDetectSickIndex(ctrl);
+  ctrl->release_lift_sick_adc_raw = 0u;
+  ctrl->release_lift_sick_adc_threshold =
+      AutoOre_ReleaseLiftDetectSickThreshold(ctrl);
+  ctrl->release_lift_sick_valid = false;
 }
 
 static bool AutoOre_UpdateReleaseLiftObserver(AutoOre_t *ctrl,
@@ -242,33 +246,34 @@ static bool AutoOre_UpdateReleaseLiftObserver(AutoOre_t *ctrl,
     ctrl->release_lift_observer_active = true;
     ctrl->release_lift_detected = false;
     ctrl->release_lift_observer_start_ms = now_ms;
-    ctrl->release_lift_observer_last_ms = now_ms;
     ctrl->release_lift_detect_time_ms = 0u;
-    ctrl->release_lift_velocity_mps = 0.0f;
-    ctrl->release_lift_height_m = 0.0f;
+    ctrl->release_lift_sick_index = AutoOre_ReleaseLiftDetectSickIndex(ctrl);
+    ctrl->release_lift_sick_adc_threshold =
+        AutoOre_ReleaseLiftDetectSickThreshold(ctrl);
+  }
+
+  const uint8_t sick_index = AutoOre_ReleaseLiftDetectSickIndex(ctrl);
+  ctrl->release_lift_sick_index = sick_index;
+  ctrl->release_lift_sick_adc_threshold =
+      AutoOre_ReleaseLiftDetectSickThreshold(ctrl);
+  if (sick_index >= SICK_OUTPUT_CHANNEL_COUNT) {
+    ctrl->release_lift_sick_valid = false;
     return false;
   }
 
-  const uint32_t delta_ms = now_ms - ctrl->release_lift_observer_last_ms;
-  ctrl->release_lift_observer_last_ms = now_ms;
-  if (delta_ms == 0u) {
+  ctrl->release_lift_sick_adc_raw = ctrl->feedback.sick_adc_raw[sick_index];
+  ctrl->release_lift_sick_valid = ctrl->feedback.sick_valid[sick_index];
+  if (!ctrl->release_lift_sick_valid) {
     return ctrl->release_lift_detected;
   }
 
-  float dt_s = (float)delta_ms * 0.001f;
-  if (dt_s > 0.05f) {
-    dt_s = 0.05f;
-  }
-  const float linear_accel_mps2 =
-      (ctrl->feedback.imu_accl_z_g - 0.99054f) *
-        AUTO_ORE_RELEASE_LIFT_GRAVITY_MPS2;
-  ctrl->release_lift_velocity_mps += linear_accel_mps2 * dt_s;
-  ctrl->release_lift_height_m += ctrl->release_lift_velocity_mps * dt_s;
-  ctrl->release_lift_height_m -=
-      AutoOre_ReleaseLiftHeightDriftRateMps(ctrl) *
-      ((float)delta_ms * 0.001f);
-  if (!ctrl->release_lift_detected &&
-      ctrl->release_lift_height_m >= AutoOre_ReleaseLiftDetectHeightM(ctrl)) {
+  const bool threshold_met =
+      ctrl->param.release_lift_detect_sick_greater_than_threshold
+          ? (ctrl->release_lift_sick_adc_raw >=
+             ctrl->release_lift_sick_adc_threshold)
+          : (ctrl->release_lift_sick_adc_raw <=
+             ctrl->release_lift_sick_adc_threshold);
+  if (!ctrl->release_lift_detected && threshold_met) {
     ctrl->release_lift_detected = true;
     ctrl->release_lift_detect_time_ms = now_ms;
   }
@@ -1417,7 +1422,7 @@ static void AutoOre_RunChamberHigh(AutoOre_t *ctrl, uint32_t now_ms) {
   switch (ctrl->step_index) {
     case 0:
       AutoOre_EnterStep(ctrl, now_ms);
-      if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_WAIT_STORE_ORE,
+        if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_WAIT_STORE_ORE,
               SUCTION_ON,
               &ctrl->param.arm_speed.chamber_wait) ||
           !AutoOre_CommandOreStore(ctrl, ORE_STORE_TRANSFORM_STANDBY, true)) {
@@ -1492,7 +1497,7 @@ static void AutoOre_RunChamberLow(AutoOre_t *ctrl, uint32_t now_ms) {
   switch (ctrl->step_index) {
     case 0:
       AutoOre_EnterStep(ctrl, now_ms);
-      if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_WAIT_STORE_ORE,
+        if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_WAIT_STORE_ORE,
               SUCTION_ON,
               &ctrl->param.arm_speed.chamber_wait) ||
           !AutoOre_CommandOreStore(ctrl, ORE_STORE_TRANSFORM_LIFT, false)) {

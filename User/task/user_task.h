@@ -204,10 +204,11 @@ typedef struct {
     volatile float pole_cmd_front_lift_rad;
     volatile float pole_cmd_rear_lift_rad;
     volatile float chassis_cmd_vx_mps;
-    volatile float release_lift_height_m;
-    volatile float release_lift_velocity_mps;
+    volatile uint8_t release_lift_sick_index;
+    volatile uint16_t release_lift_sick_adc_raw;
+    volatile uint16_t release_lift_sick_adc_threshold;
+    volatile bool release_lift_sick_valid;
     volatile bool release_lift_detected;
-    volatile float imu_accl_z_g;
     volatile bool auto_rod_spearhead_busy;
     volatile AutoRodSpearhead_State_t auto_rod_spearhead_state;
     volatile AutoRodSpearhead_Result_t auto_rod_spearhead_result;

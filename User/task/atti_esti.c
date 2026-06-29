@@ -38,7 +38,7 @@ KPID_t imu_temp_ctrl_pid;
 Chassis_IMU_t chassis_to_send;
 
 BMI088_Cali_t cali_bmi088= {
-  .gyro_offset = {-0.00151803065f,0.00283994782f,0.000795091735f},
+  .gyro_offset = {-0.00138632325f,0.00282118726,0.00082872418f},
 };
 
 static const KPID_Params_t imu_temp_ctrl_pid_param = {

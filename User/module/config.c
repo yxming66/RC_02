@@ -322,14 +322,14 @@ Config_RobotParam_t robot_config = {
                 /* ArmSimple 存矿位，arm 伸到 ore_store 交接处释放矿。 */
                 [ARM_SIMPLE_BEHAVIOR_STORE_ORE] = {.joint1_pos = 0.0f, .joint2_pos = -1.51068195f},
                 /* ArmSimple 上膛位，arm 伸到 ore_store 上膛交接处吸取矿。 */
-                [ARM_SIMPLE_BEHAVIOR_CHAMBER_ORE] = {.joint1_pos = -0.0577173643f, .joint2_pos = -1.39655161f},
+                [ARM_SIMPLE_BEHAVIOR_CHAMBER_ORE] = {.joint1_pos = -0.112332456f, .joint2_pos = -1.5956496f},
                 /* ArmSimple 存矿等待位，等待平台到位后再伸到存矿位。 */
                 [ARM_SIMPLE_BEHAVIOR_WAIT_STORE_ORE] = {.joint1_pos = 0.246562153f, .joint2_pos = -1.82005286f},
                 /* ArmSimple 放矿等待位，放矿动作前的预备/稳定位置。 */
                 [ARM_SIMPLE_BEHAVIOR_WAIT_RELEASE_ORE] = {.joint1_pos = -0.239599288f, .joint2_pos =1.68926358f},
                 /* ArmSimple 放矿位，吸盘关闭后从该位置把矿释放出去。 */
                 [ARM_SIMPLE_BEHAVIOR_RELEASE_ORE] = {.joint1_pos = 0.224118978f, .joint2_pos = 0.963034928f},
-                /* ArmSimple 正向 400mm 取矿位，配合 pole 的 step_400_all_extend 使用。 */
+                /* ArmSimple 正向 400mm 取矿位，配合 pole 的 step_400_all_extend 使用。 */ 
                 [ARM_SIMPLE_BEHAVIOR_PICK_POS_400] = {.joint1_pos = 1.53361797f, .joint2_pos = 0.0f},
                 /* ArmSimple 正向 200mm 取矿位，配合 pole 的 step_200_all_extend 使用。 */
                 [ARM_SIMPLE_BEHAVIOR_PICK_POS_200] = {.joint1_pos = 1.53361797f, .joint2_pos = 0.0f},
@@ -404,7 +404,9 @@ Config_RobotParam_t robot_config = {
         .pole_arrive_threshold_rad = 0.30f,
         .prealign_yaw_tolerance_rad =
             CONFIG_AUTO_ORE_PREALIGN_YAW_TOLERANCE_RAD,
-        .release_lift_detect_height_m = 0.35f,//三层放矿观测高度
+        .release_lift_detect_sick_index = SICK_REAR_INDEX, /* auto21 使用原来的后 SICK。 */
+        .release_lift_detect_sick_adc_threshold = 2500u,
+        .release_lift_detect_sick_greater_than_threshold = true,
         /* 取矿流程中正向 200/400 取矿的底盘前进速度，单位 m/s。 */
         .fetch_chassis_vx_mps = 0.50f,
         /* 取 -200 矿时底盘前进速度，单位 m/s；可设为 0 禁止底盘前进。 */

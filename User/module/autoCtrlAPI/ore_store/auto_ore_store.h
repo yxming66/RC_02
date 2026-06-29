@@ -3,6 +3,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "device/sick.h"
 #include "module/arm_simple.h"
 #include "module/autoCtrlAPI/api/auto_ctrl_api.h"
 #include "module/chassis.h"
@@ -100,7 +101,8 @@ typedef struct {
   auto_ctrl_yaw_source_e yaw_source;
   float yaw_auto_rad;
   float yaw_rate_cmd_rad_s;
-  float imu_accl_z_g;
+  uint16_t sick_adc_raw[SICK_OUTPUT_CHANNEL_COUNT];
+  bool sick_valid[SICK_OUTPUT_CHANNEL_COUNT];
   float arm_joint1_rad;
   float arm_joint2_rad;
   float pole_front_lift_rad;
@@ -182,7 +184,9 @@ typedef struct {
   float ore_store_arrive_threshold_rad;
   float pole_arrive_threshold_rad;
   float prealign_yaw_tolerance_rad;
-  float release_lift_detect_height_m;
+  uint8_t release_lift_detect_sick_index;
+  uint16_t release_lift_detect_sick_adc_threshold;
+  bool release_lift_detect_sick_greater_than_threshold;
   float fetch_chassis_vx_mps;
   float fetch_neg_200_chassis_vx_mps;
   float store_low_return_velocity_rad_s;
@@ -240,10 +244,11 @@ typedef struct {
   bool release_lift_observer_active;
   bool release_lift_detected;
   uint32_t release_lift_observer_start_ms;
-  uint32_t release_lift_observer_last_ms;
   uint32_t release_lift_detect_time_ms;
-  float release_lift_velocity_mps;
-  float release_lift_height_m;
+  uint8_t release_lift_sick_index;
+  uint16_t release_lift_sick_adc_raw;
+  uint16_t release_lift_sick_adc_threshold;
+  bool release_lift_sick_valid;
   AutoOre_Params_t param;
   AutoOre_Feedback_t feedback;
 } AutoOre_t;
