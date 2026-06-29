@@ -153,6 +153,10 @@ static PC_AutoAction_t AutoCtrlFeed_MapOreAction(AutoOre_Action_t action) {
       return PC_AUTO_ACTION_STORE;
     case AUTO_ORE_ACTION_RELEASE:
       return PC_AUTO_ACTION_RELEASE;
+    case AUTO_ORE_ACTION_RELEASE_STEP1:
+      return PC_AUTO_ACTION_RELEASE_STEP1;
+    case AUTO_ORE_ACTION_RELEASE_STEP2:
+      return PC_AUTO_ACTION_RELEASE_STEP2;
     case AUTO_ORE_ACTION_RELEASE_LIFT_DETECT:
       return PC_AUTO_ACTION_RELEASE_LIFT_DETECT;
     case AUTO_ORE_ACTION_CHAMBER:
@@ -182,6 +186,10 @@ static AutoOre_Action_t AutoCtrlFeed_RequestToOreAction(
       return AUTO_ORE_ACTION_STORE;
     case AUTO_ORE_DEBUG_REQUEST_RELEASE:
       return AUTO_ORE_ACTION_RELEASE;
+    case AUTO_ORE_DEBUG_REQUEST_RELEASE_STEP1:
+      return AUTO_ORE_ACTION_RELEASE_STEP1;
+    case AUTO_ORE_DEBUG_REQUEST_RELEASE_STEP2:
+      return AUTO_ORE_ACTION_RELEASE_STEP2;
     case AUTO_ORE_DEBUG_REQUEST_RELEASE_LIFT_DETECT:
       return AUTO_ORE_ACTION_RELEASE_LIFT_DETECT;
     case AUTO_ORE_DEBUG_REQUEST_CHAMBER:
@@ -407,6 +415,8 @@ static bool AutoCtrlFeed_IsOreAction(PC_AutoAction_t action) {
   switch (action) {
     case PC_AUTO_ACTION_STORE:
     case PC_AUTO_ACTION_RELEASE:
+    case PC_AUTO_ACTION_RELEASE_STEP1:
+    case PC_AUTO_ACTION_RELEASE_STEP2:
     case PC_AUTO_ACTION_RELEASE_LIFT_DETECT:
     case PC_AUTO_ACTION_CHAMBER:
     case PC_AUTO_ACTION_PICK_POS_400:
@@ -472,6 +482,8 @@ static bool AutoCtrlFeed_ShouldForcePcSuccess(PC_AutoAction_t action) {
   switch (action) {
     case PC_AUTO_ACTION_STORE:
     case PC_AUTO_ACTION_RELEASE:
+    case PC_AUTO_ACTION_RELEASE_STEP1:
+    case PC_AUTO_ACTION_RELEASE_STEP2:
     case PC_AUTO_ACTION_RELEASE_LIFT_DETECT:
     case PC_AUTO_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD:
     case PC_AUTO_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD:
@@ -523,6 +535,8 @@ static uint16_t AutoCtrlFeed_OreActionFailureMask(AutoOre_Action_t action) {
     case AUTO_ORE_ACTION_STORE:
       return PC_AUTO_ACTION_FAILURE_STORE_ORE;
     case AUTO_ORE_ACTION_RELEASE:
+    case AUTO_ORE_ACTION_RELEASE_STEP1:
+    case AUTO_ORE_ACTION_RELEASE_STEP2:
     case AUTO_ORE_ACTION_RELEASE_LIFT_DETECT:
       return PC_AUTO_ACTION_FAILURE_RELEASE_ORE;
     case AUTO_ORE_ACTION_CHAMBER:
@@ -589,6 +603,12 @@ static bool AutoCtrlFeed_StartOreAction(AutoOre_Action_t action) {
       break;
     case AUTO_ORE_ACTION_RELEASE:
       result = AutoOre_StartRelease(&auto_ore_ctrl, now_ms);
+      break;
+    case AUTO_ORE_ACTION_RELEASE_STEP1:
+      result = AutoOre_StartReleaseStep1(&auto_ore_ctrl, now_ms);
+      break;
+    case AUTO_ORE_ACTION_RELEASE_STEP2:
+      result = AutoOre_StartReleaseStep2(&auto_ore_ctrl, now_ms);
       break;
     case AUTO_ORE_ACTION_RELEASE_LIFT_DETECT:
       result = AutoOre_StartReleaseLiftDetect(&auto_ore_ctrl, now_ms);
@@ -1213,6 +1233,14 @@ bool Task_AutoOreStartRelease(void) {
   return AutoCtrlFeed_StartOreAction(AUTO_ORE_ACTION_RELEASE);
 }
 
+bool Task_AutoOreStartReleaseStep1(void) {
+  return AutoCtrlFeed_StartOreAction(AUTO_ORE_ACTION_RELEASE_STEP1);
+}
+
+bool Task_AutoOreStartReleaseStep2(void) {
+  return AutoCtrlFeed_StartOreAction(AUTO_ORE_ACTION_RELEASE_STEP2);
+}
+
 bool Task_AutoOreStartReleaseLiftDetect(void) {
   return AutoCtrlFeed_StartOreAction(AUTO_ORE_ACTION_RELEASE_LIFT_DETECT);
 }
@@ -1299,6 +1327,12 @@ static void AutoCtrlFeed_HandleAutoOreDebugRequest(void) {
       break;
     case AUTO_ORE_DEBUG_REQUEST_RELEASE:
       result = Task_AutoOreStartRelease();
+      break;
+    case AUTO_ORE_DEBUG_REQUEST_RELEASE_STEP1:
+      result = Task_AutoOreStartReleaseStep1();
+      break;
+    case AUTO_ORE_DEBUG_REQUEST_RELEASE_STEP2:
+      result = Task_AutoOreStartReleaseStep2();
       break;
     case AUTO_ORE_DEBUG_REQUEST_RELEASE_LIFT_DETECT:
       result = Task_AutoOreStartReleaseLiftDetect();

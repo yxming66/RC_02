@@ -207,6 +207,8 @@ typedef enum {
     PC_AUTO_ACTION_STEP_DESCEND_400_HEAD = 19, /* 普通头向下 400mm 台阶 */
     PC_AUTO_ACTION_ROD_SPEARHEAD_STEP2 = 20, /* 取矛头 step2：夹取抬高并确认 */
     PC_AUTO_ACTION_RELEASE_LIFT_DETECT = 21, /* 一键放矿：Pole 到位后检测抬升再放矿 */
+    PC_AUTO_ACTION_RELEASE_STEP1 = 22, /* 放矿 step1：需要上膛则上膛，Pole 伸出，Arm 到待放矿位 */
+    PC_AUTO_ACTION_RELEASE_STEP2 = 23, /* 放矿 step2：待放矿位->辅助进位->放矿位->吸盘断开 */
 } PC_AutoAction_t;
 
 typedef enum {
