@@ -17,6 +17,7 @@ typedef enum {
   AUTO_ORE_ACTION_NONE = 0,
   AUTO_ORE_ACTION_STORE,
   AUTO_ORE_ACTION_RELEASE,
+  AUTO_ORE_ACTION_RELEASE_LIFT_DETECT,
   AUTO_ORE_ACTION_CHAMBER,
   AUTO_ORE_ACTION_PICK_POS_400,
   AUTO_ORE_ACTION_PICK_POS_200,
@@ -255,6 +256,7 @@ bool AutoOre_StartStoreAtPosition(AutoOre_t *ctrl,
                                   AutoOre_Position_t position,
                                   uint32_t now_ms);
 bool AutoOre_StartRelease(AutoOre_t *ctrl, uint32_t now_ms);
+bool AutoOre_StartReleaseLiftDetect(AutoOre_t *ctrl, uint32_t now_ms);
 bool AutoOre_StartChamber(AutoOre_t *ctrl, uint32_t now_ms);
 bool AutoOre_StartPickPos400(AutoOre_t *ctrl, uint32_t now_ms);
 bool AutoOre_StartPickPos200(AutoOre_t *ctrl, uint32_t now_ms);

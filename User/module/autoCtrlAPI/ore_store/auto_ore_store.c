@@ -73,6 +73,15 @@ static float AutoOre_SelectPrealignWz(AutoOre_t *ctrl);
 static float AutoOre_OreStoreArriveThresholdRad(const AutoOre_t *ctrl);
 static void AutoOre_FinishSuccess(AutoOre_t *ctrl);
 
+static bool AutoOre_ActionIsReleaseLike(AutoOre_Action_t action) {
+  return action == AUTO_ORE_ACTION_RELEASE ||
+         action == AUTO_ORE_ACTION_RELEASE_LIFT_DETECT;
+}
+
+static bool AutoOre_ActionUsesReleaseLiftDetect(AutoOre_Action_t action) {
+  return action == AUTO_ORE_ACTION_RELEASE_LIFT_DETECT;
+}
+
 static void AutoOre_EnterStep(AutoOre_t *ctrl, uint32_t now_ms) {
   if (!ctrl->step_entered) {
     ctrl->step_entered = true;
@@ -502,7 +511,7 @@ static bool AutoOre_OreStorePlatformAtTarget(const AutoOre_t *ctrl,
 
 static bool AutoOre_ChamberWaitPlatformReady(const AutoOre_t *ctrl,
                                              float threshold_rad) {
-  if (ctrl != 0 && ctrl->action == AUTO_ORE_ACTION_RELEASE) {
+  if (ctrl != 0 && AutoOre_ActionIsReleaseLike(ctrl->action)) {
     return true;
   }
   return AutoOre_OreStorePlatformAtTarget(ctrl, threshold_rad);
@@ -886,7 +895,7 @@ static void AutoOre_FinishChamberSuccess(AutoOre_t *ctrl) {
 
 static void AutoOre_FinishChamberSegment(AutoOre_t *ctrl, uint32_t now_ms) {
   AutoOre_FinishChamberSuccess(ctrl);
-  if (ctrl->action == AUTO_ORE_ACTION_RELEASE) {
+  if (AutoOre_ActionIsReleaseLike(ctrl->action)) {
     ctrl->active_position = AUTO_ORE_POSITION_ARM;
     ctrl->step_index = 0u;
     ctrl->step_phase = 0u;
@@ -903,7 +912,7 @@ static void AutoOre_FinishSuccess(AutoOre_t *ctrl) {
   const AutoOre_Fault_t fault_before_finish = ctrl->fault;
   if (ctrl->action == AUTO_ORE_ACTION_STORE) {
     AutoOre_SetActivePositionHasOre(ctrl, true);
-  } else if (ctrl->action == AUTO_ORE_ACTION_RELEASE) {
+  } else if (AutoOre_ActionIsReleaseLike(ctrl->action)) {
     AutoOre_SetActivePositionHasOre(ctrl, false);
   } else if (ctrl->action == AUTO_ORE_ACTION_CHAMBER) {
     AutoOre_FinishChamberSuccess(ctrl);
@@ -1133,7 +1142,7 @@ static bool AutoOre_CommandReleaseOreStoreHold(
 }
 
 static bool AutoOre_CommandReleasePoleDuringChamber(AutoOre_t *ctrl) {
-  if (ctrl->action != AUTO_ORE_ACTION_RELEASE) {
+  if (!AutoOre_ActionIsReleaseLike(ctrl->action)) {
     return true;
   }
   return AutoOre_CommandReleasePoleTarget(ctrl);
@@ -1177,12 +1186,24 @@ static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
       const bool arm_ready = AutoOre_WaitConditionThenDelay(
           ctrl, now_ms, ctrl->feedback.arm_at_target,
           AutoOre_ReleaseWaitMs(ctrl));
+      if (!AutoOre_ActionUsesReleaseLiftDetect(ctrl->action)) {
+        if (arm_ready) {
+          AutoOre_NextStep(ctrl);
+        } else {
+          (void)AutoOre_CheckTimeout(ctrl, now_ms);
+        }
+        return;
+      }
       const bool lift_ready = AutoOre_UpdateReleaseLiftObserver(ctrl, now_ms);
-        const bool lift_settled = lift_ready &&
+      const bool lift_settled = lift_ready &&
           (now_ms - ctrl->release_lift_detect_time_ms) >=
-            AutoOre_ReleaseLiftDetectSettleMs(ctrl);
-        if (arm_ready && lift_settled) {
-        AutoOre_NextStep(ctrl);
+              AutoOre_ReleaseLiftDetectSettleMs(ctrl);
+      if (lift_settled) {
+        if (arm_ready) {
+          AutoOre_NextStep(ctrl);
+        } else {
+          (void)AutoOre_CheckTimeout(ctrl, now_ms);
+        }
       } else if (ctrl->release_lift_observer_active &&
                  (now_ms - ctrl->release_lift_observer_start_ms) >=
                      AutoOre_ReleaseLiftDetectTimeoutMs(ctrl)) {
@@ -1190,6 +1211,8 @@ static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
         ctrl->result = AUTO_ORE_RESULT_FAIL;
         ctrl->fault = AUTO_ORE_FAULT_TIMEOUT;
         ctrl->failure_mask |= AUTO_ORE_FAILURE_RELEASE_ORE;
+      } else if (!arm_ready) {
+        (void)AutoOre_CheckTimeout(ctrl, now_ms);
       }
       return;
     case 2:
@@ -2501,7 +2524,7 @@ static bool AutoOre_Start(AutoOre_t *ctrl, AutoOre_Action_t action,
   AutoOre_Position_t position = AUTO_ORE_POSITION_NONE;
   if (action == AUTO_ORE_ACTION_STORE) {
     position = AutoOre_SelectStorePosition(&ctrl->occupancy);
-  } else if (action == AUTO_ORE_ACTION_RELEASE) {
+  } else if (AutoOre_ActionIsReleaseLike(action)) {
     if (ctrl->occupancy.arm_has_ore) {
       position = AUTO_ORE_POSITION_ARM;
     } else {
@@ -2538,6 +2561,10 @@ bool AutoOre_StartStoreAtPosition(AutoOre_t *ctrl,
 
 bool AutoOre_StartRelease(AutoOre_t *ctrl, uint32_t now_ms) {
   return AutoOre_Start(ctrl, AUTO_ORE_ACTION_RELEASE, now_ms);
+}
+
+bool AutoOre_StartReleaseLiftDetect(AutoOre_t *ctrl, uint32_t now_ms) {
+  return AutoOre_Start(ctrl, AUTO_ORE_ACTION_RELEASE_LIFT_DETECT, now_ms);
 }
 
 bool AutoOre_StartChamber(AutoOre_t *ctrl, uint32_t now_ms) {
@@ -2613,7 +2640,7 @@ void AutoOre_Update(AutoOre_t *ctrl, const AutoOre_Feedback_t *feedback,
         ctrl->fault = AUTO_ORE_FAULT_INVALID_OCCUPANCY;
         break;
     }
-  } else if (ctrl->action == AUTO_ORE_ACTION_RELEASE) {
+  } else if (AutoOre_ActionIsReleaseLike(ctrl->action)) {
     switch (ctrl->active_position) {
       case AUTO_ORE_POSITION_ARM:
         AutoOre_RunReleaseArm(ctrl, now_ms);

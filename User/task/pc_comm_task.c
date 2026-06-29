@@ -79,6 +79,8 @@ static AutoOre_DebugRequest_t PcComm_MapAutoAction(uint8_t action) {
             return AUTO_ORE_DEBUG_REQUEST_STORE;
         case PC_AUTO_ACTION_RELEASE:
             return AUTO_ORE_DEBUG_REQUEST_RELEASE;
+        case PC_AUTO_ACTION_RELEASE_LIFT_DETECT:
+            return AUTO_ORE_DEBUG_REQUEST_RELEASE_LIFT_DETECT;
         case PC_AUTO_ACTION_CHAMBER:
             return AUTO_ORE_DEBUG_REQUEST_CHAMBER;
         case PC_AUTO_ACTION_PICK_POS_400:

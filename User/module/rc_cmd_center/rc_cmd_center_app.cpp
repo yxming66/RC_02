@@ -1036,6 +1036,18 @@ static bool Rc_ShouldExitAutoActionBySwitch(void) {
          dr16.data.sw_r == DR16_SW_MID;
 }
 
+static bool Rc_IsAnyAutoActionBusy(void) {
+  return (auto_ctrl_inited && AutoCtrl_IsBusy(&auto_ctrl)) ||
+         (auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl)) ||
+         Task_AutoRodSpearheadIsBusy() || Task_AutoSickCorrectIsBusy();
+}
+
+static bool Rc_ShouldExitPcAutoActionBySwitch(void) {
+  return dr16.header.online && Rc_IsAnyAutoActionBusy() &&
+         last_sw_l == DR16_SW_UP && last_sw_r == DR16_SW_UP &&
+         (dr16.data.sw_l != DR16_SW_UP || dr16.data.sw_r != DR16_SW_UP);
+}
+
 static bool Rc_ShouldUsePcCommand(void) {
   return MrlinkPc_IsPCControlMode() &&
          dr16.data.sw_l == DR16_SW_UP &&
@@ -1162,7 +1174,8 @@ static void Rc_AbortAutoCtrlIfBusy(void) {
 }
 
 static void Rc_AbortAutoActionsBySwitch(void) {
-  if (!Rc_ShouldExitAutoActionBySwitch()) {
+  if (!Rc_ShouldExitAutoActionBySwitch() &&
+      !Rc_ShouldExitPcAutoActionBySwitch()) {
     return;
   }
 

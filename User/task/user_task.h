@@ -138,6 +138,7 @@ typedef enum {
     AUTO_ORE_DEBUG_REQUEST_STEP_ASCEND_400_HEAD = 18,
     AUTO_ORE_DEBUG_REQUEST_STEP_DESCEND_400_HEAD = 19,
     AUTO_ORE_DEBUG_REQUEST_ROD_SPEARHEAD_STEP2 = 20,
+    AUTO_ORE_DEBUG_REQUEST_RELEASE_LIFT_DETECT = 21,
 } AutoOre_DebugRequest_t;
 
 typedef struct {
@@ -464,6 +465,7 @@ bool Task_PoleMainGetSupportLift(float *front_lift_rad, float *rear_lift_rad);
 bool Task_PoleMainGetHoldCommand(Pole_CMD_t *cmd);
 bool Task_AutoOreStartStore(void);
 bool Task_AutoOreStartRelease(void);
+bool Task_AutoOreStartReleaseLiftDetect(void);
 bool Task_AutoOreStartChamber(void);
 bool Task_AutoOreStartPickPos400(void);
 bool Task_AutoOreStartPickPos200(void);
