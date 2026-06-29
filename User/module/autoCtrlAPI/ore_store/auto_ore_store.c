@@ -1194,16 +1194,16 @@ static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
         }
         return;
       }
+      if (!arm_ready) {
+        (void)AutoOre_CheckTimeout(ctrl, now_ms);
+        return;
+      }
       const bool lift_ready = AutoOre_UpdateReleaseLiftObserver(ctrl, now_ms);
       const bool lift_settled = lift_ready &&
           (now_ms - ctrl->release_lift_detect_time_ms) >=
               AutoOre_ReleaseLiftDetectSettleMs(ctrl);
       if (lift_settled) {
-        if (arm_ready) {
-          AutoOre_NextStep(ctrl);
-        } else {
-          (void)AutoOre_CheckTimeout(ctrl, now_ms);
-        }
+        AutoOre_NextStep(ctrl);
       } else if (ctrl->release_lift_observer_active &&
                  (now_ms - ctrl->release_lift_observer_start_ms) >=
                      AutoOre_ReleaseLiftDetectTimeoutMs(ctrl)) {
@@ -1211,8 +1211,6 @@ static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
         ctrl->result = AUTO_ORE_RESULT_FAIL;
         ctrl->fault = AUTO_ORE_FAULT_TIMEOUT;
         ctrl->failure_mask |= AUTO_ORE_FAILURE_RELEASE_ORE;
-      } else if (!arm_ready) {
-        (void)AutoOre_CheckTimeout(ctrl, now_ms);
       }
       return;
     case 2:
