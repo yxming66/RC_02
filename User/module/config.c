@@ -348,9 +348,9 @@ Config_RobotParam_t robot_config = {
         /* ArmSimple 一键行为速度上限，单位 rad/s；<=0 表示使用 arm_simple_param.vel_limit 默认值。 */
         .arm_speed = {
             /* store_*：一键存矿流程，wait=等待/预备位，place=伸到存矿位，standby=回待机位。 */
-            .store_wait = {.joint1_max_vel_rad_s = 2.5f, .joint2_max_vel_rad_s = 8.0f},
-            .store_place = {.joint1_max_vel_rad_s = 2.5f, .joint2_max_vel_rad_s = 8.0f},
-            .store_standby = {.joint1_max_vel_rad_s =2.5f, .joint2_max_vel_rad_s = 8.0f},
+            .store_wait = {.joint1_max_vel_rad_s = 1.5f, .joint2_max_vel_rad_s = 8.0f},
+            .store_place = {.joint1_max_vel_rad_s = 1.5f, .joint2_max_vel_rad_s = 8.0f},
+            .store_standby = {.joint1_max_vel_rad_s =1.5f, .joint2_max_vel_rad_s = 8.0f},
             /* release_*：一键放矿流程，wait=放矿前等待位，assist=放矿辅助进位，place=放矿位，standby=放矿后回待机位。 */
             .release_wait = {.joint1_max_vel_rad_s = 3.0f, .joint2_max_vel_rad_s = 2.0f},
             .release_assist = {.joint1_max_vel_rad_s = 3.0f, .joint2_max_vel_rad_s = 2.0f},

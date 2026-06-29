@@ -1266,9 +1266,11 @@ static bool Rc_AutoCtrlTemplateIsAscend(auto_ctrl_template_e template_id) {
 static bool Rc_StartAutoUpStepPickStore(void) {
   const RcAutoStepProfile_t profile = Rc_SelectAutoStepProfile();
   if (profile == RC_AUTO_STEP_PROFILE_FUSED_200) {
+    // return Task_AutoStepStartAscend200Head();
     return Task_AutoOreStartStepPickStoreAscend200Head();
   }
   if (profile == RC_AUTO_STEP_PROFILE_FUSED_UP_400_NORMAL_DOWN_400) {
+    // return Task_AutoStepStartAscend400Head();
     return Task_AutoOreStartStepPickStoreAscend400Head();
   }
   return false;
