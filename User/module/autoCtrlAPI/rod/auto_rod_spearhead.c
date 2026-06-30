@@ -458,9 +458,25 @@ static void AutoRodSpearhead_RunDockWait(
     uint32_t now_ms) {
   const bool dock_complete_received =
       feedback != 0 && feedback->dock_complete_received;
+  const bool rod_at_target = feedback != 0 && feedback->rod_at_target;
 
   switch (ctrl->step_index) {
     case 0:
+      AutoRodSpearhead_EnterStep(ctrl, now_ms);
+      if (!AutoRodSpearhead_CommandOreStore(
+              ctrl, AutoRodSpearhead_DockWaitTransform(ctrl), false) ||
+          !AutoRodSpearhead_CommandRod(ctrl, ROD_NEW_POSE_GRAB_HIGH,
+                                       ROD_NEW_GRIP_GRAB)) {
+        return;
+      }
+      if (rod_at_target ||
+          AutoRodSpearhead_StepElapsed(ctrl, now_ms) >=
+              AutoRodSpearhead_GrabHighDelayMs(ctrl)) {
+        AutoRodSpearhead_NextStep(ctrl);
+        return;
+      }
+      return;
+    case 1:
       AutoRodSpearhead_EnterStep(ctrl, now_ms);
       if (!AutoRodSpearhead_CommandOreStore(
               ctrl, AutoRodSpearhead_DockWaitTransform(ctrl), false) ||
@@ -477,7 +493,7 @@ static void AutoRodSpearhead_RunDockWait(
         AutoRodSpearhead_FinishTimeout(ctrl);
       }
       return;
-    case 1:
+    case 2:
       AutoRodSpearhead_EnterStep(ctrl, now_ms);
       if (!AutoRodSpearhead_CommandOreStore(
               ctrl, AutoRodSpearhead_DockWaitTransform(ctrl), false) ||
