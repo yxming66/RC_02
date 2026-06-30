@@ -373,7 +373,7 @@ Config_RobotParam_t robot_config = {
             /* 存矿：arm 到存矿位后的稳定等待、固矿气缸关闭等待、气缸重新打开等待。 */
             .store_arm_settle_ms = 300u,
             .store_cylinder_close_ms = 200u,
-            .store_arm_suction_off_ms = 2000u,
+            .store_arm_suction_off_ms = 2300u,
             .store_cylinder_open_ms = 200u, 
             /* 放矿：放矿前等待、Pole 到位后抬升观测超时、抬升确认后稳定等待、到放矿位后短暂停稳、吸盘关闭后矿石脱离等待。 */
             .release_wait_ms = 400u,

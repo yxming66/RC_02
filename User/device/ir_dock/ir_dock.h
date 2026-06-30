@@ -25,6 +25,8 @@ extern "C" {
 
 #define IR_DOCK_FRAME_HEAD0 (0xAAu)
 #define IR_DOCK_FRAME_HEAD1 (0x55u)
+#define IR_DOCK_CMD_ONLINE (0x01u)
+#define IR_DOCK_CMD_COMPLETE (0x02u)
 #define IR_DOCK_CMD_MINE_INPUT (0x02u)
 #define IR_DOCK_CMD_MINE_ACK (0x82u)
 #define IR_DOCK_MINE_INPUT_FRAME_SIZE (18u)
@@ -37,6 +39,10 @@ extern "C" {
 #define IR_DOCK_ORE_POSITION_COUNT (12u)
 #define IR_DOCK_ORE_PACKET_SIZE (1u + IR_DOCK_ORE_POSITION_COUNT)
 #define IR_DOCK_ORE_TYPE_ONLY_PACKET_SIZE (IR_DOCK_ORE_POSITION_COUNT)
+
+#ifndef IR_DOCK_ONLINE_TIMEOUT_MS
+#define IR_DOCK_ONLINE_TIMEOUT_MS (750u)
+#endif
 
 typedef enum {
   IR_DOCK_STATUS_IDLE = 0x00u,
@@ -118,13 +124,20 @@ typedef struct {
   volatile uint32_t last_rx_start_ms;
   volatile uint32_t last_rx_raw_ms;
   volatile uint32_t last_rx_ms;
+  volatile uint32_t last_online_rx_ms;
+  volatile uint32_t last_complete_rx_ms;
   volatile uint32_t last_ore_rx_ms;
   volatile uint32_t last_tx_ms;
   volatile uint32_t last_rx_age_ms;
+  volatile uint32_t last_online_age_ms;
+  volatile uint32_t last_complete_age_ms;
   volatile uint32_t last_ore_rx_age_ms;
   volatile uint32_t last_rx_raw_age_ms;
   volatile uint32_t rx_count;
   volatile uint32_t tx_count;
+  volatile uint32_t online_rx_count;
+  volatile uint32_t complete_rx_count;
+  volatile uint32_t invalid_rx_count;
   volatile uint32_t frame_rx_count;
   volatile uint32_t ack_tx_count;
   volatile uint32_t status_ack_tx_count;
@@ -151,6 +164,7 @@ bool IrDock_SendOreInfo(IrDock_Status_t status,
 IrDock_AckSubmitResult_t IrDock_SendAckFrame(
     const uint8_t ack_frame[IR_DOCK_ACK_FRAME_SIZE], uint32_t now_ms);
 bool IrDock_IsDockCompleteFresh(uint32_t now_ms);
+bool IrDock_IsOnline(uint32_t now_ms);
 bool IrDock_IsOreInfoFresh(uint32_t now_ms);
 IrDock_Status_t IrDock_GetLastRxStatus(void);
 bool IrDock_GetOreInfo(IrDock_OreInfo_t *info, uint32_t now_ms);
