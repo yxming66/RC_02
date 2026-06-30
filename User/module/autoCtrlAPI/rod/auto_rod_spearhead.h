@@ -57,6 +57,8 @@ typedef struct {
   bool rod_photo_triggered;
   bool rod_at_target;
   bool ore_store_at_target;
+  bool ore_store_position_valid;
+  float ore_store_platform_position_rad;
   bool dock_complete_received;
 } AutoRodSpearhead_Feedback_t;
 

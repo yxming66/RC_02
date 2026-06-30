@@ -1124,6 +1124,8 @@ static void AutoCtrlFeed_UpdateAutoRodSpearhead(uint32_t now_ms,
       .rod_photo_triggered = AutoCtrlFeed_ReadRodSpearheadPhoto(),
       .rod_at_target = false,
       .ore_store_at_target = false,
+      .ore_store_position_valid = false,
+      .ore_store_platform_position_rad = 0.0f,
       .dock_complete_received = IrDock_IsDockCompleteFresh(now_ms),
   };
   const RodNew_Feedback_t *rod_fb = Task_RodNewGetFeedback();
@@ -1132,6 +1134,12 @@ static void AutoCtrlFeed_UpdateAutoRodSpearhead(uint32_t now_ms,
   }
   const OreStore_CMD_t *auto_rod_ore_store_cmd =
       AutoRodSpearhead_GetOreStoreCommand(&auto_rod_spearhead_ctrl);
+  const OreStore_Feedback_t *ore_store_fb = Task_OreStoreGetFeedback();
+  if (ore_store_fb != NULL) {
+    feedback.ore_store_position_valid = true;
+    feedback.ore_store_platform_position_rad =
+        ore_store_fb->position_rad[ORE_STORE_AXIS_PLATFORM];
+  }
   if (auto_rod_ore_store_cmd != NULL) {
     feedback.ore_store_at_target = AutoCtrlFeed_OreStoreAtCommandTarget(
         auto_rod_ore_store_cmd,
