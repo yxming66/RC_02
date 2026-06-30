@@ -520,6 +520,9 @@ AA 55 02 msg_id side ore_type[12] crc8
 | 22 | PICK_STORE_POS_400，取正 400mm 矿后并行存矿和后退 |
 | 23 | PICK_STORE_POS_200，取正 200mm 矿后并行存矿和后退 |
 | 24 | PICK_STORE_NEG_200，取反 200mm 矿后并行存矿和后退 |
+| 25 | STEP_DROP_STORE_ASCEND_200_HEAD，丢矿版融合头向上 200mm 台阶；仅高位有矿时启动，存矿阶段强制存高位 |
+| 26 | STEP_DROP_STORE_DESCEND_200_HEAD，丢矿版融合头向下 200mm 台阶；仅高位有矿时启动，存矿阶段强制存高位 |
+| 27 | STEP_DROP_STORE_ASCEND_400_HEAD，丢矿版融合头向上 400mm 台阶；仅高位有矿时启动，存矿阶段强制存高位 |
 
 ### 6.3 红外对接
 

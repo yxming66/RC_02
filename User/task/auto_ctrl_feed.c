@@ -173,6 +173,12 @@ static PC_AutoAction_t AutoCtrlFeed_MapOreAction(AutoOre_Action_t action) {
       return PC_AUTO_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD;
     case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD:
       return PC_AUTO_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD;
+    case AUTO_ORE_ACTION_STEP_DROP_STORE_ASCEND_200_HEAD:
+      return PC_AUTO_ACTION_STEP_DROP_STORE_ASCEND_200_HEAD;
+    case AUTO_ORE_ACTION_STEP_DROP_STORE_DESCEND_200_HEAD:
+      return PC_AUTO_ACTION_STEP_DROP_STORE_DESCEND_200_HEAD;
+    case AUTO_ORE_ACTION_STEP_DROP_STORE_ASCEND_400_HEAD:
+      return PC_AUTO_ACTION_STEP_DROP_STORE_ASCEND_400_HEAD;
     case AUTO_ORE_ACTION_PICK_STORE_POS_400:
       return PC_AUTO_ACTION_PICK_STORE_POS_400;
     case AUTO_ORE_ACTION_PICK_STORE_POS_200:
@@ -208,6 +214,12 @@ static AutoOre_Action_t AutoCtrlFeed_RequestToOreAction(
       return AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD;
     case AUTO_ORE_DEBUG_REQUEST_STEP_PICK_STORE_ASCEND_400_HEAD:
       return AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD;
+    case AUTO_ORE_DEBUG_REQUEST_STEP_DROP_STORE_ASCEND_200_HEAD:
+      return AUTO_ORE_ACTION_STEP_DROP_STORE_ASCEND_200_HEAD;
+    case AUTO_ORE_DEBUG_REQUEST_STEP_DROP_STORE_DESCEND_200_HEAD:
+      return AUTO_ORE_ACTION_STEP_DROP_STORE_DESCEND_200_HEAD;
+    case AUTO_ORE_DEBUG_REQUEST_STEP_DROP_STORE_ASCEND_400_HEAD:
+      return AUTO_ORE_ACTION_STEP_DROP_STORE_ASCEND_400_HEAD;
     case AUTO_ORE_DEBUG_REQUEST_PICK_STORE_POS_400:
       return AUTO_ORE_ACTION_PICK_STORE_POS_400;
     case AUTO_ORE_DEBUG_REQUEST_PICK_STORE_POS_200:
@@ -431,6 +443,9 @@ static bool AutoCtrlFeed_IsOreAction(PC_AutoAction_t action) {
     case PC_AUTO_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD:
     case PC_AUTO_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD:
     case PC_AUTO_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD:
+    case PC_AUTO_ACTION_STEP_DROP_STORE_ASCEND_200_HEAD:
+    case PC_AUTO_ACTION_STEP_DROP_STORE_DESCEND_200_HEAD:
+    case PC_AUTO_ACTION_STEP_DROP_STORE_ASCEND_400_HEAD:
     case PC_AUTO_ACTION_PICK_STORE_POS_400:
     case PC_AUTO_ACTION_PICK_STORE_POS_200:
     case PC_AUTO_ACTION_PICK_STORE_NEG_200:
@@ -481,6 +496,9 @@ static bool AutoCtrlFeed_IsFusedOreAction(AutoOre_Action_t action) {
     case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD:
     case AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD:
     case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD:
+    case AUTO_ORE_ACTION_STEP_DROP_STORE_ASCEND_200_HEAD:
+    case AUTO_ORE_ACTION_STEP_DROP_STORE_DESCEND_200_HEAD:
+    case AUTO_ORE_ACTION_STEP_DROP_STORE_ASCEND_400_HEAD:
     case AUTO_ORE_ACTION_PICK_STORE_POS_400:
     case AUTO_ORE_ACTION_PICK_STORE_POS_200:
     case AUTO_ORE_ACTION_PICK_STORE_NEG_200:
@@ -498,6 +516,9 @@ static bool AutoCtrlFeed_ShouldForcePcSuccess(PC_AutoAction_t action) {
     case PC_AUTO_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD:
     case PC_AUTO_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD:
     case PC_AUTO_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD:
+    case PC_AUTO_ACTION_STEP_DROP_STORE_ASCEND_200_HEAD:
+    case PC_AUTO_ACTION_STEP_DROP_STORE_DESCEND_200_HEAD:
+    case PC_AUTO_ACTION_STEP_DROP_STORE_ASCEND_400_HEAD:
     case PC_AUTO_ACTION_PICK_STORE_POS_400:
     case PC_AUTO_ACTION_PICK_STORE_POS_200:
     case PC_AUTO_ACTION_PICK_STORE_NEG_200:
@@ -559,6 +580,9 @@ static uint16_t AutoCtrlFeed_OreActionFailureMask(AutoOre_Action_t action) {
     case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD:
     case AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD:
     case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD:
+    case AUTO_ORE_ACTION_STEP_DROP_STORE_ASCEND_200_HEAD:
+    case AUTO_ORE_ACTION_STEP_DROP_STORE_DESCEND_200_HEAD:
+    case AUTO_ORE_ACTION_STEP_DROP_STORE_ASCEND_400_HEAD:
     case AUTO_ORE_ACTION_PICK_STORE_POS_400:
     case AUTO_ORE_ACTION_PICK_STORE_POS_200:
     case AUTO_ORE_ACTION_PICK_STORE_NEG_200:
@@ -643,6 +667,18 @@ static bool AutoCtrlFeed_StartOreAction(AutoOre_Action_t action) {
       break;
     case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD:
       result = AutoOre_StartStepPickStoreAscend400Head(&auto_ore_ctrl,
+                                                       now_ms);
+      break;
+    case AUTO_ORE_ACTION_STEP_DROP_STORE_ASCEND_200_HEAD:
+      result = AutoOre_StartStepDropStoreAscend200Head(&auto_ore_ctrl,
+                                                       now_ms);
+      break;
+    case AUTO_ORE_ACTION_STEP_DROP_STORE_DESCEND_200_HEAD:
+      result = AutoOre_StartStepDropStoreDescend200Head(&auto_ore_ctrl,
+                                                        now_ms);
+      break;
+    case AUTO_ORE_ACTION_STEP_DROP_STORE_ASCEND_400_HEAD:
+      result = AutoOre_StartStepDropStoreAscend400Head(&auto_ore_ctrl,
                                                        now_ms);
       break;
     case AUTO_ORE_ACTION_PICK_STORE_POS_400:
@@ -1311,6 +1347,21 @@ bool Task_AutoOreStartStepPickStoreAscend400Head(void) {
       AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD);
 }
 
+bool Task_AutoOreStartStepDropStoreAscend200Head(void) {
+  return AutoCtrlFeed_StartOreAction(
+      AUTO_ORE_ACTION_STEP_DROP_STORE_ASCEND_200_HEAD);
+}
+
+bool Task_AutoOreStartStepDropStoreDescend200Head(void) {
+  return AutoCtrlFeed_StartOreAction(
+      AUTO_ORE_ACTION_STEP_DROP_STORE_DESCEND_200_HEAD);
+}
+
+bool Task_AutoOreStartStepDropStoreAscend400Head(void) {
+  return AutoCtrlFeed_StartOreAction(
+      AUTO_ORE_ACTION_STEP_DROP_STORE_ASCEND_400_HEAD);
+}
+
 bool Task_AutoOreStartPickStorePos400(void) {
   return AutoCtrlFeed_StartOreAction(AUTO_ORE_ACTION_PICK_STORE_POS_400);
 }
@@ -1398,6 +1449,15 @@ static void AutoCtrlFeed_HandleAutoOreDebugRequest(void) {
       break;
     case AUTO_ORE_DEBUG_REQUEST_STEP_PICK_STORE_ASCEND_400_HEAD:
       result = Task_AutoOreStartStepPickStoreAscend400Head();
+      break;
+    case AUTO_ORE_DEBUG_REQUEST_STEP_DROP_STORE_ASCEND_200_HEAD:
+      result = Task_AutoOreStartStepDropStoreAscend200Head();
+      break;
+    case AUTO_ORE_DEBUG_REQUEST_STEP_DROP_STORE_DESCEND_200_HEAD:
+      result = Task_AutoOreStartStepDropStoreDescend200Head();
+      break;
+    case AUTO_ORE_DEBUG_REQUEST_STEP_DROP_STORE_ASCEND_400_HEAD:
+      result = Task_AutoOreStartStepDropStoreAscend400Head();
       break;
     case AUTO_ORE_DEBUG_REQUEST_PICK_STORE_POS_400:
       result = Task_AutoOreStartPickStorePos400();

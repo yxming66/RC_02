@@ -211,6 +211,9 @@ typedef enum {
     PC_AUTO_ACTION_PICK_STORE_POS_400 = 22, /* 一键取正 400mm 矿后并行存矿和后退 */
     PC_AUTO_ACTION_PICK_STORE_POS_200 = 23, /* 一键取正 200mm 矿后并行存矿和后退 */
     PC_AUTO_ACTION_PICK_STORE_NEG_200 = 24, /* 一键取反 200mm 矿后并行存矿和后退 */
+    PC_AUTO_ACTION_STEP_DROP_STORE_ASCEND_200_HEAD = 25, /* 丢矿版融合取矿存矿并头向上 200mm 台阶 */
+    PC_AUTO_ACTION_STEP_DROP_STORE_DESCEND_200_HEAD = 26, /* 丢矿版融合取矿存矿并头向下 200mm 台阶 */
+    PC_AUTO_ACTION_STEP_DROP_STORE_ASCEND_400_HEAD = 27, /* 丢矿版融合取矿存矿并头向上 400mm 台阶 */
 } PC_AutoAction_t;
 
 typedef enum {

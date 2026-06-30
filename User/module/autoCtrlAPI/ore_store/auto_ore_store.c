@@ -90,6 +90,12 @@ static bool AutoOre_ActionIsPickStoreFused(AutoOre_Action_t action) {
          action == AUTO_ORE_ACTION_PICK_STORE_NEG_200;
 }
 
+static bool AutoOre_ActionIsDropStoreFused(AutoOre_Action_t action) {
+  return action == AUTO_ORE_ACTION_STEP_DROP_STORE_ASCEND_200_HEAD ||
+         action == AUTO_ORE_ACTION_STEP_DROP_STORE_DESCEND_200_HEAD ||
+         action == AUTO_ORE_ACTION_STEP_DROP_STORE_ASCEND_400_HEAD;
+}
+
 static AutoOre_Action_t AutoOre_PickStoreFusedPickAction(
     AutoOre_Action_t action) {
   switch (action) {
@@ -1559,7 +1565,8 @@ static bool AutoOre_ActionIsPick(AutoOre_Action_t action) {
 static bool AutoOre_ActionIsFused(AutoOre_Action_t action) {
   return action == AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD ||
          action == AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD ||
-         action == AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD;
+         action == AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD ||
+         AutoOre_ActionIsDropStoreFused(action);
 }
 
 static const AutoOre_FusedParam_t *AutoOre_FusedParam(const AutoOre_t *ctrl) {
@@ -1568,10 +1575,13 @@ static const AutoOre_FusedParam_t *AutoOre_FusedParam(const AutoOre_t *ctrl) {
   }
   switch (ctrl->action) {
     case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD:
+    case AUTO_ORE_ACTION_STEP_DROP_STORE_ASCEND_200_HEAD:
       return &ctrl->param.fused_step_pick_store_ascend_200_head;
     case AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD:
+    case AUTO_ORE_ACTION_STEP_DROP_STORE_DESCEND_200_HEAD:
       return &ctrl->param.fused_step_pick_store_descend_200_head;
     case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD:
+    case AUTO_ORE_ACTION_STEP_DROP_STORE_ASCEND_400_HEAD:
       return &ctrl->param.fused_step_pick_store_ascend_400_head;
     default:
       return 0;
@@ -1619,10 +1629,13 @@ static const float *AutoOre_FusedStepStartPoleTarget(const AutoOre_t *ctrl) {
   }
   switch (ctrl->action) {
     case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD:
+    case AUTO_ORE_ACTION_STEP_DROP_STORE_ASCEND_400_HEAD:
       return ctrl->param.pole_param->preset.step_400_all_extend;
     case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD:
+    case AUTO_ORE_ACTION_STEP_DROP_STORE_ASCEND_200_HEAD:
       return ctrl->param.pole_param->preset.step_200_all_extend;
     case AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD:
+    case AUTO_ORE_ACTION_STEP_DROP_STORE_DESCEND_200_HEAD:
       return ctrl->param.pole_param->preset.step_200_descend_all_retract;
     default:
       return 0;
@@ -1666,10 +1679,13 @@ static auto_ctrl_template_e AutoOre_FusedDefaultTemplate(
     AutoOre_Action_t action) {
   switch (action) {
     case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD:
+    case AUTO_ORE_ACTION_STEP_DROP_STORE_ASCEND_200_HEAD:
       return AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD;
     case AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD:
+    case AUTO_ORE_ACTION_STEP_DROP_STORE_DESCEND_200_HEAD:
       return AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD;
     case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD:
+    case AUTO_ORE_ACTION_STEP_DROP_STORE_ASCEND_400_HEAD:
       return AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD;
     default:
       return AUTO_CTRL_TEMPLATE_NONE;
@@ -1798,10 +1814,13 @@ static AutoOre_Action_t AutoOre_FusedDefaultPickAction(
     AutoOre_Action_t action) {
   switch (action) {
     case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD:
+    case AUTO_ORE_ACTION_STEP_DROP_STORE_ASCEND_400_HEAD:
       return AUTO_ORE_ACTION_PICK_POS_400;
     case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD:
+    case AUTO_ORE_ACTION_STEP_DROP_STORE_ASCEND_200_HEAD:
       return AUTO_ORE_ACTION_PICK_POS_200;
     case AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD:
+    case AUTO_ORE_ACTION_STEP_DROP_STORE_DESCEND_200_HEAD:
       return AUTO_ORE_ACTION_PICK_NEG_200;
     default:
       return AUTO_ORE_ACTION_PICK_POS_200;
@@ -1812,7 +1831,8 @@ static const float *AutoOre_FusedPickPoleTarget(const AutoOre_t *ctrl) {
   if (ctrl == 0 || ctrl->param.pole_param == 0) {
     return 0;
   }
-  if (ctrl->action == AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD) {
+  if (ctrl->action == AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD ||
+      ctrl->action == AUTO_ORE_ACTION_STEP_DROP_STORE_DESCEND_200_HEAD) {
     return ctrl->param.pole_param->preset.step_200_descend_all_retract;
   }
   const AutoOre_FusedParam_t *param = AutoOre_FusedParam(ctrl);
@@ -1897,6 +1917,10 @@ static bool AutoOre_FusedArmPhotoConfirmed(AutoOre_t *ctrl,
 }
 
 static AutoOre_Position_t AutoOre_FusedSelectStorePosition(AutoOre_t *ctrl) {
+  if (AutoOre_ActionIsDropStoreFused(ctrl->action)) {
+    return AUTO_ORE_POSITION_TRANSFORM_HIGH;
+  }
+
   AutoOre_Occupancy_t occupancy = ctrl->occupancy;
   if (ctrl->feedback.ore_store_fixed_ore_cylinder_closed) {
     occupancy.transform_low_has_ore = true;
@@ -2796,6 +2820,14 @@ static bool AutoOre_Start(AutoOre_t *ctrl, AutoOre_Action_t action,
     if (!ctrl->occupancy.arm_has_ore) {
       position = AUTO_ORE_POSITION_ARM;
     }
+  } else if (AutoOre_ActionIsDropStoreFused(action)) {
+    if (!ctrl->occupancy.transform_high_has_ore) {
+      AutoOre_FailInvalidOccupancy(ctrl);
+      return false;
+    }
+    if (!ctrl->occupancy.arm_has_ore) {
+      position = AUTO_ORE_POSITION_ARM;
+    }
   } else if (AutoOre_ActionIsFused(action)) {
     if (!ctrl->occupancy.arm_has_ore) {
       position = AUTO_ORE_POSITION_ARM;
@@ -2858,6 +2890,24 @@ bool AutoOre_StartStepPickStoreDescend200Head(AutoOre_t *ctrl,
 bool AutoOre_StartStepPickStoreAscend400Head(AutoOre_t *ctrl,
                                              uint32_t now_ms) {
   return AutoOre_Start(ctrl, AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD,
+                       now_ms);
+}
+
+bool AutoOre_StartStepDropStoreAscend200Head(AutoOre_t *ctrl,
+                                             uint32_t now_ms) {
+  return AutoOre_Start(ctrl, AUTO_ORE_ACTION_STEP_DROP_STORE_ASCEND_200_HEAD,
+                       now_ms);
+}
+
+bool AutoOre_StartStepDropStoreDescend200Head(AutoOre_t *ctrl,
+                                              uint32_t now_ms) {
+  return AutoOre_Start(ctrl, AUTO_ORE_ACTION_STEP_DROP_STORE_DESCEND_200_HEAD,
+                       now_ms);
+}
+
+bool AutoOre_StartStepDropStoreAscend400Head(AutoOre_t *ctrl,
+                                             uint32_t now_ms) {
+  return AutoOre_Start(ctrl, AUTO_ORE_ACTION_STEP_DROP_STORE_ASCEND_400_HEAD,
                        now_ms);
 }
 
