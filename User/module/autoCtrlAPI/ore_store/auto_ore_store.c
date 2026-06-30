@@ -2936,6 +2936,13 @@ bool AutoOre_IsBusy(const AutoOre_t *ctrl) {
   return ctrl != 0 && ctrl->state == AUTO_ORE_STATE_RUNNING;
 }
 
+bool AutoOre_IsChassisReleased(const AutoOre_t *ctrl) {
+  return ctrl != 0 && ctrl->state == AUTO_ORE_STATE_RUNNING &&
+         (AutoOre_ActionIsPickStoreFused(ctrl->action) ||
+          AutoOre_ActionIsFused(ctrl->action)) &&
+         ctrl->fused_step_done;
+}
+
 AutoOre_State_t AutoOre_GetState(const AutoOre_t *ctrl) {
   return (ctrl == 0) ? AUTO_ORE_STATE_IDLE : ctrl->state;
 }
