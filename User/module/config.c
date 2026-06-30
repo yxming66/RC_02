@@ -378,7 +378,7 @@ Config_RobotParam_t robot_config = {
             /* 放矿：放矿前等待、Pole 到位后抬升观测超时、抬升确认后稳定等待、到放矿位后短暂停稳、吸盘关闭后矿石脱离等待。 */
             .release_wait_ms = 400u,
             .release_lift_detect_timeout_ms = 20000u,
-            .release_lift_detect_settle_ms = 1500u,//三层矿触发观测阈值延时放矿
+            .release_lift_detect_settle_ms = 500u,//三层矿触发观测阈值延时放矿
             .release_arm_settle_ms = 10u,
             .release_suction_off_ms = 400u,
             /* 上膛：低位矿夹紧等待、arm 到交接位稳定等待、气缸打开释放等待。 */
