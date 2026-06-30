@@ -47,7 +47,7 @@ typedef enum {
     PC_CMD_CAMERA_YAW = 0x17,    /* 相机云台 yaw 保持命令 */
     PC_CMD_ABSTRACT_POSITION = 0x18, /* 抽象位置命令 */
     PC_CMD_IMU = 0x20,           /* PC 下发姿态数据命令 */
-    PC_CMD_IR_ORE_ACK = 0x21,    /* PC 透传红外对接 ACK 帧，payload 为 6 字节原始 ACK */
+    PC_CMD_IR_ORE_ACK = 0x21,    /* PC 透传 UART10 矿位 ACK 帧，payload 为 6 字节原始 ACK */
 } PC_CMD_t;
 
 typedef enum {
@@ -61,9 +61,9 @@ typedef enum {
     PC_FEEDBACK_ORE_STORE = 0x95,    /* 矿仓平台状态反馈 */
     PC_FEEDBACK_STATUS = 0xA0,       /* 通信在线、接收计数、CPU 温度等状态反馈 */
     PC_FEEDBACK_AUTO_ACTION = 0x96,  /* 一键动作简化结果反馈 */
-    PC_FEEDBACK_IR_ORE = 0x97,       /* 红外对接矿种与对接状态反馈 */
+    PC_FEEDBACK_IR_ORE = 0x97,       /* UART10 矿位信息反馈 */
     PC_FEEDBACK_CAMERA_YAW = 0x98,   /* 相机云台 yaw 状态反馈 */
-    PC_FEEDBACK_IR_ORE_BRIDGE = 0x99,/* 红外对接桥接调试反馈，含 msg_id/side/原始 18 字节帧 */
+    PC_FEEDBACK_IR_ORE_BRIDGE = 0x99,/* UART10 矿位桥接调试反馈，含 msg_id/side/原始 18 字节帧 */
 } PC_FeedbackCMD_t;
  
 #define MRLINK_PC_MAX_PAYLOAD_SIZE (64u)    /* 单帧 payload 最大字节数，上位机结构体不能超过该值 */
@@ -345,13 +345,13 @@ typedef struct {
     uint8_t frame[PC_IR_ORE_ACK_FRAME_SIZE];
 } PC_IrOreAckCMD_t;
 
-/* 红外对接反馈帧：把 UART8 收到的 IR 命令（1 字节状态 + 12 字节矿种）
- * 透传给 PC 上位机，由 pc_comm_task 通过 MrlinkPc_PublishFeedback(PC_FEEDBACK_IR_ORE, …) 周期上报。
- * 与 IrDock_OreInfo_t / IrDock_Debug_t 的对应关系见各字段注释。 */
+/* 矿位反馈帧：把 UART10 收到的 12 路矿位消息透传给 PC 上位机，
+ * 由 pc_comm_task 通过 MrlinkPc_PublishFeedback(PC_FEEDBACK_IR_ORE, …) 上报。
+ * 与 OreInfo_Info_t / OreInfo_Debug_t 的对应关系见各字段注释。 */
 typedef struct {
     uint8_t valid;                                           /* 矿种信息是否曾成功解析过一帧，0=未收到过 12 字节矿种包，1=有效 */
-    uint8_t fresh;                                           /* 矿种信息是否新鲜，0=过期/未收到，1=在 IR_DOCK_ORE_INFO_FRESH_MS (1000ms) 内。注意：仅描述矿种包，不代表 status 状态命令 */
-    uint8_t status;                                          /* 最近一次 1 字节状态命令，见 IrDock_Status_t (IDLE=0/DOCKING=1/DOCK_COMPLETE=2)，状态命令单独到达也会刷新此字段 */
+    uint8_t fresh;                                           /* 矿种信息是否新鲜，0=过期/未收到，1=在 ORE_INFO_FRESH_MS (1000ms) 内 */
+    uint8_t status;                                          /* 保留字段；红外对接状态由 UART8 IrDock 单独处理 */
     uint8_t count;                                           /* 矿位个数，固定等于 PC_IR_ORE_POSITION_COUNT (12) */
     uint8_t ore_type[PC_IR_ORE_POSITION_COUNT];              /* 12 个矿位种类，见 PC_OreType_t (UNKNOWN=0/R1=1/R2=2/FAKE=3)，下标为矿位编号 */
     uint32_t age_ms;                                         /* 距最近一次成功接收 12 字节矿种包的时间，单位 ms；未收到过为 0 */
@@ -359,19 +359,19 @@ typedef struct {
 } PC_IrOreFeedback_t;
 
 typedef struct {
-    uint8_t valid;                                           /* 是否曾成功解析 18 字节红外矿种帧，0=未成功，1=成功过 */
-    uint8_t fresh;                                           /* 矿种帧是否新鲜，1 表示在 IR_DOCK_ORE_INFO_FRESH_MS 内收到 */
-    uint8_t status;                                          /* 最近状态命令，见 IrDock_Status_t：0=IDLE，1=DOCKING，2=DOCK_COMPLETE */
+    uint8_t valid;                                           /* 是否曾成功解析 18 字节 UART10 矿位帧，0=未成功，1=成功过 */
+    uint8_t fresh;                                           /* 矿种帧是否新鲜，1 表示在 ORE_INFO_FRESH_MS 内收到 */
+    uint8_t status;                                          /* 保留字段；红外对接状态由 UART8 IrDock 单独处理 */
     uint8_t count;                                           /* 矿位个数，固定为 PC_IR_ORE_POSITION_COUNT (12) */
     uint8_t msg_id;                                          /* 最近 18 字节矿种帧中的消息 ID，用于 ACK 匹配 */
     uint8_t side;                                            /* 最近 18 字节矿种帧中的侧别字段，0=左/默认，1=右，具体语义由红外对接端定义 */
     uint8_t ack_pending;                                     /* 红外对接端是否等待 ACK，0=否，1=是 */
     uint8_t parse_status;                                    /* 最近解析状态，见 IrDock_ParseStatus_t/IrDock_AckStatus_t */
     uint8_t ore_type[PC_IR_ORE_POSITION_COUNT];              /* 12 个矿位种类，见 PC_OreType_t，下标为矿位编号 */
-    uint8_t raw_frame[PC_IR_ORE_RAW_FRAME_SIZE];             /* 最近一次 18 字节红外矿种原始帧 */
+    uint8_t raw_frame[PC_IR_ORE_RAW_FRAME_SIZE];             /* 最近一次 18 字节 UART10 矿位原始帧 */
     uint32_t age_ms;                                         /* 距最近一次成功接收 18 字节矿种帧的时间，单位 ms */
     uint32_t rx_count;                                       /* 12 字节矿种包累计成功接收次数 */
-    uint32_t frame_rx_count;                                 /* 18 字节红外矿种帧累计成功接收次数 */
+    uint32_t frame_rx_count;                                 /* 18 字节 UART10 矿位帧累计接收次数 */
     uint32_t ack_tx_count;                                   /* ACK 透传到红外 UART 的累计发送次数 */
 } PC_IrOreBridgeFeedback_t;
 
@@ -543,7 +543,7 @@ typedef struct {
     uint32_t rx_ir_ore_ack_count;              /* 收到 PC_CMD_IR_ORE_ACK 的次数 */
     uint32_t ir_ore_ack_submit_count;          /* ACK 成功提交到红外 UART 发送队列的次数 */
     uint32_t ir_ore_ack_submit_error_count;    /* ACK 提交失败次数，不含 BUSY 重试 */
-    uint8_t ir_ore_ack_submit_result;          /* 最近一次 ACK 提交结果，见 IrDock_AckSubmitResult_t */
+    uint8_t ir_ore_ack_submit_result;          /* 最近一次 UART10 矿位 ACK 提交结果，见 OreInfo_AckSubmitResult_t */
     PC_IrOreAckCMD_t rx_ir_ore_ack;            /* 调试用：最近一次 PC 下发的 ACK 原始帧 */
 } PC_CommDebug_t;
 

@@ -80,6 +80,7 @@ void Task_Init(void *argument) {
   task_runtime.thread.pc_comm_sick =
       osThreadNew(Task_pc_comm_sick, NULL, &attr_pc_comm_sick);
   task_runtime.thread.ir_dock = osThreadNew(Task_ir_dock, NULL, &attr_ir_dock);
+    task_runtime.thread.ore_info = osThreadNew(Task_ore_info, NULL, &attr_ore_info);
 
   task_runtime.heartbeat.init++;
 

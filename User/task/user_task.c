@@ -160,3 +160,8 @@ const osThreadAttr_t attr_ir_dock = {
     .priority = osPriorityHigh,
     .stack_size = 256 * 4,
 };
+const osThreadAttr_t attr_ore_info = {
+  .name = "ore_info",
+  .priority = osPriorityHigh,
+  .stack_size = 512 * 4,
+};

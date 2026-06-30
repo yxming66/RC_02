@@ -23,7 +23,7 @@
 | 停止位 | 1 |
 | 数据格式 | 二进制，小端 |
 
-固件 `pc_comm_task` 每 1 ms 处理接收，每 20 ms 发送一批反馈帧，反馈频率约 50 Hz。红外矿种反馈在首次收到或内容变化后持续低频追加发送，当前周期约 200 ms。
+固件 `pc_comm_task` 每 1 ms 处理接收，每 20 ms 发送一批反馈帧，反馈频率约 50 Hz。UART10 矿位反馈在首次收到或内容变化后持续低频追加发送，当前周期约 200 ms。UART8 红外对接协议只处理 `0x01` 在线和 `0x02` 完成通知，并回复 `{0xA5, 原始帧值}` ACK。
 
 PC 在线判定：任意一帧合法 PC_COMM 帧都会刷新在线状态。若 500 ms 内没有收到合法帧，固件认为 PC 离线并回到 RC 控制模式。推荐上位机持续发送 `PC_CMD_HEARTBEAT (0x01)`，10~20 Hz 即可；高频控制命令本身也会保活。
 
@@ -94,7 +94,7 @@ def build_mrlink_frame(cmd: int, payload: bytes = b"") -> bytes:
 | `0x17` | `PC_CMD_CAMERA_YAW` | 5 | `<Bf` | 相机云台 yaw |
 | `0x18` | `PC_CMD_ABSTRACT_POSITION` | 5 | `<BBBBB` | 多机构抽象点位 |
 | `0x20` | `PC_CMD_IMU` | 28 | `<fffffff` | PC 姿态 |
-| `0x21` | `PC_CMD_IR_ORE_ACK` | 6 | `<6B` | 红外对接 ACK 透传 |
+| `0x21` | `PC_CMD_IR_ORE_ACK` | 6 | `<6B` | UART10 矿位 ACK 透传 |
 
 ### 4.1 心跳 `0x01`
 
@@ -277,9 +277,9 @@ def build_ir_ack(msg_id: int, status: int) -> bytes:
 | `0x94` | `PC_FEEDBACK_ROD_NEW` | 20 | `<BBBBffff` | 取矛头状态 |
 | `0x95` | `PC_FEEDBACK_ORE_STORE` | 12 | `<BBBBfBBBB` | 矿仓状态 |
 | `0x96` | `PC_FEEDBACK_AUTO_ACTION` | 6 | `<BBBBH` | 一键动作简化结果 |
-| `0x97` | `PC_FEEDBACK_IR_ORE` | 24 | `<BBBB12BII` | 红外矿种简表 |
+| `0x97` | `PC_FEEDBACK_IR_ORE` | 24 | `<BBBB12BII` | UART10 矿位简表 |
 | `0x98` | `PC_FEEDBACK_CAMERA_YAW` | 32 | `<BBBBffffffI` | 云台状态 |
-| `0x99` | `PC_FEEDBACK_IR_ORE_BRIDGE` | 56 | `<BBBBBBBB12B18BxxIIII` | 红外桥接调试 |
+| `0x99` | `PC_FEEDBACK_IR_ORE_BRIDGE` | 56 | `<BBBBBBBB12B18BxxIIII` | UART10 矿位桥接调试 |
 | `0xA0` | `PC_FEEDBACK_STATUS` | 10 | `<BIfB` | 通信/系统状态 |
 
 ### 5.1 底盘反馈 `0x90`
@@ -414,13 +414,13 @@ else:
     status = "IDLE"
 ```
 
-### 5.8 红外矿种简表 `0x97`
+### 5.8 UART10 矿位简表 `0x97`
 
 | 偏移 | 类型 | 字段 | 说明 |
 |---:|---|---|---|
 | 0 | u8 | `valid` | 是否成功解析过矿种包 |
 | 1 | u8 | `fresh` | 是否在 1000 ms 内收到矿种包 |
-| 2 | u8 | `status` | `0=IDLE`，`1=DOCKING`，`2=DOCK_COMPLETE` |
+| 2 | u8 | `status` | 保留字段；UART8 红外对接状态不混入矿位反馈 |
 | 3 | u8 | `count` | 固定 12 |
 | 4 | u8[12] | `ore_type` | `0=UNKNOWN`，`1=R1`，`2=R2`，`3=FAKE` |
 | 16 | u32 | `age_ms` | 距最近矿种包时间 |
@@ -444,29 +444,29 @@ else:
 | 48 | f32[2] | `output` | 电机控制输出 |
 | 56 | u32[2] | `feedback_age_ms` | ms |
 
-### 5.10 红外桥接反馈 `0x99`
+### 5.10 UART10 矿位桥接反馈 `0x99`
 
 该反馈包含 2 字节 padding，便于对齐后面的 `u32` 字段。上位机用 Python unpack 时格式为 `<BBBBBBBB12B18BxxIIII`。
 
 | 偏移 | 类型 | 字段 | 说明 |
 |---:|---|---|---|
-| 0 | u8 | `valid` | 是否成功解析过 18 字节红外矿种帧 |
+| 0 | u8 | `valid` | 是否成功解析过 18 字节 UART10 矿位帧 |
 | 1 | u8 | `fresh` | 是否在 1000 ms 内收到矿种帧 |
-| 2 | u8 | `status` | `0=IDLE`，`1=DOCKING`，`2=DOCK_COMPLETE` |
+| 2 | u8 | `status` | 保留字段；UART8 红外对接状态不混入矿位反馈 |
 | 3 | u8 | `count` | 固定 12 |
 | 4 | u8 | `msg_id` | 最近矿种帧消息 ID |
 | 5 | u8 | `side` | 红外端侧别字段 |
 | 6 | u8 | `ack_pending` | 固件是否等待 ACK |
 | 7 | u8 | `parse_status` | `0=OK`，`1=BUSY`，`2=CRC_ERR`，`3=INVALID` |
 | 8 | u8[12] | `ore_type` | 12 个矿位种类 |
-| 20 | u8[18] | `raw_frame` | 原始红外矿种帧 |
+| 20 | u8[18] | `raw_frame` | 原始 UART10 矿位帧 |
 | 38 | u8[2] | padding | 固件 C 结构体对齐填充 |
 | 40 | u32 | `age_ms` | 距最近成功矿种帧时间 |
 | 44 | u32 | `rx_count` | 成功矿种包次数 |
 | 48 | u32 | `frame_rx_count` | 成功 18 字节帧次数 |
 | 52 | u32 | `ack_tx_count` | ACK 转发次数 |
 
-红外矿种原始帧格式：
+UART10 矿位原始帧格式：
 
 ```
 AA 55 02 msg_id side ore_type[12] crc8

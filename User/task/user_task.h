@@ -14,6 +14,7 @@
 #include "module/autoCtrlAPI/rod/auto_rod_spearhead.h"
 #include "module/autoCtrlAPI/sick/auto_sick_correct.h"
 #include "device/ir_dock/ir_dock.h"
+#include "device/ore_info/ore_info.h"
 #include "module/arm_simple.h"
 #include "module/rod_new.h"
 #include "module/ore_store.h"
@@ -41,6 +42,7 @@ extern "C" {
 #define PC_COMM_FREQ (100.0)
 #define ORE_STORE_FREQ (500.0)
 #define IR_DOCK_FREQ (100.0)
+#define ORE_INFO_FREQ (100.0)
 #define TASK_FUSED_LOOP_FREQ (200.0)
 /* 任务初始化延时ms */
 #define TASK_INIT_DELAY (100u)
@@ -57,6 +59,7 @@ extern "C" {
 #define PC_COMM_INIT_DELAY (500u)
 #define ORE_STORE_INIT_DELAY (100u)
 #define IR_DOCK_INIT_DELAY (0)
+#define ORE_INFO_INIT_DELAY (0)
 /* Exported defines --------------------------------------------------------- */
 #define TASK_PERIOD_US(freq) ((uint32_t)(1000000.0f / (float)(freq)))
 /* Exported macro ----------------------------------------------------------- */
@@ -78,6 +81,7 @@ typedef enum {
     TASK_PROFILE_SICK,
     TASK_PROFILE_AUTO_CTRL,
     TASK_PROFILE_IR_DOCK,
+    TASK_PROFILE_ORE_INFO,
     TASK_PROFILE_COUNT,
 } Task_ProfileId_t;
 
@@ -323,6 +327,7 @@ typedef struct {
         osThreadId_t auto_ctrl;
         osThreadId_t pc_comm_sick;
         osThreadId_t ir_dock;
+        osThreadId_t ore_info;
 
     } thread;
 
@@ -393,6 +398,7 @@ typedef struct {
         volatile uint32_t pc_comm;
         volatile uint32_t ore_store;
         volatile uint32_t ir_dock;
+        volatile uint32_t ore_info;
     } heartbeat;
 
     Task_ProfileStats_t profile[TASK_PROFILE_COUNT];
@@ -410,6 +416,7 @@ extern volatile AutoOre_DebugControl_t g_auto_ore_debug;
 extern volatile Sick_Debug_t g_sick_debug;
 extern volatile PolePidDebugControl_t g_pole_pid_debug;
 extern volatile IrDock_Debug_t g_ir_dock_debug;
+extern volatile OreInfo_Debug_t g_ore_info_debug;
 extern AutoRodSpearhead_t auto_rod_spearhead_ctrl;
 extern bool auto_rod_spearhead_inited;
 extern AutoSickCorrect_t auto_sick_correct_ctrl;
@@ -431,6 +438,7 @@ extern const osThreadAttr_t attr_rc_main;
 extern const osThreadAttr_t attr_auto_ctrl;
 extern const osThreadAttr_t attr_pc_comm_sick;
 extern const osThreadAttr_t attr_ir_dock;
+extern const osThreadAttr_t attr_ore_info;
 /* 任务函数声明 */
 void Task_Init(void *argument);
 void Task_blink(void *argument);
@@ -448,6 +456,7 @@ void Task_pc_comm(void *argument);
 void Task_pc_comm_sick(void *argument);
 void Task_ore_store(void *argument);
 void Task_ir_dock(void *argument);
+void Task_ore_info(void *argument);
 uint32_t Task_ProfilerLoopBegin(Task_ProfileId_t id, uint32_t target_period_us);
 void Task_ProfilerLoopEnd(Task_ProfileId_t id, uint32_t loop_start_us);
 void Task_DelayUntil(Task_ProfileId_t id, uint32_t *wake_tick,

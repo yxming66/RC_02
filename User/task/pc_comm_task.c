@@ -7,6 +7,7 @@
 
 #include "task/user_task.h"
 #include "device/dr16.h"
+#include "device/ore_info/ore_info.h"
 #include "module/mrlink_pc_comm/mrlink_pc_comm.h"
 #include "module/autoCtrlAPI/api/auto_ctrl_api.h"
 #include "module/arm_simple.h"
@@ -18,7 +19,7 @@
 #define PC_COMM_LOOP_PERIOD_MS (10u)
 #define PC_COMM_TX_DMA_TIMEOUT_MS (100u)
 #define PC_COMM_CAMERA_YAW_CMD_TIMEOUT_MS (1000u)
-/* IR_ORE 12 位置矿种类在首次收到或内容变化后持续低频上报。
+/* UART10 矿位消息在首次收到或内容变化后持续低频上报。
  * age_ms 会随时间增长，不参与内容变化判断，避免退化成 50Hz 刷屏。 */
 #define PC_COMM_IR_ORE_REPEAT_MS (200u)
 
@@ -355,39 +356,39 @@ static void PcComm_NormalizeIrOreBridgeForCompare(
 }
 
 static bool PcComm_TryUpdateIrOreFeedback(uint32_t now_ms) {
-    IrDock_OreInfo_t ir_info = {0};
+    OreInfo_Info_t ore_info = {0};
     PC_IrOreFeedback_t pc_ir_ore = {0};
     PC_IrOreBridgeFeedback_t pc_ir_ore_bridge = {0};
 
-    (void)IrDock_GetOreInfo(&ir_info, now_ms);
-    pc_ir_ore.valid = ir_info.valid ? 1u : 0u;
-    pc_ir_ore.fresh = ir_info.fresh ? 1u : 0u;
-    pc_ir_ore.status = ir_info.status;
+    (void)OreInfo_GetInfo(&ore_info, now_ms);
+    pc_ir_ore.valid = ore_info.valid ? 1u : 0u;
+    pc_ir_ore.fresh = ore_info.fresh ? 1u : 0u;
+    pc_ir_ore.status = (uint8_t)IR_DOCK_STATUS_IDLE;
     pc_ir_ore.count = PC_IR_ORE_POSITION_COUNT;
     for (uint8_t i = 0u; i < PC_IR_ORE_POSITION_COUNT; ++i) {
-        pc_ir_ore.ore_type[i] = ir_info.ore_type[i];
+        pc_ir_ore.ore_type[i] = ore_info.ore_type[i];
     }
-    pc_ir_ore.age_ms = ir_info.age_ms;
-    pc_ir_ore.rx_count = ir_info.rx_count;
+    pc_ir_ore.age_ms = ore_info.age_ms;
+    pc_ir_ore.rx_count = ore_info.rx_count;
 
     pc_ir_ore_bridge.valid = pc_ir_ore.valid;
     pc_ir_ore_bridge.fresh = pc_ir_ore.fresh;
-    pc_ir_ore_bridge.status = ir_info.status;
+    pc_ir_ore_bridge.status = pc_ir_ore.status;
     pc_ir_ore_bridge.count = PC_IR_ORE_POSITION_COUNT;
-    pc_ir_ore_bridge.msg_id = ir_info.msg_id;
-    pc_ir_ore_bridge.side = ir_info.side;
-    pc_ir_ore_bridge.ack_pending = ir_info.ack_pending;
-    pc_ir_ore_bridge.parse_status = ir_info.parse_status;
+    pc_ir_ore_bridge.msg_id = ore_info.msg_id;
+    pc_ir_ore_bridge.side = ore_info.side;
+    pc_ir_ore_bridge.ack_pending = ore_info.ack_pending;
+    pc_ir_ore_bridge.parse_status = ore_info.parse_status;
     for (uint8_t i = 0u; i < PC_IR_ORE_POSITION_COUNT; ++i) {
-        pc_ir_ore_bridge.ore_type[i] = ir_info.ore_type[i];
+        pc_ir_ore_bridge.ore_type[i] = ore_info.ore_type[i];
     }
     for (uint8_t i = 0u; i < PC_IR_ORE_RAW_FRAME_SIZE; ++i) {
-        pc_ir_ore_bridge.raw_frame[i] = ir_info.raw_frame[i];
+        pc_ir_ore_bridge.raw_frame[i] = ore_info.raw_frame[i];
     }
-    pc_ir_ore_bridge.age_ms = ir_info.age_ms;
-    pc_ir_ore_bridge.rx_count = ir_info.rx_count;
-    pc_ir_ore_bridge.frame_rx_count = ir_info.frame_rx_count;
-    pc_ir_ore_bridge.ack_tx_count = ir_info.ack_tx_count;
+    pc_ir_ore_bridge.age_ms = ore_info.age_ms;
+    pc_ir_ore_bridge.rx_count = ore_info.rx_count;
+    pc_ir_ore_bridge.frame_rx_count = ore_info.frame_rx_count;
+    pc_ir_ore_bridge.ack_tx_count = ore_info.ack_tx_count;
 
     PC_IrOreFeedback_t pc_ir_ore_cmp = pc_ir_ore;
     PC_IrOreFeedback_t last_ir_ore_cmp = s_last_published_ir_ore;
@@ -442,12 +443,12 @@ static void PcComm_ProcessIrOreAckCommand(uint32_t now_ms) {
         return;
     }
 
-    IrDock_AckSubmitResult_t result = IrDock_SendAckFrame(cmd->frame, now_ms);
+    OreInfo_AckSubmitResult_t result = OreInfo_SendAckFrame(cmd->frame, now_ms);
     g_pc_comm_debug.ir_ore_ack_submit_result = (uint8_t)result;
-    if (result == IR_DOCK_ACK_SUBMIT_OK) {
+    if (result == ORE_INFO_ACK_SUBMIT_OK) {
         g_pc_comm_debug.ir_ore_ack_submit_count++;
         MrlinkPc_ClearIrOreAckCommand();
-    } else if (result != IR_DOCK_ACK_SUBMIT_BUSY) {
+    } else if (result != ORE_INFO_ACK_SUBMIT_BUSY) {
         g_pc_comm_debug.ir_ore_ack_submit_error_count++;
         MrlinkPc_ClearIrOreAckCommand();
     }

@@ -95,6 +95,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     User/device/mrlink/internal/mrlink_channel_fdcan.c
     User/device/mrlink/internal/mrlink_channel_usb.c
     ${CMAKE_CURRENT_SOURCE_DIR}/User/device/ir_dock/ir_dock.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/User/device/ore_info/ore_info.c
     User/component/toolbox/matrix.cpp
     User/component/toolbox/robotics.cpp
     User/component/toolbox/utils.cpp
@@ -164,6 +165,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     User/task/upper_mech_task.c
     User/task/ore_store_main.c
     ${CMAKE_CURRENT_SOURCE_DIR}/User/task/ir_dock_task.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/User/task/ore_info_task.c
     User/task/atti_esti.c
     User/task/pc_comm_task.c
 )
