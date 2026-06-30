@@ -142,6 +142,9 @@ typedef enum {
     AUTO_ORE_DEBUG_REQUEST_PICK_STORE_POS_400 = 22,
     AUTO_ORE_DEBUG_REQUEST_PICK_STORE_POS_200 = 23,
     AUTO_ORE_DEBUG_REQUEST_PICK_STORE_NEG_200 = 24,
+    AUTO_ORE_DEBUG_REQUEST_STEP_DROP_STORE_ASCEND_200_HEAD = 25,
+    AUTO_ORE_DEBUG_REQUEST_STEP_DROP_STORE_DESCEND_200_HEAD = 26,
+    AUTO_ORE_DEBUG_REQUEST_STEP_DROP_STORE_ASCEND_400_HEAD = 27,
 } AutoOre_DebugRequest_t;
 
 typedef struct {
@@ -482,6 +485,9 @@ bool Task_AutoOreStartPickNeg200(void);
 bool Task_AutoOreStartStepPickStoreAscend200Head(void);
 bool Task_AutoOreStartStepPickStoreDescend200Head(void);
 bool Task_AutoOreStartStepPickStoreAscend400Head(void);
+bool Task_AutoOreStartStepDropStoreAscend200Head(void);
+bool Task_AutoOreStartStepDropStoreDescend200Head(void);
+bool Task_AutoOreStartStepDropStoreAscend400Head(void);
 bool Task_AutoOreStartPickStorePos400(void);
 bool Task_AutoOreStartPickStorePos200(void);
 bool Task_AutoOreStartPickStoreNeg200(void);

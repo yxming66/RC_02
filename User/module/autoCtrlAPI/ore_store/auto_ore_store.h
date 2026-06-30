@@ -28,6 +28,9 @@ typedef enum {
   AUTO_ORE_ACTION_PICK_STORE_POS_400,
   AUTO_ORE_ACTION_PICK_STORE_POS_200,
   AUTO_ORE_ACTION_PICK_STORE_NEG_200,
+  AUTO_ORE_ACTION_STEP_DROP_STORE_ASCEND_200_HEAD,
+  AUTO_ORE_ACTION_STEP_DROP_STORE_DESCEND_200_HEAD,
+  AUTO_ORE_ACTION_STEP_DROP_STORE_ASCEND_400_HEAD,
 } AutoOre_Action_t;
 
 typedef enum {
@@ -278,6 +281,9 @@ bool AutoOre_StartPickNeg200(AutoOre_t *ctrl, uint32_t now_ms);
 bool AutoOre_StartStepPickStoreAscend200Head(AutoOre_t *ctrl, uint32_t now_ms);
 bool AutoOre_StartStepPickStoreDescend200Head(AutoOre_t *ctrl, uint32_t now_ms);
 bool AutoOre_StartStepPickStoreAscend400Head(AutoOre_t *ctrl, uint32_t now_ms);
+bool AutoOre_StartStepDropStoreAscend200Head(AutoOre_t *ctrl, uint32_t now_ms);
+bool AutoOre_StartStepDropStoreDescend200Head(AutoOre_t *ctrl, uint32_t now_ms);
+bool AutoOre_StartStepDropStoreAscend400Head(AutoOre_t *ctrl, uint32_t now_ms);
 bool AutoOre_StartPickStorePos400(AutoOre_t *ctrl, uint32_t now_ms);
 bool AutoOre_StartPickStorePos200(AutoOre_t *ctrl, uint32_t now_ms);
 bool AutoOre_StartPickStoreNeg200(AutoOre_t *ctrl, uint32_t now_ms);
