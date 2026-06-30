@@ -218,7 +218,7 @@ Config_RobotParam_t robot_config = {
                 /* 平台等待矛头对接位置，待实机标定。 */
                 [ORE_STORE_TRANSFORM_SPEARHEAD_DOCK_WAIT] = 0.340454519f,
                 /* 取矛头平台预设位，待实机标定。 */
-                [ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP] = 21.833622f,
+                [ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP] = 22.533622f,
             },
         },
         .fixed_ore_cylinder = {    
@@ -463,7 +463,7 @@ Config_RobotParam_t robot_config = {
     .auto_rod_spearhead_param = {
         /* One-key spearhead action timing; rod_param is filled during init. */
         .open_delay_ms = 1000u,
-        .grab_high_delay_ms = 500u,
+        .grab_high_delay_ms = 350u,
         .dock_wait_delay_ms = 10000u,
         /* 等待对接时 transform 的目标点；实际角度在 ore_store_param.preset.transform_position_rad 中标定。 */
         .dock_wait_transform = ORE_STORE_TRANSFORM_SPEARHEAD_DOCK_WAIT,
