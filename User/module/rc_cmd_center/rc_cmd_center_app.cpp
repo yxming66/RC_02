@@ -1597,20 +1597,6 @@ struct RcChassisAutoCtrlRoute {
 
 struct RcChassisAutoOreRoute {
   bool operator()(const RcRuntimeInput &, cmd::Context &, Chassis_CMD_t &out) const {
-    if (Rc_ShouldUsePcCommand() && AutoOre_IsChassisReleased(&auto_ore_ctrl)) {
-      const PC_ChassisCMD_t *pc_chassis_cmd = MrlinkPc_GetChassisCMD();
-      if (pc_chassis_cmd == NULL) {
-        Rc_SetChassisRelax();
-      } else {
-        chassis_cmd.mode = CHASSIS_MODE_INDEPENDENT;
-        chassis_cmd.ctrl_vec.vx = pc_chassis_cmd->vx;
-        chassis_cmd.ctrl_vec.vy = pc_chassis_cmd->vy;
-        chassis_cmd.ctrl_vec.wz = pc_chassis_cmd->wz;
-      }
-      out = chassis_cmd;
-      return true;
-    }
-
     const Chassis_CMD_t *auto_chassis_cmd =
         AutoOre_GetChassisCommand(&auto_ore_ctrl);
     if (auto_chassis_cmd != NULL) {
