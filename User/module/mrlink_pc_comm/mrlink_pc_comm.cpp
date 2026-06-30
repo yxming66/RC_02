@@ -492,7 +492,7 @@ wire::OreStoreFeedback MakeOreStoreFeedbackWire(
   wire_feedback.transform_low_has_ore = feedback.transform_low_has_ore;
   wire_feedback.transform_high_has_ore = feedback.transform_high_has_ore;
   wire_feedback.arm_has_ore = feedback.arm_has_ore;
-  wire_feedback.reserved = 0u;
+  wire_feedback.release_grid_has_ore = feedback.release_grid_has_ore;
   return wire_feedback;
 }
 

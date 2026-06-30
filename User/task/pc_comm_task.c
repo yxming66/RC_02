@@ -226,6 +226,8 @@ static void PcComm_UpdateModuleFeedback(void) {
         pc_ore.transform_high_has_ore =
             g_auto_ore_debug.transform_high_has_ore ? 1u : 0u;
         pc_ore.arm_has_ore = g_auto_ore_debug.arm_has_ore ? 1u : 0u;
+        pc_ore.release_grid_has_ore =
+            g_auto_ore_debug.release_grid_has_ore ? 1u : 0u;
         for (uint8_t axis = 0u; axis < ORE_STORE_AXIS_NUM; ++axis) {
             if (ore_fb->online[axis]) {
                 pc_ore.online_mask |= (uint8_t)(1u << axis);

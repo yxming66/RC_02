@@ -33,6 +33,7 @@ typedef enum {
   PHOTO_TRANSFER_BIT_ORE_LOW = 5u,
   PHOTO_TRANSFER_BIT_ORE_HIGH = 6u,
   PHOTO_TRANSFER_BIT_ARM_ORE = 7u,
+  PHOTO_TRANSFER_BIT_RELEASE_GRID_ORE = 8u,
 } PhotoTransfer_Bit_t;
 
 typedef struct {

@@ -407,8 +407,8 @@ Config_RobotParam_t robot_config = {
         .release_lift_detect_sick_index = SICK_REAR_INDEX,
         .release_lift_detect_sick_adc_threshold = 3200u,
         .release_lift_detect_sick_greater_than_threshold = true,
-        /* 取矿流程中正向 200/400 取矿的底盘前进速度，单位 m/s。 */
-        .fetch_chassis_vx_mps = 0.50f,
+        /* 取矿流程中正向 200/400 取矿的底盘前进速度，单位 m/s；与融合上台阶取矿靠近速度保持一致。 */
+        .fetch_chassis_vx_mps = 0.20f,
         /* 取 -200 矿时底盘前进速度，单位 m/s；可设为 0 禁止底盘前进。 */
         .fetch_neg_200_chassis_vx_mps = 0.20f,
         /* 低位存矿完成后，transform 从高位 LIFT 回低位 STANDBY 的梯形速度规划；<=0 使用默认值。 */

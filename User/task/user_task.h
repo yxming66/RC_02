@@ -168,6 +168,7 @@ typedef struct {
     volatile bool checkphoto_spear_triggered;
     volatile bool checkphoto_orelow_triggered;
     volatile bool checkphoto_orehigh_triggered;
+    volatile bool checkphoto_release_grid_triggered;
     volatile bool photo_transfer_valid;
     volatile uint16_t photo_transfer_raw_mask;
     volatile uint32_t photo_transfer_age_ms;
@@ -210,6 +211,9 @@ typedef struct {
     volatile uint16_t release_lift_sick_adc_threshold;
     volatile bool release_lift_sick_valid;
     volatile bool release_lift_detected;
+    volatile bool release_grid_check_active;
+    volatile bool release_grid_check_done;
+    volatile bool release_grid_has_ore;
     volatile float imu_accl_z_g;
     volatile bool auto_rod_spearhead_busy;
     volatile AutoRodSpearhead_State_t auto_rod_spearhead_state;

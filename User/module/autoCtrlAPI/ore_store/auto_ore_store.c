@@ -16,6 +16,7 @@
 #define AUTO_ORE_DEFAULT_STORE_LOW_RETURN_DECEL_RAD_S2 (80.0f)
 #define AUTO_ORE_STORE_LOW_RETURN_MIN_VELOCITY_RAD_S (0.05f)
 #define AUTO_ORE_DEFAULT_RELEASE_WAIT_MS (50u)
+#define AUTO_ORE_RELEASE_GRID_CHECK_MS (500u)
 #define AUTO_ORE_DEFAULT_RELEASE_LIFT_DETECT_TIMEOUT_MS (10000u)
 #define AUTO_ORE_DEFAULT_RELEASE_LIFT_DETECT_SETTLE_MS (500u)
 #define AUTO_ORE_DEFAULT_RELEASE_LIFT_DETECT_SICK_ADC_THRESHOLD (3200u)
@@ -258,14 +259,41 @@ static uint16_t AutoOre_ReleaseLiftDetectSickAdcThreshold(
 static void AutoOre_ResetReleaseLiftObserver(AutoOre_t *ctrl) {
   ctrl->release_lift_observer_active = false;
   ctrl->release_lift_detected = false;
+  ctrl->release_grid_check_active = false;
+  ctrl->release_grid_check_done = false;
+  ctrl->release_grid_has_ore = false;
   ctrl->release_lift_observer_start_ms = 0u;
   ctrl->release_lift_observer_last_ms = 0u;
   ctrl->release_lift_detect_time_ms = 0u;
+  ctrl->release_grid_check_start_ms = 0u;
+  ctrl->release_grid_check_last_ms = 0u;
   ctrl->release_lift_sick_index = AutoOre_ReleaseLiftDetectSickIndex(ctrl);
   ctrl->release_lift_sick_adc_raw = 0u;
   ctrl->release_lift_sick_adc_threshold =
       AutoOre_ReleaseLiftDetectSickAdcThreshold(ctrl);
   ctrl->release_lift_sick_valid = false;
+}
+
+static bool AutoOre_UpdateReleaseGridCheck(AutoOre_t *ctrl, uint32_t now_ms) {
+  if (!ctrl->release_grid_check_active) {
+    ctrl->release_grid_check_active = true;
+    ctrl->release_grid_check_done = false;
+    ctrl->release_grid_has_ore = true;
+    ctrl->release_grid_check_start_ms = now_ms;
+    ctrl->release_grid_check_last_ms = now_ms;
+  }
+
+  ctrl->release_grid_check_last_ms = now_ms;
+  if (!ctrl->feedback.release_grid_has_ore) {
+    ctrl->release_grid_has_ore = false;
+    ctrl->release_grid_check_done = true;
+    return true;
+  }
+  if ((now_ms - ctrl->release_grid_check_start_ms) >=
+      AUTO_ORE_RELEASE_GRID_CHECK_MS) {
+    ctrl->release_grid_check_done = true;
+  }
+  return ctrl->release_grid_check_done;
 }
 
 static bool AutoOre_UpdateReleaseLiftObserver(AutoOre_t *ctrl,
@@ -1187,7 +1215,7 @@ static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
     case 0:
       AutoOre_EnterStep(ctrl, now_ms);
       if (!AutoOre_CommandReleasePoleTarget(ctrl) ||
-          !AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_WAIT_RELEASE_ORE,
+          !AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_VERTICAL,
               SUCTION_ON,
               &ctrl->param.arm_speed.release_wait) ||
           !AutoOre_CommandReleaseOreStoreHold(ctrl,
@@ -1197,7 +1225,8 @@ static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
         return;
       }
       if (AutoOre_StepElapsed(ctrl, now_ms) > 0u &&
-          AutoOre_ReleasePoleAtTarget(ctrl)) {
+          AutoOre_ReleasePoleAtTarget(ctrl) &&
+          AutoOre_WaitArmCommandTarget(ctrl, now_ms)) {
         AutoOre_NextStep(ctrl);
       } else {
         (void)AutoOre_CheckTimeout(ctrl, now_ms);
@@ -1206,7 +1235,7 @@ static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
     case 1:
       AutoOre_EnterStep(ctrl, now_ms);
       if (!AutoOre_CommandReleasePoleTarget(ctrl) ||
-          !AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_WAIT_RELEASE_ORE,
+          !AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_VERTICAL,
               SUCTION_ON,
               &ctrl->param.arm_speed.release_wait) ||
           !AutoOre_CommandReleaseOreStoreHold(ctrl,
@@ -1218,8 +1247,12 @@ static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
       const bool arm_ready = AutoOre_WaitConditionThenDelay(
           ctrl, now_ms, ctrl->feedback.arm_at_target,
           AutoOre_ReleaseWaitMs(ctrl));
+      const bool grid_check_done = arm_ready && AutoOre_ReleasePoleAtTarget(ctrl)
+                                       ? AutoOre_UpdateReleaseGridCheck(ctrl,
+                                                                       now_ms)
+                                       : false;
       if (!AutoOre_ActionUsesReleaseLiftDetect(ctrl->action)) {
-        if (arm_ready) {
+        if (grid_check_done) {
           AutoOre_NextStep(ctrl);
         } else {
           (void)AutoOre_CheckTimeout(ctrl, now_ms);
@@ -1231,7 +1264,7 @@ static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
           (now_ms - ctrl->release_lift_detect_time_ms) >=
               AutoOre_ReleaseLiftDetectSettleMs(ctrl);
       if (lift_settled) {
-        if (arm_ready) {
+        if (grid_check_done) {
           AutoOre_NextStep(ctrl);
         } else {
           (void)AutoOre_CheckTimeout(ctrl, now_ms);

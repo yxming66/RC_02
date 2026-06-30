@@ -345,7 +345,7 @@ def build_ir_ack(msg_id: int, status: int) -> bytes:
 | 8 | u8 | `transform_low_has_ore` | `0/1` |
 | 9 | u8 | `transform_high_has_ore` | `0/1` |
 | 10 | u8 | `arm_has_ore` | `0/1` |
-| 11 | u8 | `reserved` | 固定 0 |
+| 11 | u8 | `release_grid_has_ore` | 放矿目标格占矿检测结果，`0/1` |
 
 ### 5.7 一键动作反馈 `0x96`
 

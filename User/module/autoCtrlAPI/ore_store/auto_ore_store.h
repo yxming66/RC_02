@@ -97,6 +97,7 @@ typedef struct {
   bool pe9_photo2_triggered;
   bool pa2_photo3_triggered;
   bool pa0_photo4_triggered;
+  bool release_grid_has_ore;
   bool ore_store_fixed_ore_cylinder_closed;
   auto_ctrl_yaw_source_e yaw_source;
   float yaw_auto_rad;
@@ -244,9 +245,14 @@ typedef struct {
   AutoOre_Position_t fused_store_position;
   bool release_lift_observer_active;
   bool release_lift_detected;
+  bool release_grid_check_active;
+  bool release_grid_check_done;
+  bool release_grid_has_ore;
   uint32_t release_lift_observer_start_ms;
   uint32_t release_lift_observer_last_ms;
   uint32_t release_lift_detect_time_ms;
+  uint32_t release_grid_check_start_ms;
+  uint32_t release_grid_check_last_ms;
   uint8_t release_lift_sick_index;
   uint16_t release_lift_sick_adc_raw;
   uint16_t release_lift_sick_adc_threshold;

@@ -147,6 +147,10 @@ static bool AutoCtrlFeed_ReadArmOrePhoto(void) {
   return AutoCtrlFeed_ReadPhotoTransferBit(PHOTO_TRANSFER_BIT_ARM_ORE);
 }
 
+static bool AutoCtrlFeed_ReadReleaseGridOrePhoto(void) {
+  return AutoCtrlFeed_ReadPhotoTransferBit(PHOTO_TRANSFER_BIT_RELEASE_GRID_ORE);
+}
+
 static PC_AutoAction_t AutoCtrlFeed_MapOreAction(AutoOre_Action_t action) {
   switch (action) {
     case AUTO_ORE_ACTION_STORE:
@@ -950,6 +954,8 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms, bool update_debug) {
   const bool ore_low_photo_triggered = AutoCtrlFeed_ReadOreLowPhoto();
   const bool ore_high_photo_triggered = AutoCtrlFeed_ReadOreHighPhoto();
   const bool arm_ore_photo_triggered = AutoCtrlFeed_ReadArmOrePhoto();
+  const bool release_grid_photo_triggered =
+      AutoCtrlFeed_ReadReleaseGridOrePhoto();
   const bool spear_photo_triggered = AutoCtrlFeed_ReadRodSpearheadPhoto();
   const ArmSimple_Feedback_t *arm_fb = Task_ArmSimpleGetFeedback();
   const Chassis_Feedback_t *chassis_feedback = Task_ChassisGetFeedback();
@@ -967,6 +973,7 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms, bool update_debug) {
       .pe9_photo2_triggered = feedback.pe9_photo2_triggered,
       .pa2_photo3_triggered = feedback.pa2_photo3_triggered,
       .pa0_photo4_triggered = feedback.pa0_photo4_triggered,
+      .release_grid_has_ore = release_grid_photo_triggered,
       .yaw_source = AutoCtrl_GetYawSource(&auto_ctrl),
       .yaw_auto_rad = feedback.yaw_auto_rad,
       .yaw_rate_cmd_rad_s = auto_ctrl.yaw_rate_cmd_rad_s,
@@ -1018,6 +1025,8 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms, bool update_debug) {
   g_auto_ore_debug.checkphoto_spear_triggered = spear_photo_triggered;
   g_auto_ore_debug.checkphoto_orelow_triggered = ore_low_photo_triggered;
   g_auto_ore_debug.checkphoto_orehigh_triggered = ore_high_photo_triggered;
+  g_auto_ore_debug.checkphoto_release_grid_triggered =
+      release_grid_photo_triggered;
   g_auto_ore_debug.photo_transfer_valid = photo_transfer_snapshot.valid;
   g_auto_ore_debug.photo_transfer_raw_mask = photo_transfer_snapshot.raw_mask;
   g_auto_ore_debug.photo_transfer_age_ms = photo_transfer_snapshot.age_ms;
@@ -1084,6 +1093,11 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms, bool update_debug) {
     g_auto_ore_debug.release_lift_sick_valid =
       auto_ore_ctrl.release_lift_sick_valid;
     g_auto_ore_debug.release_lift_detected = auto_ore_ctrl.release_lift_detected;
+    g_auto_ore_debug.release_grid_check_active =
+      auto_ore_ctrl.release_grid_check_active;
+    g_auto_ore_debug.release_grid_check_done =
+      auto_ore_ctrl.release_grid_check_done;
+    g_auto_ore_debug.release_grid_has_ore = auto_ore_ctrl.release_grid_has_ore;
     g_auto_ore_debug.imu_accl_z_g = auto_ore_feedback.imu_accl_z_g;
 }
 

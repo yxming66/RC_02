@@ -126,7 +126,7 @@ struct __attribute__((packed)) OreStoreFeedback {
   uint8_t transform_low_has_ore;    /* 变形机构低位占矿状态，0/1 */
   uint8_t transform_high_has_ore;   /* 变形机构高位占矿状态，0/1 */
   uint8_t arm_has_ore;              /* 机械臂持矿状态，0/1 */
-  uint8_t reserved;                 /* 保留字段，发送端固定为 0 */
+  uint8_t release_grid_has_ore;     /* 放矿目标格占矿检测结果，0/1 */
 };
 
 struct __attribute__((packed)) StepFeedback {
