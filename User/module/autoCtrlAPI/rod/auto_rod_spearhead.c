@@ -6,6 +6,7 @@
 #define AUTO_ROD_SPEARHEAD_DEFAULT_GRAB_HIGH_DELAY_MS (500u)
 #define AUTO_ROD_SPEARHEAD_DEFAULT_DOCK_WAIT_DELAY_MS (500u)
 #define AUTO_ROD_SPEARHEAD_DEFAULT_PHOTO_CHECK_MS (1000u)
+#define AUTO_ROD_SPEARHEAD_DOCK_WAIT_POSE_DELAY_MS (300u)
 
 static uint32_t AutoRodSpearhead_OpenDelayMs(
     const AutoRodSpearhead_t *ctrl) {
@@ -458,20 +459,18 @@ static void AutoRodSpearhead_RunDockWait(
     uint32_t now_ms) {
   const bool dock_complete_received =
       feedback != 0 && feedback->dock_complete_received;
-  const bool rod_at_target = feedback != 0 && feedback->rod_at_target;
 
   switch (ctrl->step_index) {
     case 0:
       AutoRodSpearhead_EnterStep(ctrl, now_ms);
       if (!AutoRodSpearhead_CommandOreStore(
               ctrl, AutoRodSpearhead_DockWaitTransform(ctrl), false) ||
-          !AutoRodSpearhead_CommandRod(ctrl, ROD_NEW_POSE_GRAB_HIGH,
+          !AutoRodSpearhead_CommandRod(ctrl, ROD_NEW_POSE_STANDBY,
                                        ROD_NEW_GRIP_GRAB)) {
         return;
       }
-      if (rod_at_target ||
-          AutoRodSpearhead_StepElapsed(ctrl, now_ms) >=
-              AutoRodSpearhead_GrabHighDelayMs(ctrl)) {
+      if (AutoRodSpearhead_StepElapsed(ctrl, now_ms) >=
+          AUTO_ROD_SPEARHEAD_DOCK_WAIT_POSE_DELAY_MS) {
         AutoRodSpearhead_NextStep(ctrl);
         return;
       }

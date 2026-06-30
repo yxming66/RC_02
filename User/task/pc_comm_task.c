@@ -18,9 +18,9 @@
 #define PC_COMM_LOOP_PERIOD_MS (10u)
 #define PC_COMM_TX_DMA_TIMEOUT_MS (100u)
 #define PC_COMM_CAMERA_YAW_CMD_TIMEOUT_MS (1000u)
-/* IR_ORE 12 位置矿种类只在对端发来时变一次，正常状态几乎不变。
- * 仅在数据变化或距上次发送超过心跳周期时才发，避免 50Hz 重复刷屏。 */
-#define PC_COMM_IR_ORE_HEARTBEAT_MS (500u)
+/* IR_ORE 12 位置矿种类在首次收到或内容变化后持续低频上报。
+ * age_ms 会随时间增长，不参与内容变化判断，避免退化成 50Hz 刷屏。 */
+#define PC_COMM_IR_ORE_REPEAT_MS (200u)
 
 extern volatile PC_CommandSource_t g_pc_command_source;
 extern DR16_t dr16;
@@ -45,7 +45,7 @@ static const uint8_t s_feedback_cmds[] = {
     PC_FEEDBACK_STEP,
     PC_FEEDBACK_STATUS,
     /* PC_FEEDBACK_IR_ORE 不在自动循环里：由 PcComm_TryUpdateIrOreFeedback
-     * 判定变更或心跳到期后单独追加，避免 50Hz 重复发送。 */
+     * 在首次收到/内容变化后持续低频追加，避免 50Hz 重复发送。 */
 };
 
 static void PcComm_DebugRecordInitFail(int8_t reason) {
@@ -330,7 +330,23 @@ static void PcComm_UpdateCameraYawCommand(uint32_t now_ms) {
 static PC_IrOreFeedback_t s_last_published_ir_ore = {0};
 static PC_IrOreBridgeFeedback_t s_last_published_ir_ore_bridge = {0};
 static bool s_last_published_ir_ore_inited = false;
+static bool s_ir_ore_continuous_publish = false;
 static uint32_t s_last_ir_ore_publish_ms = 0u;
+
+static void PcComm_NormalizeIrOreForCompare(PC_IrOreFeedback_t *feedback) {
+    if (feedback == NULL) {
+        return;
+    }
+    feedback->age_ms = 0u;
+}
+
+static void PcComm_NormalizeIrOreBridgeForCompare(
+    PC_IrOreBridgeFeedback_t *feedback) {
+    if (feedback == NULL) {
+        return;
+    }
+    feedback->age_ms = 0u;
+}
 
 static bool PcComm_TryUpdateIrOreFeedback(uint32_t now_ms) {
     IrDock_OreInfo_t ir_info = {0};
@@ -367,15 +383,30 @@ static bool PcComm_TryUpdateIrOreFeedback(uint32_t now_ms) {
     pc_ir_ore_bridge.frame_rx_count = ir_info.frame_rx_count;
     pc_ir_ore_bridge.ack_tx_count = ir_info.ack_tx_count;
 
-    const bool first_send = !s_last_published_ir_ore_inited;
-    const bool changed = first_send ||
-        memcmp(&pc_ir_ore, &s_last_published_ir_ore, sizeof(pc_ir_ore)) != 0 ||
-        memcmp(&pc_ir_ore_bridge, &s_last_published_ir_ore_bridge,
-               sizeof(pc_ir_ore_bridge)) != 0;
-    const bool heartbeat_due =
-        (now_ms - s_last_ir_ore_publish_ms) >= PC_COMM_IR_ORE_HEARTBEAT_MS;
+    PC_IrOreFeedback_t pc_ir_ore_cmp = pc_ir_ore;
+    PC_IrOreFeedback_t last_ir_ore_cmp = s_last_published_ir_ore;
+    PC_IrOreBridgeFeedback_t pc_ir_ore_bridge_cmp = pc_ir_ore_bridge;
+    PC_IrOreBridgeFeedback_t last_ir_ore_bridge_cmp =
+        s_last_published_ir_ore_bridge;
+    PcComm_NormalizeIrOreForCompare(&pc_ir_ore_cmp);
+    PcComm_NormalizeIrOreForCompare(&last_ir_ore_cmp);
+    PcComm_NormalizeIrOreBridgeForCompare(&pc_ir_ore_bridge_cmp);
+    PcComm_NormalizeIrOreBridgeForCompare(&last_ir_ore_bridge_cmp);
 
-    if (!changed && !heartbeat_due) {
+    const bool has_ore_info = pc_ir_ore.valid != 0u;
+    const bool changed = has_ore_info &&
+        (!s_last_published_ir_ore_inited ||
+         memcmp(&pc_ir_ore_cmp, &last_ir_ore_cmp,
+                sizeof(pc_ir_ore_cmp)) != 0 ||
+         memcmp(&pc_ir_ore_bridge_cmp, &last_ir_ore_bridge_cmp,
+                sizeof(pc_ir_ore_bridge_cmp)) != 0);
+    if (changed) {
+        s_ir_ore_continuous_publish = true;
+    }
+    const bool repeat_due = s_ir_ore_continuous_publish &&
+        ((now_ms - s_last_ir_ore_publish_ms) >= PC_COMM_IR_ORE_REPEAT_MS);
+
+    if (!changed && !repeat_due) {
         return false;
     }
 
@@ -446,7 +477,7 @@ static bool PcComm_TransmitFeedback(void) {
         }
     }
 
-    /* IR_ORE 仅在数据变更或心跳到期时才追加帧，避免 50Hz 重复刷屏。 */
+    /* IR_ORE 首次收到/内容变化后持续低频追加帧，避免 50Hz 重复刷屏。 */
     if (ir_ore_pending) {
         if (PcComm_AppendFeedbackFrame(PC_FEEDBACK_IR_ORE, &tx_len)) {
             frame_count++;
