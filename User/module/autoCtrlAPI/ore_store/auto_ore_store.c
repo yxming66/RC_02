@@ -33,6 +33,7 @@
 #define AUTO_ORE_DEFAULT_FUSED_ARM_PHOTO_STABLE_MS (120u)
 #define AUTO_ORE_DEFAULT_FUSED_PHOTO1_LIFT_DELAY_MS (200u)
 #define AUTO_ORE_FUSED_STEP_PHOTO_STABLE_MS (20u)
+#define AUTO_ORE_PICK_STORE_RETREAT_PHOTO_DELAY_MS (100u)
 #define AUTO_ORE_FUSED_HEAD_ASCEND_FRONT_RETRACT_STEP_INDEX (2u)
 #define AUTO_ORE_FUSED_HEAD_DESCEND_FIRST_EDGE_STEP_INDEX (1u)
 #define AUTO_ORE_FUSED_ARM_PHOTO_ENABLE_JOINT1_RAD (0.6981317f)
@@ -100,6 +101,18 @@ static AutoOre_Action_t AutoOre_PickStoreFusedPickAction(
     default:
       return action;
   }
+}
+
+static bool AutoOre_PickActionUsesPhoto1Falling(AutoOre_Action_t action) {
+  return AutoOre_PickStoreFusedPickAction(action) ==
+         AUTO_ORE_ACTION_PICK_NEG_200;
+}
+
+static void AutoOre_ResetPhoto1Latch(AutoOre_t *ctrl) {
+  ctrl->fused_photo1_stable_trigger_seen = false;
+  ctrl->fused_photo1_stable_release_latched = false;
+  ctrl->fused_photo1_triggered_since_ms = 0u;
+  ctrl->fused_photo1_released_since_ms = 0u;
 }
 
 static void AutoOre_EnterStep(AutoOre_t *ctrl, uint32_t now_ms) {
@@ -307,16 +320,6 @@ static uint32_t AutoOre_ChamberArmSettleMs(const AutoOre_t *ctrl) {
 static uint32_t AutoOre_ChamberCylinderOpenMs(const AutoOre_t *ctrl) {
   return AutoOre_TimingValue(ctrl->param.timing.chamber_cylinder_open_ms,
                              AUTO_ORE_DEFAULT_CHAMBER_CYLINDER_OPEN_MS);
-}
-
-static uint32_t AutoOre_FetchChassisMoveMs(const AutoOre_t *ctrl) {
-  const AutoOre_Action_t pick_action =
-      AutoOre_PickStoreFusedPickAction(ctrl->action);
-  if (pick_action == AUTO_ORE_ACTION_PICK_NEG_200) {
-    return ctrl->param.timing.fetch_neg_200_chassis_move_ms;
-  }
-  return AutoOre_TimingValue(ctrl->param.timing.fetch_chassis_move_ms,
-                             AUTO_ORE_DEFAULT_FETCH_CHASSIS_MOVE_MS);
 }
 
 static uint32_t AutoOre_FusedPrealignStableMs(const AutoOre_t *ctrl) {
@@ -1661,6 +1664,50 @@ static bool AutoOre_FusedStepStartFrontPhotoReached(AutoOre_t *ctrl,
   }
 }
 
+static bool AutoOre_PickPhoto1LiftReached(AutoOre_t *ctrl, uint32_t now_ms) {
+  if (ctrl == 0) {
+    return false;
+  }
+  if (!AutoOre_PickActionUsesPhoto1Falling(ctrl->action)) {
+    return ctrl->feedback.pe13_photo1_triggered;
+  }
+  return AutoOre_LatchPhotoStableFalling(
+      ctrl->feedback.pe13_photo1_triggered,
+      &ctrl->fused_photo1_stable_trigger_seen,
+      &ctrl->fused_photo1_stable_release_latched,
+      &ctrl->fused_photo1_triggered_since_ms,
+      &ctrl->fused_photo1_released_since_ms, now_ms);
+}
+
+static bool AutoOre_PickStoreRetreatPhotoReached(AutoOre_t *ctrl,
+                                                 uint32_t now_ms) {
+  if (ctrl == 0) {
+    return false;
+  }
+  if (AutoOre_PickActionUsesPhoto1Falling(ctrl->action)) {
+    return ctrl->feedback.pe13_photo1_triggered;
+  }
+  return AutoOre_LatchPhotoStableFalling(
+      ctrl->feedback.pe13_photo1_triggered,
+      &ctrl->fused_photo1_stable_trigger_seen,
+      &ctrl->fused_photo1_stable_release_latched,
+      &ctrl->fused_photo1_triggered_since_ms,
+      &ctrl->fused_photo1_released_since_ms, now_ms);
+}
+
+static bool AutoOre_PickStoreRetreatReady(AutoOre_t *ctrl, uint32_t now_ms) {
+  if (!AutoOre_PickStoreRetreatPhotoReached(ctrl, now_ms)) {
+    ctrl->fused_arm_photo_since_ms = 0u;
+    return false;
+  }
+  if (ctrl->fused_arm_photo_since_ms == 0u) {
+    ctrl->fused_arm_photo_since_ms = now_ms;
+    return false;
+  }
+  return (now_ms - ctrl->fused_arm_photo_since_ms) >=
+         AUTO_ORE_PICK_STORE_RETREAT_PHOTO_DELAY_MS;
+}
+
 static uint8_t AutoOre_FusedFastPickTemplateStartStepIndex(
     const AutoOre_t *ctrl) {
   if (ctrl == 0) {
@@ -1760,13 +1807,9 @@ static ArmSimple_BehaviorPoint_t AutoOre_FusedPickArmPoint(
   return AutoOre_PickArmPoint(pick_action);
 }
 
-static bool AutoOre_FusedArmPhotoConfirmed(AutoOre_t *ctrl,
-                                           uint32_t now_ms) {
-  const AutoOre_FusedParam_t *param = AutoOre_FusedParam(ctrl);
-  if (param == 0) {
-    return false;
-  }
-  if (!param->use_arm_photo_confirm) {
+static bool AutoOre_ArmPhotoConfirmed(AutoOre_t *ctrl, uint32_t now_ms,
+                                      bool use_arm_photo_confirm) {
+  if (!use_arm_photo_confirm) {
     ctrl->pick_lift_confirmed = true;
     return true;
   }
@@ -1792,6 +1835,14 @@ static bool AutoOre_FusedArmPhotoConfirmed(AutoOre_t *ctrl,
     ctrl->pick_lift_confirmed = true;
   }
   return ctrl->pick_lift_confirmed;
+}
+
+static bool AutoOre_FusedArmPhotoConfirmed(AutoOre_t *ctrl,
+                                           uint32_t now_ms) {
+  const AutoOre_FusedParam_t *param = AutoOre_FusedParam(ctrl);
+  return param != 0 &&
+         AutoOre_ArmPhotoConfirmed(ctrl, now_ms,
+                                   param->use_arm_photo_confirm);
 }
 
 static AutoOre_Position_t AutoOre_FusedSelectStorePosition(AutoOre_t *ctrl) {
@@ -2269,7 +2320,7 @@ static void AutoOre_RunPickStoreFusedParallel(AutoOre_t *ctrl,
   }
 
   if (!ctrl->fused_step_done) {
-    if (AutoOre_StepElapsed(ctrl, now_ms) < AutoOre_FetchChassisMoveMs(ctrl)) {
+    if (!AutoOre_PickStoreRetreatReady(ctrl, now_ms)) {
       AutoOre_CommandChassisMove(ctrl, -AutoOre_FetchChassisVxMps(ctrl));
     } else {
       ctrl->fused_step_done = true;
@@ -2334,21 +2385,30 @@ static void AutoOre_RunPickStoreFused(AutoOre_t *ctrl, uint32_t now_ms) {
         return;
       }
       AutoOre_CommandChassisMove(ctrl, AutoOre_FetchChassisVxMps(ctrl));
-      if (AutoOre_StepElapsed(ctrl, now_ms) >=
-          AutoOre_FetchChassisMoveMs(ctrl)) {
+      if (AutoOre_PickPhoto1LiftReached(ctrl, now_ms)) {
         AutoOre_NextStep(ctrl);
+      } else {
+        (void)AutoOre_CheckTimeoutWithFailure(
+            ctrl, now_ms, AUTO_ORE_FAILURE_PICK_ORE);
       }
       return;
     case 3:
       AutoOre_EnterStep(ctrl, now_ms);
-      if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_STANDBY, SUCTION_ON,
-                              &ctrl->param.arm_speed.pick_standby) ||
+      AutoOre_CommandChassisHold(ctrl);
+      if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_PICK_LIFT_DETECT,
+                              SUCTION_ON,
+                              &ctrl->param.arm_speed.pick_lift_detect) ||
           !AutoOre_CommandPoleTarget(ctrl, pole_target)) {
         AutoOre_FailPickInvalidParam(ctrl);
         return;
       }
-      if (AutoOre_WaitArmCommandTarget(ctrl, now_ms)) {
+      if (AutoOre_WaitConditionThenDelay(
+              ctrl, now_ms, ctrl->feedback.arm_at_target,
+              AutoOre_FusedPickLiftDetectMs(ctrl)) &&
+          AutoOre_ArmPhotoConfirmed(ctrl, now_ms, false)) {
         AutoOre_SetArmHasOre(ctrl, true);
+        AutoOre_ResetPhoto1Latch(ctrl);
+        ctrl->fused_arm_photo_since_ms = 0u;
         AutoOre_NextStep(ctrl);
       } else {
         (void)AutoOre_CheckTimeoutWithFailure(
@@ -2551,21 +2611,26 @@ static void AutoOre_RunPickOre(AutoOre_t *ctrl, uint32_t now_ms) {
         return;
       }
       AutoOre_CommandChassisMove(ctrl, AutoOre_FetchChassisVxMps(ctrl));
-      if (AutoOre_StepElapsed(ctrl, now_ms) >=
-          AutoOre_FetchChassisMoveMs(ctrl)) {
+      if (AutoOre_PickPhoto1LiftReached(ctrl, now_ms)) {
         AutoOre_NextStep(ctrl);
+      } else {
+        (void)AutoOre_CheckTimeout(ctrl, now_ms);
       }
       return;
     case 3:
       AutoOre_EnterStep(ctrl, now_ms);
-      if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_STANDBY,
+      AutoOre_CommandChassisHold(ctrl);
+      if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_PICK_LIFT_DETECT,
                               SUCTION_ON,
-                              &ctrl->param.arm_speed.pick_standby) ||
+                              &ctrl->param.arm_speed.pick_lift_detect) ||
           !AutoOre_CommandPoleTarget(ctrl, pole_target)) {
         AutoOre_FailInvalidParam(ctrl);
         return;
       }
-      if (AutoOre_WaitArmCommandTarget(ctrl, now_ms)) {
+      if (AutoOre_WaitConditionThenDelay(
+              ctrl, now_ms, ctrl->feedback.arm_at_target,
+              AutoOre_FusedPickLiftDetectMs(ctrl)) &&
+          AutoOre_ArmPhotoConfirmed(ctrl, now_ms, false)) {
         AutoOre_FinishSuccess(ctrl);
       } else {
         (void)AutoOre_CheckTimeout(ctrl, now_ms);

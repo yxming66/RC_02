@@ -213,12 +213,12 @@ Config_RobotParam_t robot_config = {
                 [ORE_STORE_TRANSFORM_STANDBY] = 0.0f,
                 /* 平台中间等待位，存高位矿时等待 arm 交接。 */
                 [ORE_STORE_TRANSFORM_MID_WAIT] = 11.0f,
-                /* 平台抬升位/满行程位，用于低位存矿或低位上膛交接。 */
+                /* 平台抬升位/满行程位，用于  低位存矿或低位上膛交接。 */
                 [ORE_STORE_TRANSFORM_LIFT] = 18.4731674f,
                 /* 平台等待矛头对接位置，待实机标定。 */
                 [ORE_STORE_TRANSFORM_SPEARHEAD_DOCK_WAIT] = 0.666363478f,
                 /* 取矛头平台预设位，待实机标定。 */
-                [ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP] = 23.7524891f,
+                [ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP] = 21.833622f,
             },
         },
         .fixed_ore_cylinder = {    

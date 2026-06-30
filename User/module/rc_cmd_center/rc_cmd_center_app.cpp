@@ -75,7 +75,6 @@
 #endif
 
 #define RC_POLE_MANUAL_INPUT_SCALE (1.5f)
-#define RC_AUTO_ROD_STEP1_POLE_TARGET_RAD (3.0f)
 #define RC_POLE_CH_RES_DEADBAND (1.0e-4f)
 #undef RC_POLE_CH_RES_ENABLE
 #define RC_POLE_CH_RES_ENABLE (0u)
@@ -1280,12 +1279,12 @@ static bool Rc_AutoCtrlTemplateIsAscend(auto_ctrl_template_e template_id) {
 static bool Rc_StartAutoUpStepPickStore(void) {
   const RcAutoStepProfile_t profile = Rc_SelectAutoStepProfile();
   if (profile == RC_AUTO_STEP_PROFILE_FUSED_200) {
-    return Task_AutoStepStartAscend200Head();
-    // return Task_AutoOreStartStepPickStoreAscend200Head();
+    // return Task_AutoStepStartAscend200Head();
+    return Task_AutoOreStartStepPickStoreAscend200Head();
   }
   if (profile == RC_AUTO_STEP_PROFILE_FUSED_UP_400_NORMAL_DOWN_400) {
-    return Task_AutoStepStartAscend400Head();
-    // return Task_AutoOreStartStepPickStoreAscend400Head();
+    // return Task_AutoStepStartAscend400Head();
+    return Task_AutoOreStartStepPickStoreAscend400Head();
   }
   return false;
 }
@@ -1730,15 +1729,6 @@ struct RcPoleAutoRodRoute {
   }
 };
 
-struct RcPoleAutoRodStep1Route {
-  bool operator()(const RcRuntimeInput &, cmd::Context &, Pole_CMD_t &out) const {
-    Rc_SetPoleAutoTarget(RC_AUTO_ROD_STEP1_POLE_TARGET_RAD,
-                         RC_AUTO_ROD_STEP1_POLE_TARGET_RAD);
-    out = pole_cmd;
-    return true;
-  }
-};
-
 struct RcArmSimpleSafeRoute {
   bool operator()(cmd::Context &, ArmSimple_CMD_t &out) const {
     Rc_SetArmSimpleRelax();
@@ -2044,11 +2034,9 @@ static void Rc_ConfigureCmdCenter(void) {
               .when<RcPlanIn<RC_CMD_PLAN_DRIVE> >()
               .priority(cmd::Priority::Manual),
           cmd::from<RcRuntimeInput, RcPolePcRoute>()
-              .when<RcPlanIn<RC_CMD_PLAN_PC> >()
+              .when<RcPlanIn<RC_CMD_PLAN_PC,
+                     RC_CMD_PLAN_AUTO_ROD_STEP1_PC_OUTPUT> >()
               .priority(cmd::Priority::Remote),
-          cmd::from<RcRuntimeInput, RcPoleAutoRodStep1Route>()
-              .when<RcPlanIn<RC_CMD_PLAN_AUTO_ROD_STEP1_PC_OUTPUT> >()
-              .priority(cmd::Priority::Auto),
           cmd::from<RcRuntimeInput, RcPoleAutoCtrlRoute>()
               .when<RcPlanIn<RC_CMD_PLAN_AUTO_CTRL_OUTPUT,
                              RC_CMD_PLAN_PC_AUTO_CTRL> >()
