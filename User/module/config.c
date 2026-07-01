@@ -462,13 +462,13 @@ Config_RobotParam_t robot_config = {
     /* 模块参数：一键取矛头 auto_rod_spearhead_param，取矛头机构动作时序和检测。 */
     .auto_rod_spearhead_param = {
         /* One-key spearhead action timing; rod_param is filled during init. */
-        .open_delay_ms = 1000u,
-        .grab_high_delay_ms = 350u,
+        .open_delay_ms = 1500u,
+        .grab_high_delay_ms = 800u,
         .dock_wait_delay_ms = 10000u,
         /* 等待对接时 transform 的目标点；实际角度在 ore_store_param.preset.transform_position_rad 中标定。 */
         .dock_wait_transform = ORE_STORE_TRANSFORM_SPEARHEAD_DOCK_WAIT,
         .use_photo_check = true,
-        .photo_check_ms = 700u,
+        .photo_check_ms = 500u,
     },
     /* 模块参数：自动台阶/自动控制 auto_ctrl_param，台阶模板和 SICK 校正参数。 */
     .auto_ctrl_param = {
