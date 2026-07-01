@@ -34,6 +34,7 @@
 #define AUTO_ORE_DEFAULT_FUSED_ARM_PHOTO_STABLE_MS (120u)
 #define AUTO_ORE_DEFAULT_FUSED_PHOTO1_LIFT_DELAY_MS (200u)
 #define AUTO_ORE_FUSED_STEP_PHOTO_STABLE_MS (20u)
+#define AUTO_ORE_PICK_STORE_FETCH_PHOTO_DELAY_MS (100u)
 #define AUTO_ORE_PICK_STORE_RETREAT_PHOTO_DELAY_MS (100u)
 #define AUTO_ORE_FUSED_HEAD_ASCEND_FRONT_RETRACT_STEP_INDEX (2u)
 #define AUTO_ORE_FUSED_HEAD_DESCEND_FIRST_EDGE_STEP_INDEX (1u)
@@ -476,6 +477,18 @@ static bool AutoOre_WaitConditionThenDelay(AutoOre_t *ctrl, uint32_t now_ms,
     ctrl->step_condition_time_ms = now_ms;
   }
   return (now_ms - ctrl->step_condition_time_ms) >= delay_ms;
+}
+
+static bool AutoOre_WaitLatchedConditionThenDelay(AutoOre_t *ctrl,
+                                                  uint32_t now_ms,
+                                                  bool condition,
+                                                  uint32_t delay_ms) {
+  if (condition && !ctrl->step_condition_met) {
+    ctrl->step_condition_met = true;
+    ctrl->step_condition_time_ms = now_ms;
+  }
+  return ctrl->step_condition_met &&
+         (now_ms - ctrl->step_condition_time_ms) >= delay_ms;
 }
 
 static bool AutoOre_LatchPhotoStableFalling(
@@ -2460,7 +2473,9 @@ static void AutoOre_RunPickStoreFused(AutoOre_t *ctrl, uint32_t now_ms) {
         return;
       }
       AutoOre_CommandChassisMove(ctrl, AutoOre_FetchChassisVxMps(ctrl));
-      if (AutoOre_PickPhoto1LiftReached(ctrl, now_ms)) {
+      if (AutoOre_WaitLatchedConditionThenDelay(
+              ctrl, now_ms, AutoOre_PickPhoto1LiftReached(ctrl, now_ms),
+              AUTO_ORE_PICK_STORE_FETCH_PHOTO_DELAY_MS)) {
         AutoOre_NextStep(ctrl);
       } else {
         (void)AutoOre_CheckTimeoutWithFailure(
