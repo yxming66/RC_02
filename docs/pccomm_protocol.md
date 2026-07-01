@@ -23,7 +23,7 @@
 | 停止位 | 1 |
 | 数据格式 | 二进制，小端 |
 
-固件 `pc_comm_task` 每 1 ms 处理接收，每 20 ms 发送一批反馈帧，反馈频率约 50 Hz。UART10 矿位反馈在首次收到或内容变化后持续低频追加发送，当前周期约 200 ms。UART8 红外对接协议只处理 `0x01` 在线和 `0x02` 完成通知，并回复 `{0xA5, 原始帧值}` ACK。
+固件 `pc_comm_task` 每 1 ms 处理接收，每 20 ms 发送一批反馈帧，反馈频率约 50 Hz。红外矿种反馈在首次收到或内容变化后持续低频追加发送，当前周期约 200 ms。
 
 PC 在线判定：任意一帧合法 PC_COMM 帧都会刷新在线状态。若 500 ms 内没有收到合法帧，固件认为 PC 离线并回到 RC 控制模式。推荐上位机持续发送 `PC_CMD_HEARTBEAT (0x01)`，10~20 Hz 即可；高频控制命令本身也会保活。
 
@@ -94,7 +94,7 @@ def build_mrlink_frame(cmd: int, payload: bytes = b"") -> bytes:
 | `0x17` | `PC_CMD_CAMERA_YAW` | 5 | `<Bf` | 相机云台 yaw |
 | `0x18` | `PC_CMD_ABSTRACT_POSITION` | 5 | `<BBBBB` | 多机构抽象点位 |
 | `0x20` | `PC_CMD_IMU` | 28 | `<fffffff` | PC 姿态 |
-| `0x21` | `PC_CMD_IR_ORE_ACK` | 6 | `<6B` | UART10 矿位 ACK 透传 |
+| `0x21` | `PC_CMD_IR_ORE_ACK` | 6 | `<6B` | 红外对接 ACK 透传 |
 
 ### 4.1 心跳 `0x01`
 
@@ -264,7 +264,7 @@ def build_ir_ack(msg_id: int, status: int) -> bytes:
 
 ## 5. STM32 发给 PC 的反馈
 
-固件每 20 ms 尝试发送以下反馈批次：`0x81, 0x96, 0x90, 0x91, 0x93, 0x94, 0x95, 0x98, 0x92, 0xA0`。`0x02` 开始比赛命令仅在遥控器行为映射从非 PC 映射切入 PC 映射时追加一次。`0x17` 仅作为 PC 下发的 camera yaw 命令使用，固件不再把它作为命令镜像回传。`0x97/0x99` 红外反馈在首次收到或内容变化后持续低频追加，当前周期约 200 ms。
+固件每 20 ms 尝试发送以下反馈批次：`0x81, 0x96, 0x90, 0x91, 0x93, 0x94, 0x95, 0x98, 0x92, 0x9A, 0xA0`。`0x02` 开始比赛命令仅在遥控器行为映射从非 PC 映射切入 PC 映射时追加一次。`0x17` 仅作为 PC 下发的 camera yaw 命令使用，固件不再把它作为命令镜像回传。`0x97/0x99` 旧红外矿种反馈在首次收到或内容变化后持续低频追加，当前周期约 200 ms；`0x9A` 为新 R1/R2 红外对接协议状态反馈，随 50 Hz 常规反馈发送。
 
 | cmd | 名称 | payload | Python unpack | 说明 |
 |---:|---|---:|---|---|
@@ -277,9 +277,10 @@ def build_ir_ack(msg_id: int, status: int) -> bytes:
 | `0x94` | `PC_FEEDBACK_ROD_NEW` | 20 | `<BBBBffff` | 取矛头状态 |
 | `0x95` | `PC_FEEDBACK_ORE_STORE` | 12 | `<BBBBfBBBB` | 矿仓状态 |
 | `0x96` | `PC_FEEDBACK_AUTO_ACTION` | 6 | `<BBBBH` | 一键动作简化结果 |
-| `0x97` | `PC_FEEDBACK_IR_ORE` | 24 | `<BBBB12BII` | UART10 矿位简表 |
+| `0x97` | `PC_FEEDBACK_IR_ORE` | 24 | `<BBBB12BII` | 红外矿种简表 |
 | `0x98` | `PC_FEEDBACK_CAMERA_YAW` | 32 | `<BBBBffffffI` | 云台状态 |
-| `0x99` | `PC_FEEDBACK_IR_ORE_BRIDGE` | 56 | `<BBBBBBBB12B18BxxIIII` | UART10 矿位桥接调试 |
+| `0x99` | `PC_FEEDBACK_IR_ORE_BRIDGE` | 56 | `<BBBBBBBB12B18BxxIIII` | 红外桥接调试 |
+| `0x9A` | `PC_FEEDBACK_IR_DOCK` | 24 | `<BBBBBBBBIIII` | R1/R2 红外对接状态 |
 | `0xA0` | `PC_FEEDBACK_STATUS` | 10 | `<BIfB` | 通信/系统状态 |
 
 ### 5.1 底盘反馈 `0x90`
@@ -414,13 +415,13 @@ else:
     status = "IDLE"
 ```
 
-### 5.8 UART10 矿位简表 `0x97`
+### 5.8 红外矿种简表 `0x97`
 
 | 偏移 | 类型 | 字段 | 说明 |
 |---:|---|---|---|
 | 0 | u8 | `valid` | 是否成功解析过矿种包 |
 | 1 | u8 | `fresh` | 是否在 1000 ms 内收到矿种包 |
-| 2 | u8 | `status` | 保留字段；UART8 红外对接状态不混入矿位反馈 |
+| 2 | u8 | `status` | `0=IDLE`，`1=DOCKING`，`2=DOCK_COMPLETE` |
 | 3 | u8 | `count` | 固定 12 |
 | 4 | u8[12] | `ore_type` | `0=UNKNOWN`，`1=R1`，`2=R2`，`3=FAKE` |
 | 16 | u32 | `age_ms` | 距最近矿种包时间 |
@@ -444,35 +445,60 @@ else:
 | 48 | f32[2] | `output` | 电机控制输出 |
 | 56 | u32[2] | `feedback_age_ms` | ms |
 
-### 5.10 UART10 矿位桥接反馈 `0x99`
+### 5.10 红外桥接反馈 `0x99`
 
 该反馈包含 2 字节 padding，便于对齐后面的 `u32` 字段。上位机用 Python unpack 时格式为 `<BBBBBBBB12B18BxxIIII`。
 
 | 偏移 | 类型 | 字段 | 说明 |
 |---:|---|---|---|
-| 0 | u8 | `valid` | 是否成功解析过 18 字节 UART10 矿位帧 |
+| 0 | u8 | `valid` | 是否成功解析过 18 字节红外矿种帧 |
 | 1 | u8 | `fresh` | 是否在 1000 ms 内收到矿种帧 |
-| 2 | u8 | `status` | 保留字段；UART8 红外对接状态不混入矿位反馈 |
+| 2 | u8 | `status` | `0=IDLE`，`1=DOCKING`，`2=DOCK_COMPLETE` |
 | 3 | u8 | `count` | 固定 12 |
 | 4 | u8 | `msg_id` | 最近矿种帧消息 ID |
 | 5 | u8 | `side` | 红外端侧别字段 |
 | 6 | u8 | `ack_pending` | 固件是否等待 ACK |
 | 7 | u8 | `parse_status` | `0=OK`，`1=BUSY`，`2=CRC_ERR`，`3=INVALID` |
 | 8 | u8[12] | `ore_type` | 12 个矿位种类 |
-| 20 | u8[18] | `raw_frame` | 原始 UART10 矿位帧 |
+| 20 | u8[18] | `raw_frame` | 原始红外矿种帧 |
 | 38 | u8[2] | padding | 固件 C 结构体对齐填充 |
 | 40 | u32 | `age_ms` | 距最近成功矿种帧时间 |
 | 44 | u32 | `rx_count` | 成功矿种包次数 |
 | 48 | u32 | `frame_rx_count` | 成功 18 字节帧次数 |
 | 52 | u32 | `ack_tx_count` | ACK 转发次数 |
 
-UART10 矿位原始帧格式：
+红外矿种原始帧格式：
 
 ```
 AA 55 02 msg_id side ore_type[12] crc8
 ```
 
-### 5.11 状态反馈 `0xA0`
+### 5.11 R1/R2 红外对接反馈 `0x9A`
+
+该反馈来自 UART8 上的 R1/R2 红外新协议帧：
+
+```
+4D 52 dock_complete r2_leave_zone1 cleared_ore_id zone3_r2_state crc16_lo crc16_hi
+```
+
+payload 为 24 字节，Python unpack 格式为 `<BBBBBBBBIIII`。
+
+| 偏移 | 类型 | 字段 | 说明 |
+|---:|---|---|---|
+| 0 | u8 | `valid` | 是否曾成功解析过新红外帧，`0/1` |
+| 1 | u8 | `fresh` | 最近一帧是否仍在超时时间内，`0/1` |
+| 2 | u8 | `dock_complete` | 对接完成是否新鲜有效，`0=未完成/过期`，`1=完成` |
+| 3 | u8 | `r2_leave_zone1_allowed` | R2 是否可以出一区，`0=不可以`，`1=可以` |
+| 4 | u8 | `cleared_ore_id` | 哪个 R1 矿被清掉，合法值 `0-12` 且不含 `5/8`；未收到为 `0xFF` |
+| 5 | u8 | `zone3_r2_state` | 三区 R2 状态，`1=工作状态`，`2=待机状态`；未收到为 `0` |
+| 6 | u8 | `last_dock_complete_cmd` | 最近一帧原始对接完成字段，`0/1` |
+| 7 | u8 | `last_r2_leave_zone1_cmd` | 最近一帧原始 R2 出一区字段，`0/1` |
+| 8 | u32 | `age_ms` | 距最近成功解析新红外帧的时间，未收到为 `0` |
+| 12 | u32 | `rx_count` | 成功解析新红外帧累计次数 |
+| 16 | u32 | `crc_error_count` | CRC 错误累计次数 |
+| 20 | u32 | `error_count` | 红外接收/解析错误累计次数 |
+
+### 5.12 状态反馈 `0xA0`
 
 | 偏移 | 类型 | 字段 | 说明 |
 |---:|---|---|---|

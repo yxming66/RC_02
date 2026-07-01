@@ -14,13 +14,13 @@
 #include "module/autoCtrlAPI/rod/auto_rod_spearhead.h"
 #include "module/autoCtrlAPI/sick/auto_sick_correct.h"
 #include "device/ir_dock/ir_dock.h"
-#include "device/ore_info/ore_info.h"
 #include "module/arm_simple.h"
 #include "module/rod_new.h"
 #include "module/ore_store.h"
 #include "module/camera_yaw.h"
 #include "device/buzzer.h"
 #include "device/sick.h"
+#include "device/ore_info/ore_info.h"
 
 /* USER INCLUDE END */
 

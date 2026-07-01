@@ -49,6 +49,7 @@ inline constexpr Topic kFeedbackOreStore = PC_FEEDBACK_ORE_STORE;
 inline constexpr Topic kFeedbackAutoAction = PC_FEEDBACK_AUTO_ACTION;
 inline constexpr Topic kFeedbackIrOre = PC_FEEDBACK_IR_ORE;
 inline constexpr Topic kFeedbackIrOreBridge = PC_FEEDBACK_IR_ORE_BRIDGE;
+inline constexpr Topic kFeedbackIrDock = PC_FEEDBACK_IR_DOCK;
 inline constexpr Topic kFeedbackCameraYaw = PC_FEEDBACK_CAMERA_YAW;
 inline constexpr Topic kFeedbackStatus = PC_FEEDBACK_STATUS;
 
@@ -169,6 +170,7 @@ static_assert(IsValidWirePayload<PC_PoleFeedback_t>(), "PC_PoleFeedback_t payloa
 static_assert(IsValidWirePayload<PC_AutoActionFeedback_t>(), "PC_AutoActionFeedback_t payload is invalid");
 static_assert(IsValidWirePayload<PC_IrOreFeedback_t>(), "PC_IrOreFeedback_t payload is invalid");
 static_assert(IsValidWirePayload<PC_IrOreBridgeFeedback_t>(), "PC_IrOreBridgeFeedback_t payload is invalid");
+static_assert(IsValidWirePayload<PC_IrDockFeedback_t>(), "PC_IrDockFeedback_t payload is invalid");
 static_assert(IsValidWirePayload<PC_CameraYawFeedback_t>(), "PC_CameraYawFeedback_t payload is invalid");
 static_assert(IsValidWirePayload<ArmSimpleFeedback>(), "ArmSimpleFeedback payload is invalid");
 static_assert(IsValidWirePayload<RodNewFeedback>(), "RodNewFeedback payload is invalid");
@@ -199,6 +201,8 @@ static_assert(sizeof(PC_IrOreFeedback_t) == 24u,
               "PC_FEEDBACK_IR_ORE wire size changed");
 static_assert(sizeof(PC_IrOreBridgeFeedback_t) == 56u,
               "PC_FEEDBACK_IR_ORE_BRIDGE wire size changed");
+static_assert(sizeof(PC_IrDockFeedback_t) == 24u,
+              "PC_FEEDBACK_IR_DOCK wire size changed");
 static_assert(sizeof(PC_CameraYawFeedback_t) == 32u,
               "PC_FEEDBACK_CAMERA_YAW wire size changed");
 static_assert(sizeof(ArmSimpleFeedback) == 15u,
@@ -238,6 +242,7 @@ MRLINK_PC_MESSAGE_TRAIT(PC_PoleFeedback_t, PC_FEEDBACK_POLE);
 MRLINK_PC_MESSAGE_TRAIT(PC_AutoActionFeedback_t, PC_FEEDBACK_AUTO_ACTION);
 MRLINK_PC_MESSAGE_TRAIT(PC_IrOreFeedback_t, PC_FEEDBACK_IR_ORE);
 MRLINK_PC_MESSAGE_TRAIT(PC_IrOreBridgeFeedback_t, PC_FEEDBACK_IR_ORE_BRIDGE);
+MRLINK_PC_MESSAGE_TRAIT(PC_IrDockFeedback_t, PC_FEEDBACK_IR_DOCK);
 MRLINK_PC_MESSAGE_TRAIT(PC_CameraYawFeedback_t, PC_FEEDBACK_CAMERA_YAW);
 MRLINK_PC_MESSAGE_TRAIT(pc_comm::wire::ArmSimpleFeedback, PC_FEEDBACK_ARM_SIMPLE);
 MRLINK_PC_MESSAGE_TRAIT(pc_comm::wire::RodNewFeedback, PC_FEEDBACK_ROD_NEW);

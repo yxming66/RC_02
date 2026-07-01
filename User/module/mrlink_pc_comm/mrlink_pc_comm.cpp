@@ -54,6 +54,7 @@ static uint8_t s_auto_action_rx_latch = PC_AUTO_ACTION_NONE;
 static uint32_t s_auto_action_rx_latch_tick = 0u;
 static PC_IrOreFeedback_t s_ir_ore_feedback{};
 static PC_IrOreBridgeFeedback_t s_ir_ore_bridge_feedback{};
+static PC_IrDockFeedback_t s_ir_dock_feedback{};
 static wire::StartMatchCmd s_start_match_cmd{};
 static bool s_start_match_pending = false;
 static MrlinkPc_TxCallback_t s_tx_done_callback = nullptr;
@@ -802,6 +803,12 @@ extern "C" bool MrlinkPc_PublishFeedback(uint8_t topic,
       s_state.feedback.ir_ore_bridge = *typed;
       return s_bus.StoreLatest(*typed);
     }
+    case PC_FEEDBACK_IR_DOCK: {
+      const auto *typed = static_cast<const PC_IrDockFeedback_t *>(feedback);
+      s_ir_dock_feedback = *typed;
+      s_state.feedback.ir_dock = *typed;
+      return s_bus.StoreLatest(*typed);
+    }
     case PC_FEEDBACK_STEP: {
       const auto *typed = static_cast<const PC_StepFeedback_t *>(feedback);
       s_state.feedback.step = *typed;
@@ -915,6 +922,9 @@ extern "C" uint16_t MrlinkPc_BuildFeedbackFrame(uint8_t cmd, uint8_t *tx_buf,
     }
     case PC_FEEDBACK_IR_ORE_BRIDGE: {
       return BuildLatestOrFallback(s_ir_ore_bridge_feedback, tx_buf, buf_size);
+    }
+    case PC_FEEDBACK_IR_DOCK: {
+      return BuildLatestOrFallback(s_ir_dock_feedback, tx_buf, buf_size);
     }
     case PC_FEEDBACK_STEP: {
       const wire::StepFeedback fallback =

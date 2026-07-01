@@ -3,6 +3,7 @@
 #include <stddef.h>
 
 #include "bsp/uart.h"
+#include "component/crc16.h"
 
 static uint8_t ir_dock_rx_buf[IR_DOCK_RX_BUFFER_SIZE] = {0};
 static uint8_t ir_dock_tx_buf[IR_DOCK_STATUS_ACK_FRAME_SIZE] = {0};
@@ -38,7 +39,21 @@ static void IrDock_ErrorCallback(void) {
 }
 
 static bool IrDock_StatusIsValid(uint8_t status) {
-  return status == IR_DOCK_CMD_ONLINE || status == IR_DOCK_CMD_COMPLETE;
+  return status == IR_DOCK_CMD_UNFINISHED || status == IR_DOCK_CMD_COMPLETE;
+}
+
+static bool IrDock_LeaveZone1CmdIsValid(uint8_t cmd) {
+  return cmd == IR_DOCK_LEAVE_ZONE1_FORBID ||
+         cmd == IR_DOCK_LEAVE_ZONE1_ALLOW;
+}
+
+static bool IrDock_ClearedOreIdIsValid(uint8_t ore_id) {
+  return ore_id <= 12u && ore_id != 5u && ore_id != 8u;
+}
+
+static bool IrDock_Zone3R2StateIsValid(uint8_t state) {
+  return state == IR_DOCK_ZONE3_R2_WORK ||
+         state == IR_DOCK_ZONE3_R2_STANDBY;
 }
 
 static void IrDock_ClearRawRxData(void) {
@@ -106,28 +121,50 @@ static bool IrDock_SendCommandAck(uint8_t cmd, uint32_t now_ms) {
   return false;
 }
 
-static void IrDock_ParseStatusByte(uint8_t raw_byte, uint32_t now_ms) {
-  g_ir_dock_debug.last_rx_raw_byte = raw_byte;
+static bool IrDock_FrameCrcIsValid(const uint8_t *frame) {
+  const uint16_t crc_recv = (uint16_t)frame[IR_DOCK_FRAME_SIZE - 2u] |
+                            ((uint16_t)frame[IR_DOCK_FRAME_SIZE - 1u] << 8u);
+  const uint16_t crc_calc =
+      CRC16_Calc(frame, IR_DOCK_FRAME_SIZE - IR_DOCK_CRC_SIZE, CRC16_INIT);
+  return crc_recv == crc_calc;
+}
+
+static void IrDock_ParseProtocolFrame(const uint8_t *frame, uint32_t now_ms) {
+  const uint8_t dock_complete_cmd = frame[2];
+  const uint8_t r2_leave_zone1_cmd = frame[3];
+  const uint8_t cleared_ore_id = frame[4];
+  const uint8_t zone3_r2_state = frame[5];
+
+  g_ir_dock_debug.last_rx_raw_byte = zone3_r2_state;
   g_ir_dock_debug.last_rx_ms = now_ms;
   g_ir_dock_debug.rx_count++;
 
-  if (!IrDock_StatusIsValid(raw_byte)) {
+  if (!IrDock_StatusIsValid(dock_complete_cmd) ||
+      !IrDock_LeaveZone1CmdIsValid(r2_leave_zone1_cmd) ||
+      !IrDock_ClearedOreIdIsValid(cleared_ore_id) ||
+      !IrDock_Zone3R2StateIsValid(zone3_r2_state)) {
     g_ir_dock_debug.invalid_rx_count++;
     g_ir_dock_debug.error_count++;
     return;
   }
 
-  g_ir_dock_debug.last_rx_status = raw_byte;
-  if (raw_byte == IR_DOCK_CMD_ONLINE) {
-    g_ir_dock_debug.last_online_rx_ms = now_ms;
-    g_ir_dock_debug.online = true;
-    g_ir_dock_debug.online_rx_count++;
-  } else if (raw_byte == IR_DOCK_CMD_COMPLETE) {
+  g_ir_dock_debug.last_dock_complete_cmd = dock_complete_cmd;
+  g_ir_dock_debug.last_r2_leave_zone1_cmd = r2_leave_zone1_cmd;
+  g_ir_dock_debug.last_cleared_ore_id = cleared_ore_id;
+  g_ir_dock_debug.last_zone3_r2_state = zone3_r2_state;
+  g_ir_dock_debug.r2_leave_zone1_allowed =
+      (r2_leave_zone1_cmd == IR_DOCK_LEAVE_ZONE1_ALLOW);
+  g_ir_dock_debug.last_rx_status = dock_complete_cmd;
+  g_ir_dock_debug.last_online_rx_ms = now_ms;
+  g_ir_dock_debug.online = true;
+  g_ir_dock_debug.online_rx_count++;
+  g_ir_dock_debug.protocol_frame_rx_count++;
+  if (dock_complete_cmd == IR_DOCK_CMD_COMPLETE) {
     g_ir_dock_debug.last_complete_rx_ms = now_ms;
     g_ir_dock_debug.complete_rx_count++;
   }
 
-  (void)IrDock_SendCommandAck(raw_byte, now_ms);
+  (void)IrDock_SendCommandAck(dock_complete_cmd, now_ms);
 }
 
 static void IrDock_ParseRxBytes(const uint8_t *rx_buf, uint16_t packet_len,
@@ -143,8 +180,31 @@ static void IrDock_ParseRxBytes(const uint8_t *rx_buf, uint16_t packet_len,
     g_ir_dock_debug.last_rx_raw_byte = rx_buf[packet_len - 1u];
   }
 
-  for (uint16_t i = 0u; i < packet_len; ++i) {
-    IrDock_ParseStatusByte(rx_buf[i], now_ms);
+  uint16_t parsed_frame_count = 0u;
+  uint16_t offset = 0u;
+  while (offset + IR_DOCK_FRAME_SIZE <= packet_len) {
+    if (rx_buf[offset] != IR_DOCK_FRAME_HEAD0 ||
+        rx_buf[offset + 1u] != IR_DOCK_FRAME_HEAD1) {
+      offset++;
+      continue;
+    }
+
+    if (!IrDock_FrameCrcIsValid(&rx_buf[offset])) {
+      g_ir_dock_debug.crc_error_count++;
+      g_ir_dock_debug.invalid_rx_count++;
+      g_ir_dock_debug.error_count++;
+      offset++;
+      continue;
+    }
+
+    IrDock_ParseProtocolFrame(&rx_buf[offset], now_ms);
+    parsed_frame_count++;
+    offset = (uint16_t)(offset + IR_DOCK_FRAME_SIZE);
+  }
+
+  if (parsed_frame_count == 0u) {
+    g_ir_dock_debug.invalid_rx_count++;
+    g_ir_dock_debug.error_count++;
   }
 }
 
@@ -202,8 +262,13 @@ void IrDock_Init(uint32_t now_ms) {
   g_ir_dock_debug.rx_busy = false;
   g_ir_dock_debug.tx_busy = false;
   g_ir_dock_debug.dock_complete_fresh = false;
+  g_ir_dock_debug.r2_leave_zone1_allowed = false;
   g_ir_dock_debug.last_rx_status = (uint8_t)IR_DOCK_STATUS_IDLE;
   g_ir_dock_debug.last_rx_raw_byte = 0u;
+  g_ir_dock_debug.last_dock_complete_cmd = IR_DOCK_CMD_UNFINISHED;
+  g_ir_dock_debug.last_r2_leave_zone1_cmd = IR_DOCK_LEAVE_ZONE1_FORBID;
+  g_ir_dock_debug.last_cleared_ore_id = IR_DOCK_CLEARED_ORE_NONE;
+  g_ir_dock_debug.last_zone3_r2_state = IR_DOCK_ZONE3_R2_UNKNOWN;
   g_ir_dock_debug.last_tx_status = (uint8_t)IR_DOCK_STATUS_IDLE;
   g_ir_dock_debug.last_rx_len = 0u;
   g_ir_dock_debug.last_tx_len = 0u;
@@ -235,10 +300,10 @@ void IrDock_Process(uint32_t now_ms) {
       (g_ir_dock_debug.last_rx_raw_ms == 0u)
           ? 0u
           : (now_ms - g_ir_dock_debug.last_rx_raw_ms);
-    g_ir_dock_debug.last_rx_age_ms =
+  g_ir_dock_debug.last_rx_age_ms =
       (g_ir_dock_debug.last_rx_ms == 0u)
-        ? 0u
-        : (now_ms - g_ir_dock_debug.last_rx_ms);
+          ? 0u
+          : (now_ms - g_ir_dock_debug.last_rx_ms);
   g_ir_dock_debug.dock_complete_fresh = IrDock_IsDockCompleteFresh(now_ms);
   g_ir_dock_debug.online = IrDock_IsOnline(now_ms);
   (void)IrDock_TryStartReceive(now_ms);
@@ -275,4 +340,16 @@ bool IrDock_IsOnline(uint32_t now_ms) {
 
 IrDock_Status_t IrDock_GetLastRxStatus(void) {
   return (IrDock_Status_t)g_ir_dock_debug.last_rx_status;
+}
+
+bool IrDock_IsR2LeaveZone1Allowed(void) {
+  return g_ir_dock_debug.r2_leave_zone1_allowed;
+}
+
+uint8_t IrDock_GetLastClearedOreId(void) {
+  return g_ir_dock_debug.last_cleared_ore_id;
+}
+
+uint8_t IrDock_GetLastZone3R2State(void) {
+  return g_ir_dock_debug.last_zone3_r2_state;
 }

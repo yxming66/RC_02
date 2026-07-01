@@ -19,14 +19,23 @@ extern "C" {
 #define IR_DOCK_RX_BUFFER_SIZE (16u)
 #endif
 
-#define IR_DOCK_CMD_ONLINE (0x01u)
-#define IR_DOCK_CMD_COMPLETE (0x02u)
+#define IR_DOCK_FRAME_HEAD0 (0x4Du)
+#define IR_DOCK_FRAME_HEAD1 (0x52u)
+#define IR_DOCK_FRAME_SIZE (8u)
+#define IR_DOCK_CRC_SIZE (2u)
+#define IR_DOCK_CMD_UNFINISHED (0x00u)
+#define IR_DOCK_CMD_COMPLETE (0x01u)
+#define IR_DOCK_LEAVE_ZONE1_FORBID (0x00u)
+#define IR_DOCK_LEAVE_ZONE1_ALLOW (0x01u)
+#define IR_DOCK_ZONE3_R2_WORK (0x01u)
+#define IR_DOCK_ZONE3_R2_STANDBY (0x02u)
+#define IR_DOCK_ZONE3_R2_UNKNOWN (0x00u)
+#define IR_DOCK_CLEARED_ORE_NONE (0xFFu)
 #define IR_DOCK_STATUS_ACK_HEAD (0xA5u)
 #define IR_DOCK_STATUS_ACK_FRAME_SIZE (2u)
 
 typedef enum {
   IR_DOCK_STATUS_IDLE = 0x00u,
-  IR_DOCK_STATUS_ONLINE = IR_DOCK_CMD_ONLINE,
   IR_DOCK_STATUS_DOCK_COMPLETE = IR_DOCK_CMD_COMPLETE,
 } IrDock_Status_t;
 
@@ -36,8 +45,13 @@ typedef struct {
   volatile bool rx_busy;
   volatile bool tx_busy;
   volatile bool dock_complete_fresh;
+  volatile bool r2_leave_zone1_allowed;
   volatile uint8_t last_rx_status;
   volatile uint8_t last_rx_raw_byte;
+  volatile uint8_t last_dock_complete_cmd;
+  volatile uint8_t last_r2_leave_zone1_cmd;
+  volatile uint8_t last_cleared_ore_id;
+  volatile uint8_t last_zone3_r2_state;
   volatile uint8_t last_tx_status;
   volatile uint8_t last_rx_len;
   volatile uint8_t last_rx_raw_len;
@@ -60,6 +74,8 @@ typedef struct {
   volatile uint32_t status_ack_tx_count;
   volatile uint32_t online_rx_count;
   volatile uint32_t complete_rx_count;
+  volatile uint32_t protocol_frame_rx_count;
+  volatile uint32_t crc_error_count;
   volatile uint32_t invalid_rx_count;
   volatile uint32_t error_count;
   volatile uint32_t rx_interval_block_count;
@@ -74,6 +90,9 @@ bool IrDock_SendStatus(IrDock_Status_t status, uint32_t now_ms);
 bool IrDock_IsDockCompleteFresh(uint32_t now_ms);
 bool IrDock_IsOnline(uint32_t now_ms);
 IrDock_Status_t IrDock_GetLastRxStatus(void);
+bool IrDock_IsR2LeaveZone1Allowed(void);
+uint8_t IrDock_GetLastClearedOreId(void);
+uint8_t IrDock_GetLastZone3R2State(void);
 
 #ifdef __cplusplus
 }

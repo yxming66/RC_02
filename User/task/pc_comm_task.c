@@ -7,7 +7,6 @@
 
 #include "task/user_task.h"
 #include "device/dr16.h"
-#include "device/ore_info/ore_info.h"
 #include "module/mrlink_pc_comm/mrlink_pc_comm.h"
 #include "module/autoCtrlAPI/api/auto_ctrl_api.h"
 #include "module/arm_simple.h"
@@ -19,9 +18,6 @@
 #define PC_COMM_LOOP_PERIOD_MS (10u)
 #define PC_COMM_TX_DMA_TIMEOUT_MS (100u)
 #define PC_COMM_CAMERA_YAW_CMD_TIMEOUT_MS (1000u)
-/* UART10 矿位消息在首次收到或内容变化后持续低频上报。
- * age_ms 会随时间增长，不参与内容变化判断，避免退化成 50Hz 刷屏。 */
-#define PC_COMM_IR_ORE_REPEAT_MS (200u)
 
 extern volatile PC_CommandSource_t g_pc_command_source;
 extern DR16_t dr16;
@@ -44,6 +40,7 @@ static const uint8_t s_feedback_cmds[] = {
     PC_FEEDBACK_ORE_STORE,
     PC_FEEDBACK_CAMERA_YAW,
     PC_FEEDBACK_STEP,
+    PC_FEEDBACK_IR_DOCK,
     PC_FEEDBACK_STATUS,
     /* PC_FEEDBACK_IR_ORE 不在自动循环里：由 PcComm_TryUpdateIrOreFeedback
      * 在首次收到/内容变化后持续低频追加，避免 50Hz 重复发送。 */
@@ -334,97 +331,9 @@ static void PcComm_UpdateCameraYawCommand(uint32_t now_ms) {
     (void)Task_CameraYawPostGroupCommand(&cmd);
 }
 
-static PC_IrOreFeedback_t s_last_published_ir_ore = {0};
-static PC_IrOreBridgeFeedback_t s_last_published_ir_ore_bridge = {0};
-static bool s_last_published_ir_ore_inited = false;
-static bool s_ir_ore_continuous_publish = false;
-static uint32_t s_last_ir_ore_publish_ms = 0u;
-
-static void PcComm_NormalizeIrOreForCompare(PC_IrOreFeedback_t *feedback) {
-    if (feedback == NULL) {
-        return;
-    }
-    feedback->age_ms = 0u;
-}
-
-static void PcComm_NormalizeIrOreBridgeForCompare(
-    PC_IrOreBridgeFeedback_t *feedback) {
-    if (feedback == NULL) {
-        return;
-    }
-    feedback->age_ms = 0u;
-}
-
 static bool PcComm_TryUpdateIrOreFeedback(uint32_t now_ms) {
-    OreInfo_Info_t ore_info = {0};
-    PC_IrOreFeedback_t pc_ir_ore = {0};
-    PC_IrOreBridgeFeedback_t pc_ir_ore_bridge = {0};
-
-    (void)OreInfo_GetInfo(&ore_info, now_ms);
-    pc_ir_ore.valid = ore_info.valid ? 1u : 0u;
-    pc_ir_ore.fresh = ore_info.fresh ? 1u : 0u;
-    pc_ir_ore.status = (uint8_t)IR_DOCK_STATUS_IDLE;
-    pc_ir_ore.count = PC_IR_ORE_POSITION_COUNT;
-    for (uint8_t i = 0u; i < PC_IR_ORE_POSITION_COUNT; ++i) {
-        pc_ir_ore.ore_type[i] = ore_info.ore_type[i];
-    }
-    pc_ir_ore.age_ms = ore_info.age_ms;
-    pc_ir_ore.rx_count = ore_info.rx_count;
-
-    pc_ir_ore_bridge.valid = pc_ir_ore.valid;
-    pc_ir_ore_bridge.fresh = pc_ir_ore.fresh;
-    pc_ir_ore_bridge.status = pc_ir_ore.status;
-    pc_ir_ore_bridge.count = PC_IR_ORE_POSITION_COUNT;
-    pc_ir_ore_bridge.msg_id = ore_info.msg_id;
-    pc_ir_ore_bridge.side = ore_info.side;
-    pc_ir_ore_bridge.ack_pending = ore_info.ack_pending;
-    pc_ir_ore_bridge.parse_status = ore_info.parse_status;
-    for (uint8_t i = 0u; i < PC_IR_ORE_POSITION_COUNT; ++i) {
-        pc_ir_ore_bridge.ore_type[i] = ore_info.ore_type[i];
-    }
-    for (uint8_t i = 0u; i < PC_IR_ORE_RAW_FRAME_SIZE; ++i) {
-        pc_ir_ore_bridge.raw_frame[i] = ore_info.raw_frame[i];
-    }
-    pc_ir_ore_bridge.age_ms = ore_info.age_ms;
-    pc_ir_ore_bridge.rx_count = ore_info.rx_count;
-    pc_ir_ore_bridge.frame_rx_count = ore_info.frame_rx_count;
-    pc_ir_ore_bridge.ack_tx_count = ore_info.ack_tx_count;
-
-    PC_IrOreFeedback_t pc_ir_ore_cmp = pc_ir_ore;
-    PC_IrOreFeedback_t last_ir_ore_cmp = s_last_published_ir_ore;
-    PC_IrOreBridgeFeedback_t pc_ir_ore_bridge_cmp = pc_ir_ore_bridge;
-    PC_IrOreBridgeFeedback_t last_ir_ore_bridge_cmp =
-        s_last_published_ir_ore_bridge;
-    PcComm_NormalizeIrOreForCompare(&pc_ir_ore_cmp);
-    PcComm_NormalizeIrOreForCompare(&last_ir_ore_cmp);
-    PcComm_NormalizeIrOreBridgeForCompare(&pc_ir_ore_bridge_cmp);
-    PcComm_NormalizeIrOreBridgeForCompare(&last_ir_ore_bridge_cmp);
-
-    const bool has_ore_info = pc_ir_ore.valid != 0u;
-    const bool changed = has_ore_info &&
-        (!s_last_published_ir_ore_inited ||
-         memcmp(&pc_ir_ore_cmp, &last_ir_ore_cmp,
-                sizeof(pc_ir_ore_cmp)) != 0 ||
-         memcmp(&pc_ir_ore_bridge_cmp, &last_ir_ore_bridge_cmp,
-                sizeof(pc_ir_ore_bridge_cmp)) != 0);
-    if (changed) {
-        s_ir_ore_continuous_publish = true;
-    }
-    const bool repeat_due = s_ir_ore_continuous_publish &&
-        ((now_ms - s_last_ir_ore_publish_ms) >= PC_COMM_IR_ORE_REPEAT_MS);
-
-    if (!changed && !repeat_due) {
-        return false;
-    }
-
-    s_last_published_ir_ore = pc_ir_ore;
-    s_last_published_ir_ore_bridge = pc_ir_ore_bridge;
-    s_last_published_ir_ore_inited = true;
-    s_last_ir_ore_publish_ms = now_ms;
-    (void)MrlinkPc_PublishFeedback(PC_FEEDBACK_IR_ORE, &pc_ir_ore);
-    (void)MrlinkPc_PublishFeedback(PC_FEEDBACK_IR_ORE_BRIDGE,
-                                   &pc_ir_ore_bridge);
-    return true;
+    (void)now_ms;
+    return false;
 }
 
 static void PcComm_UpdateStatusFeedback(void) {
@@ -437,18 +346,29 @@ static void PcComm_UpdateStatusFeedback(void) {
     (void)MrlinkPc_PublishFeedback(PC_FEEDBACK_STATUS, &status);
 }
 
-static void PcComm_ProcessIrOreAckCommand(uint32_t now_ms) {
-    const PC_IrOreAckCMD_t *cmd = MrlinkPc_GetIrOreAckCMD();
-    if (cmd == NULL) {
-        return;
-    }
+static void PcComm_UpdateIrDockFeedback(uint32_t now_ms) {
+    PC_IrDockFeedback_t feedback = {0};
+    feedback.valid = (g_ir_dock_debug.protocol_frame_rx_count > 0u) ? 1u : 0u;
+    feedback.fresh = IrDock_IsOnline(now_ms) ? 1u : 0u;
+    feedback.dock_complete = IrDock_IsDockCompleteFresh(now_ms) ? 1u : 0u;
+    feedback.r2_leave_zone1_allowed =
+        IrDock_IsR2LeaveZone1Allowed() ? 1u : 0u;
+    feedback.cleared_ore_id = IrDock_GetLastClearedOreId();
+    feedback.zone3_r2_state = IrDock_GetLastZone3R2State();
+    feedback.last_dock_complete_cmd = g_ir_dock_debug.last_dock_complete_cmd;
+    feedback.last_r2_leave_zone1_cmd =
+        g_ir_dock_debug.last_r2_leave_zone1_cmd;
+    feedback.age_ms = g_ir_dock_debug.last_rx_age_ms;
+    feedback.rx_count = g_ir_dock_debug.protocol_frame_rx_count;
+    feedback.crc_error_count = g_ir_dock_debug.crc_error_count;
+    feedback.error_count = g_ir_dock_debug.error_count;
+    (void)MrlinkPc_PublishFeedback(PC_FEEDBACK_IR_DOCK, &feedback);
+}
 
-    OreInfo_AckSubmitResult_t result = OreInfo_SendAckFrame(cmd->frame, now_ms);
-    g_pc_comm_debug.ir_ore_ack_submit_result = (uint8_t)result;
-    if (result == ORE_INFO_ACK_SUBMIT_OK) {
-        g_pc_comm_debug.ir_ore_ack_submit_count++;
-        MrlinkPc_ClearIrOreAckCommand();
-    } else if (result != ORE_INFO_ACK_SUBMIT_BUSY) {
+static void PcComm_ProcessIrOreAckCommand(uint32_t now_ms) {
+    (void)now_ms;
+    if (MrlinkPc_GetIrOreAckCMD() != NULL) {
+        g_pc_comm_debug.ir_ore_ack_submit_result = 0xFFu;
         g_pc_comm_debug.ir_ore_ack_submit_error_count++;
         MrlinkPc_ClearIrOreAckCommand();
     }
@@ -472,6 +392,7 @@ static bool PcComm_TransmitFeedback(void) {
 
     PcComm_UpdateStatusFeedback();
     PcComm_UpdateModuleFeedback();
+    PcComm_UpdateIrDockFeedback(now);
     const bool ir_ore_pending = PcComm_TryUpdateIrOreFeedback(now);
     const bool start_match_pending = PcComm_AppendStartMatchFrame(&tx_len);
     if (start_match_pending) {
