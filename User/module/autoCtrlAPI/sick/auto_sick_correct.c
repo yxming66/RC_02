@@ -28,6 +28,11 @@ static bool AutoSickCorrect_IndexValid(uint8_t index) {
   return index < AUTO_SICK_CORRECT_SENSOR_COUNT;
 }
 
+static bool AutoSickCorrect_ActionUsesSingleXSensor(
+    AutoSickCorrect_Action_t action) {
+  return action == AUTO_SICK_CORRECT_ACTION_ORE_RELEASE;
+}
+
 static uint32_t AutoSickCorrect_FinishStableMs(
     const AutoSickCorrect_PointParams_t *param) {
   return (param != 0 && param->finish_stable_ms > 0u)
@@ -51,16 +56,28 @@ static float AutoSickCorrect_PoleTargetLift(
 }
 
 static bool AutoSickCorrect_PointParamValid(
-    const AutoSickCorrect_PointParams_t *param) {
+    const AutoSickCorrect_PointParams_t *param,
+    AutoSickCorrect_Action_t action) {
   if (param == 0) {
     return false;
   }
 
   if (!AutoSickCorrect_IndexValid(param->front_index) ||
-      !AutoSickCorrect_IndexValid(param->rod_front_index) ||
-      !AutoSickCorrect_IndexValid(param->rear_index) ||
-      !AutoSickCorrect_IndexValid(param->rod_rear_index) ||
       param->valid_adc_min > param->valid_adc_max) {
+    return false;
+  }
+
+  if (AutoSickCorrect_ActionUsesSingleXSensor(action)) {
+    return isfinite(param->x_target_adc) && param->x_target_adc > 0.0f &&
+           isfinite(param->x_tolerance_adc) && param->x_tolerance_adc > 0.0f &&
+           isfinite(param->x_kp_mps_per_adc) &&
+           isfinite(param->vx_limit_mps) && param->vx_limit_mps > 0.0f &&
+           isfinite(param->pole_speed);
+  }
+
+  if (!AutoSickCorrect_IndexValid(param->rod_front_index) ||
+      !AutoSickCorrect_IndexValid(param->rear_index) ||
+      !AutoSickCorrect_IndexValid(param->rod_rear_index)) {
     return false;
   }
 
@@ -162,7 +179,13 @@ static bool AutoSickCorrect_FeedbackSensorValid(
 
 static bool AutoSickCorrect_FeedbackValid(
     const AutoSickCorrect_Feedback_t *feedback,
-    const AutoSickCorrect_PointParams_t *param) {
+    const AutoSickCorrect_PointParams_t *param,
+    AutoSickCorrect_Action_t action) {
+  if (AutoSickCorrect_ActionUsesSingleXSensor(action)) {
+    return AutoSickCorrect_FeedbackSensorValid(feedback, param,
+                                               param->front_index);
+  }
+
   return AutoSickCorrect_FeedbackSensorValid(feedback, param,
                                              param->front_index) &&
          AutoSickCorrect_FeedbackSensorValid(feedback, param,
@@ -180,18 +203,10 @@ static bool AutoSickCorrect_Start(AutoSickCorrect_t *ctrl,
     return false;
   }
 
-  if (action == AUTO_SICK_CORRECT_ACTION_ORE_RELEASE) {
-    ctrl->action = action;
-    AutoSickCorrect_Finish(ctrl, AUTO_SICK_CORRECT_RESULT_FAIL,
-                           AUTO_SICK_CORRECT_FAULT_UNSUPPORTED,
-                           AUTO_SICK_CORRECT_STATE_FAIL);
-    return false;
-  }
-
   ctrl->action = action;
   const AutoSickCorrect_PointParams_t *param =
       AutoSickCorrect_ActiveParams(ctrl);
-  if (!AutoSickCorrect_PointParamValid(param)) {
+  if (!AutoSickCorrect_PointParamValid(param, action)) {
     AutoSickCorrect_Finish(ctrl, AUTO_SICK_CORRECT_RESULT_FAIL,
                            AUTO_SICK_CORRECT_FAULT_INVALID_PARAM,
                            AUTO_SICK_CORRECT_STATE_FAIL);
@@ -253,7 +268,7 @@ void AutoSickCorrect_Update(AutoSickCorrect_t *ctrl,
 
   const AutoSickCorrect_PointParams_t *param =
       AutoSickCorrect_ActiveParams(ctrl);
-  if (!AutoSickCorrect_PointParamValid(param)) {
+  if (!AutoSickCorrect_PointParamValid(param, ctrl->action)) {
     AutoSickCorrect_Finish(ctrl, AUTO_SICK_CORRECT_RESULT_FAIL,
                            AUTO_SICK_CORRECT_FAULT_INVALID_PARAM,
                            AUTO_SICK_CORRECT_STATE_FAIL);
@@ -276,7 +291,7 @@ void AutoSickCorrect_Update(AutoSickCorrect_t *ctrl,
 
   ctrl->step_index = 1u;
 
-  if (!AutoSickCorrect_FeedbackValid(feedback, param)) {
+  if (!AutoSickCorrect_FeedbackValid(feedback, param, ctrl->action)) {
     AutoSickCorrect_CommandChassis(ctrl, 0.0f, 0.0f, 0.0f);
     ctrl->stable_since_ms = 0u;
     if ((now_ms - ctrl->start_time_ms) >=
@@ -288,28 +303,43 @@ void AutoSickCorrect_Update(AutoSickCorrect_t *ctrl,
     return;
   }
 
-  const float front_adc = (float)feedback->adc_raw[param->front_index];
-  const float rear_adc = (float)feedback->adc_raw[param->rear_index];
-  const float rod_front_adc = (float)feedback->adc_raw[param->rod_front_index];
-  const float rod_rear_adc = (float)feedback->adc_raw[param->rod_rear_index];
-  const bool use_front_x = front_adc <= rear_adc;
+  if (AutoSickCorrect_ActionUsesSingleXSensor(ctrl->action)) {
+    ctrl->x_sample_adc = (float)feedback->adc_raw[param->front_index];
+    ctrl->x_sample_index = param->front_index;
+    ctrl->y_sample_adc = 0.0f;
+    ctrl->y_target_adc = 0.0f;
+    ctrl->yaw_sample_diff_adc = 0.0f;
+  } else {
+    const float front_adc = (float)feedback->adc_raw[param->front_index];
+    const float rear_adc = (float)feedback->adc_raw[param->rear_index];
+    const float rod_front_adc = (float)feedback->adc_raw[param->rod_front_index];
+    const float rod_rear_adc = (float)feedback->adc_raw[param->rod_rear_index];
+    const bool use_front_x = front_adc <= rear_adc;
 
-  ctrl->x_sample_adc = use_front_x ? front_adc : rear_adc;
-  ctrl->x_sample_index = use_front_x ? param->front_index : param->rear_index;
-  ctrl->y_sample_adc = (rod_front_adc + rod_rear_adc) * 0.5f;
-  ctrl->y_target_adc = param->y_target_adc;
-  ctrl->yaw_sample_diff_adc = rod_front_adc - rod_rear_adc;
+    ctrl->x_sample_adc = use_front_x ? front_adc : rear_adc;
+    ctrl->x_sample_index = use_front_x ? param->front_index : param->rear_index;
+    ctrl->y_sample_adc = (rod_front_adc + rod_rear_adc) * 0.5f;
+    ctrl->y_target_adc = param->y_target_adc;
+    ctrl->yaw_sample_diff_adc = rod_front_adc - rod_rear_adc;
+  }
 
   ctrl->x_error_adc = param->x_target_adc - ctrl->x_sample_adc;
-  ctrl->y_error_adc = ctrl->y_target_adc - ctrl->y_sample_adc;
-  ctrl->yaw_error_adc = param->yaw_target_diff_adc -
-                        ctrl->yaw_sample_diff_adc;
+  if (AutoSickCorrect_ActionUsesSingleXSensor(ctrl->action)) {
+    ctrl->y_error_adc = 0.0f;
+    ctrl->yaw_error_adc = 0.0f;
+  } else {
+    ctrl->y_error_adc = ctrl->y_target_adc - ctrl->y_sample_adc;
+    ctrl->yaw_error_adc = param->yaw_target_diff_adc -
+                          ctrl->yaw_sample_diff_adc;
+  }
 
   const bool x_done =
       AutoSickCorrect_AbsFloat(ctrl->x_error_adc) <= param->x_tolerance_adc;
-  const bool y_done =
+  const bool single_x_sensor = AutoSickCorrect_ActionUsesSingleXSensor(
+      ctrl->action);
+  const bool y_done = single_x_sensor ||
       AutoSickCorrect_AbsFloat(ctrl->y_error_adc) <= param->y_tolerance_adc;
-  const bool yaw_done =
+  const bool yaw_done = single_x_sensor ||
       AutoSickCorrect_AbsFloat(ctrl->yaw_error_adc) <= param->yaw_tolerance_adc;
 
   const float vx_mps =
