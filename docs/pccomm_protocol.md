@@ -430,7 +430,7 @@ else:
 |---:|---|---|---|
 | 0 | u8 | `valid` | 是否成功解析过矿种包 |
 | 1 | u8 | `fresh` | 是否在 1000 ms 内收到矿种包 |
-| 2 | u8 | `status` | `0=IDLE`，`1=DOCKING`，`2=DOCK_COMPLETE` |
+| 2 | u8 | `status` | 保留字段，当前矿位上报固定为 `0` |
 | 3 | u8 | `count` | 固定 12 |
 | 4 | u8[12] | `ore_type` | `0=UNKNOWN`，`1=R1`，`2=R2`，`3=FAKE` |
 | 16 | u32 | `age_ms` | 距最近矿种包时间 |
@@ -462,7 +462,7 @@ else:
 |---:|---|---|---|
 | 0 | u8 | `valid` | 是否成功解析过 18 字节红外矿种帧 |
 | 1 | u8 | `fresh` | 是否在 1000 ms 内收到矿种帧 |
-| 2 | u8 | `status` | `0=IDLE`，`1=DOCKING`，`2=DOCK_COMPLETE` |
+| 2 | u8 | `status` | 保留字段，当前矿位上报固定为 `0` |
 | 3 | u8 | `count` | 固定 12 |
 | 4 | u8 | `msg_id` | 最近矿种帧消息 ID |
 | 5 | u8 | `side` | 红外端侧别字段 |

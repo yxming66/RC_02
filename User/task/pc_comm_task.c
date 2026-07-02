@@ -7,6 +7,7 @@
 
 #include "task/user_task.h"
 #include "device/dr16.h"
+#include "device/ore_info/ore_info.h"
 #include "module/mrlink_pc_comm/mrlink_pc_comm.h"
 #include "module/autoCtrlAPI/api/auto_ctrl_api.h"
 #include "module/arm_simple.h"
@@ -18,6 +19,7 @@
 #define PC_COMM_LOOP_PERIOD_MS (10u)
 #define PC_COMM_TX_DMA_TIMEOUT_MS (100u)
 #define PC_COMM_CAMERA_YAW_CMD_TIMEOUT_MS (1000u)
+#define PC_COMM_IR_ORE_TX_PERIOD_MS (200u)
 
 extern volatile PC_CommandSource_t g_pc_command_source;
 extern DR16_t dr16;
@@ -30,6 +32,9 @@ static bool s_pc_comm_callbacks_registered = false;
 static bool s_pc_comm_inited = false;
 static uint32_t s_pc_comm_last_init_attempt_tick = 0u;
 static uint32_t s_pc_comm_last_tx_tick = 0u;
+static uint32_t s_ir_ore_last_tx_tick = 0u;
+static uint32_t s_ir_ore_last_frame_rx_count = 0u;
+static bool s_ir_ore_feedback_started = false;
 static const uint8_t s_feedback_cmds[] = {
     PC_FEEDBACK_HEARTBEAT,
     PC_FEEDBACK_AUTO_ACTION,
@@ -358,8 +363,57 @@ static void PcComm_UpdateCameraYawCommand(uint32_t now_ms) {
 }
 
 static bool PcComm_TryUpdateIrOreFeedback(uint32_t now_ms) {
-    (void)now_ms;
-    return false;
+    OreInfo_Info_t info = {0};
+    if (!OreInfo_GetInfo(&info, now_ms)) {
+        return false;
+    }
+
+    const bool new_frame = !s_ir_ore_feedback_started ||
+                           info.frame_rx_count != s_ir_ore_last_frame_rx_count;
+    const bool periodic = s_ir_ore_feedback_started &&
+                          (now_ms - s_ir_ore_last_tx_tick) >=
+                              PC_COMM_IR_ORE_TX_PERIOD_MS;
+    if (!new_frame && !periodic) {
+        return false;
+    }
+
+    PC_IrOreFeedback_t feedback = {0};
+    feedback.valid = info.valid ? 1u : 0u;
+    feedback.fresh = info.fresh ? 1u : 0u;
+    feedback.status = 0u;
+    feedback.count = info.count;
+    for (uint8_t i = 0u; i < PC_IR_ORE_POSITION_COUNT; ++i) {
+        feedback.ore_type[i] = info.ore_type[i];
+    }
+    feedback.age_ms = info.age_ms;
+    feedback.rx_count = info.rx_count;
+    (void)MrlinkPc_PublishFeedback(PC_FEEDBACK_IR_ORE, &feedback);
+
+    PC_IrOreBridgeFeedback_t bridge = {0};
+    bridge.valid = info.valid ? 1u : 0u;
+    bridge.fresh = info.fresh ? 1u : 0u;
+    bridge.status = 0u;
+    bridge.count = info.count;
+    bridge.msg_id = info.msg_id;
+    bridge.side = info.side;
+    bridge.ack_pending = info.ack_pending;
+    bridge.parse_status = info.parse_status;
+    for (uint8_t i = 0u; i < PC_IR_ORE_POSITION_COUNT; ++i) {
+        bridge.ore_type[i] = info.ore_type[i];
+    }
+    for (uint8_t i = 0u; i < PC_IR_ORE_RAW_FRAME_SIZE; ++i) {
+        bridge.raw_frame[i] = info.raw_frame[i];
+    }
+    bridge.age_ms = info.age_ms;
+    bridge.rx_count = info.rx_count;
+    bridge.frame_rx_count = info.frame_rx_count;
+    bridge.ack_tx_count = info.ack_tx_count;
+    (void)MrlinkPc_PublishFeedback(PC_FEEDBACK_IR_ORE_BRIDGE, &bridge);
+
+    s_ir_ore_feedback_started = true;
+    s_ir_ore_last_frame_rx_count = info.frame_rx_count;
+    s_ir_ore_last_tx_tick = now_ms;
+    return true;
 }
 
 static void PcComm_UpdateStatusFeedback(void) {
