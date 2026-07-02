@@ -515,8 +515,9 @@ Config_RobotParam_t robot_config = {
          * SICK 校正参数：
          * - index 字段选择校正使用的 4 路 SICK ADC 通道。
          *   当前硬件：前侧=3，后侧=0，矛头侧后侧=1，矛头侧前侧=2。
-         * - 取矛头校正使用 x_sample_adc = 矛头侧前侧 SICK rawdata[2]，
-         *   y_sample_adc = 后侧 SICK rawdata[0]。
+         * - 取矛头校正由 auto_sick_correct.c 的 X/Y 轴宏开关控制；
+         *   当前 x/y 两轴都关闭，动作会直接返回成功。
+         *   重新开启时，y 使用后侧 SICK rawdata[0]，x 使用矛头侧前侧 SICK rawdata[2]。
          * - yaw_sample_diff_adc 保留给其他 SICK 校正动作调试。
          * - *_kp 字段把 ADC 误差映射到底盘速度；*_limit 字段做命令限幅。
          *   tolerance/stable/timeout 用于判定校正完成。

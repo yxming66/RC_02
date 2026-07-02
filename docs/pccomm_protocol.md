@@ -546,12 +546,12 @@ payload 为 24 字节，Python unpack 格式为 `<BBBBBBBBIIII`。
 | 13 | ROD_SPEARHEAD_STEP1 |
 | 14 | ROD_SPEARHEAD_STEP2 |
 | 15 | ROD_DOCK_WAIT |
-| 16 | SICK_CORRECT_ROD_SPEARHEAD_POS1，取矛头位置 1 的 SICK 校正：x 使用 rawdata[2]，y 使用 rawdata[0]；超时后启用轴误差均 <=15 ADC 则 SUCCESS |
-| 17 | SICK_CORRECT_ROD_SPEARHEAD_POS2，取矛头位置 2 的 SICK 校正：x 使用 rawdata[2]，y 使用 rawdata[0]；超时后启用轴误差均 <=15 ADC 则 SUCCESS |
-| 18 | SICK_CORRECT_ROD_SPEARHEAD_POS3，取矛头位置 3 的 SICK 校正：x 使用 rawdata[2]，y 使用 rawdata[0]；超时后启用轴误差均 <=15 ADC 则 SUCCESS |
-| 19 | SICK_CORRECT_ROD_SPEARHEAD_POS4，取矛头位置 4 的 SICK 校正：x 使用 rawdata[2]，y 使用 rawdata[0]；超时后启用轴误差均 <=15 ADC 则 SUCCESS |
-| 20 | SICK_CORRECT_ROD_SPEARHEAD_POS5，取矛头位置 5 的 SICK 校正：x 使用 rawdata[2]，y 使用 rawdata[0]；超时后启用轴误差均 <=15 ADC 则 SUCCESS |
-| 21 | SICK_CORRECT_ROD_SPEARHEAD_POS6，取矛头位置 6 的 SICK 校正：x 使用 rawdata[2]，y 使用 rawdata[0]；超时后启用轴误差均 <=15 ADC 则 SUCCESS |
+| 16 | SICK_CORRECT_ROD_SPEARHEAD_POS1，取矛头位置 1 的 SICK 校正：X/Y 由固件宏开关控制，当前 x/y 都关闭，直接 SUCCESS；重新开启后 y 使用 rawdata[0]，x 使用 rawdata[2]；超时后启用轴误差均 <=15 ADC 则 SUCCESS |
+| 17 | SICK_CORRECT_ROD_SPEARHEAD_POS2，取矛头位置 2 的 SICK 校正：X/Y 由固件宏开关控制，当前 x/y 都关闭，直接 SUCCESS；重新开启后 y 使用 rawdata[0]，x 使用 rawdata[2]；超时后启用轴误差均 <=15 ADC 则 SUCCESS |
+| 18 | SICK_CORRECT_ROD_SPEARHEAD_POS3，取矛头位置 3 的 SICK 校正：X/Y 由固件宏开关控制，当前 x/y 都关闭，直接 SUCCESS；重新开启后 y 使用 rawdata[0]，x 使用 rawdata[2]；超时后启用轴误差均 <=15 ADC 则 SUCCESS |
+| 19 | SICK_CORRECT_ROD_SPEARHEAD_POS4，取矛头位置 4 的 SICK 校正：X/Y 由固件宏开关控制，当前 x/y 都关闭，直接 SUCCESS；重新开启后 y 使用 rawdata[0]，x 使用 rawdata[2]；超时后启用轴误差均 <=15 ADC 则 SUCCESS |
+| 20 | SICK_CORRECT_ROD_SPEARHEAD_POS5，取矛头位置 5 的 SICK 校正：X/Y 由固件宏开关控制，当前 x/y 都关闭，直接 SUCCESS；重新开启后 y 使用 rawdata[0]，x 使用 rawdata[2]；超时后启用轴误差均 <=15 ADC 则 SUCCESS |
+| 21 | SICK_CORRECT_ROD_SPEARHEAD_POS6，取矛头位置 6 的 SICK 校正：X/Y 由固件宏开关控制，当前 x/y 都关闭，直接 SUCCESS；重新开启后 y 使用 rawdata[0]，x 使用 rawdata[2]；超时后启用轴误差均 <=15 ADC 则 SUCCESS |
 | 22 | SICK_CORRECT_ORE_RELEASE，放矿前 SICK 校正：仅 x 方向，使用 rawdata[2]，目标 ADC=1303 |
 | 23 | STEP_ASCEND_200_HEAD |
 | 24 | STEP_DESCEND_200_HEAD |
