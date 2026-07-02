@@ -33,6 +33,11 @@ static bool AutoSickCorrect_ActionUsesSingleXSensor(
   return action == AUTO_SICK_CORRECT_ACTION_ORE_RELEASE;
 }
 
+static bool AutoSickCorrect_ActionUsesOnlyYSensors(
+    AutoSickCorrect_Action_t action) {
+  return action == AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD;
+}
+
 static uint32_t AutoSickCorrect_FinishStableMs(
     const AutoSickCorrect_PointParams_t *param) {
   return (param != 0 && param->finish_stable_ms > 0u)
@@ -62,20 +67,31 @@ static bool AutoSickCorrect_PointParamValid(
     return false;
   }
 
-  if (!AutoSickCorrect_IndexValid(param->front_index) ||
-      param->valid_adc_min > param->valid_adc_max) {
+  if (param->valid_adc_min > param->valid_adc_max) {
     return false;
   }
 
+  if (AutoSickCorrect_ActionUsesOnlyYSensors(action)) {
+    return AutoSickCorrect_IndexValid(param->rod_rear_index) &&
+           isfinite(param->y_target_adc) && param->y_target_adc > 0.0f &&
+           isfinite(param->y_tolerance_adc) &&
+               param->y_tolerance_adc > 0.0f &&
+           isfinite(param->y_kp_mps_per_adc) &&
+           isfinite(param->vy_limit_mps) && param->vy_limit_mps > 0.0f &&
+           isfinite(param->pole_speed);
+  }
+
   if (AutoSickCorrect_ActionUsesSingleXSensor(action)) {
-    return isfinite(param->x_target_adc) && param->x_target_adc > 0.0f &&
+    return AutoSickCorrect_IndexValid(param->front_index) &&
+         isfinite(param->x_target_adc) && param->x_target_adc > 0.0f &&
            isfinite(param->x_tolerance_adc) && param->x_tolerance_adc > 0.0f &&
            isfinite(param->x_kp_mps_per_adc) &&
            isfinite(param->vx_limit_mps) && param->vx_limit_mps > 0.0f &&
            isfinite(param->pole_speed);
   }
 
-  if (!AutoSickCorrect_IndexValid(param->rod_front_index) ||
+  if (!AutoSickCorrect_IndexValid(param->front_index) ||
+      !AutoSickCorrect_IndexValid(param->rod_front_index) ||
       !AutoSickCorrect_IndexValid(param->rear_index) ||
       !AutoSickCorrect_IndexValid(param->rod_rear_index)) {
     return false;
@@ -181,6 +197,11 @@ static bool AutoSickCorrect_FeedbackValid(
     const AutoSickCorrect_Feedback_t *feedback,
     const AutoSickCorrect_PointParams_t *param,
     AutoSickCorrect_Action_t action) {
+  if (AutoSickCorrect_ActionUsesOnlyYSensors(action)) {
+    return AutoSickCorrect_FeedbackSensorValid(feedback, param,
+                                               param->rod_rear_index);
+  }
+
   if (AutoSickCorrect_ActionUsesSingleXSensor(action)) {
     return AutoSickCorrect_FeedbackSensorValid(feedback, param,
                                                param->front_index);
@@ -309,6 +330,14 @@ void AutoSickCorrect_Update(AutoSickCorrect_t *ctrl,
     ctrl->y_sample_adc = 0.0f;
     ctrl->y_target_adc = 0.0f;
     ctrl->yaw_sample_diff_adc = 0.0f;
+  } else if (AutoSickCorrect_ActionUsesOnlyYSensors(ctrl->action)) {
+    const float rod_rear_adc = (float)feedback->adc_raw[param->rod_rear_index];
+
+    ctrl->x_sample_adc = 0.0f;
+    ctrl->x_sample_index = 0u;
+    ctrl->y_sample_adc = rod_rear_adc;
+    ctrl->y_target_adc = param->y_target_adc;
+    ctrl->yaw_sample_diff_adc = 0.0f;
   } else {
     const float front_adc = (float)feedback->adc_raw[param->front_index];
     const float rear_adc = (float)feedback->adc_raw[param->rear_index];
@@ -324,7 +353,11 @@ void AutoSickCorrect_Update(AutoSickCorrect_t *ctrl,
   }
 
   ctrl->x_error_adc = param->x_target_adc - ctrl->x_sample_adc;
-  if (AutoSickCorrect_ActionUsesSingleXSensor(ctrl->action)) {
+  if (AutoSickCorrect_ActionUsesOnlyYSensors(ctrl->action)) {
+    ctrl->x_error_adc = 0.0f;
+    ctrl->y_error_adc = ctrl->y_target_adc - ctrl->y_sample_adc;
+    ctrl->yaw_error_adc = 0.0f;
+  } else if (AutoSickCorrect_ActionUsesSingleXSensor(ctrl->action)) {
     ctrl->y_error_adc = 0.0f;
     ctrl->yaw_error_adc = 0.0f;
   } else {
@@ -337,21 +370,28 @@ void AutoSickCorrect_Update(AutoSickCorrect_t *ctrl,
       AutoSickCorrect_AbsFloat(ctrl->x_error_adc) <= param->x_tolerance_adc;
   const bool single_x_sensor = AutoSickCorrect_ActionUsesSingleXSensor(
       ctrl->action);
+  const bool only_y_sensor = AutoSickCorrect_ActionUsesOnlyYSensors(
+      ctrl->action);
+  const bool x_axis_enabled = !only_y_sensor;
+  const bool yaw_axis_enabled = !single_x_sensor && !only_y_sensor;
+  const bool y_axis_enabled = !single_x_sensor;
   const bool y_done = single_x_sensor ||
       AutoSickCorrect_AbsFloat(ctrl->y_error_adc) <= param->y_tolerance_adc;
-  const bool yaw_done = single_x_sensor ||
+  const bool yaw_done = !yaw_axis_enabled ||
       AutoSickCorrect_AbsFloat(ctrl->yaw_error_adc) <= param->yaw_tolerance_adc;
 
   const float vx_mps =
-      x_done ? 0.0f
-             : AutoSickCorrect_Clamp(ctrl->x_error_adc *
-                                         param->x_kp_mps_per_adc,
-                                     param->vx_limit_mps);
+      (!x_axis_enabled || x_done)
+          ? 0.0f
+          : AutoSickCorrect_Clamp(ctrl->x_error_adc *
+                                      param->x_kp_mps_per_adc,
+                                  param->vx_limit_mps);
   const float vy_mps =
-      y_done ? 0.0f
-             : AutoSickCorrect_Clamp(ctrl->y_error_adc *
-                                         param->y_kp_mps_per_adc,
-                                     param->vy_limit_mps);
+      (!y_axis_enabled || y_done)
+          ? 0.0f
+          : AutoSickCorrect_Clamp(ctrl->y_error_adc *
+                                      param->y_kp_mps_per_adc,
+                                  param->vy_limit_mps);
   const float wz_rad_s =
       yaw_done ? 0.0f
                : AutoSickCorrect_Clamp(ctrl->yaw_error_adc *
@@ -367,7 +407,8 @@ void AutoSickCorrect_Update(AutoSickCorrect_t *ctrl,
     return;
   }
 
-  if (!x_done || !y_done || !yaw_done) {
+  if ((x_axis_enabled && !x_done) || (y_axis_enabled && !y_done) ||
+      (yaw_axis_enabled && !yaw_done)) {
     ctrl->stable_since_ms = 0u;
     return;
   }

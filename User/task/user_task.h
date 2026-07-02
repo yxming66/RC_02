@@ -503,6 +503,7 @@ bool Task_AutoRodSpearheadStartDockWait(void);
 void Task_AutoRodSpearheadAbort(void);
 bool Task_AutoRodSpearheadIsBusy(void);
 bool Task_AutoRodSpearheadIsPickupStep1(void);
+bool Task_AutoRodSpearheadIsPickupStep2(void);
 const RodNew_CMD_t *Task_AutoRodSpearheadGetCommand(void);
 const OreStore_CMD_t *Task_AutoRodSpearheadGetOreStoreCommand(void);
 bool Task_AutoSickCorrectStartRodSpearhead(void);
