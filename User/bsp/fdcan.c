@@ -93,6 +93,7 @@ static BSP_FDCAN_IdParser_t id_parser = NULL;
 static BSP_FDCAN_TxQueue_t tx_queues[BSP_FDCAN_NUM];
 static const uint8_t fdcan_dlc2len[16] = {0,1,2,3,4,5,6,7,8,12,16,20,24,32,48,64};
 volatile BSP_FDCAN_RxDebug_t g_bsp_fdcan_rx_debug = {0};
+static volatile uint32_t fdcan_rx_sequence[BSP_FDCAN_NUM] = {0};
 static volatile bool fdcan_recover_pending[BSP_FDCAN_NUM] = {false};
 static volatile bool fdcan_tx_drain_active[BSP_FDCAN_NUM] = {false};
 
@@ -510,7 +511,11 @@ static void BSP_FDCAN_RxFifo0Callback(void) {
           msg.frame_type = frame_type;
           msg.original_id = original_id;
           msg.parsed_id = parsed_id;
+          msg.sequence = ++fdcan_rx_sequence[fdcan_idx];
           msg.timestamp = (uint32_t)(start_us / 1000ULL);
+          g_bsp_fdcan_rx_debug.last_rx_sequence[fdcan_idx] = msg.sequence;
+          g_bsp_fdcan_rx_debug.last_rx_id[fdcan_idx] = parsed_id;
+          g_bsp_fdcan_rx_debug.last_rx_timestamp_ms[fdcan_idx] = msg.timestamp;
           uint8_t real_len = fdcan_dlc2len[rx_header.DataLength & 0xF];
           msg.dlc = real_len;
           if (msg.dlc > BSP_FDCAN_MAX_DLC) msg.dlc = BSP_FDCAN_MAX_DLC;
@@ -568,7 +573,11 @@ static void BSP_FDCAN_RxFifo1Callback(void) {
           msg.frame_type = frame_type;
           msg.original_id = original_id;
           msg.parsed_id = parsed_id;
+          msg.sequence = ++fdcan_rx_sequence[fdcan_idx];
           msg.timestamp = (uint32_t)(start_us / 1000ULL);
+          g_bsp_fdcan_rx_debug.last_rx_sequence[fdcan_idx] = msg.sequence;
+          g_bsp_fdcan_rx_debug.last_rx_id[fdcan_idx] = parsed_id;
+          g_bsp_fdcan_rx_debug.last_rx_timestamp_ms[fdcan_idx] = msg.timestamp;
           uint8_t real_len = fdcan_dlc2len[rx_header.DataLength & 0xF];
           msg.dlc = real_len; 
           if (msg.dlc > BSP_FDCAN_MAX_DLC) msg.dlc = BSP_FDCAN_MAX_DLC;

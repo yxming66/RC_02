@@ -531,33 +531,38 @@ payload 为 24 字节，Python unpack 格式为 `<BBBBBBBBIIII`。
 | 值 | 动作 |
 |---:|---|
 | 0 | NONE |
-| 1 | STORE |
-| 2 | RELEASE |
-| 3 | CHAMBER |
-| 4 | PICK_POS_400 |
-| 5 | PICK_POS_200 |
-| 6 | PICK_NEG_200 |
-| 7 | ROD_SPEARHEAD |
-| 8 | ABORT |
-| 9 | SICK_CORRECT_ROD_SPEARHEAD |
-| 10 | SICK_CORRECT_ORE_RELEASE，放矿前 SICK 校正：仅 x 方向，使用 rawdata[2]，目标 ADC=1303 |
-| 11 | ROD_DOCK_WAIT |
-| 12 | STEP_PICK_STORE_ASCEND_200_HEAD |
-| 13 | STEP_PICK_STORE_DESCEND_200_HEAD |
-| 14 | STEP_PICK_STORE_ASCEND_400_HEAD |
-| 15 | ROD_SPEARHEAD_STEP1 |
-| 16 | STEP_ASCEND_200_HEAD |
-| 17 | STEP_DESCEND_200_HEAD |
-| 18 | STEP_ASCEND_400_HEAD |
-| 19 | STEP_DESCEND_400_HEAD |
-| 20 | ROD_SPEARHEAD_STEP2 |
-| 21 | RELEASE_LIFT_DETECT，Pole 到放矿目标后比较预留 SICK 原始 ADC 阈值，确认被抬起后继续放矿 |
-| 22 | PICK_STORE_POS_400，取正 400mm 矿后并行存矿和后退 |
-| 23 | PICK_STORE_POS_200，取正 200mm 矿后并行存矿和后退 |
-| 24 | PICK_STORE_NEG_200，取反 200mm 矿后并行存矿和后退 |
-| 25 | STEP_DROP_STORE_ASCEND_200_HEAD，丢矿版融合头向上 200mm 台阶；仅高位有矿时启动，存矿阶段强制存高位 |
-| 26 | STEP_DROP_STORE_DESCEND_200_HEAD，丢矿版融合头向下 200mm 台阶；仅高位有矿时启动，存矿阶段强制存高位 |
-| 27 | STEP_DROP_STORE_ASCEND_400_HEAD，丢矿版融合头向上 400mm 台阶；仅高位有矿时启动，存矿阶段强制存高位 |
+| 1 | ABORT |
+| 2 | STORE |
+| 3 | RELEASE |
+| 4 | RELEASE_LIFT_DETECT，Pole 到放矿目标后比较预留 SICK 原始 ADC 阈值，确认被抬起后继续放矿 |
+| 5 | CHAMBER |
+| 6 | PICK_POS_400 |
+| 7 | PICK_POS_200 |
+| 8 | PICK_NEG_200 |
+| 9 | PICK_STORE_POS_400，取正 400mm 矿后并行存矿和后退 |
+| 10 | PICK_STORE_POS_200，取正 200mm 矿后并行存矿和后退 |
+| 11 | PICK_STORE_NEG_200，取反 200mm 矿后并行存矿和后退 |
+| 12 | ROD_SPEARHEAD |
+| 13 | ROD_SPEARHEAD_STEP1 |
+| 14 | ROD_SPEARHEAD_STEP2 |
+| 15 | ROD_DOCK_WAIT |
+| 16 | SICK_CORRECT_ROD_SPEARHEAD_POS1，取矛头位置 1 的 SICK 校正：x 使用 rawdata[2]，y 使用 rawdata[0]；超时后启用轴误差均 <=15 ADC 则 SUCCESS |
+| 17 | SICK_CORRECT_ROD_SPEARHEAD_POS2，取矛头位置 2 的 SICK 校正：x 使用 rawdata[2]，y 使用 rawdata[0]；超时后启用轴误差均 <=15 ADC 则 SUCCESS |
+| 18 | SICK_CORRECT_ROD_SPEARHEAD_POS3，取矛头位置 3 的 SICK 校正：x 使用 rawdata[2]，y 使用 rawdata[0]；超时后启用轴误差均 <=15 ADC 则 SUCCESS |
+| 19 | SICK_CORRECT_ROD_SPEARHEAD_POS4，取矛头位置 4 的 SICK 校正：x 使用 rawdata[2]，y 使用 rawdata[0]；超时后启用轴误差均 <=15 ADC 则 SUCCESS |
+| 20 | SICK_CORRECT_ROD_SPEARHEAD_POS5，取矛头位置 5 的 SICK 校正：x 使用 rawdata[2]，y 使用 rawdata[0]；超时后启用轴误差均 <=15 ADC 则 SUCCESS |
+| 21 | SICK_CORRECT_ROD_SPEARHEAD_POS6，取矛头位置 6 的 SICK 校正：x 使用 rawdata[2]，y 使用 rawdata[0]；超时后启用轴误差均 <=15 ADC 则 SUCCESS |
+| 22 | SICK_CORRECT_ORE_RELEASE，放矿前 SICK 校正：仅 x 方向，使用 rawdata[2]，目标 ADC=1303 |
+| 23 | STEP_ASCEND_200_HEAD |
+| 24 | STEP_DESCEND_200_HEAD |
+| 25 | STEP_ASCEND_400_HEAD |
+| 26 | STEP_DESCEND_400_HEAD |
+| 27 | STEP_PICK_STORE_ASCEND_200_HEAD |
+| 28 | STEP_PICK_STORE_DESCEND_200_HEAD |
+| 29 | STEP_PICK_STORE_ASCEND_400_HEAD |
+| 30 | STEP_DROP_STORE_ASCEND_200_HEAD，丢矿版融合头向上 200mm 台阶；仅高位有矿时启动，存矿阶段强制存高位 |
+| 31 | STEP_DROP_STORE_DESCEND_200_HEAD，丢矿版融合头向下 200mm 台阶；仅高位有矿时启动，存矿阶段强制存高位 |
+| 32 | STEP_DROP_STORE_ASCEND_400_HEAD，丢矿版融合头向上 400mm 台阶；仅高位有矿时启动，存矿阶段强制存高位 |
 
 ### 6.3 红外对接
 

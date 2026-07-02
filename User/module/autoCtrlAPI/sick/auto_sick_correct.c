@@ -6,6 +6,7 @@
 #define AUTO_SICK_CORRECT_DEFAULT_FINISH_STABLE_MS (120u)
 #define AUTO_SICK_CORRECT_DEFAULT_TIMEOUT_MS (5000u)
 #define AUTO_SICK_CORRECT_DEFAULT_POLE_TARGET_LIFT (2.0f)
+#define AUTO_SICK_CORRECT_ROD_SPEARHEAD_TIMEOUT_SUCCESS_TOLERANCE_ADC (15.0f)
 
 static float AutoSickCorrect_AbsFloat(float value) {
   return (value >= 0.0f) ? value : -value;
@@ -35,7 +36,23 @@ static bool AutoSickCorrect_ActionUsesSingleXSensor(
 
 static bool AutoSickCorrect_ActionUsesOnlyYSensors(
     AutoSickCorrect_Action_t action) {
-  return action == AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD;
+  return false;
+}
+
+static bool AutoSickCorrect_ActionIsRodSpearheadPosition(
+    AutoSickCorrect_Action_t action) {
+  return action >= AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD_POS1 &&
+         action <= AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD_POS6;
+}
+
+static bool AutoSickCorrect_ActionUsesRodSpearheadSamples(
+    AutoSickCorrect_Action_t action) {
+  return AutoSickCorrect_ActionIsRodSpearheadPosition(action);
+}
+
+static uint8_t AutoSickCorrect_RodSpearheadPositionIndex(
+    AutoSickCorrect_Action_t action) {
+  return (uint8_t)(action - AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD_POS1);
 }
 
 static uint32_t AutoSickCorrect_FinishStableMs(
@@ -81,6 +98,20 @@ static bool AutoSickCorrect_PointParamValid(
            isfinite(param->pole_speed);
   }
 
+  if (AutoSickCorrect_ActionUsesRodSpearheadSamples(action)) {
+    return AutoSickCorrect_IndexValid(param->front_index) &&
+           AutoSickCorrect_IndexValid(param->rod_rear_index) &&
+           isfinite(param->x_target_adc) && param->x_target_adc > 0.0f &&
+           isfinite(param->y_target_adc) && param->y_target_adc > 0.0f &&
+           isfinite(param->x_tolerance_adc) && param->x_tolerance_adc > 0.0f &&
+           isfinite(param->y_tolerance_adc) && param->y_tolerance_adc > 0.0f &&
+           isfinite(param->x_kp_mps_per_adc) &&
+           isfinite(param->y_kp_mps_per_adc) &&
+           isfinite(param->vx_limit_mps) && param->vx_limit_mps > 0.0f &&
+           isfinite(param->vy_limit_mps) && param->vy_limit_mps > 0.0f &&
+           isfinite(param->pole_speed);
+  }
+
   if (AutoSickCorrect_ActionUsesSingleXSensor(action)) {
     return AutoSickCorrect_IndexValid(param->front_index) &&
          isfinite(param->x_target_adc) && param->x_target_adc > 0.0f &&
@@ -120,8 +151,14 @@ static const AutoSickCorrect_PointParams_t *AutoSickCorrect_ActiveParams(
   }
 
   switch (ctrl->action) {
-    case AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD:
-      return &ctrl->param.rod_spearhead;
+    case AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD_POS1:
+    case AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD_POS2:
+    case AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD_POS3:
+    case AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD_POS4:
+    case AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD_POS5:
+    case AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD_POS6:
+      return &ctrl->param.rod_spearhead_position[
+          AutoSickCorrect_RodSpearheadPositionIndex(ctrl->action)];
     case AUTO_SICK_CORRECT_ACTION_ORE_RELEASE:
       return &ctrl->param.ore_release;
     case AUTO_SICK_CORRECT_ACTION_NONE:
@@ -202,6 +239,13 @@ static bool AutoSickCorrect_FeedbackValid(
                                                param->rod_rear_index);
   }
 
+  if (AutoSickCorrect_ActionUsesRodSpearheadSamples(action)) {
+    return AutoSickCorrect_FeedbackSensorValid(feedback, param,
+                                               param->front_index) &&
+           AutoSickCorrect_FeedbackSensorValid(feedback, param,
+                                               param->rod_rear_index);
+  }
+
   if (AutoSickCorrect_ActionUsesSingleXSensor(action)) {
     return AutoSickCorrect_FeedbackSensorValid(feedback, param,
                                                param->front_index);
@@ -268,10 +312,17 @@ void AutoSickCorrect_Init(AutoSickCorrect_t *ctrl,
   AutoSickCorrect_ClearOutputs(ctrl);
 }
 
-bool AutoSickCorrect_StartRodSpearhead(AutoSickCorrect_t *ctrl,
-                                       uint32_t now_ms) {
-  return AutoSickCorrect_Start(ctrl, AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD,
-                               now_ms);
+bool AutoSickCorrect_StartRodSpearheadPosition(AutoSickCorrect_t *ctrl,
+                                               uint8_t position_index,
+                                               uint32_t now_ms) {
+  if (position_index >= AUTO_SICK_CORRECT_ROD_SPEARHEAD_POSITION_COUNT) {
+    return false;
+  }
+  return AutoSickCorrect_Start(
+      ctrl,
+      (AutoSickCorrect_Action_t)(AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD_POS1 +
+                                position_index),
+      now_ms);
 }
 
 bool AutoSickCorrect_StartOreRelease(AutoSickCorrect_t *ctrl,
@@ -324,7 +375,13 @@ void AutoSickCorrect_Update(AutoSickCorrect_t *ctrl,
     return;
   }
 
-  if (AutoSickCorrect_ActionUsesSingleXSensor(ctrl->action)) {
+  if (AutoSickCorrect_ActionUsesRodSpearheadSamples(ctrl->action)) {
+    ctrl->x_sample_adc = (float)feedback->adc_raw[param->front_index];
+    ctrl->x_sample_index = param->front_index;
+    ctrl->y_sample_adc = (float)feedback->adc_raw[param->rod_rear_index];
+    ctrl->y_target_adc = param->y_target_adc;
+    ctrl->yaw_sample_diff_adc = 0.0f;
+  } else if (AutoSickCorrect_ActionUsesSingleXSensor(ctrl->action)) {
     ctrl->x_sample_adc = (float)feedback->adc_raw[param->front_index];
     ctrl->x_sample_index = param->front_index;
     ctrl->y_sample_adc = 0.0f;
@@ -353,7 +410,10 @@ void AutoSickCorrect_Update(AutoSickCorrect_t *ctrl,
   }
 
   ctrl->x_error_adc = param->x_target_adc - ctrl->x_sample_adc;
-  if (AutoSickCorrect_ActionUsesOnlyYSensors(ctrl->action)) {
+  if (AutoSickCorrect_ActionUsesRodSpearheadSamples(ctrl->action)) {
+    ctrl->y_error_adc = ctrl->y_target_adc - ctrl->y_sample_adc;
+    ctrl->yaw_error_adc = 0.0f;
+  } else if (AutoSickCorrect_ActionUsesOnlyYSensors(ctrl->action)) {
     ctrl->x_error_adc = 0.0f;
     ctrl->y_error_adc = ctrl->y_target_adc - ctrl->y_sample_adc;
     ctrl->yaw_error_adc = 0.0f;
@@ -372,8 +432,11 @@ void AutoSickCorrect_Update(AutoSickCorrect_t *ctrl,
       ctrl->action);
   const bool only_y_sensor = AutoSickCorrect_ActionUsesOnlyYSensors(
       ctrl->action);
+  const bool rod_spearhead_samples = AutoSickCorrect_ActionUsesRodSpearheadSamples(
+      ctrl->action);
   const bool x_axis_enabled = !only_y_sensor;
-  const bool yaw_axis_enabled = !single_x_sensor && !only_y_sensor;
+  const bool yaw_axis_enabled = !single_x_sensor && !only_y_sensor &&
+                                !rod_spearhead_samples;
   const bool y_axis_enabled = !single_x_sensor;
   const bool y_done = single_x_sensor ||
       AutoSickCorrect_AbsFloat(ctrl->y_error_adc) <= param->y_tolerance_adc;
@@ -401,6 +464,18 @@ void AutoSickCorrect_Update(AutoSickCorrect_t *ctrl,
   AutoSickCorrect_CommandChassis(ctrl, vx_mps, vy_mps, wz_rad_s);
 
   if ((now_ms - ctrl->start_time_ms) >= AutoSickCorrect_TimeoutMs(param)) {
+    if (rod_spearhead_samples &&
+        (!x_axis_enabled ||
+         AutoSickCorrect_AbsFloat(ctrl->x_error_adc) <=
+             AUTO_SICK_CORRECT_ROD_SPEARHEAD_TIMEOUT_SUCCESS_TOLERANCE_ADC) &&
+        (!y_axis_enabled ||
+         AutoSickCorrect_AbsFloat(ctrl->y_error_adc) <=
+             AUTO_SICK_CORRECT_ROD_SPEARHEAD_TIMEOUT_SUCCESS_TOLERANCE_ADC)) {
+      AutoSickCorrect_Finish(ctrl, AUTO_SICK_CORRECT_RESULT_SUCCESS,
+                             AUTO_SICK_CORRECT_FAULT_NONE,
+                             AUTO_SICK_CORRECT_STATE_SUCCESS);
+      return;
+    }
     AutoSickCorrect_Finish(ctrl, AUTO_SICK_CORRECT_RESULT_FAIL,
                            AUTO_SICK_CORRECT_FAULT_TIMEOUT,
                            AUTO_SICK_CORRECT_STATE_FAIL);

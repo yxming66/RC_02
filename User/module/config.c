@@ -13,6 +13,31 @@
 #include "device/sick.h"
 
 #define CONFIG_AUTO_ORE_PREALIGN_YAW_TOLERANCE_RAD (0.0872664626f)
+#define CONFIG_SICK_ROD_SPEARHEAD_PARAM(x_target, y_target) \
+    { \
+        .front_index = SICK_ROD_FRONT_INDEX, \
+        .rod_front_index = SICK_ROD_FRONT_INDEX, \
+        .rear_index = SICK_REAR_INDEX, \
+        .rod_rear_index = SICK_REAR_INDEX, \
+        .valid_adc_min = 0u, \
+        .valid_adc_max = 32100u, \
+        .x_target_adc = (x_target), \
+        .y_target_adc = (y_target), \
+        .yaw_target_diff_adc = 0.0f, \
+        .x_tolerance_adc = 2.0f, \
+        .y_tolerance_adc = 2.0f, \
+        .yaw_tolerance_adc = 20.0f, \
+        .x_kp_mps_per_adc = -0.0002f, \
+        .y_kp_mps_per_adc = 0.0019f, \
+        .yaw_kp_rad_s_per_adc = 0.0f, \
+        .vx_limit_mps = 0.30f, \
+        .vy_limit_mps = 0.30f, \
+        .wz_limit_rad_s = 0.80f, \
+        .pole_target_lift = 3.0f, \
+        .pole_speed = 50.0f, \
+        .finish_stable_ms = 100u, \
+        .timeout_ms = 5000u, \
+    }
 
 Config_RobotParam_t robot_config = {
     /* 模块参数：底盘 chassis_param，电机、PID、底盘几何、速度/力矩限幅。 */
@@ -490,37 +515,22 @@ Config_RobotParam_t robot_config = {
          * SICK 校正参数：
          * - index 字段选择校正使用的 4 路 SICK ADC 通道。
          *   当前硬件：前侧=3，后侧=0，矛头侧后侧=1，矛头侧前侧=2。
-         * - 取矛头校正只使用 y_sample_adc = 矛头侧后侧 SICK。
-         * - x_sample_adc/yaw_sample_diff_adc 保留给其他 SICK 校正动作调试。
+         * - 取矛头校正使用 x_sample_adc = 矛头侧前侧 SICK rawdata[2]，
+         *   y_sample_adc = 后侧 SICK rawdata[0]。
+         * - yaw_sample_diff_adc 保留给其他 SICK 校正动作调试。
          * - *_kp 字段把 ADC 误差映射到底盘速度；*_limit 字段做命令限幅。
          *   tolerance/stable/timeout 用于判定校正完成。
          */
         /* 模块参数：SICK 一键校正 sick_correct，取矛头/放矿前的 SICK 对位参数。 */
         .sick_correct = {
-            .rod_spearhead = {
-                .front_index = SICK_FRONT_INDEX,
-                .rod_front_index = SICK_ROD_FRONT_INDEX,
-                .rear_index = SICK_REAR_INDEX,
-                .rod_rear_index = SICK_ROD_REAR_INDEX,
-                .valid_adc_min = 0u,                 /* 有效 ADC 下限，低于认为传感器无效。 */
-                .valid_adc_max = 32100u,             /* 有效 ADC 上限，高于认为传感器无效。 */
-                .x_target_adc = 3574.0f,             /* 取矛头校正不使用 x，仅保持参数占位。 */
-                .y_target_adc = 896.0f,              /* 矛头侧后侧 SICK 的 y 目标 ADC，稍后按实测修改。 */
-                .yaw_target_diff_adc = 0.0f,         /* 取矛头校正不使用 yaw，仅保持参数占位。 */
-                .x_tolerance_adc = 30.0f,            /* 取矛头校正不使用 x，仅保持参数占位。 */
-                .y_tolerance_adc = 20.0f,            /* y 误差小于该值认为 y 到位，稍后按实测修改。 */
-                .yaw_tolerance_adc = 20.0f,          /* 取矛头校正不使用 yaw，仅保持参数占位。 */
-                .x_kp_mps_per_adc = -0.0002f,        /* 取矛头校正不使用 x，仅保持参数占位。 */
-                .y_kp_mps_per_adc = 0.0019f,       /* y ADC 误差到 vy(m/s) 的比例系数。 */
-                .yaw_kp_rad_s_per_adc = 0.0f,      /* 取矛头校正不使用 yaw，仅保持参数占位。 */
-                .vx_limit_mps = 0.30f,               /* 取矛头校正不输出 vx，仅保持参数占位。 */
-                .vy_limit_mps = 0.30f,               /* vy 指令限幅，单位 m/s。 */
-                .wz_limit_rad_s = 0.80f,             /* 取矛头校正不输出 wz，仅保持参数占位。 */
-                .pole_target_lift = 2.0f,            /* 校正时撑杆目标高度/角度。 */
-                .pole_speed = 50.0f,                 /* 校正时撑杆运动速度。 */
-                .finish_stable_ms = 100u,            /* 全部误差到位后保持多久才判成功。 */
-                .timeout_ms = 3000u,                 /* 校正总超时，单位 ms。 */
-            }, 
+            .rod_spearhead_position = {
+                [0] = CONFIG_SICK_ROD_SPEARHEAD_PARAM(666.0f, 1131.0f),
+                [1] = CONFIG_SICK_ROD_SPEARHEAD_PARAM(1599.0f, 1131.0f),
+                [2] = CONFIG_SICK_ROD_SPEARHEAD_PARAM(2566.0f, 1131.0f),
+                [3] = CONFIG_SICK_ROD_SPEARHEAD_PARAM(3500.0f, 1131.0f),
+                [4] = CONFIG_SICK_ROD_SPEARHEAD_PARAM(4406.0f, 1507.0f),
+                [5] = CONFIG_SICK_ROD_SPEARHEAD_PARAM(5377.0f, 1504.0f),
+            },
             /* 放矿前 SICK 校正：只使用 rawdata[2] 做 x 方向校正。 */
             .ore_release = {  
                 .front_index = SICK_ROD_FRONT_INDEX,
@@ -541,7 +551,7 @@ Config_RobotParam_t robot_config = {
                 .vx_limit_mps = 0.30f,               /* vx 命令限幅，单位 m/s。 */
                 .vy_limit_mps = 0.30f,               /* vy 命令限幅，单位 m/s。 */
                 .wz_limit_rad_s = 0.80f,             /* wz 命令限幅，单位 rad/s。 */
-                .pole_target_lift = 2.0f,            /* 校正阶段撑杆目标高度。 */
+                .pole_target_lift = 3.0f,            /* 校正阶段撑杆目标高度。 */
                 .pole_speed = 50.0f,                 /* 校正阶段撑杆速度。 */
                 .finish_stable_ms = 120u,            /* 成功前需要保持稳定的时间。 */
                 .timeout_ms = 5000u,                 /* 校正总超时，单位 ms。 */
@@ -557,7 +567,7 @@ Config_RobotParam_t robot_config = {
              * - front_retract_move_speed: 前光电触发后，收前腿时的前进速度。
              * - rear_retract_move_speed: 中段后低速等待后光电的前进速度。
              * - second_photo_retract_move_speed: 后光电触发后，全收腿时的前进速度。
-             */
+             */ 
             .prealign_move_speed = 0.0f,        /* PREALIGN 对正阶段叠加 vx，单位 m/s。 */
             .pole_extend_move_speed = 0.4f,    /* 撑杆伸出阶段 vx，单位 m/s。 */
             .front_retract_move_speed = 0.40f,  /* 前杆动作阶段 vx，单位 m/s。 */

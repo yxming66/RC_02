@@ -34,9 +34,9 @@ bool auto_ctrl_inited = false;
 AutoOre_t auto_ore_ctrl;
 bool auto_ore_inited = false;
 
-/* Ozone/调试器手动触发一键动作：request=1存矿，2放矿，3上膛，4中止，5取正400，6取正200，7取负200，8完整取矛头，9矛头sick校正，
-10放矿sick校正，11等待对接，12融合200上台阶取矿存矿，13融合200下台阶取矿存矿，14融合400上台阶取矿存矿，15取矛头step1分步调试，
-16单独200上台阶，17单独200下台阶，18单独400上台阶，19单独400下台阶，20取矛头step2分步调试。 */
+/* Ozone/调试器手动触发一键动作：request=1中止，2存矿，3放矿，4抬升检测放矿，5上膛，6/7/8取正400/正200/负200，
+9/10/11取正400/正200/负200后并行存矿，12完整取矛头，13/14取矛头step1/step2，15等待对接，
+16~21取矛头位置1~6 SICK校正，22放矿SICK校正，23~26普通台阶，27~32融合/丢矿版取矿存矿台阶。 */
 volatile AutoOre_DebugControl_t g_auto_ore_debug = {0};//手动调用一键函数
 
 AutoRodSpearhead_t auto_rod_spearhead_ctrl;
@@ -231,7 +231,6 @@ static AutoOre_Action_t AutoCtrlFeed_RequestToOreAction(
     case AUTO_ORE_DEBUG_REQUEST_ROD_SPEARHEAD:
     case AUTO_ORE_DEBUG_REQUEST_ROD_SPEARHEAD_STEP1:
     case AUTO_ORE_DEBUG_REQUEST_ROD_SPEARHEAD_STEP2:
-    case AUTO_ORE_DEBUG_REQUEST_SICK_CORRECT_ROD_SPEARHEAD:
     case AUTO_ORE_DEBUG_REQUEST_SICK_CORRECT_ORE_RELEASE:
     case AUTO_ORE_DEBUG_REQUEST_ROD_DOCK_WAIT:
     case AUTO_ORE_DEBUG_REQUEST_STEP_ASCEND_200_HEAD:
@@ -270,8 +269,18 @@ static PC_AutoAction_t AutoCtrlFeed_MapRodAction(
 static PC_AutoAction_t AutoCtrlFeed_MapSickCorrectAction(
     AutoSickCorrect_Action_t action) {
   switch (action) {
-    case AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD:
-      return PC_AUTO_ACTION_SICK_CORRECT_ROD_SPEARHEAD;
+    case AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD_POS1:
+      return PC_AUTO_ACTION_SICK_CORRECT_ROD_SPEARHEAD_POS1;
+    case AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD_POS2:
+      return PC_AUTO_ACTION_SICK_CORRECT_ROD_SPEARHEAD_POS2;
+    case AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD_POS3:
+      return PC_AUTO_ACTION_SICK_CORRECT_ROD_SPEARHEAD_POS3;
+    case AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD_POS4:
+      return PC_AUTO_ACTION_SICK_CORRECT_ROD_SPEARHEAD_POS4;
+    case AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD_POS5:
+      return PC_AUTO_ACTION_SICK_CORRECT_ROD_SPEARHEAD_POS5;
+    case AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD_POS6:
+      return PC_AUTO_ACTION_SICK_CORRECT_ROD_SPEARHEAD_POS6;
     case AUTO_SICK_CORRECT_ACTION_ORE_RELEASE:
       return PC_AUTO_ACTION_SICK_CORRECT_ORE_RELEASE;
     case AUTO_SICK_CORRECT_ACTION_NONE:
@@ -313,8 +322,14 @@ static void AutoCtrlFeed_RememberSickCorrectAction(
 static AutoSickCorrect_PointParams_t *AutoCtrlFeed_SickCorrectParamsForAction(
     AutoSickCorrect_Action_t action) {
   switch (action) {
-    case AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD:
-      return &auto_sick_correct_ctrl.param.rod_spearhead;
+    case AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD_POS1:
+    case AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD_POS2:
+    case AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD_POS3:
+    case AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD_POS4:
+    case AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD_POS5:
+    case AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD_POS6:
+      return &auto_sick_correct_ctrl.param.rod_spearhead_position[
+          (uint8_t)(action - AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD_POS1)];
     case AUTO_SICK_CORRECT_ACTION_ORE_RELEASE:
       return &auto_sick_correct_ctrl.param.ore_release;
     case AUTO_SICK_CORRECT_ACTION_NONE:
@@ -540,8 +555,25 @@ static bool AutoCtrlFeed_IsRodSpearheadAction(PC_AutoAction_t action) {
 }
 
 static bool AutoCtrlFeed_IsSickCorrectAction(PC_AutoAction_t action) {
-  return action == PC_AUTO_ACTION_SICK_CORRECT_ROD_SPEARHEAD ||
+  return action == PC_AUTO_ACTION_SICK_CORRECT_ROD_SPEARHEAD_POS1 ||
+         action == PC_AUTO_ACTION_SICK_CORRECT_ROD_SPEARHEAD_POS2 ||
+         action == PC_AUTO_ACTION_SICK_CORRECT_ROD_SPEARHEAD_POS3 ||
+         action == PC_AUTO_ACTION_SICK_CORRECT_ROD_SPEARHEAD_POS4 ||
+         action == PC_AUTO_ACTION_SICK_CORRECT_ROD_SPEARHEAD_POS5 ||
+         action == PC_AUTO_ACTION_SICK_CORRECT_ROD_SPEARHEAD_POS6 ||
          action == PC_AUTO_ACTION_SICK_CORRECT_ORE_RELEASE;
+}
+
+static bool AutoCtrlFeed_IsRodSpearheadSickCorrectRequest(
+    AutoOre_DebugRequest_t request) {
+  return request >= AUTO_ORE_DEBUG_REQUEST_SICK_CORRECT_ROD_SPEARHEAD_POS1 &&
+         request <= AUTO_ORE_DEBUG_REQUEST_SICK_CORRECT_ROD_SPEARHEAD_POS6;
+}
+
+static uint8_t AutoCtrlFeed_RodSpearheadSickCorrectPositionIndex(
+    AutoOre_DebugRequest_t request) {
+  return (uint8_t)(request -
+                   AUTO_ORE_DEBUG_REQUEST_SICK_CORRECT_ROD_SPEARHEAD_POS1);
 }
 
 static PC_AutoAction_t AutoCtrlFeed_GetRodSpearheadFeedbackAction(void) {
@@ -752,9 +784,16 @@ static bool AutoCtrlFeed_StartSickCorrectAction(
   const uint32_t now_ms = BSP_TIME_Get_ms();
   AutoCtrlFeed_PrepareSickCorrectParams(action);
   switch (action) {
-    case AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD:
-      result = AutoSickCorrect_StartRodSpearhead(&auto_sick_correct_ctrl,
-                                                 now_ms);
+    case AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD_POS1:
+    case AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD_POS2:
+    case AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD_POS3:
+    case AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD_POS4:
+    case AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD_POS5:
+    case AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD_POS6:
+      result = AutoSickCorrect_StartRodSpearheadPosition(
+          &auto_sick_correct_ctrl,
+          (uint8_t)(action - AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD_POS1),
+          now_ms);
       break;
     case AUTO_SICK_CORRECT_ACTION_ORE_RELEASE:
       result = AutoSickCorrect_StartOreRelease(&auto_sick_correct_ctrl,
@@ -1232,9 +1271,9 @@ static void AutoCtrlFeed_InitAutoSickCorrect(void) {
   AutoSickCorrect_Init(&auto_sick_correct_ctrl,
                        &cfg->auto_ctrl_param.sick_correct);
   AutoCtrlFeed_InitSickCorrectDebugOverride(
-      &auto_sick_correct_ctrl.param.rod_spearhead);
+      &auto_sick_correct_ctrl.param.rod_spearhead_position[0]);
   AutoCtrlFeed_CopySickCorrectParamToDebug(
-      &auto_sick_correct_ctrl.param.rod_spearhead);
+      &auto_sick_correct_ctrl.param.rod_spearhead_position[0]);
   auto_sick_correct_inited = true;
 }
 
@@ -1299,7 +1338,7 @@ static void AutoCtrlFeed_UpdateAutoSickCorrect(uint32_t now_ms,
       AutoCtrlFeed_SickCorrectParamsForAction(
           AutoSickCorrect_GetAction(&auto_sick_correct_ctrl));
   if (active_param == NULL) {
-    active_param = &auto_sick_correct_ctrl.param.rod_spearhead;
+    active_param = &auto_sick_correct_ctrl.param.rod_spearhead_position[0];
   }
   AutoCtrlFeed_CopySickCorrectParamToDebug(active_param);
 }
@@ -1487,8 +1526,14 @@ static void AutoCtrlFeed_HandleAutoOreDebugRequest(void) {
     case AUTO_ORE_DEBUG_REQUEST_ROD_DOCK_WAIT:
       result = Task_AutoRodSpearheadStartDockWait();
       break;
-    case AUTO_ORE_DEBUG_REQUEST_SICK_CORRECT_ROD_SPEARHEAD:
-      result = Task_AutoSickCorrectStartRodSpearhead();
+    case AUTO_ORE_DEBUG_REQUEST_SICK_CORRECT_ROD_SPEARHEAD_POS1:
+    case AUTO_ORE_DEBUG_REQUEST_SICK_CORRECT_ROD_SPEARHEAD_POS2:
+    case AUTO_ORE_DEBUG_REQUEST_SICK_CORRECT_ROD_SPEARHEAD_POS3:
+    case AUTO_ORE_DEBUG_REQUEST_SICK_CORRECT_ROD_SPEARHEAD_POS4:
+    case AUTO_ORE_DEBUG_REQUEST_SICK_CORRECT_ROD_SPEARHEAD_POS5:
+    case AUTO_ORE_DEBUG_REQUEST_SICK_CORRECT_ROD_SPEARHEAD_POS6:
+      result = Task_AutoSickCorrectStartRodSpearheadPosition(
+          AutoCtrlFeed_RodSpearheadSickCorrectPositionIndex(request));
       break;
     case AUTO_ORE_DEBUG_REQUEST_SICK_CORRECT_ORE_RELEASE:
       result = Task_AutoSickCorrectStartOreRelease();
@@ -1528,7 +1573,7 @@ static void AutoCtrlFeed_HandleAutoOreDebugRequest(void) {
         request != AUTO_ORE_DEBUG_REQUEST_ROD_SPEARHEAD_STEP1 &&
         request != AUTO_ORE_DEBUG_REQUEST_ROD_SPEARHEAD_STEP2 &&
         request != AUTO_ORE_DEBUG_REQUEST_ROD_DOCK_WAIT &&
-        request != AUTO_ORE_DEBUG_REQUEST_SICK_CORRECT_ROD_SPEARHEAD &&
+        !AutoCtrlFeed_IsRodSpearheadSickCorrectRequest(request) &&
           request != AUTO_ORE_DEBUG_REQUEST_SICK_CORRECT_ORE_RELEASE &&
           request != AUTO_ORE_DEBUG_REQUEST_STEP_ASCEND_200_HEAD &&
           request != AUTO_ORE_DEBUG_REQUEST_STEP_DESCEND_200_HEAD &&
@@ -1653,9 +1698,13 @@ const OreStore_CMD_t *Task_AutoRodSpearheadGetOreStoreCommand(void) {
              : NULL;
 }
 
-bool Task_AutoSickCorrectStartRodSpearhead(void) {
+bool Task_AutoSickCorrectStartRodSpearheadPosition(uint8_t position_index) {
+  if (position_index >= AUTO_SICK_CORRECT_ROD_SPEARHEAD_POSITION_COUNT) {
+    return false;
+  }
   return AutoCtrlFeed_StartSickCorrectAction(
-      AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD);
+      (AutoSickCorrect_Action_t)(AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD_POS1 +
+                                position_index));
 }
 
 bool Task_AutoSickCorrectStartOreRelease(void) {

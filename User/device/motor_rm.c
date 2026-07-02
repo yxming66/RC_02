@@ -64,6 +64,8 @@ MOTOR_RM_SlotTxDebug_t g_motor_rm_slot_tx_debug[MOTOR_RM_MAX_MOTORS] = {0};
 
 /* USER FUNCTION END */
 
+static bool MOTOR_RM_GroupHasOnlineMotor(const MOTOR_RM_CANManager_t *manager, uint8_t group);
+
 static int8_t MOTOR_RM_GetLogicalIndex(uint16_t can_id, MOTOR_RM_Module_t module) {
     switch (module) {
         case MOTOR_M2006:
@@ -187,6 +189,11 @@ static int8_t MOTOR_RM_SendGroup(MOTOR_RM_CANManager_t *manager,
                                  uint16_t source_motor_id,
                                  int8_t logical_index) {
     if (manager == NULL) return DEVICE_ERR_NULL;
+    if (!MOTOR_RM_GroupHasOnlineMotor(manager, group)) {
+        manager->pending_tx_groups &= (uint8_t)~MOTOR_RM_TX_GROUP_MASK(group);
+        motor_rm_tx_debug.pending_tx_groups = manager->pending_tx_groups;
+        return DEVICE_ERR_NO_DEV;
+    }
     BSP_CAN_StdDataFrame_t tx_frame;
     const int8_t frame_ret = MOTOR_RM_FillTxFrame(manager, group, &tx_frame);
     if (frame_ret != DEVICE_OK) return frame_ret;
@@ -260,6 +267,30 @@ static void MOTOR_RM_ResetAngleTracker(MOTOR_RM_t *motor, uint16_t raw_angle) {
 static MOTOR_RM_CANManager_t* MOTOR_RM_GetCANManager(BSP_CAN_t can) {
     if (can >= BSP_CAN_NUM) return NULL;
     return can_managers[can];
+}
+
+static bool MOTOR_RM_MotorIsInTxGroup(const MOTOR_RM_t *motor, uint8_t group) {
+    if (motor == NULL) return false;
+    return MOTOR_RM_GetTxGroupById(motor->param.id) == (int8_t)group;
+}
+
+static bool MOTOR_RM_GroupHasOnlineMotor(const MOTOR_RM_CANManager_t *manager, uint8_t group) {
+    if (manager == NULL) return false;
+    for (int i = 0; i < manager->motor_count; i++) {
+        MOTOR_RM_t *motor = manager->motors[i];
+        if (MOTOR_RM_MotorIsInTxGroup(motor, group) &&
+            motor->motor.header.online) {
+            return true;
+        }
+    }
+    for (int i = 0; i < manager->external_motor_count; i++) {
+        MOTOR_RM_t *motor = manager->external_motors[i];
+        if (MOTOR_RM_MotorIsInTxGroup(motor, group) &&
+            motor->motor.header.online) {
+            return true;
+        }
+    }
+    return false;
 }
 
 static int8_t MOTOR_RM_CreateCANManager(BSP_CAN_t can) {
@@ -432,6 +463,15 @@ int8_t MOTOR_RM_Update(MOTOR_RM_Param_t *param) {
         }
         return DEVICE_ERR;
     }
+    if (rx_msg.sequence == motor->last_rx_sequence) {
+        uint64_t now_time = BSP_TIME_Get();
+        if (now_time - motor->motor.header.last_online_time > MOTOR_RM_FEEDBACK_TIMEOUT_US) {
+            motor->motor.header.online = false;
+            return DEVICE_ERR_NO_DEV;
+        }
+        return DEVICE_ERR;
+    }
+    motor->last_rx_sequence = rx_msg.sequence;
     motor->motor.header.online = true;
     motor->motor.header.last_online_time = BSP_TIME_Get();
     Motor_RM_Decode(motor, &rx_msg);

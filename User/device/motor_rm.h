@@ -74,6 +74,7 @@ typedef struct {
     float gearbox_total_angle;
     uint32_t angle_lost_count;
     uint32_t last_feedback_time;
+    uint32_t last_rx_sequence;
 } MOTOR_RM_t;
 
 /*CAN管理器，管理一个CAN总线上所有的电机*/

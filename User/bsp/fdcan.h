@@ -82,6 +82,7 @@ typedef struct {
     BSP_FDCAN_FrameType_t frame_type;
     uint32_t original_id;
     uint32_t parsed_id;
+  uint32_t sequence;
     uint8_t dlc;
     uint8_t data[BSP_FDCAN_MAX_DLC];
     uint32_t timestamp;
@@ -133,6 +134,9 @@ typedef struct {
   volatile uint32_t fifo1_last_us;
   volatile uint32_t fifo0_max_us;
   volatile uint32_t fifo1_max_us;
+  volatile uint32_t last_rx_sequence[BSP_FDCAN_NUM];
+  volatile uint32_t last_rx_id[BSP_FDCAN_NUM];
+  volatile uint32_t last_rx_timestamp_ms[BSP_FDCAN_NUM];
   volatile uint32_t error_status_count[BSP_FDCAN_NUM];
   volatile uint32_t bus_off_count[BSP_FDCAN_NUM];
   volatile uint32_t recover_request_count[BSP_FDCAN_NUM];

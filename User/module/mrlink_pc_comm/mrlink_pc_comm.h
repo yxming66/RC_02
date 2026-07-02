@@ -189,33 +189,38 @@ typedef struct {
 
 typedef enum {
     PC_AUTO_ACTION_NONE = 0,             /* 无一键动作 */
-    PC_AUTO_ACTION_STORE = 1,            /* 一键存矿 */
-    PC_AUTO_ACTION_RELEASE = 2,          /* 一键放矿 */
-    PC_AUTO_ACTION_CHAMBER = 3,          /* 一键上膛 */
-    PC_AUTO_ACTION_PICK_POS_400 = 4,     /* 一键取正 400mm 矿 */
-    PC_AUTO_ACTION_PICK_POS_200 = 5,     /* 一键取正 200mm 矿 */
-    PC_AUTO_ACTION_PICK_NEG_200 = 6,     /* 一键取反 200mm 矿 */
-    PC_AUTO_ACTION_ROD_SPEARHEAD = 7,    /* 一键取矛头 */
-    PC_AUTO_ACTION_ABORT = 8,            /* 中止一键动作 */
-    PC_AUTO_ACTION_SICK_CORRECT_ROD_SPEARHEAD = 9, /* 取矛头前 SICK 一键校正 */
-    PC_AUTO_ACTION_SICK_CORRECT_ORE_RELEASE = 10,  /* 放矿前 SICK 一键校正 */
-    PC_AUTO_ACTION_ROD_DOCK_WAIT = 11,   /* 取矛头机构等待对接 */
-    PC_AUTO_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD = 12, /* 融合取矿存矿并头向上 200mm 台阶 */
-    PC_AUTO_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD = 13, /* 融合取矿存矿并头向下 200mm 台阶 */
-    PC_AUTO_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD = 14, /* 融合取矿存矿并头向上 400mm 台阶 */
-    PC_AUTO_ACTION_ROD_SPEARHEAD_STEP1 = 15, /* 取矛头 step1：平台到位并张开待机 */
-    PC_AUTO_ACTION_STEP_ASCEND_200_HEAD = 16, /* 普通头向上 200mm 台阶 */
-    PC_AUTO_ACTION_STEP_DESCEND_200_HEAD = 17, /* 普通头向下 200mm 台阶 */
-    PC_AUTO_ACTION_STEP_ASCEND_400_HEAD = 18, /* 普通头向上 400mm 台阶 */
-    PC_AUTO_ACTION_STEP_DESCEND_400_HEAD = 19, /* 普通头向下 400mm 台阶 */
-    PC_AUTO_ACTION_ROD_SPEARHEAD_STEP2 = 20, /* 取矛头 step2：夹取抬高并确认 */
-    PC_AUTO_ACTION_RELEASE_LIFT_DETECT = 21, /* 一键放矿：Pole 到位后检测抬升再放矿 */
-    PC_AUTO_ACTION_PICK_STORE_POS_400 = 22, /* 一键取正 400mm 矿后并行存矿和后退 */
-    PC_AUTO_ACTION_PICK_STORE_POS_200 = 23, /* 一键取正 200mm 矿后并行存矿和后退 */
-    PC_AUTO_ACTION_PICK_STORE_NEG_200 = 24, /* 一键取反 200mm 矿后并行存矿和后退 */
-    PC_AUTO_ACTION_STEP_DROP_STORE_ASCEND_200_HEAD = 25, /* 丢矿版融合取矿存矿并头向上 200mm 台阶 */
-    PC_AUTO_ACTION_STEP_DROP_STORE_DESCEND_200_HEAD = 26, /* 丢矿版融合取矿存矿并头向下 200mm 台阶 */
-    PC_AUTO_ACTION_STEP_DROP_STORE_ASCEND_400_HEAD = 27, /* 丢矿版融合取矿存矿并头向上 400mm 台阶 */
+    PC_AUTO_ACTION_ABORT = 1,            /* 中止一键动作 */
+    PC_AUTO_ACTION_STORE = 2,            /* 一键存矿 */
+    PC_AUTO_ACTION_RELEASE = 3,          /* 一键放矿 */
+    PC_AUTO_ACTION_RELEASE_LIFT_DETECT = 4, /* 一键放矿：Pole 到位后检测抬升再放矿 */
+    PC_AUTO_ACTION_CHAMBER = 5,          /* 一键上膛 */
+    PC_AUTO_ACTION_PICK_POS_400 = 6,     /* 一键取正 400mm 矿 */
+    PC_AUTO_ACTION_PICK_POS_200 = 7,     /* 一键取正 200mm 矿 */
+    PC_AUTO_ACTION_PICK_NEG_200 = 8,     /* 一键取反 200mm 矿 */
+    PC_AUTO_ACTION_PICK_STORE_POS_400 = 9, /* 一键取正 400mm 矿后并行存矿和后退 */
+    PC_AUTO_ACTION_PICK_STORE_POS_200 = 10, /* 一键取正 200mm 矿后并行存矿和后退 */
+    PC_AUTO_ACTION_PICK_STORE_NEG_200 = 11, /* 一键取反 200mm 矿后并行存矿和后退 */
+    PC_AUTO_ACTION_ROD_SPEARHEAD = 12,   /* 一键取矛头 */
+    PC_AUTO_ACTION_ROD_SPEARHEAD_STEP1 = 13, /* 取矛头 step1：平台到位并张开待机 */
+    PC_AUTO_ACTION_ROD_SPEARHEAD_STEP2 = 14, /* 取矛头 step2：夹取抬高并确认 */
+    PC_AUTO_ACTION_ROD_DOCK_WAIT = 15,   /* 取矛头机构等待对接 */
+    PC_AUTO_ACTION_SICK_CORRECT_ROD_SPEARHEAD_POS1 = 16, /* 取矛头位置1 SICK 校正 */
+    PC_AUTO_ACTION_SICK_CORRECT_ROD_SPEARHEAD_POS2 = 17, /* 取矛头位置2 SICK 校正 */
+    PC_AUTO_ACTION_SICK_CORRECT_ROD_SPEARHEAD_POS3 = 18, /* 取矛头位置3 SICK 校正 */
+    PC_AUTO_ACTION_SICK_CORRECT_ROD_SPEARHEAD_POS4 = 19, /* 取矛头位置4 SICK 校正 */
+    PC_AUTO_ACTION_SICK_CORRECT_ROD_SPEARHEAD_POS5 = 20, /* 取矛头位置5 SICK 校正 */
+    PC_AUTO_ACTION_SICK_CORRECT_ROD_SPEARHEAD_POS6 = 21, /* 取矛头位置6 SICK 校正 */
+    PC_AUTO_ACTION_SICK_CORRECT_ORE_RELEASE = 22, /* 放矿前 SICK 一键校正 */
+    PC_AUTO_ACTION_STEP_ASCEND_200_HEAD = 23, /* 普通头向上 200mm 台阶 */
+    PC_AUTO_ACTION_STEP_DESCEND_200_HEAD = 24, /* 普通头向下 200mm 台阶 */
+    PC_AUTO_ACTION_STEP_ASCEND_400_HEAD = 25, /* 普通头向上 400mm 台阶 */
+    PC_AUTO_ACTION_STEP_DESCEND_400_HEAD = 26, /* 普通头向下 400mm 台阶 */
+    PC_AUTO_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD = 27, /* 融合取矿存矿并头向上 200mm 台阶 */
+    PC_AUTO_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD = 28, /* 融合取矿存矿并头向下 200mm 台阶 */
+    PC_AUTO_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD = 29, /* 融合取矿存矿并头向上 400mm 台阶 */
+    PC_AUTO_ACTION_STEP_DROP_STORE_ASCEND_200_HEAD = 30, /* 丢矿版融合取矿存矿并头向上 200mm 台阶 */
+    PC_AUTO_ACTION_STEP_DROP_STORE_DESCEND_200_HEAD = 31, /* 丢矿版融合取矿存矿并头向下 200mm 台阶 */
+    PC_AUTO_ACTION_STEP_DROP_STORE_ASCEND_400_HEAD = 32, /* 丢矿版融合取矿存矿并头向上 400mm 台阶 */ 
 } PC_AutoAction_t;
 
 typedef enum {

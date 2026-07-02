@@ -14,10 +14,19 @@ extern "C" {
 #define AUTO_SICK_CORRECT_SENSOR_COUNT (4u)
 #endif
 
+#ifndef AUTO_SICK_CORRECT_ROD_SPEARHEAD_POSITION_COUNT
+#define AUTO_SICK_CORRECT_ROD_SPEARHEAD_POSITION_COUNT (6u)
+#endif
+
 typedef enum {
   AUTO_SICK_CORRECT_ACTION_NONE = 0,
-  AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD,
-  AUTO_SICK_CORRECT_ACTION_ORE_RELEASE,
+  AUTO_SICK_CORRECT_ACTION_ORE_RELEASE = 1,
+  AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD_POS1 = 2,
+  AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD_POS2 = 3,
+  AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD_POS3 = 4,
+  AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD_POS4 = 5,
+  AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD_POS5 = 6,
+  AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD_POS6 = 7,
 } AutoSickCorrect_Action_t;
 
 typedef enum {
@@ -71,7 +80,8 @@ typedef struct {
 } AutoSickCorrect_PointParams_t;
 
 typedef struct {
-  AutoSickCorrect_PointParams_t rod_spearhead;
+  AutoSickCorrect_PointParams_t rod_spearhead_position[
+      AUTO_SICK_CORRECT_ROD_SPEARHEAD_POSITION_COUNT];
   AutoSickCorrect_PointParams_t ore_release;
 } AutoSickCorrect_Params_t;
 
@@ -106,8 +116,9 @@ typedef struct {
 
 void AutoSickCorrect_Init(AutoSickCorrect_t *ctrl,
                           const AutoSickCorrect_Params_t *param);
-bool AutoSickCorrect_StartRodSpearhead(AutoSickCorrect_t *ctrl,
-                                       uint32_t now_ms);
+bool AutoSickCorrect_StartRodSpearheadPosition(AutoSickCorrect_t *ctrl,
+                                               uint8_t position_index,
+                                               uint32_t now_ms);
 bool AutoSickCorrect_StartOreRelease(AutoSickCorrect_t *ctrl,
                                      uint32_t now_ms);
 void AutoSickCorrect_Update(AutoSickCorrect_t *ctrl,
