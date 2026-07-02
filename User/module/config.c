@@ -463,9 +463,9 @@ Config_RobotParam_t robot_config = {
     .auto_rod_spearhead_param = {
         /* One-key spearhead action timing; rod_param is filled during init. */
         .open_delay_ms = 5000u,
-        .grab_high_delay_ms = 3000u,
+        .grab_high_delay_ms = 1500u,
         .detect_grip_delay_ms = 100u,
-        .detect_pose_delay_ms = 2000u,
+        .detect_pose_delay_ms = 600u,
         .detect_success_hold_ms = 500u,
         .dock_wait_delay_ms = 10000u,
         /* 等待对接时 transform 的目标点；实际角度在 ore_store_param.preset.transform_position_rad 中标定。 */
