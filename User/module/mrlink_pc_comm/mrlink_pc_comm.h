@@ -364,7 +364,7 @@ typedef struct {
     uint8_t fresh;                                           /* 矿种帧是否新鲜，1 表示在 IR_DOCK_ORE_INFO_FRESH_MS 内收到 */
     uint8_t status;                                          /* 最近状态命令，见 IrDock_Status_t：0=IDLE，1=DOCKING，2=DOCK_COMPLETE */
     uint8_t count;                                           /* 矿位个数，固定为 PC_IR_ORE_POSITION_COUNT (12) */
-    uint8_t msg_id;                                          /* 最近 18 字节矿种帧中的消息 ID，用于 ACK 匹配 */
+    uint8_t msg_id;                                           /* 最近 18 字节矿种帧中的消息 ID，用于 ACK 匹配 */
     uint8_t side;                                            /* 最近 18 字节矿种帧中的侧别字段，0=左/默认，1=右，具体语义由红外对接端定义 */
     uint8_t ack_pending;                                     /* 红外对接端是否等待 ACK，0=否，1=是 */
     uint8_t parse_status;                                    /* 最近解析状态，见 IrDock_ParseStatus_t/IrDock_AckStatus_t */
