@@ -45,6 +45,7 @@ typedef enum {
 typedef enum {
   ROD_NEW_POSE_STANDBY = 0,  /* 放平位 */
   ROD_NEW_POSE_GRAB_HIGH,     /* 高位夹取 */
+  ROD_NEW_POSE_DETECT,        /* 识别检测位置 */
   ROD_NEW_POSE_DOCK_WAIT,     /* 等待对接位置 */
   ROD_NEW_POSE_MANUAL,        /* 手动角度 */
 } RodNew_Pose_t;
@@ -58,6 +59,7 @@ typedef struct {
   /* 角度参数（弧度） */
   float angle_standby_rad;
   float angle_grab_high_rad;
+  float angle_detect_rad;
   float angle_dock_wait_rad;
 
   /* 角度限幅 */

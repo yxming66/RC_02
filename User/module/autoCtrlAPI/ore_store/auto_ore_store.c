@@ -34,6 +34,7 @@
 #define AUTO_ORE_DEFAULT_FUSED_ARM_PHOTO_STABLE_MS (120u)
 #define AUTO_ORE_DEFAULT_FUSED_PHOTO1_LIFT_DELAY_MS (200u)
 #define AUTO_ORE_FUSED_STEP_PHOTO_STABLE_MS (20u)
+#define AUTO_ORE_PICK_STORE_FETCH_PHOTO_DELAY_MS (100u)
 #define AUTO_ORE_PICK_STORE_RETREAT_PHOTO_DELAY_MS (100u)
 #define AUTO_ORE_FUSED_HEAD_ASCEND_FRONT_RETRACT_STEP_INDEX (2u)
 #define AUTO_ORE_FUSED_HEAD_DESCEND_FIRST_EDGE_STEP_INDEX (1u)
@@ -476,6 +477,18 @@ static bool AutoOre_WaitConditionThenDelay(AutoOre_t *ctrl, uint32_t now_ms,
     ctrl->step_condition_time_ms = now_ms;
   }
   return (now_ms - ctrl->step_condition_time_ms) >= delay_ms;
+}
+
+static bool AutoOre_WaitLatchedConditionThenDelay(AutoOre_t *ctrl,
+                                                  uint32_t now_ms,
+                                                  bool condition,
+                                                  uint32_t delay_ms) {
+  if (condition && !ctrl->step_condition_met) {
+    ctrl->step_condition_met = true;
+    ctrl->step_condition_time_ms = now_ms;
+  }
+  return ctrl->step_condition_met &&
+         (now_ms - ctrl->step_condition_time_ms) >= delay_ms;
 }
 
 static bool AutoOre_LatchPhotoStableFalling(
@@ -1289,6 +1302,24 @@ static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
     case 2:
       AutoOre_EnterStep(ctrl, now_ms);
       if (!AutoOre_CommandReleasePoleTarget(ctrl) ||
+          !AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_WAIT_RELEASE_ORE,
+              SUCTION_ON,
+              &ctrl->param.arm_speed.release_wait) ||
+          !AutoOre_CommandReleaseOreStoreHold(ctrl,
+                                              ORE_STORE_TRANSFORM_STANDBY,
+                                              true)) {
+        AutoOre_FailInvalidParam(ctrl);
+        return;
+      }
+      if (AutoOre_WaitArmCommandTarget(ctrl, now_ms)) {
+        AutoOre_NextStep(ctrl);
+      } else {
+        (void)AutoOre_CheckTimeout(ctrl, now_ms);
+      }
+      return;
+    case 3:
+      AutoOre_EnterStep(ctrl, now_ms);
+      if (!AutoOre_CommandReleasePoleTarget(ctrl) ||
           !AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_RELEASE_ORE_ASSIST,
               SUCTION_ON,
               &ctrl->param.arm_speed.release_assist) ||
@@ -1304,7 +1335,7 @@ static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
         (void)AutoOre_CheckTimeout(ctrl, now_ms);
       }
       return;
-    case 3:
+    case 4:
       AutoOre_EnterStep(ctrl, now_ms);
       if (!AutoOre_CommandReleasePoleTarget(ctrl) ||
           !AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_RELEASE_ORE,
@@ -1324,7 +1355,7 @@ static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
         (void)AutoOre_CheckTimeout(ctrl, now_ms);
       }
       return;
-    case 4:
+    case 5:
       AutoOre_EnterStep(ctrl, now_ms);
       if (!AutoOre_CommandReleasePoleTarget(ctrl) ||
           !AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_RELEASE_ORE,
@@ -1343,7 +1374,7 @@ static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
         (void)AutoOre_CheckTimeout(ctrl, now_ms);
       }
       return;
-    case 5:
+    case 6:
       AutoOre_EnterStep(ctrl, now_ms);
       if (!AutoOre_CommandReleasePoleTarget(ctrl) ||
           !AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_STANDBY,
@@ -2442,7 +2473,9 @@ static void AutoOre_RunPickStoreFused(AutoOre_t *ctrl, uint32_t now_ms) {
         return;
       }
       AutoOre_CommandChassisMove(ctrl, AutoOre_FetchChassisVxMps(ctrl));
-      if (AutoOre_PickPhoto1LiftReached(ctrl, now_ms)) {
+      if (AutoOre_WaitLatchedConditionThenDelay(
+              ctrl, now_ms, AutoOre_PickPhoto1LiftReached(ctrl, now_ms),
+              AUTO_ORE_PICK_STORE_FETCH_PHOTO_DELAY_MS)) {
         AutoOre_NextStep(ctrl);
       } else {
         (void)AutoOre_CheckTimeoutWithFailure(

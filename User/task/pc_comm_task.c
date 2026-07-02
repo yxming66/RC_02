@@ -192,6 +192,22 @@ static bool PcComm_AppendStartMatchFrame(uint16_t *tx_len) {
     return true;
 }
 
+static bool PcComm_AppendRetryFrame(uint16_t *tx_len) {
+    if (tx_len == NULL || *tx_len >= sizeof(s_tx_buf) ||
+        !MrlinkPc_HasRetryRequest()) {
+        return false;
+    }
+
+    const uint16_t frame_len = MrlinkPc_BuildRetryFrame(
+        &s_tx_buf[*tx_len], (uint16_t)(sizeof(s_tx_buf) - *tx_len));
+    if (frame_len == 0u) {
+        return false;
+    }
+
+    *tx_len = (uint16_t)(*tx_len + frame_len);
+    return true;
+}
+
 static void PcComm_UpdateModuleFeedback(void) {
     const ArmSimple_Feedback_t *arm_fb = Task_ArmSimpleGetFeedback();
     if (arm_fb != NULL) {
@@ -398,6 +414,10 @@ static bool PcComm_TransmitFeedback(void) {
     if (start_match_pending) {
         frame_count++;
     }
+    const bool retry_pending = PcComm_AppendRetryFrame(&tx_len);
+    if (retry_pending) {
+        frame_count++;
+    }
 
     for (uint8_t i = 0; i < (uint8_t)(sizeof(s_feedback_cmds) / sizeof(s_feedback_cmds[0])); ++i) {
         if (PcComm_AppendFeedbackFrame(s_feedback_cmds[i], &tx_len)) {
@@ -422,8 +442,13 @@ static bool PcComm_TransmitFeedback(void) {
         if (tx_result != MRLINK_CHANNEL_OK) {
             s_tx_dma_busy = false;
             g_pc_comm_debug.tx_dma_error_count++;
-        } else if (start_match_pending) {
-            MrlinkPc_ClearStartMatchRequest();
+        } else {
+            if (start_match_pending) {
+                MrlinkPc_ClearStartMatchRequest();
+            }
+            if (retry_pending) {
+                MrlinkPc_ClearRetryRequest();
+            }
         }
         PcComm_DebugRecordTx(s_tx_buf, tx_len, frame_count, tx_result);
         return tx_result == MRLINK_CHANNEL_OK;

@@ -30,6 +30,7 @@ bool RodNew_ParamsValid(const RodNew_Params_t *param) {
   return param != nullptr && param->servo.angle_max_rad > param->servo.angle_min_rad &&
          isfinite(param->servo.angle_min_rad) && isfinite(param->servo.angle_max_rad) &&
          isfinite(param->servo.angle_standby_rad) &&
+         isfinite(param->servo.angle_detect_rad) &&
          isfinite(param->servo.angle_dock_wait_rad) &&
          isfinite(param->servo.max_vel_rad_s) &&
          param->servo.pwm_channel < BSP_PWM_NUM;
@@ -120,6 +121,9 @@ int8_t RodNew_Control(RodNew_t *r, RodNew_Mode_t mode, RodNew_Pose_t pose,
       break;
     case ROD_NEW_POSE_GRAB_HIGH:
       r->servo.target_angle_rad = r->param->servo.angle_grab_high_rad;
+      break;
+    case ROD_NEW_POSE_DETECT:
+      r->servo.target_angle_rad = r->param->servo.angle_detect_rad;
       break;
     case ROD_NEW_POSE_DOCK_WAIT:
       r->servo.target_angle_rad = r->param->servo.angle_dock_wait_rad;

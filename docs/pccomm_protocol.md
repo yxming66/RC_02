@@ -269,6 +269,7 @@ def build_ir_ack(msg_id: int, status: int) -> bytes:
 | cmd | 名称 | payload | Python unpack | 说明 |
 |---:|---|---:|---|---|
 | `0x02` | `PC_FEEDBACK_START_MATCH` | 1 | `<B` | 开始比赛命令；`start=0` 等待，`start=1` 开始 |
+| `0x03` | `PC_FEEDBACK_RETRY` | 1 | `<B` | 重试命令；`retry=0` 默认不重试，`retry=1` 启动 PC 侧重试逻辑 |
 | `0x81` | `PC_FEEDBACK_HEARTBEAT` | 0 | - | STM32 心跳 |
 | `0x90` | `PC_FEEDBACK_CHASSIS` | 12 | `<fff` | 底盘速度反馈 |
 | `0x91` | `PC_FEEDBACK_POLE` | 24 | `<ffffff` | 撑杆反馈 |
@@ -282,6 +283,14 @@ def build_ir_ack(msg_id: int, status: int) -> bytes:
 | `0x99` | `PC_FEEDBACK_IR_ORE_BRIDGE` | 56 | `<BBBBBBBB12B18BxxIIII` | 红外桥接调试 |
 | `0x9A` | `PC_FEEDBACK_IR_DOCK` | 24 | `<BBBBBBBBIIII` | R1/R2 红外对接状态 |
 | `0xA0` | `PC_FEEDBACK_STATUS` | 10 | `<BIfB` | 通信/系统状态 |
+
+### 5.0 一次性控制反馈 `0x02/0x03`
+
+`PC_FEEDBACK_START_MATCH (0x02)` 与 `PC_FEEDBACK_RETRY (0x03)` 是 STM32 发给 PC 的一次性控制反馈，不在固定 50 Hz 批次列表中；固件内部有 pending 标志时追加到下一次发送批次，发送成功后自动清除。上位机应按 `cmd` 分发并把它们当作边沿事件处理，避免依赖持续电平。
+
+`PC_FEEDBACK_START_MATCH` payload 为 1 字节，`start=1` 表示开始比赛。
+
+`PC_FEEDBACK_RETRY` payload 为 1 字节，`retry=1` 表示 PC 需要启动重试相关逻辑；`retry=0` 保留为默认不重试状态。
 
 ### 5.1 底盘反馈 `0x90`
 
@@ -531,7 +540,7 @@ payload 为 24 字节，Python unpack 格式为 `<BBBBBBBBIIII`。
 | 7 | ROD_SPEARHEAD |
 | 8 | ABORT |
 | 9 | SICK_CORRECT_ROD_SPEARHEAD |
-| 10 | SICK_CORRECT_ORE_RELEASE，当前预留/不支持 |
+| 10 | SICK_CORRECT_ORE_RELEASE，放矿前 SICK 校正：仅 x 方向，使用 rawdata[2]，目标 ADC=1303 |
 | 11 | ROD_DOCK_WAIT |
 | 12 | STEP_PICK_STORE_ASCEND_200_HEAD |
 | 13 | STEP_PICK_STORE_DESCEND_200_HEAD |

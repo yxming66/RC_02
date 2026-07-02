@@ -62,6 +62,10 @@
 #define RC_AUTO_STEP_CH_RES_THRESHOLD (0.90f)
 #endif
 
+#ifndef RC_PC_RETRY_CH_L_X_THRESHOLD
+#define RC_PC_RETRY_CH_L_X_THRESHOLD (0.90f)
+#endif
+
 #ifndef RC_DEBUG_UPDATE_PERIOD_MS
 #define RC_DEBUG_UPDATE_PERIOD_MS (50u)
 #endif
@@ -136,6 +140,7 @@ typedef enum {
   RC_CMD_PLAN_AUTO_ORE_OUTPUT,
   RC_CMD_PLAN_AUTO_ROD_OUTPUT,
   RC_CMD_PLAN_AUTO_ROD_STEP1_PC_OUTPUT,
+  RC_CMD_PLAN_AUTO_ROD_STEP2_PC_POLE_OUTPUT,
   RC_CMD_PLAN_AUTO_SICK_CORRECT_OUTPUT,
 } RcCommandPlan_t;
 
@@ -1056,6 +1061,16 @@ static bool Rc_ShouldUsePcCommand(void) {
 
 static bool rc_pc_behavior_was_active = false;
 
+static void Rc_UpdatePcRetryRequest(void) {
+  if (!dr16.header.online || dr16.data.sw_l != DR16_SW_UP ||
+      dr16.data.sw_r != DR16_SW_UP) {
+    return;
+  }
+
+  (void)MrlinkPc_RequestRetry(
+      (dr16.data.ch_l_x > RC_PC_RETRY_CH_L_X_THRESHOLD) ? 1u : 0u);
+}
+
 static RcControlPage_t Rc_PageForBehavior(RcBehavior_t behavior) {
   switch (behavior) {
     case RC_BEHAVIOR_DRIVE:
@@ -1457,6 +1472,10 @@ static RcCommandPlan_t Rc_SelectCommandPlan(RcBehavior_t behavior) {
     if (Task_AutoRodSpearheadIsPickupStep1() && behavior == RC_BEHAVIOR_PC &&
         Rc_ShouldUsePcCommand()) {
       return RC_CMD_PLAN_AUTO_ROD_STEP1_PC_OUTPUT;
+    }
+    if (Task_AutoRodSpearheadIsPickupStep2() && behavior == RC_BEHAVIOR_PC &&
+        Rc_ShouldUsePcCommand()) {
+      return RC_CMD_PLAN_AUTO_ROD_STEP2_PC_POLE_OUTPUT;
     }
     return RC_CMD_PLAN_AUTO_ROD_OUTPUT;
   }
@@ -2021,7 +2040,8 @@ static void Rc_ConfigureCmdCenter(void) {
                              RC_CMD_PLAN_AUTO_ORE_STANDBY> >()
               .priority(cmd::Priority::Fallback),
           cmd::from<RcRuntimeInput, RcChassisHoldRoute>()
-              .when<RcPlanIn<RC_CMD_PLAN_AUTO_ROD_OUTPUT> >()
+              .when<RcPlanIn<RC_CMD_PLAN_AUTO_ROD_OUTPUT,
+                     RC_CMD_PLAN_AUTO_ROD_STEP2_PC_POLE_OUTPUT> >()
               .priority(cmd::Priority::Fallback));
 
   rc_cmd_center
@@ -2035,7 +2055,8 @@ static void Rc_ConfigureCmdCenter(void) {
               .priority(cmd::Priority::Manual),
           cmd::from<RcRuntimeInput, RcPolePcRoute>()
               .when<RcPlanIn<RC_CMD_PLAN_PC,
-                     RC_CMD_PLAN_AUTO_ROD_STEP1_PC_OUTPUT> >()
+                     RC_CMD_PLAN_AUTO_ROD_STEP1_PC_OUTPUT,
+                     RC_CMD_PLAN_AUTO_ROD_STEP2_PC_POLE_OUTPUT> >()
               .priority(cmd::Priority::Remote),
           cmd::from<RcRuntimeInput, RcPoleAutoCtrlRoute>()
               .when<RcPlanIn<RC_CMD_PLAN_AUTO_CTRL_OUTPUT,
@@ -2083,7 +2104,8 @@ static void Rc_ConfigureCmdCenter(void) {
                              RC_CMD_PLAN_AUTO_CTRL_OUTPUT,
                              RC_CMD_PLAN_PC_AUTO_CTRL,
                              RC_CMD_PLAN_AUTO_ROD_OUTPUT,
-                     RC_CMD_PLAN_AUTO_ROD_STEP1_PC_OUTPUT,
+                             RC_CMD_PLAN_AUTO_ROD_STEP1_PC_OUTPUT,
+                             RC_CMD_PLAN_AUTO_ROD_STEP2_PC_POLE_OUTPUT,
                              RC_CMD_PLAN_AUTO_SICK_CORRECT_OUTPUT> >()
               .priority(cmd::Priority::Fallback));
 
@@ -2105,7 +2127,8 @@ static void Rc_ConfigureCmdCenter(void) {
               .priority(cmd::Priority::CriticalAuto),
           cmd::from<RcRuntimeInput, RcOreStoreAutoRodRoute>()
               .when<RcPlanIn<RC_CMD_PLAN_AUTO_ROD_OUTPUT,
-                     RC_CMD_PLAN_AUTO_ROD_STEP1_PC_OUTPUT> >()
+              RC_CMD_PLAN_AUTO_ROD_STEP1_PC_OUTPUT,
+              RC_CMD_PLAN_AUTO_ROD_STEP2_PC_POLE_OUTPUT> >()
               .priority(cmd::Priority::CriticalAuto),
           cmd::from<RcRuntimeInput, RcOreStoreHoldRoute>()
               .when<RcPlanIn<RC_CMD_PLAN_DRIVE,
@@ -2115,6 +2138,7 @@ static void Rc_ConfigureCmdCenter(void) {
                              RC_CMD_PLAN_AUTO_ORE_STANDBY,
                              RC_CMD_PLAN_AUTO_CTRL_OUTPUT,
                              RC_CMD_PLAN_PC_AUTO_CTRL,
+                             RC_CMD_PLAN_AUTO_ROD_STEP2_PC_POLE_OUTPUT,
                              RC_CMD_PLAN_AUTO_SICK_CORRECT_OUTPUT> >()
               .priority(cmd::Priority::Fallback));
 
@@ -2132,7 +2156,8 @@ static void Rc_ConfigureCmdCenter(void) {
               .priority(cmd::Priority::Remote),
           cmd::from<RcRuntimeInput, RcRodNewAutoRoute>()
               .when<RcPlanIn<RC_CMD_PLAN_AUTO_ROD_OUTPUT,
-                     RC_CMD_PLAN_AUTO_ROD_STEP1_PC_OUTPUT> >()
+                 RC_CMD_PLAN_AUTO_ROD_STEP1_PC_OUTPUT,
+                 RC_CMD_PLAN_AUTO_ROD_STEP2_PC_POLE_OUTPUT> >()
               .priority(cmd::Priority::CriticalAuto),
           cmd::from<RcRuntimeInput, RcRodNewHoldRoute>()
               .when<RcPlanIn<RC_CMD_PLAN_DRIVE,
@@ -2179,6 +2204,7 @@ void RcCmdCenterApp_Update(uint32_t now_ms) {
   if (pc_behavior_active && !rc_pc_behavior_was_active) {
     (void)MrlinkPc_RequestStartMatch(1u);
   }
+  Rc_UpdatePcRetryRequest();
   rc_pc_behavior_was_active = pc_behavior_active;
   rc_cmd_center.tick(now_ms).publish();
   Rc_PublishCommandsAndDebug(update_debug);

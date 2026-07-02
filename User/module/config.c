@@ -318,7 +318,7 @@ Config_RobotParam_t robot_config = {
         .preset = {
             .behavior_point = {
                 /* ArmSimple 待机/安全收回位，一键动作开始和结束常用位置。 */
-                [ARM_SIMPLE_BEHAVIOR_STANDBY] = {.joint1_pos = 0.0f, .joint2_pos = 0.896505594f},
+                [ARM_SIMPLE_BEHAVIOR_STANDBY] = {.joint1_pos = 0.224461725f, .joint2_pos = -0.252654374f},
                 /* ArmSimple 存矿位，arm 伸到 ore_store 交接处释放矿。 */
                 [ARM_SIMPLE_BEHAVIOR_STORE_ORE] = {.joint1_pos = 0.0f, .joint2_pos = -1.51068195f},
                 /* ArmSimple 上膛位，arm 伸到 ore_store 上膛交接处吸取矿。 */
@@ -350,23 +350,23 @@ Config_RobotParam_t robot_config = {
         /* ArmSimple 一键行为速度上限，单位 rad/s；<=0 表示使用 arm_simple_param.vel_limit 默认值。 */
         .arm_speed = {
             /* store_*：一键存矿流程，wait=等待/预备位，place=伸到存矿位，standby=回待机位。 */
-            .store_wait = {.joint1_max_vel_rad_s = 1.5f, .joint2_max_vel_rad_s = 8.0f},
-            .store_place = {.joint1_max_vel_rad_s = 1.5f, .joint2_max_vel_rad_s = 8.0f},
-            .store_standby = {.joint1_max_vel_rad_s =1.5f, .joint2_max_vel_rad_s = 8.0f},
+            .store_wait = {.joint1_max_vel_rad_s = 1.5f, .joint2_max_vel_rad_s = 4.0f},
+            .store_place = {.joint1_max_vel_rad_s = 1.5f, .joint2_max_vel_rad_s = 4.0f},
+            .store_standby = {.joint1_max_vel_rad_s =1.5f, .joint2_max_vel_rad_s = 4.0f},
             /* release_*：一键放矿流程，wait=放矿前等待位，assist=放矿辅助进位，place=放矿位，standby=放矿后回待机位。 */
             .release_wait = {.joint1_max_vel_rad_s = 3.0f, .joint2_max_vel_rad_s = 2.0f},
             .release_assist = {.joint1_max_vel_rad_s = 3.0f, .joint2_max_vel_rad_s = 2.0f},
             .release_place = {.joint1_max_vel_rad_s = 3.0f, .joint2_max_vel_rad_s = 2.0f},
             .release_standby = {.joint1_max_vel_rad_s = 3.0f, .joint2_max_vel_rad_s = 2.0f},
             /* chamber_*：一键上膛流程，wait=对接等待位，place=取/交接位，standby=上膛后回待机位。 */
-            .chamber_wait = {.joint1_max_vel_rad_s = 8.0f, .joint2_max_vel_rad_s = 8.0f},
+            .chamber_wait = {.joint1_max_vel_rad_s = 8.0f, .joint2_max_vel_rad_s = 4.0f},
             .chamber_place = {.joint1_max_vel_rad_s = 8.0f, .joint2_max_vel_rad_s = 6.0f},
             .chamber_standby = {.joint1_max_vel_rad_s = 8.0f, .joint2_max_vel_rad_s = 4.0f},
             /* pick_*：一键取矿流程，standby=取矿前/后待机位，place=伸到取矿位，fetch=底盘前进取矿时保持取矿位。 */
             .pick_standby = {.joint1_max_vel_rad_s = 2.0f, .joint2_max_vel_rad_s = 1.0f},
-            .pick_place = {.joint1_max_vel_rad_s = 8.0f, .joint2_max_vel_rad_s = 20.0f},
-            .pick_fetch = {.joint1_max_vel_rad_s = 2.0f, .joint2_max_vel_rad_s = 20.0f},
-            .pick_lift_detect = {.joint1_max_vel_rad_s = 2.0f, .joint2_max_vel_rad_s = 20.0f},
+            .pick_place = {.joint1_max_vel_rad_s = 8.0f, .joint2_max_vel_rad_s = 4.0f},
+            .pick_fetch = {.joint1_max_vel_rad_s = 2.0f, .joint2_max_vel_rad_s = 4.0f},
+            .pick_lift_detect = {.joint1_max_vel_rad_s = 2.0f, .joint2_max_vel_rad_s = 4.0f},
         },
         /* 一键存/放/上膛/取矿流程中的动作延时，单位 ms；<=0 时使用状态机内置默认值。 */
         .timing = {
@@ -462,8 +462,11 @@ Config_RobotParam_t robot_config = {
     /* 模块参数：一键取矛头 auto_rod_spearhead_param，取矛头机构动作时序和检测。 */
     .auto_rod_spearhead_param = {
         /* One-key spearhead action timing; rod_param is filled during init. */
-        .open_delay_ms = 1000u,
-        .grab_high_delay_ms = 350u,
+        .open_delay_ms = 5000u,
+        .grab_high_delay_ms = 1500u,
+        .detect_grip_delay_ms = 100u,
+        .detect_pose_delay_ms = 600u,
+        .detect_success_hold_ms = 500u,
         .dock_wait_delay_ms = 10000u,
         /* 等待对接时 transform 的目标点；实际角度在 ore_store_param.preset.transform_position_rad 中标定。 */
         .dock_wait_transform = ORE_STORE_TRANSFORM_SPEARHEAD_DOCK_WAIT,
@@ -487,9 +490,8 @@ Config_RobotParam_t robot_config = {
          * SICK 校正参数：
          * - index 字段选择校正使用的 4 路 SICK ADC 通道。
          *   当前硬件：前侧=3，后侧=0，矛头侧后侧=1，矛头侧前侧=2。
-         * - x_sample_adc 使用前/后侧中距离更近的一路 SICK。
-         * - y_sample_adc = average(矛头前侧, 矛头后侧)。
-         * - yaw_sample_diff_adc = 矛头前侧 - 矛头后侧。
+         * - 取矛头校正只使用 y_sample_adc = 矛头侧后侧 SICK。
+         * - x_sample_adc/yaw_sample_diff_adc 保留给其他 SICK 校正动作调试。
          * - *_kp 字段把 ADC 误差映射到底盘速度；*_limit 字段做命令限幅。
          *   tolerance/stable/timeout 用于判定校正完成。
          */
@@ -500,44 +502,42 @@ Config_RobotParam_t robot_config = {
                 .rod_front_index = SICK_ROD_FRONT_INDEX,
                 .rear_index = SICK_REAR_INDEX,
                 .rod_rear_index = SICK_ROD_REAR_INDEX,
-                .valid_adc_min = 100u,               /* 有效 ADC 下限，低于认为传感器无效。 */
+                .valid_adc_min = 0u,                 /* 有效 ADC 下限，低于认为传感器无效。 */
                 .valid_adc_max = 32100u,             /* 有效 ADC 上限，高于认为传感器无效。 */
-                .x_target_adc = 3574.0f,             /* 前/后侧中距离更近一路的 x 目标 ADC。 */
-                .y_target_adc = (1089.0f + 896.0f) / 2.0f,             /* 矛头侧平均 y 目标 ADC。 */
-                .yaw_target_diff_adc = (894.0f-1079.0f),         /* yaw 目标 ADC：矛头前侧 - 矛头后侧。 */
-                .x_tolerance_adc = 30.0f,            /* x 误差小于该值认为 x 到位。 */
-                .y_tolerance_adc = 20.0f,            /* y 误差小于该值认为 y 到位。 */
-                .yaw_tolerance_adc = 20.0f,          /* yaw/z 误差小于该值认为姿态到位。 */
-                .x_kp_mps_per_adc = -0.0002f,         /* x ADC 误差到 vx(m/s) 的比例系数。 */
+                .x_target_adc = 3574.0f,             /* 取矛头校正不使用 x，仅保持参数占位。 */
+                .y_target_adc = 896.0f,              /* 矛头侧后侧 SICK 的 y 目标 ADC，稍后按实测修改。 */
+                .yaw_target_diff_adc = 0.0f,         /* 取矛头校正不使用 yaw，仅保持参数占位。 */
+                .x_tolerance_adc = 30.0f,            /* 取矛头校正不使用 x，仅保持参数占位。 */
+                .y_tolerance_adc = 20.0f,            /* y 误差小于该值认为 y 到位，稍后按实测修改。 */
+                .yaw_tolerance_adc = 20.0f,          /* 取矛头校正不使用 yaw，仅保持参数占位。 */
+                .x_kp_mps_per_adc = -0.0002f,        /* 取矛头校正不使用 x，仅保持参数占位。 */
                 .y_kp_mps_per_adc = 0.0019f,       /* y ADC 误差到 vy(m/s) 的比例系数。 */
-                .yaw_kp_rad_s_per_adc = -0.0f,     /* yaw/z ADC 误差到 wz(rad/s) 的比例系数。 */
-                .vx_limit_mps = 0.30f,               /* vx 指令限幅，单位 m/s。 */
+                .yaw_kp_rad_s_per_adc = 0.0f,      /* 取矛头校正不使用 yaw，仅保持参数占位。 */
+                .vx_limit_mps = 0.30f,               /* 取矛头校正不输出 vx，仅保持参数占位。 */
                 .vy_limit_mps = 0.30f,               /* vy 指令限幅，单位 m/s。 */
-                .wz_limit_rad_s = 0.80f,             /* wz 指令限幅，单位 rad/s。 */
+                .wz_limit_rad_s = 0.80f,             /* 取矛头校正不输出 wz，仅保持参数占位。 */
                 .pole_target_lift = 2.0f,            /* 校正时撑杆目标高度/角度。 */
                 .pole_speed = 50.0f,                 /* 校正时撑杆运动速度。 */
                 .finish_stable_ms = 100u,            /* 全部误差到位后保持多久才判成功。 */
                 .timeout_ms = 3000u,                 /* 校正总超时，单位 ms。 */
             }, 
-            /* 预留给放矿前 SICK 校正。
-             * 当前 AutoSickCorrect_StartOreRelease 路径返回不支持，
-             * 因此这些值仅作占位。 */
+            /* 放矿前 SICK 校正：只使用 rawdata[2] 做 x 方向校正。 */
             .ore_release = {  
-                .front_index = SICK_FRONT_INDEX,
+                .front_index = SICK_ROD_FRONT_INDEX,
                 .rod_front_index = SICK_ROD_FRONT_INDEX,
                 .rear_index = SICK_REAR_INDEX,
                 .rod_rear_index = SICK_ROD_REAR_INDEX,
-                .valid_adc_min = 700u,               /* 有效 ADC 下限。 */
+                .valid_adc_min = 0u,               /* 有效 ADC 下限。 */
                 .valid_adc_max = 32100u,             /* 有效 ADC 上限。 */
-                .x_target_adc = 0.0f,                /* 前侧平均 x 目标 ADC；0 保持该动作非法。 */
-                .y_target_adc = 0.0f,                /* 矛头侧平均 y 目标 ADC。 */
+                .x_target_adc = 1303.0f,             /* rawdata[2] 的 x 目标 ADC。 */
+                .y_target_adc = 1.0f,                /* 放矿校正不使用 y，仅保持参数有效。 */
                 .yaw_target_diff_adc = 0.0f,         /* 目标 ADC：矛头前侧 - 矛头后侧。 */
-                .x_tolerance_adc = 30.0f,            /* 允许的 x ADC 误差。     */
-                .y_tolerance_adc = 30.0f,            /* 允许的 y ADC 误差。 */
+                .x_tolerance_adc = 200.0f,           /* 允许的 x ADC 误差。     */
+                .y_tolerance_adc = 1.0f,             /* 放矿校正不使用 y。 */
                 .yaw_tolerance_adc = 30.0f,          /* 允许的 yaw/z ADC 误差。 */
-                .x_kp_mps_per_adc = 0.0010f,         /* x 误差到 vx 的增益。 */
-                .y_kp_mps_per_adc = 0.0010f,         /* y 误差到 vy 的增益。 */
-                .yaw_kp_rad_s_per_adc = 0.0020f,     /* yaw/z 误差到 wz 的增益。 */
+                .x_kp_mps_per_adc = -0.0010f,         /* x 误差到 vx 的增益。 */
+                .y_kp_mps_per_adc = 0.0f,            /* 放矿校正不输出 vy。 */
+                .yaw_kp_rad_s_per_adc = 0.0f,        /* 放矿校正不输出 wz。 */
                 .vx_limit_mps = 0.30f,               /* vx 命令限幅，单位 m/s。 */
                 .vy_limit_mps = 0.30f,               /* vy 命令限幅，单位 m/s。 */
                 .wz_limit_rad_s = 0.80f,             /* wz 命令限幅，单位 rad/s。 */
@@ -703,6 +703,7 @@ Config_RobotParam_t robot_config = {
             /* Rod 舵机软件行程：0.0 -> 776us 等待位，1.0 -> 1504us 水平位。 */
             .angle_standby_rad = 1.0f,
             .angle_grab_high_rad = 0.35f,
+            .angle_detect_rad = 0.25f,
             .angle_dock_wait_rad = 0.0f,
             .angle_min_rad = 0.0f,
             .angle_max_rad = 1.0f,

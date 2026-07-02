@@ -57,6 +57,8 @@ static PC_IrOreBridgeFeedback_t s_ir_ore_bridge_feedback{};
 static PC_IrDockFeedback_t s_ir_dock_feedback{};
 static wire::StartMatchCmd s_start_match_cmd{};
 static bool s_start_match_pending = false;
+static wire::RetryCmd s_retry_cmd{};
+static bool s_retry_pending = false;
 static MrlinkPc_TxCallback_t s_tx_done_callback = nullptr;
 static MrlinkPc_TxCallback_t s_tx_error_callback = nullptr;
 static BSP_UART_t s_channel_uart = BSP_UART_PC;
@@ -545,6 +547,8 @@ extern "C" bool MrlinkPc_CommInit(void) {
   std::memset(&s_state, 0, sizeof(s_state));
   ClearModuleCommands();
   s_ir_ore_ack_pending = false;
+  s_start_match_pending = false;
+  s_retry_pending = false;
   s_state.control_mode = PC_MODE_RC;
   s_state.feedback.status.command_source = PC_COMMAND_SOURCE_RC;
 
@@ -849,6 +853,30 @@ extern "C" uint16_t MrlinkPc_BuildStartMatchFrame(uint8_t *tx_buf,
 
   return s_bus.Publish(wire::kFeedbackStartMatch, s_start_match_cmd, tx_buf,
                        buf_size);
+}
+
+extern "C" bool MrlinkPc_RequestRetry(uint8_t retry) {
+  s_retry_cmd.retry = (retry != 0u) ? 1u : 0u;
+  s_retry_pending = true;
+  return true;
+}
+
+extern "C" bool MrlinkPc_HasRetryRequest(void) {
+  return s_retry_pending;
+}
+
+extern "C" void MrlinkPc_ClearRetryRequest(void) {
+  s_retry_pending = false;
+  s_retry_cmd.retry = 0u;
+}
+
+extern "C" uint16_t MrlinkPc_BuildRetryFrame(uint8_t *tx_buf,
+                                               uint16_t buf_size) {
+  if (!s_retry_pending || tx_buf == nullptr) {
+    return 0u;
+  }
+
+  return s_bus.Publish(wire::kFeedbackRetry, s_retry_cmd, tx_buf, buf_size);
 }
 
 extern "C" const PC_AutoStepParams_t *MrlinkPc_GetAutoStepParams(void) {
