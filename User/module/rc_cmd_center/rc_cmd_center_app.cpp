@@ -62,6 +62,10 @@
 #define RC_AUTO_STEP_CH_RES_THRESHOLD (0.90f)
 #endif
 
+#ifndef RC_PC_RETRY_CH_L_X_THRESHOLD
+#define RC_PC_RETRY_CH_L_X_THRESHOLD (0.90f)
+#endif
+
 #ifndef RC_DEBUG_UPDATE_PERIOD_MS
 #define RC_DEBUG_UPDATE_PERIOD_MS (50u)
 #endif
@@ -1055,6 +1059,16 @@ static bool Rc_ShouldUsePcCommand(void) {
 }
 
 static bool rc_pc_behavior_was_active = false;
+
+static void Rc_UpdatePcRetryRequest(void) {
+  if (!dr16.header.online || dr16.data.sw_l != DR16_SW_UP ||
+      dr16.data.sw_r != DR16_SW_UP) {
+    return;
+  }
+
+  (void)MrlinkPc_RequestRetry(
+      (dr16.data.ch_l_x > RC_PC_RETRY_CH_L_X_THRESHOLD) ? 1u : 0u);
+}
 
 static RcControlPage_t Rc_PageForBehavior(RcBehavior_t behavior) {
   switch (behavior) {
@@ -2179,6 +2193,7 @@ void RcCmdCenterApp_Update(uint32_t now_ms) {
   if (pc_behavior_active && !rc_pc_behavior_was_active) {
     (void)MrlinkPc_RequestStartMatch(1u);
   }
+  Rc_UpdatePcRetryRequest();
   rc_pc_behavior_was_active = pc_behavior_active;
   rc_cmd_center.tick(now_ms).publish();
   Rc_PublishCommandsAndDebug(update_debug);
