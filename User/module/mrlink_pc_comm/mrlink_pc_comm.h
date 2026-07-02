@@ -53,6 +53,7 @@ typedef enum {
 typedef enum {
     PC_FEEDBACK_HEARTBEAT = 0x81,    /* STM32 心跳反馈 */
     PC_FEEDBACK_START_MATCH = 0x02,  /* STM32->PC 一次性开始比赛命令 */
+    PC_FEEDBACK_RETRY = 0x03,        /* STM32->PC 一次性重试请求命令 */
     PC_FEEDBACK_CHASSIS = 0x90,      /* 底盘速度反馈 */
     PC_FEEDBACK_POLE = 0x91,         /* 撑杆位置/电机角度反馈 */
     PC_FEEDBACK_STEP = 0x92,         /* 自动上下台阶流程状态反馈 */
@@ -652,6 +653,18 @@ void MrlinkPc_ClearStartMatchRequest(void);
 
 /* 构造开始比赛命令 mrlink 帧；无待发送命令或缓存不足时返回 0。 */
 uint16_t MrlinkPc_BuildStartMatchFrame(uint8_t *tx_buf, uint16_t buf_size);
+
+/* 请求向 PC 发送一次重试命令；retry 非 0 表示需要启动重试逻辑。 */
+bool MrlinkPc_RequestRetry(uint8_t retry);
+
+/* 返回是否有待发送的重试命令。 */
+bool MrlinkPc_HasRetryRequest(void);
+
+/* 清除待发送的重试命令，通常在发送成功后调用。 */
+void MrlinkPc_ClearRetryRequest(void);
+
+/* 构造重试命令 mrlink 帧；无待发送命令或缓存不足时返回 0。 */
+uint16_t MrlinkPc_BuildRetryFrame(uint8_t *tx_buf, uint16_t buf_size);
 
 /* 构造指定反馈 cmd 的 mrlink 帧；tx_buf 为输出缓存，buf_size 为缓存字节数，返回帧长度。 */
 uint16_t MrlinkPc_BuildFeedbackFrame(uint8_t cmd, uint8_t *tx_buf,

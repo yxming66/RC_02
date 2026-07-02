@@ -40,6 +40,7 @@ inline constexpr Topic kCmdIrOreAck = PC_CMD_IR_ORE_ACK;
 
 inline constexpr Topic kFeedbackHeartbeat = PC_FEEDBACK_HEARTBEAT;
 inline constexpr Topic kFeedbackStartMatch = PC_FEEDBACK_START_MATCH;
+inline constexpr Topic kFeedbackRetry = PC_FEEDBACK_RETRY;
 inline constexpr Topic kFeedbackChassis = PC_FEEDBACK_CHASSIS;
 inline constexpr Topic kFeedbackPole = PC_FEEDBACK_POLE;
 inline constexpr Topic kFeedbackStep = PC_FEEDBACK_STEP;
@@ -88,6 +89,10 @@ struct __attribute__((packed)) AutoActionCmd {
 
 struct __attribute__((packed)) StartMatchCmd {
   uint8_t start;     /* 0=默认等待，1=开始/启动 */
+};
+
+struct __attribute__((packed)) RetryCmd {
+  uint8_t retry;     /* 0=默认不重试，1=启动 PC 侧重试逻辑 */
 };
 
 struct __attribute__((packed)) StepCmd {
@@ -156,6 +161,7 @@ static_assert(IsValidWirePayload<PC_ChassisCMD_t>(), "PC_ChassisCMD_t payload is
 static_assert(IsValidWirePayload<PC_ImuCMD_t>(), "PC_ImuCMD_t payload is invalid");
 static_assert(IsValidWirePayload<PC_IrOreAckCMD_t>(), "PC_IrOreAckCMD_t payload is invalid");
 static_assert(IsValidWirePayload<StartMatchCmd>(), "StartMatchCmd payload is invalid");
+static_assert(IsValidWirePayload<RetryCmd>(), "RetryCmd payload is invalid");
 static_assert(IsValidWirePayload<PoleCmd>(), "PoleCmd payload is invalid");
 static_assert(IsValidWirePayload<ArmSimpleCmd>(), "ArmSimpleCmd payload is invalid");
 static_assert(IsValidWirePayload<RodNewCmd>(), "RodNewCmd payload is invalid");
@@ -180,6 +186,7 @@ static_assert(sizeof(PC_ChassisCMD_t) == 12u, "PC_CMD_CHASSIS wire size changed"
 static_assert(sizeof(PC_ImuCMD_t) == 28u, "PC_CMD_IMU wire size changed");
 static_assert(sizeof(PC_IrOreAckCMD_t) == 6u, "PC_CMD_IR_ORE_ACK wire size changed");
 static_assert(sizeof(StartMatchCmd) == 1u, "PC_FEEDBACK_START_MATCH wire size changed");
+static_assert(sizeof(RetryCmd) == 1u, "PC_FEEDBACK_RETRY wire size changed");
 static_assert(sizeof(PoleCmd) == 9u, "PC_CMD_POLE wire size changed");
 static_assert(sizeof(ArmSimpleCmd) == 10u, "PC_CMD_ARM_SIMPLE wire size changed");
 static_assert(sizeof(RodNewCmd) == 6u, "PC_CMD_ROD_NEW wire size changed");

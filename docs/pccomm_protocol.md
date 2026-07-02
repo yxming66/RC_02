@@ -264,11 +264,12 @@ def build_ir_ack(msg_id: int, status: int) -> bytes:
 
 ## 5. STM32 发给 PC 的反馈
 
-固件每 20 ms 尝试发送以下反馈批次：`0x81, 0x96, 0x90, 0x91, 0x93, 0x94, 0x95, 0x98, 0x92, 0xA0`。`0x02` 开始比赛命令仅在遥控器行为映射从非 PC 映射切入 PC 映射时追加一次。`0x17` 仅作为 PC 下发的 camera yaw 命令使用，固件不再把它作为命令镜像回传。`0x97/0x99` 红外反馈在首次收到或内容变化后持续低频追加，当前周期约 200 ms。
+固件每 20 ms 尝试发送以下反馈批次：`0x81, 0x96, 0x90, 0x91, 0x93, 0x94, 0x95, 0x98, 0x92, 0xA0`。`0x02` 开始比赛命令仅在遥控器行为映射从非 PC 映射切入 PC 映射时追加一次。`0x03` 重试命令仅在固件业务层请求 PC 启动重试逻辑时追加一次。`0x17` 仅作为 PC 下发的 camera yaw 命令使用，固件不再把它作为命令镜像回传。`0x97/0x99` 红外反馈在首次收到或内容变化后持续低频追加，当前周期约 200 ms。
 
 | cmd | 名称 | payload | Python unpack | 说明 |
 |---:|---|---:|---|---|
 | `0x02` | `PC_FEEDBACK_START_MATCH` | 1 | `<B` | 开始比赛命令；`start=0` 等待，`start=1` 开始 |
+| `0x03` | `PC_FEEDBACK_RETRY` | 1 | `<B` | 重试命令；`retry=0` 默认不重试，`retry=1` 启动 PC 侧重试逻辑 |
 | `0x81` | `PC_FEEDBACK_HEARTBEAT` | 0 | - | STM32 心跳 |
 | `0x90` | `PC_FEEDBACK_CHASSIS` | 12 | `<fff` | 底盘速度反馈 |
 | `0x91` | `PC_FEEDBACK_POLE` | 24 | `<ffffff` | 撑杆反馈 |
@@ -281,6 +282,14 @@ def build_ir_ack(msg_id: int, status: int) -> bytes:
 | `0x98` | `PC_FEEDBACK_CAMERA_YAW` | 32 | `<BBBBffffffI` | 云台状态 |
 | `0x99` | `PC_FEEDBACK_IR_ORE_BRIDGE` | 56 | `<BBBBBBBB12B18BxxIIII` | 红外桥接调试 |
 | `0xA0` | `PC_FEEDBACK_STATUS` | 10 | `<BIfB` | 通信/系统状态 |
+
+### 5.0 一次性控制反馈 `0x02/0x03`
+
+`PC_FEEDBACK_START_MATCH (0x02)` 与 `PC_FEEDBACK_RETRY (0x03)` 是 STM32 发给 PC 的一次性控制反馈，不在固定 50 Hz 批次列表中；固件内部有 pending 标志时追加到下一次发送批次，发送成功后自动清除。上位机应按 `cmd` 分发并把它们当作边沿事件处理，避免依赖持续电平。
+
+`PC_FEEDBACK_START_MATCH` payload 为 1 字节，`start=1` 表示开始比赛。
+
+`PC_FEEDBACK_RETRY` payload 为 1 字节，`retry=1` 表示 PC 需要启动重试相关逻辑；`retry=0` 保留为默认不重试状态。
 
 ### 5.1 底盘反馈 `0x90`
 
