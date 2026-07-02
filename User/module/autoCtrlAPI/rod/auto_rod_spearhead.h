@@ -47,6 +47,9 @@ typedef struct {
   const OreStore_Params_t *ore_store_param;
   uint32_t open_delay_ms;
   uint32_t grab_high_delay_ms;
+  uint32_t detect_grip_delay_ms;
+  uint32_t detect_pose_delay_ms;
+  uint32_t detect_success_hold_ms;
   uint32_t dock_wait_delay_ms;
   OreStore_TransformPoint_t dock_wait_transform;
   bool use_photo_check;
