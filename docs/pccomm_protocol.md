@@ -550,7 +550,7 @@ AA 55 02 msg_id side ore_type[12] crc8
 4D 52 dock_complete r2_leave_zone1 cleared_ore_id zone3_r2_state crc16_lo crc16_hi
 ```
 
-CRC 使用 CRC16/MODBUS：初值 `0xFFFF`，反射多项式 `0xA001`，低字节在前。示例完成帧 `4D 52 01 00 00 01` 的 CRC 为 `76 36`。
+CRC 使用工程公共 `component/crc16` 的 `CRC16_Calc()`：初值 `CRC16_INIT = 0xFFFF`，低字节在前。示例完成帧 `4D 52 01 00 00 01` 的 CRC 为 `A6 51`。
 
 payload 为 24 字节，Python unpack 格式为 `<BBBBBBBBIIII`。
 

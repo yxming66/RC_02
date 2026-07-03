@@ -487,7 +487,7 @@ Config_RobotParam_t robot_config = {
     /* 模块参数：一键取矛头 auto_rod_spearhead_param，取矛头机构动作时序和检测。 */
     .auto_rod_spearhead_param = {
         /* One-key spearhead action timing; rod_param is filled during init. */
-        .open_delay_ms = 5000u,
+        .open_delay_ms = 20u,
         .grab_high_delay_ms = 1500u,
         .detect_grip_delay_ms = 100u,
         .detect_pose_delay_ms = 600u,
