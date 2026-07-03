@@ -217,6 +217,8 @@ static bool AutoRodSpearhead_StartAction(AutoRodSpearhead_t *ctrl,
   ctrl->photo_stable_started = false;
   ctrl->photo_stable_state = false;
   ctrl->photo_stable_start_time_ms = now_ms;
+  ctrl->dock_complete_latched = false;
+  ctrl->dock_wait_start_time_ms = now_ms;
   AutoRodSpearhead_ClearOutputs(ctrl);
   return true;
 }
@@ -503,6 +505,10 @@ static void AutoRodSpearhead_RunDockWait(
     uint32_t now_ms) {
   const bool dock_complete_received =
       feedback != 0 && feedback->dock_complete_received;
+  if (dock_complete_received && feedback->dock_complete_rx_ms != 0u &&
+      feedback->dock_complete_rx_ms >= ctrl->dock_wait_start_time_ms) {
+    ctrl->dock_complete_latched = true;
+  }
   const bool transform_position_high =
       feedback == 0 || !feedback->ore_store_position_valid ||
       feedback->ore_store_platform_position_rad >
@@ -538,7 +544,7 @@ static void AutoRodSpearhead_RunDockWait(
                                        ROD_NEW_GRIP_GRAB)) {
         return;
       }
-      if (dock_complete_received) {
+      if (ctrl->dock_complete_latched) {
         AutoRodSpearhead_NextStep(ctrl);
         return;
       }

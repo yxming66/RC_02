@@ -63,6 +63,7 @@ typedef struct {
   bool ore_store_position_valid;
   float ore_store_platform_position_rad;
   bool dock_complete_received;
+  uint32_t dock_complete_rx_ms;
 } AutoRodSpearhead_Feedback_t;
 
 typedef struct {
@@ -76,6 +77,8 @@ typedef struct {
   bool photo_stable_started;
   bool photo_stable_state;
   uint32_t photo_stable_start_time_ms;
+  bool dock_complete_latched;
+  uint32_t dock_wait_start_time_ms;
   bool rod_cmd_valid;
   RodNew_CMD_t rod_cmd;
   bool ore_store_cmd_valid;

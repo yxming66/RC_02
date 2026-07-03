@@ -1202,6 +1202,7 @@ static void AutoCtrlFeed_UpdateAutoRodSpearhead(uint32_t now_ms,
       .ore_store_position_valid = false,
       .ore_store_platform_position_rad = 0.0f,
       .dock_complete_received = IrDock_IsDockCompleteFresh(now_ms),
+      .dock_complete_rx_ms = g_ir_dock_debug.last_complete_rx_ms,
   };
   const RodNew_Feedback_t *rod_fb = Task_RodNewGetFeedback();
   if (rod_fb != NULL) {
@@ -1257,7 +1258,7 @@ static void AutoCtrlFeed_UpdateAutoRodSpearhead(uint32_t now_ms,
       auto_rod_spearhead_ctrl.ore_store_cmd.platform_target_rad;
   g_auto_ore_debug.ir_dock_complete_fresh = feedback.dock_complete_received;
   g_auto_ore_debug.ir_dock_last_rx_status = g_ir_dock_debug.last_rx_status;
-  g_auto_ore_debug.ir_dock_last_rx_age_ms = g_ir_dock_debug.last_rx_age_ms;
+  g_auto_ore_debug.ir_dock_last_rx_age_ms = g_ir_dock_debug.last_complete_age_ms;
   g_auto_ore_debug.ir_dock_rx_count = g_ir_dock_debug.rx_count;
   g_auto_ore_debug.ir_dock_error_count = g_ir_dock_debug.error_count;
 }
