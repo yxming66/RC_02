@@ -48,6 +48,7 @@ typedef enum {
     PC_CMD_ABSTRACT_POSITION = 0x18, /* 抽象位置命令 */
     PC_CMD_IMU = 0x20,           /* PC 下发姿态数据命令 */
     PC_CMD_IR_ORE_ACK = 0x21,    /* PC 透传红外对接 ACK 帧，payload 为 6 字节原始 ACK */
+    PC_CMD_R2_READY_STATE = 0x22,/* PC 下发 R2 准备/重试状态，驱动灯效模式 */
 } PC_CMD_t;
 
 typedef enum {
@@ -243,6 +244,16 @@ typedef enum {
 typedef struct {
     uint8_t action;    /* 一键动作类型，见 PC_AutoAction_t */
 } PC_AutoActionCMD_t;
+
+typedef enum {
+    PC_R2_READY_STATE_NOT_READY = 0,  /* R2 未准备完毕，对应灯效 1 号模式 */
+    PC_R2_READY_STATE_READY = 1,      /* R2 已准备完毕，对应灯效 2 号模式 */
+    PC_R2_READY_STATE_RETRY = 2,      /* R2 需要重试，对应灯效 3 号模式 */
+} PC_R2ReadyState_t;
+
+typedef struct {
+    uint8_t state;    /* 见 PC_R2ReadyState_t */
+} PC_R2ReadyStateCMD_t;
 
 typedef enum {
     PC_STEP_TEMPLATE_NONE = 0,              /* 无自动台阶流程 */
@@ -463,6 +474,7 @@ typedef struct {
     PC_StepCMD_t step;                   /* 待执行/最近一次自动台阶命令 */
     PC_ImuCMD_t imu;                     /* 最近一次 PC 姿态数据 */
     PC_IrOreAckCMD_t ir_ore_ack;             /* 待转发到红外对接 UART 的 ACK 原始帧 */
+    PC_R2ReadyStateCMD_t r2_ready_state;     /* 最近一次 PC 下发的 R2 准备/重试状态 */
 } MrlinkPc_CMD_Data_t;
 
 typedef struct {
@@ -564,6 +576,9 @@ typedef struct {
     PC_AutoActionCMD_t rx_auto_action;      /* 调试用：最近一次一键动作命令 */
     PC_StepCMD_t rx_step;                   /* 调试用：最近一次自动台阶命令 */
     PC_ImuCMD_t rx_imu;                     /* 调试用：最近一次 PC 姿态数据 */
+    PC_R2ReadyStateCMD_t rx_r2_ready_state; /* 调试用：最近一次 R2 准备/重试状态 */
+    uint32_t rx_r2_ready_state_count;        /* 收到 PC_CMD_R2_READY_STATE 的次数 */
+    uint8_t r2_ready_light_mode;             /* 最近一次 R2 状态映射到的灯效模式 */
 
     uint32_t tx_count;                /* 反馈发送尝试次数 */
     uint8_t tx_dma_busy;              /* 发送 DMA 忙标志，0=空闲，1=忙 */
@@ -659,6 +674,12 @@ const PC_ImuCMD_t *MrlinkPc_GetImuCMD(void);
 
 /* 获取待转发的红外对接 ACK 命令；无待转发命令时返回 NULL。 */
 const PC_IrOreAckCMD_t *MrlinkPc_GetIrOreAckCMD(void);
+
+/* 获取最近一次 PC 下发的 R2 准备/重试状态。 */
+const PC_R2ReadyStateCMD_t *MrlinkPc_GetR2ReadyStateCMD(void);
+
+/* 最近一次 PC_CMD_R2_READY_STATE 是否为 READY。 */
+bool MrlinkPc_IsR2Ready(void);
 
 /* 发布某个反馈 topic 的最新数据；topic 见 PC_FeedbackCMD_t，feedback 指向对应反馈结构体。 */
 bool MrlinkPc_PublishFeedback(uint8_t topic, const void *feedback);

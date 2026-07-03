@@ -505,8 +505,7 @@ static void AutoRodSpearhead_RunDockWait(
     uint32_t now_ms) {
   const bool dock_complete_received =
       feedback != 0 && feedback->dock_complete_received;
-  if (dock_complete_received && feedback->dock_complete_rx_ms != 0u &&
-      feedback->dock_complete_rx_ms >= ctrl->dock_wait_start_time_ms) {
+  if (dock_complete_received) {
     ctrl->dock_complete_latched = true;
   }
   const bool transform_position_high =

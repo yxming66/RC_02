@@ -1232,9 +1232,13 @@ static void AutoCtrlFeed_UpdateAutoRodSpearhead(uint32_t now_ms,
       .ore_store_at_target = false,
       .ore_store_position_valid = false,
       .ore_store_platform_position_rad = 0.0f,
-      .dock_complete_received = IrDock_IsDockCompleteFresh(now_ms),
+      .dock_complete_received = IrDock_IsDockCompleteFresh(now_ms) ||
+                                MrlinkPc_IsR2Ready(),
       .dock_complete_rx_ms = g_ir_dock_debug.last_complete_rx_ms,
   };
+  if (MrlinkPc_IsR2Ready()) {
+    feedback.dock_complete_rx_ms = now_ms;
+  }
   const RodNew_Feedback_t *rod_fb = Task_RodNewGetFeedback();
   if (rod_fb != NULL) {
     feedback.rod_at_target = rod_fb->at_target;
@@ -1773,7 +1777,7 @@ const Pole_CMD_t *Task_AutoSickCorrectGetPoleCommand(void) {
 }
 
 bool Task_IrDockIsDockCompleteFresh(void) {
-  return IrDock_IsDockCompleteFresh(BSP_TIME_Get_ms());
+  return IrDock_IsDockCompleteFresh(BSP_TIME_Get_ms()) || MrlinkPc_IsR2Ready();
 }
 
 /* Exported functions ------------------------------------------------------- */

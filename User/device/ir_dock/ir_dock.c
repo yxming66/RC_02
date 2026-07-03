@@ -3,7 +3,9 @@
 #include <stddef.h>
 
 #include "bsp/uart.h"
-#include "component/crc16.h"
+
+#define IR_DOCK_CRC16_MODBUS_INIT (0xFFFFu)
+#define IR_DOCK_CRC16_MODBUS_POLY (0xA001u)
 
 static uint8_t ir_dock_rx_buf[IR_DOCK_RX_BUFFER_SIZE] = {0};
 static uint8_t ir_dock_tx_buf[IR_DOCK_STATUS_ACK_FRAME_SIZE] = {0};
@@ -121,11 +123,26 @@ static bool IrDock_SendCommandAck(uint8_t cmd, uint32_t now_ms) {
   return false;
 }
 
+static uint16_t IrDock_Crc16ModbusCalc(const uint8_t *frame, uint16_t len) {
+  uint16_t crc = IR_DOCK_CRC16_MODBUS_INIT;
+  for (uint16_t i = 0u; i < len; ++i) {
+    crc ^= frame[i];
+    for (uint8_t bit = 0u; bit < 8u; ++bit) {
+      if ((crc & 0x0001u) != 0u) {
+        crc = (uint16_t)((crc >> 1u) ^ IR_DOCK_CRC16_MODBUS_POLY);
+      } else {
+        crc = (uint16_t)(crc >> 1u);
+      }
+    }
+  }
+  return crc;
+}
+
 static bool IrDock_FrameCrcIsValid(const uint8_t *frame) {
   const uint16_t crc_recv = (uint16_t)frame[IR_DOCK_FRAME_SIZE - 2u] |
                             ((uint16_t)frame[IR_DOCK_FRAME_SIZE - 1u] << 8u);
   const uint16_t crc_calc =
-      CRC16_Calc(frame, IR_DOCK_FRAME_SIZE - IR_DOCK_CRC_SIZE, CRC16_INIT);
+      IrDock_Crc16ModbusCalc(frame, IR_DOCK_FRAME_SIZE - IR_DOCK_CRC_SIZE);
   return crc_recv == crc_calc;
 }
 

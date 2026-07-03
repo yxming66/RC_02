@@ -5,6 +5,7 @@
 
 #include "bsp/time.h"
 #include "bsp/uart.h"
+#include "bsp/can.h"
 #include "cmsis_os2.h"
 #include "device/mrlink/mrlink_channel.h"
 #include "device/mrlink/mrlink.hpp"
@@ -23,6 +24,8 @@ constexpr uint16_t kMrlinkRxBufSize = MRLINK_PC_RX_STREAM_BUF_SIZE;
 constexpr uint16_t kMrlinkTxBufSize = MRLINK_PC_MAX_FRAME_SIZE;
 constexpr uint32_t kAutoActionRepeatReleaseMs = 300u;
 constexpr uint32_t kModuleCommandTimeoutMs = 10000u;
+constexpr BSP_CAN_t kR2LightCanBus = BSP_CAN_2;
+constexpr uint32_t kR2LightCanId = 0x322u;
 
 static_assert(kRxDmaSlotCount >= 2u, "MRLINK_PC_RX_DMA_SLOT_COUNT must be >= 2");
 static_assert(kRxDmaBufSize >= MRLINK_PC_MAX_FRAME_SIZE,
@@ -179,6 +182,9 @@ void TouchOnline(uint8_t cmd) {
     case PC_CMD_IR_ORE_ACK:
       g_pc_comm_debug.rx_ir_ore_ack_count++;
       break;
+    case PC_CMD_R2_READY_STATE:
+      g_pc_comm_debug.rx_r2_ready_state_count++;
+      break;
     default:
       break;
   }
@@ -327,6 +333,36 @@ void OnIrOreAck(const PC_IrOreAckCMD_t &cmd) {
   TouchOnline(PC_CMD_IR_ORE_ACK);
 }
 
+void OnR2ReadyState(const wire::R2ReadyStateCmd &cmd) {
+  s_state.cmd.r2_ready_state.state = cmd.state;
+
+  uint8_t light_mode = 1u;
+  switch (static_cast<PC_R2ReadyState_t>(cmd.state)) {
+    case PC_R2_READY_STATE_READY:
+      light_mode = 2u;
+      break;
+    case PC_R2_READY_STATE_RETRY:
+      light_mode = 3u;
+      break;
+    case PC_R2_READY_STATE_NOT_READY:
+    default:
+      light_mode = 1u;
+      break;
+  }
+
+  BSP_CAN_StdDataFrame_t frame = {};
+  frame.id = kR2LightCanId;
+  frame.dlc = 1u;
+  frame.data[0] = light_mode;
+  const int8_t can_init_ret = BSP_CAN_Init();
+  if (can_init_ret == BSP_OK || can_init_ret == BSP_ERR_INITED) {
+    (void)BSP_CAN_TransmitStdDataFrame(kR2LightCanBus, &frame);
+  }
+  g_pc_comm_debug.r2_ready_light_mode = light_mode;
+  MarkRxFrame(PC_CMD_R2_READY_STATE, sizeof(cmd), MRLINK_OK);
+  TouchOnline(PC_CMD_R2_READY_STATE);
+}
+
 void OnMrlinkError(const MrLink_ErrorInfo_t &err) {
   g_pc_comm_debug.mrlink_error_count++;
   g_pc_comm_debug.mrlink_last_error_code = static_cast<uint8_t>(err.code);
@@ -356,7 +392,9 @@ bool RegisterHandlers() {
              MRLINK_OK &&
          s_bus.SubscribeLatest<wire::StepCmd>(OnStep) == MRLINK_OK &&
          s_bus.SubscribeLatest<PC_ImuCMD_t>(OnImu) == MRLINK_OK &&
-         s_bus.Subscribe<PC_IrOreAckCMD_t>(OnIrOreAck) == MRLINK_OK;
+         s_bus.Subscribe<PC_IrOreAckCMD_t>(OnIrOreAck) == MRLINK_OK &&
+         s_bus.SubscribeLatest<wire::R2ReadyStateCmd>(OnR2ReadyState) ==
+           MRLINK_OK;
 }
 
 void RxReadyCallback(void *ctx) {
@@ -672,6 +710,8 @@ extern "C" void MrlinkPc_DebugUpdate(void) {
                       &s_state.cmd.auto_action);
   CopyPlainToVolatile(&g_pc_comm_debug.rx_step, &s_state.cmd.step);
   CopyPlainToVolatile(&g_pc_comm_debug.rx_imu, &s_state.cmd.imu);
+  CopyPlainToVolatile(&g_pc_comm_debug.rx_r2_ready_state,
+                      &s_state.cmd.r2_ready_state);
   CopyPlainToVolatile(&g_pc_comm_debug.rx_ir_ore_ack,
                       &s_state.cmd.ir_ore_ack);
   const MrLink_Stats_t *stats = s_bus.GetStats();
@@ -758,6 +798,14 @@ extern "C" const PC_ImuCMD_t *MrlinkPc_GetImuCMD(void) {
 
 extern "C" const PC_IrOreAckCMD_t *MrlinkPc_GetIrOreAckCMD(void) {
   return s_ir_ore_ack_pending ? &s_state.cmd.ir_ore_ack : nullptr;
+}
+
+extern "C" const PC_R2ReadyStateCMD_t *MrlinkPc_GetR2ReadyStateCMD(void) {
+  return &s_state.cmd.r2_ready_state;
+}
+
+extern "C" bool MrlinkPc_IsR2Ready(void) {
+  return s_state.cmd.r2_ready_state.state == PC_R2_READY_STATE_READY;
 }
 
 extern "C" bool MrlinkPc_PublishFeedback(uint8_t topic,
