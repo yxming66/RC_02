@@ -525,10 +525,10 @@ Config_RobotParam_t robot_config = {
         /* 模块参数：SICK 一键校正 sick_correct，取矛头/放矿前的 SICK 对位参数。 */
         .sick_correct = {
             .rod_spearhead_position = {
-                [0] = CONFIG_SICK_ROD_SPEARHEAD_PARAM(666.0f, 1131.0f),
-                [1] = CONFIG_SICK_ROD_SPEARHEAD_PARAM(1599.0f, 1131.0f),
-                [2] = CONFIG_SICK_ROD_SPEARHEAD_PARAM(2566.0f, 1131.0f),
-                [3] = CONFIG_SICK_ROD_SPEARHEAD_PARAM(3500.0f, 1131.0f),
+                [0] = CONFIG_SICK_ROD_SPEARHEAD_PARAM(666.0f, 1103.0f),
+                [1] = CONFIG_SICK_ROD_SPEARHEAD_PARAM(1599.0f, 1103.0f),
+                [2] = CONFIG_SICK_ROD_SPEARHEAD_PARAM(2566.0f, 1103.0f),
+                [3] = CONFIG_SICK_ROD_SPEARHEAD_PARAM(3500.0f, 1103.0f),
                 [4] = CONFIG_SICK_ROD_SPEARHEAD_PARAM(4406.0f, 1507.0f),
                 [5] = CONFIG_SICK_ROD_SPEARHEAD_PARAM(5377.0f, 1504.0f),
             },
