@@ -85,6 +85,11 @@ typedef enum {
 #define MRLINK_PC_RX_STREAM_BUF_SIZE (512u) /* mrlink 协议解析流缓冲区字节数 */
 #endif
 
+#if !defined(MRLINK_CPP_MAX_LATEST_MESSAGES) || (MRLINK_CPP_MAX_LATEST_MESSAGES < 24u)
+#undef MRLINK_CPP_MAX_LATEST_MESSAGES
+#define MRLINK_CPP_MAX_LATEST_MESSAGES (24u)
+#endif
+
 typedef struct {
     float vx;    /* 底盘 x 方向目标速度，单位 m/s */
     float vy;    /* 底盘 y 方向目标速度，单位 m/s */
@@ -359,6 +364,9 @@ typedef struct {
     float y_target_adc;              /* Y 方向 SICK 标准 ADC 值 */
     float y_sample_adc;              /* Y 方向 SICK 实时 ADC 值 */
 } PC_SickCorrectFeedback_t;
+
+#define PC_SICK_CORRECT_VALID_X (1u << 0)
+#define PC_SICK_CORRECT_VALID_Y (1u << 1)
 
 typedef enum {
     PC_ORE_TYPE_UNKNOWN = 0,    /* 矿种未知或未收到 */

@@ -487,14 +487,14 @@ payload 为 20 字节，Python unpack 格式为 `<BBBBffff`。当前用于取矛
 |---:|---|---|---|
 | 0 | u8 | `action` | 当前取矛头 SICK 校正动作，`16~21` 对应位置 1~6；无效时为 0 |
 | 1 | u8 | `position_index` | 取矛头位置索引，`0~5`；无效时为 `0xFF` |
-| 2 | u8 | `valid_mask` | bit0 表示 X 字段有效，bit1 表示 Y 字段有效 |
+| 2 | u8 | `valid_mask` | bit0 表示 X 字段有效，bit1 表示 Y 字段有效；空闲时只要 SICK 原始值有效也会置位 |
 | 3 | u8 | `reserved` | 固定 0 |
 | 4 | f32 | `x_target_adc` | X 方向 SICK 标准 ADC 值 |
 | 8 | f32 | `x_sample_adc` | X 方向 SICK 实时 ADC 值 |
 | 12 | f32 | `y_target_adc` | Y 方向 SICK 标准 ADC 值 |
 | 16 | f32 | `y_sample_adc` | Y 方向 SICK 实时 ADC 值 |
 
-当前取矛头 SICK 校正默认仅启用 Y 方向，因此常见 `valid_mask=0x02`，`y_target_adc/y_sample_adc` 为主要观察量；若重新启用 X 方向，bit0 与 X 字段会随之有效。
+固件会在每次 PC 发送批次前刷新该帧。取矛头 SICK 校正运行时，`action/position_index` 指向正在校正的位置；空闲时 `action=0`、`position_index=0xFF`，目标值使用位置 1 的配置，实时值仍来自当前 SICK 原始 ADC。当前控制默认仅使用 Y 方向，但帧会同时上报可读到的 X/Y 实时值，方便上位机调试。
 
 ### 5.9 相机云台反馈 `0x98`
 

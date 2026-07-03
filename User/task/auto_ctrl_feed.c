@@ -937,10 +937,10 @@ static void AutoCtrlFeed_PublishSickCorrectFeedback(void) {
     pc_feedback.x_sample_adc = g_auto_ore_debug.auto_sick_correct_x_sample_adc;
     pc_feedback.y_target_adc = g_auto_ore_debug.auto_sick_correct_y_target_adc;
     pc_feedback.y_sample_adc = g_auto_ore_debug.auto_sick_correct_y_sample_adc;
-    pc_feedback.valid_mask = 0x02u;
+    pc_feedback.valid_mask = PC_SICK_CORRECT_VALID_Y;
     if (g_auto_ore_debug.auto_sick_correct_x_target_adc > 0.0f ||
         g_auto_ore_debug.auto_sick_correct_x_sample_adc > 0.0f) {
-      pc_feedback.valid_mask |= 0x01u;
+      pc_feedback.valid_mask |= PC_SICK_CORRECT_VALID_X;
     }
   }
 

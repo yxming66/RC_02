@@ -8,6 +8,7 @@
 #include "task/user_task.h"
 #include "device/dr16.h"
 #include "device/ore_info/ore_info.h"
+#include "device/sick.h"
 #include "module/mrlink_pc_comm/mrlink_pc_comm.h"
 #include "module/autoCtrlAPI/api/auto_ctrl_api.h"
 #include "module/arm_simple.h"
@@ -190,6 +191,86 @@ static bool PcComm_AppendFeedbackFrame(uint8_t cmd, uint16_t *tx_len) {
 
     *tx_len = (uint16_t)(*tx_len + frame_len);
     return true;
+}
+
+static bool PcComm_IsRodSpearheadSickCorrectAction(
+    AutoSickCorrect_Action_t action) {
+    return action >= AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD_POS1 &&
+           action <= AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD_POS6;
+}
+
+static uint8_t PcComm_MapSickCorrectAction(AutoSickCorrect_Action_t action) {
+    switch (action) {
+        case AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD_POS1:
+            return (uint8_t)PC_AUTO_ACTION_SICK_CORRECT_ROD_SPEARHEAD_POS1;
+        case AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD_POS2:
+            return (uint8_t)PC_AUTO_ACTION_SICK_CORRECT_ROD_SPEARHEAD_POS2;
+        case AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD_POS3:
+            return (uint8_t)PC_AUTO_ACTION_SICK_CORRECT_ROD_SPEARHEAD_POS3;
+        case AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD_POS4:
+            return (uint8_t)PC_AUTO_ACTION_SICK_CORRECT_ROD_SPEARHEAD_POS4;
+        case AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD_POS5:
+            return (uint8_t)PC_AUTO_ACTION_SICK_CORRECT_ROD_SPEARHEAD_POS5;
+        case AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD_POS6:
+            return (uint8_t)PC_AUTO_ACTION_SICK_CORRECT_ROD_SPEARHEAD_POS6;
+        case AUTO_SICK_CORRECT_ACTION_NONE:
+        case AUTO_SICK_CORRECT_ACTION_ORE_RELEASE:
+        default:
+            return (uint8_t)PC_AUTO_ACTION_NONE;
+    }
+}
+
+static void PcComm_UpdateSickCorrectFeedback(void) {
+    PC_SickCorrectFeedback_t feedback = {0};
+    feedback.position_index = 0xFFu;
+
+    if (!auto_sick_correct_inited) {
+        (void)MrlinkPc_PublishFeedback(PC_FEEDBACK_SICK_CORRECT, &feedback);
+        return;
+    }
+
+    const AutoSickCorrect_Action_t action =
+        AutoSickCorrect_GetAction(&auto_sick_correct_ctrl);
+    if (PcComm_IsRodSpearheadSickCorrectAction(action)) {
+        feedback.action = PcComm_MapSickCorrectAction(action);
+        feedback.position_index =
+            (uint8_t)(action - AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD_POS1);
+    }
+
+    const uint8_t position_index =
+        (feedback.position_index < AUTO_SICK_CORRECT_ROD_SPEARHEAD_POSITION_COUNT)
+            ? feedback.position_index
+            : 0u;
+    const AutoSickCorrect_PointParams_t *param =
+        &auto_sick_correct_ctrl.param.rod_spearhead_position[position_index];
+
+    feedback.x_target_adc = param->x_target_adc;
+    feedback.y_target_adc = param->y_target_adc;
+    feedback.x_sample_adc = auto_sick_correct_ctrl.x_sample_adc;
+    feedback.y_sample_adc = auto_sick_correct_ctrl.y_sample_adc;
+
+    Sick_Output_t sick_output = {0};
+    if (Task_SickGetLatestOutput(&sick_output)) {
+        if (param->front_index < SICK_OUTPUT_CHANNEL_COUNT &&
+            sick_output.valid[param->front_index]) {
+            feedback.x_sample_adc = (float)sick_output.adc_raw[param->front_index];
+            feedback.valid_mask |= PC_SICK_CORRECT_VALID_X;
+        }
+        if (param->rod_rear_index < SICK_OUTPUT_CHANNEL_COUNT &&
+            sick_output.valid[param->rod_rear_index]) {
+            feedback.y_sample_adc = (float)sick_output.adc_raw[param->rod_rear_index];
+            feedback.valid_mask |= PC_SICK_CORRECT_VALID_Y;
+        }
+    }
+
+    if (feedback.x_target_adc > 0.0f || feedback.x_sample_adc > 0.0f) {
+        feedback.valid_mask |= PC_SICK_CORRECT_VALID_X;
+    }
+    if (feedback.y_target_adc > 0.0f || feedback.y_sample_adc > 0.0f) {
+        feedback.valid_mask |= PC_SICK_CORRECT_VALID_Y;
+    }
+
+    (void)MrlinkPc_PublishFeedback(PC_FEEDBACK_SICK_CORRECT, &feedback);
 }
 
 static bool PcComm_AppendStartMatchFrame(uint16_t *tx_len) {
@@ -473,6 +554,7 @@ static bool PcComm_TransmitFeedback(void) {
 
     PcComm_UpdateStatusFeedback();
     PcComm_UpdateModuleFeedback();
+    PcComm_UpdateSickCorrectFeedback();
     PcComm_UpdateIrDockFeedback(now);
     const bool ir_ore_pending = PcComm_TryUpdateIrOreFeedback(now);
     const bool start_match_pending = PcComm_AppendStartMatchFrame(&tx_len);
