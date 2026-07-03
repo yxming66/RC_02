@@ -1723,6 +1723,13 @@ bool Task_AutoRodSpearheadIsPickupStep2(void) {
              AUTO_ROD_SPEARHEAD_ACTION_PICKUP_STEP2;
 }
 
+bool Task_AutoRodSpearheadIsDockWait(void) {
+  return auto_rod_spearhead_inited &&
+         AutoRodSpearhead_IsBusy(&auto_rod_spearhead_ctrl) &&
+         AutoRodSpearhead_GetAction(&auto_rod_spearhead_ctrl) ==
+             AUTO_ROD_SPEARHEAD_ACTION_DOCK_WAIT;
+}
+
 const RodNew_CMD_t *Task_AutoRodSpearheadGetCommand(void) {
   return auto_rod_spearhead_inited
              ? AutoRodSpearhead_GetRodCommand(&auto_rod_spearhead_ctrl)
