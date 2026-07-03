@@ -33,10 +33,10 @@
         .vx_limit_mps = 0.30f, \
         .vy_limit_mps = 0.30f, \
         .wz_limit_rad_s = 0.80f, \
-        .pole_target_lift = 3.0f, \
+        .pole_target_lift = 2.0f, \
         .pole_speed = 50.0f, \
         .finish_stable_ms = 100u, \
-        .timeout_ms = 5000u, \
+        .timeout_ms = 2000u, \
     }
 
 Config_RobotParam_t robot_config = {
