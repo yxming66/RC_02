@@ -521,6 +521,20 @@ wire::StatusFeedback MakeStatusFeedbackWire(
   return wire_feedback;
 }
 
+wire::SickCorrectFeedback MakeSickCorrectFeedbackWire(
+    const PC_SickCorrectFeedback_t &feedback) {
+  wire::SickCorrectFeedback wire_feedback = {};
+  wire_feedback.action = feedback.action;
+  wire_feedback.position_index = feedback.position_index;
+  wire_feedback.valid_mask = feedback.valid_mask;
+  wire_feedback.reserved = 0u;
+  wire_feedback.x_target_adc = feedback.x_target_adc;
+  wire_feedback.x_sample_adc = feedback.x_sample_adc;
+  wire_feedback.y_target_adc = feedback.y_target_adc;
+  wire_feedback.y_sample_adc = feedback.y_sample_adc;
+  return wire_feedback;
+}
+
 }  // namespace
 
 volatile PC_CommDebug_t g_pc_comm_debug;
@@ -795,6 +809,14 @@ extern "C" bool MrlinkPc_PublishFeedback(uint8_t topic,
       s_state.feedback.camera_yaw = *typed;
       return s_bus.StoreLatest(*typed);
     }
+    case PC_FEEDBACK_SICK_CORRECT: {
+      const auto *typed =
+          static_cast<const PC_SickCorrectFeedback_t *>(feedback);
+      s_state.feedback.sick_correct = *typed;
+      const wire::SickCorrectFeedback wire_feedback =
+          MakeSickCorrectFeedbackWire(*typed);
+      return s_bus.StoreLatest(wire_feedback);
+    }
     case PC_FEEDBACK_IR_ORE: {
       const auto *typed = static_cast<const PC_IrOreFeedback_t *>(feedback);
       s_ir_ore_feedback = *typed;
@@ -944,6 +966,11 @@ extern "C" uint16_t MrlinkPc_BuildFeedbackFrame(uint8_t cmd, uint8_t *tx_buf,
     case PC_FEEDBACK_CAMERA_YAW: {
       return BuildLatestOrFallback(s_state.feedback.camera_yaw, tx_buf,
                                    buf_size);
+    }
+    case PC_FEEDBACK_SICK_CORRECT: {
+      const wire::SickCorrectFeedback fallback =
+          MakeSickCorrectFeedbackWire(s_state.feedback.sick_correct);
+      return BuildLatestOrFallback(fallback, tx_buf, buf_size);
     }
     case PC_FEEDBACK_IR_ORE: {
       return BuildLatestOrFallback(s_ir_ore_feedback, tx_buf, buf_size);

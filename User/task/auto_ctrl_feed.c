@@ -356,6 +356,12 @@ static void AutoCtrlFeed_CopySickCorrectParamToDebug(
       param->yaw_kp_rad_s_per_adc;
 }
 
+static bool AutoCtrlFeed_IsRodSpearheadSickCorrectAction(
+    AutoSickCorrect_Action_t action) {
+  return action >= AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD_POS1 &&
+         action <= AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD_POS6;
+}
+
 static void AutoCtrlFeed_InitSickCorrectDebugOverride(
     const AutoSickCorrect_PointParams_t *param) {
   if (param == NULL) {
@@ -916,6 +922,31 @@ static void AutoCtrlFeed_PublishAutoActionFeedback(void) {
   (void)MrlinkPc_PublishFeedback(PC_FEEDBACK_AUTO_ACTION, &pc_feedback);
 }
 
+static void AutoCtrlFeed_PublishSickCorrectFeedback(void) {
+  PC_SickCorrectFeedback_t pc_feedback = {0};
+  const AutoSickCorrect_Action_t action =
+      AutoSickCorrect_GetAction(&auto_sick_correct_ctrl);
+
+  pc_feedback.position_index = 0xFFu;
+  if (auto_sick_correct_inited &&
+      AutoCtrlFeed_IsRodSpearheadSickCorrectAction(action)) {
+    pc_feedback.action = (uint8_t)AutoCtrlFeed_MapSickCorrectAction(action);
+    pc_feedback.position_index =
+        (uint8_t)(action - AUTO_SICK_CORRECT_ACTION_ROD_SPEARHEAD_POS1);
+    pc_feedback.x_target_adc = g_auto_ore_debug.auto_sick_correct_x_target_adc;
+    pc_feedback.x_sample_adc = g_auto_ore_debug.auto_sick_correct_x_sample_adc;
+    pc_feedback.y_target_adc = g_auto_ore_debug.auto_sick_correct_y_target_adc;
+    pc_feedback.y_sample_adc = g_auto_ore_debug.auto_sick_correct_y_sample_adc;
+    pc_feedback.valid_mask = 0x02u;
+    if (g_auto_ore_debug.auto_sick_correct_x_target_adc > 0.0f ||
+        g_auto_ore_debug.auto_sick_correct_x_sample_adc > 0.0f) {
+      pc_feedback.valid_mask |= 0x01u;
+    }
+  }
+
+  (void)MrlinkPc_PublishFeedback(PC_FEEDBACK_SICK_CORRECT, &pc_feedback);
+}
+
 static bool AutoCtrlFeed_ArmSimpleAtTarget(float threshold) {
   const ArmSimple_Feedback_t *arm_fb = Task_ArmSimpleGetFeedback();
   if (arm_fb == NULL) {
@@ -1342,6 +1373,7 @@ static void AutoCtrlFeed_UpdateAutoSickCorrect(uint32_t now_ms,
     active_param = &auto_sick_correct_ctrl.param.rod_spearhead_position[0];
   }
   AutoCtrlFeed_CopySickCorrectParamToDebug(active_param);
+  AutoCtrlFeed_PublishSickCorrectFeedback();
 }
 
 bool Task_AutoOreStartStore(void) {

@@ -8,6 +8,7 @@
 #include "bsp/pwm.h"
 #include "device/buzzer.h"
 #include "device/dr16.h"
+#include "device/light_effect_can.h"
 
 #ifndef BLINK_AUDIO_FEATURES
 #define BLINK_AUDIO_FEATURES (1U << 0)  /* startup music only */
@@ -280,6 +281,8 @@ void Task_blink(void *argument) {
     }
   }
 
+  (void)LightEffectCan_Init();
+
   // CloudMusic_Config_t cloudmusic_config;
   // CloudMusic_GetDefaultConfig(&cloudmusic_config);
   // cloudmusic_config.enable_startup_music = true;
@@ -299,6 +302,7 @@ void Task_blink(void *argument) {
     tick += delay_tick;
     /* USER CODE BEGIN */
     const uint32_t now_tick = BSP_TIME_Get_ms();
+    LightEffectCan_Update(now_tick);
     Blink_UpdateAudio(now_tick);
 
     if (reset) {

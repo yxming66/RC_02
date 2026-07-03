@@ -29,6 +29,31 @@ PC 在线判定：任意一帧合法 PC_COMM 帧都会刷新在线状态。若 5
 
 PC 控制命令实际生效还要求遥控器进入 PC 控制页：当前代码条件为 `sw_l == UP && sw_r == UP` 且 PC 链路在线。上位机可通过 `PC_FEEDBACK_STATUS.command_source == 1` 判断当前是否由 PC 接管。
 
+## CAN 灯效模式命令
+
+灯效模式额外支持一个简单 CAN 接收协议，独立于 PC_COMM 串口 mrlink 帧：
+
+| 项 | 参数 |
+|---|---|
+| CAN 类型 | 标准数据帧 |
+| CAN ID | `0x322` |
+| DLC | 至少 1 |
+| Data[0] | 灯效模式号 |
+| Data[1..7] | 忽略 |
+
+当前有效模式号为 `0~32`，只解析第一个字节：
+
+| Data[0] | 含义 |
+|---:|---|
+| `0x00` | 全灭 |
+| `0x01` | 1 号模式，白色常亮 |
+| `0x14` | 20 号模式，白色追逐 |
+| `0x1F` | 31 号模式，星云紫蓝 |
+| `0x20` | 32 号模式，珍珠幻彩 |
+| `0xFF` | 切换到下一个模式 |
+
+注意发送的是二进制数值，不是 ASCII 字符。例如 1 号模式应发送 `0x01`，不要发送字符 `'1'`（`0x31`）。
+
 ## 2. mrlink 帧格式
 
 PC_COMM 业务数据封装在 mrlink 字节流帧中。串口可能一次收到多帧拼接，上位机解析时应循环拆帧。
@@ -264,7 +289,7 @@ def build_ir_ack(msg_id: int, status: int) -> bytes:
 
 ## 5. STM32 发给 PC 的反馈
 
-固件每 20 ms 尝试发送以下反馈批次：`0x81, 0x96, 0x90, 0x91, 0x93, 0x94, 0x95, 0x98, 0x92, 0x9A, 0xA0`。`0x02` 开始比赛命令仅在遥控器行为映射从非 PC 映射切入 PC 映射时追加一次。`0x17` 仅作为 PC 下发的 camera yaw 命令使用，固件不再把它作为命令镜像回传。`0x97/0x99` 旧红外矿种反馈在首次收到或内容变化后持续低频追加，当前周期约 200 ms；`0x9A` 为新 R1/R2 红外对接协议状态反馈，随 50 Hz 常规反馈发送。
+固件每 20 ms 尝试发送以下反馈批次：`0x81, 0x96, 0x90, 0x91, 0x93, 0x94, 0x95, 0x98, 0x92, 0x9B, 0x9A, 0xA0`。`0x02` 开始比赛命令仅在遥控器行为映射从非 PC 映射切入 PC 映射时追加一次。`0x17` 仅作为 PC 下发的 camera yaw 命令使用，固件不再把它作为命令镜像回传。`0x97/0x99` 旧红外矿种反馈在首次收到或内容变化后持续低频追加，当前周期约 200 ms；`0x9A` 为新 R1/R2 红外对接协议状态反馈，随 50 Hz 常规反馈发送。
 
 | cmd | 名称 | payload | Python unpack | 说明 |
 |---:|---|---:|---|---|
@@ -282,6 +307,7 @@ def build_ir_ack(msg_id: int, status: int) -> bytes:
 | `0x98` | `PC_FEEDBACK_CAMERA_YAW` | 32 | `<BBBBffffffI` | 云台状态 |
 | `0x99` | `PC_FEEDBACK_IR_ORE_BRIDGE` | 56 | `<BBBBBBBB12B18BxxIIII` | 红外桥接调试 |
 | `0x9A` | `PC_FEEDBACK_IR_DOCK` | 24 | `<BBBBBBBBIIII` | R1/R2 红外对接状态 |
+| `0x9B` | `PC_FEEDBACK_SICK_CORRECT` | 20 | `<BBBBffff` | 取矛头 SICK 校正标准值/实时值 |
 | `0xA0` | `PC_FEEDBACK_STATUS` | 10 | `<BIfB` | 通信/系统状态 |
 
 ### 5.0 一次性控制反馈 `0x02/0x03`
@@ -435,6 +461,23 @@ else:
 | 4 | u8[12] | `ore_type` | `0=UNKNOWN`，`1=R1`，`2=R2`，`3=FAKE` |
 | 16 | u32 | `age_ms` | 距最近矿种包时间 |
 | 20 | u32 | `rx_count` | 成功接收矿种包次数 |
+
+### 5.8a 取矛头 SICK 校正反馈 `0x9B`
+
+payload 为 20 字节，Python unpack 格式为 `<BBBBffff`。当前用于取矛头位置 1~6 的 SICK 校正实时观测；非取矛头 SICK 校正时 `action=0`，`position_index=0xFF`，`valid_mask=0`。
+
+| 偏移 | 类型 | 字段 | 单位/说明 |
+|---:|---|---|---|
+| 0 | u8 | `action` | 当前取矛头 SICK 校正动作，`16~21` 对应位置 1~6；无效时为 0 |
+| 1 | u8 | `position_index` | 取矛头位置索引，`0~5`；无效时为 `0xFF` |
+| 2 | u8 | `valid_mask` | bit0 表示 X 字段有效，bit1 表示 Y 字段有效 |
+| 3 | u8 | `reserved` | 固定 0 |
+| 4 | f32 | `x_target_adc` | X 方向 SICK 标准 ADC 值 |
+| 8 | f32 | `x_sample_adc` | X 方向 SICK 实时 ADC 值 |
+| 12 | f32 | `y_target_adc` | Y 方向 SICK 标准 ADC 值 |
+| 16 | f32 | `y_sample_adc` | Y 方向 SICK 实时 ADC 值 |
+
+当前取矛头 SICK 校正默认仅启用 Y 方向，因此常见 `valid_mask=0x02`，`y_target_adc/y_sample_adc` 为主要观察量；若重新启用 X 方向，bit0 与 X 字段会随之有效。
 
 ### 5.9 相机云台反馈 `0x98`
 

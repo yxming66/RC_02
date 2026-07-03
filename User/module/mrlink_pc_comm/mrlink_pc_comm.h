@@ -66,6 +66,7 @@ typedef enum {
     PC_FEEDBACK_CAMERA_YAW = 0x98,   /* 相机云台 yaw 状态反馈 */
     PC_FEEDBACK_IR_ORE_BRIDGE = 0x99,/* 红外对接桥接调试反馈，含 msg_id/side/原始 18 字节帧 */
     PC_FEEDBACK_IR_DOCK = 0x9A,      /* R1/R2 红外对接新协议状态反馈 */
+    PC_FEEDBACK_SICK_CORRECT = 0x9B, /* 取矛头 SICK 校正标准值/实时值反馈 */
 } PC_FeedbackCMD_t;
  
 #define MRLINK_PC_MAX_PAYLOAD_SIZE (64u)    /* 单帧 payload 最大字节数，上位机结构体不能超过该值 */
@@ -337,6 +338,17 @@ typedef struct {
     uint16_t failure_mask;          /* 失败部位 bitmask，见 PC_AUTO_ACTION_FAILURE_* */
 } PC_AutoActionFeedback_t;
 
+typedef struct {
+    uint8_t action;                  /* 当前 SICK 校正一键动作，见 PC_AutoAction_t；非取矛头校正时为 0 */
+    uint8_t position_index;          /* 取矛头位置索引，0~5；无效时为 0xFF */
+    uint8_t valid_mask;              /* bit0=x 字段有效，bit1=y 字段有效 */
+    uint8_t reserved;                /* 保留字段，发送端固定为 0 */
+    float x_target_adc;              /* X 方向 SICK 标准 ADC 值 */
+    float x_sample_adc;              /* X 方向 SICK 实时 ADC 值 */
+    float y_target_adc;              /* Y 方向 SICK 标准 ADC 值 */
+    float y_sample_adc;              /* Y 方向 SICK 实时 ADC 值 */
+} PC_SickCorrectFeedback_t;
+
 typedef enum {
     PC_ORE_TYPE_UNKNOWN = 0,    /* 矿种未知或未收到 */
     PC_ORE_TYPE_R1 = 1,         /* R1 矿 */
@@ -461,6 +473,7 @@ typedef struct {
     PC_OreStoreFeedback_t ore_store;          /* 矿仓反馈缓存 */
     PC_CameraYawFeedback_t camera_yaw;     /* 相机云台 yaw 反馈缓存 */
     PC_StepFeedback_t step;                /* 自动台阶反馈缓存 */
+    PC_SickCorrectFeedback_t sick_correct; /* 取矛头 SICK 校正反馈缓存 */
     PC_StatusFeedback_t status;            /* 通信/系统状态反馈缓存 */
     PC_IrDockFeedback_t ir_dock;           /* R1/R2 红外对接反馈缓存 */
     PC_IrOreBridgeFeedback_t ir_ore_bridge;  /* 红外对接桥接反馈缓存 */

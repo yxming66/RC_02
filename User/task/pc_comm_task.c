@@ -45,6 +45,7 @@ static const uint8_t s_feedback_cmds[] = {
     PC_FEEDBACK_ORE_STORE,
     PC_FEEDBACK_CAMERA_YAW,
     PC_FEEDBACK_STEP,
+    PC_FEEDBACK_SICK_CORRECT,
     PC_FEEDBACK_IR_DOCK,
     PC_FEEDBACK_STATUS,
     /* PC_FEEDBACK_IR_ORE 不在自动循环里：由 PcComm_TryUpdateIrOreFeedback
