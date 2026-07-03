@@ -49,6 +49,13 @@ static bool AutoCtrlTemplate_IsYawAligned(const auto_ctrl_t *ctrl) {
   return fabsf(ctrl->yaw_error_rad) <= ctrl->yaw_tolerance_rad;
 }
 
+static void AutoCtrlTemplate_CommandChassisZeroVector(auto_ctrl_t *ctrl) {
+  ctrl->chassis_cmd.mode = CHASSIS_MODE_INDEPENDENT;
+  ctrl->chassis_cmd.ctrl_vec.vx = 0.0f;
+  ctrl->chassis_cmd.ctrl_vec.vy = 0.0f;
+  ctrl->chassis_cmd.ctrl_vec.wz = 0.0f;
+}
+
 static float AutoCtrlTemplate_GetTimedMoveYawTolerance(
     const auto_ctrl_t *ctrl, const AutoCtrl_TemplateParam_t *param) {
   if (param != 0 && isfinite(param->timed_move_yaw_tolerance_rad) &&
@@ -537,11 +544,16 @@ static bool AutoCtrlTemplate_PhotoStopSettled(auto_ctrl_t *ctrl,
 }
 
 static bool AutoCtrlTemplate_CommandPhotoStopAndPole(
-  auto_ctrl_t *ctrl, uint32_t now_ms, uint32_t settle_ms, float settle_vx,
+  auto_ctrl_t *ctrl, uint32_t now_ms, uint32_t settle_ms, bool lock_chassis_zero,
+  float settle_vx,
   float hold_front_target, float hold_rear_target, float hold_front_speed,
   float hold_rear_speed, float front_target, float rear_target,
   float front_speed, float rear_speed) {
-  AutoCtrlPrimitive_CommandFlatMoveWithYawRate(ctrl, settle_vx);
+  if (lock_chassis_zero) {
+    AutoCtrlTemplate_CommandChassisZeroVector(ctrl);
+  } else {
+    AutoCtrlPrimitive_CommandFlatMoveWithYawRate(ctrl, settle_vx);
+  }
   if (!AutoCtrlTemplate_PhotoStopSettled(ctrl, now_ms, settle_ms)) {
     AutoCtrlTemplate_CommandPole(ctrl, hold_front_target, hold_rear_target,
                                  hold_front_speed, hold_rear_speed);
@@ -598,7 +610,11 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
 
     case 2: /* 停车并收前杆，等待前杆到位。 */
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      AutoCtrlPrimitive_CommandFlatMove(ctrl, use_400mm ? 0.0f : 0.4f);
+      if (use_400mm) {
+        AutoCtrlTemplate_CommandChassisZeroVector(ctrl);
+      } else {
+        AutoCtrlPrimitive_CommandFlatMove(ctrl, 0.4f);
+      }
       AutoCtrlTemplate_CommandPole(ctrl, pole.front_retract[0],
                                    pole.front_retract[1],
                                    param->pole_front_retract_speed,
@@ -616,7 +632,7 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
 
     case 3: /* 前杆收回后的中段定时移动。 */
       if (use_400mm && AutoCtrlTemplate_LatchRearPhotoStable(ctrl, now_ms)) {
-        AutoCtrlPrimitive_CommandFlatMove(ctrl, 0.0f);
+        AutoCtrlTemplate_CommandChassisZeroVector(ctrl);
         AutoCtrlTemplate_CommandPole(ctrl, pole.all_retract[0],
                                      pole.all_retract[1],
                                      param->pole_front_retract_speed,
@@ -661,7 +677,11 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
 
     case 5: /* 停车并四杆全收，等待四杆到位。 */
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      AutoCtrlPrimitive_CommandFlatMove(ctrl, use_400mm ? 0.0f : 0.4f);
+      if (use_400mm) {
+        AutoCtrlTemplate_CommandChassisZeroVector(ctrl);
+      } else {
+        AutoCtrlPrimitive_CommandFlatMove(ctrl, 0.4f);
+      }
       AutoCtrlTemplate_CommandPole(ctrl, pole.all_retract[0],
                                    pole.all_retract[1],
                                    param->pole_front_retract_speed,
@@ -737,7 +757,7 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
       if (AutoCtrlTemplate_DescendFirstPhotoFallingStable(ctrl, use_400mm,
                           now_ms)) {
         if (AutoCtrlTemplate_CommandPhotoStopAndPole(
-                ctrl, now_ms, param->photo_stop_settle_ms,
+            ctrl, now_ms, param->photo_stop_settle_ms, use_400mm,
             use_400mm ? 0.0f : param->rear_retract_move_speed,
                 pole.all_retract[0], pole.all_retract[1],
                 param->pole_front_retract_speed,
@@ -764,8 +784,11 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
 
     case 2: /* 低速前进并等待前杆支撑到位。 */
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      AutoCtrlPrimitive_CommandFlatMoveWithYawRate(ctrl,
-                                                   use_400mm ? 0.0f : 0.2f);
+      if (use_400mm) {
+        AutoCtrlTemplate_CommandChassisZeroVector(ctrl);
+      } else {
+        AutoCtrlPrimitive_CommandFlatMoveWithYawRate(ctrl, 0.2f);
+      }
       AutoCtrlTemplate_CommandPole(ctrl, pole.all_extend[0],
                                    pole.all_retract[1],
                                    param->pole_front_extend_speed,
@@ -807,7 +830,7 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
       if (AutoCtrlTemplate_DescendSecondPhotoFallingStable(ctrl, use_400mm,
                            now_ms)) {
         if (AutoCtrlTemplate_CommandPhotoStopAndPole(
-                ctrl, now_ms, param->photo_stop_settle_ms,
+            ctrl, now_ms, param->photo_stop_settle_ms, use_400mm,
             use_400mm ? 0.0f : param->front_retract_move_speed,
                 pole.all_extend[0], pole.all_retract[1],
                 param->pole_front_extend_speed,
@@ -834,8 +857,11 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
 
     case 5: /* 低速前进并等待四杆支撑到位。 */
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      AutoCtrlPrimitive_CommandFlatMoveWithYawRate(ctrl,
-                                                   use_400mm ? 0.0f : 0.2f);
+      if (use_400mm) {
+        AutoCtrlTemplate_CommandChassisZeroVector(ctrl);
+      } else {
+        AutoCtrlPrimitive_CommandFlatMoveWithYawRate(ctrl, 0.2f);
+      }
       AutoCtrlTemplate_CommandPole(ctrl, pole.all_extend[0],
                                    pole.all_extend[1],
                                    param->pole_front_extend_speed,

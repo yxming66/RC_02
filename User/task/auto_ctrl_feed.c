@@ -532,8 +532,6 @@ static bool AutoCtrlFeed_IsFusedOreAction(AutoOre_Action_t action) {
 static bool AutoCtrlFeed_ShouldForcePcSuccess(PC_AutoAction_t action) {
   switch (action) {
     case PC_AUTO_ACTION_STORE:
-    case PC_AUTO_ACTION_RELEASE:
-    case PC_AUTO_ACTION_RELEASE_LIFT_DETECT:
     case PC_AUTO_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD:
     case PC_AUTO_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD:
     case PC_AUTO_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD:
