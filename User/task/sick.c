@@ -1,9 +1,24 @@
 #include "task/user_task.h"
 
+#ifndef SICK_DEBUG_UPDATE_PERIOD_MS
+#define SICK_DEBUG_UPDATE_PERIOD_MS (50u)
+#endif
+
 volatile Sick_Debug_t g_sick_debug = {0};
 
 static bool sick_init_attempted = false;
 static bool sick_inited = false;
+static uint32_t sick_debug_last_update_ms = 0u;
+
+static bool Task_SickDebugPeriodicDue(uint32_t now_ms) {
+  if (sick_debug_last_update_ms == 0u ||
+      (uint32_t)(now_ms - sick_debug_last_update_ms) >=
+          SICK_DEBUG_UPDATE_PERIOD_MS) {
+    sick_debug_last_update_ms = now_ms;
+    return true;
+  }
+  return false;
+}
 
 static void Task_SickUpdateDebug(void) {
   Sick_Output_t output = {0};
@@ -51,8 +66,11 @@ void Task_SickStep(void) {
   const uint32_t profile_start_us =
       Task_ProfilerLoopBegin(TASK_PROFILE_SICK, TASK_PERIOD_US(SICK_FREQ));
 
-  SICK_Update(BSP_TIME_Get_ms());
-  Task_SickUpdateDebug();
+  const uint32_t now_ms = BSP_TIME_Get_ms();
+  SICK_Update(now_ms);
+  if (Task_SickDebugPeriodicDue(now_ms)) {
+    Task_SickUpdateDebug();
+  }
   task_runtime.heartbeat.sick++;
   Task_ProfilerLoopEnd(TASK_PROFILE_SICK, profile_start_us);
 }

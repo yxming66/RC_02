@@ -37,6 +37,10 @@
 #define MOTOR_RM_TX_GROUP_GM6020_HIGH      (2u)
 #define MOTOR_RM_TX_GROUP_MASK(group)      ((uint8_t)(1u << (group)))
 
+#ifndef MOTOR_RM_TX_DEBUG_ENABLE
+#define MOTOR_RM_TX_DEBUG_ENABLE           (0)
+#endif
+
 #define MOTOR_ENC_RES            (8192)   /* 电机编码器分辨率 */
 #define MOTOR_CUR_RES            (16384)  /* 电机转矩电流分辨率 */
 #define MOTOR_RM_SUSPICIOUS_DELTA_COUNT ((MOTOR_ENC_RES * 9) / 20)
@@ -155,6 +159,7 @@ static void MOTOR_RM_UpdateTxDebug(const MOTOR_RM_CANManager_t *manager,
                                    const BSP_CAN_StdDataFrame_t *tx_frame,
                                    uint16_t source_motor_id,
                                    int8_t logical_index) {
+#if MOTOR_RM_TX_DEBUG_ENABLE
     if (manager == NULL || tx_frame == NULL) return;
     motor_rm_tx_debug.valid = 1;
     motor_rm_tx_debug.can = manager->can;
@@ -182,6 +187,12 @@ static void MOTOR_RM_UpdateTxDebug(const MOTOR_RM_CANManager_t *manager,
                tx_frame->data,
                sizeof(g_motor_rm_slot_tx_debug[i].tx_data));
     }
+#else
+    (void)manager;
+    (void)tx_frame;
+    (void)source_motor_id;
+    (void)logical_index;
+#endif
 }
 
 static int8_t MOTOR_RM_SendGroup(MOTOR_RM_CANManager_t *manager,
@@ -191,7 +202,9 @@ static int8_t MOTOR_RM_SendGroup(MOTOR_RM_CANManager_t *manager,
     if (manager == NULL) return DEVICE_ERR_NULL;
     if (!MOTOR_RM_GroupHasOnlineMotor(manager, group)) {
         manager->pending_tx_groups &= (uint8_t)~MOTOR_RM_TX_GROUP_MASK(group);
+#if MOTOR_RM_TX_DEBUG_ENABLE
         motor_rm_tx_debug.pending_tx_groups = manager->pending_tx_groups;
+#endif
         return DEVICE_ERR_NO_DEV;
     }
     BSP_CAN_StdDataFrame_t tx_frame;
@@ -202,8 +215,10 @@ static int8_t MOTOR_RM_SendGroup(MOTOR_RM_CANManager_t *manager,
     const int8_t ret = BSP_CAN_TransmitStdDataFrame(manager->can, &tx_frame) == BSP_OK ? DEVICE_OK : DEVICE_ERR;
     if (ret == DEVICE_OK) {
         manager->pending_tx_groups &= (uint8_t)~MOTOR_RM_TX_GROUP_MASK(group);
+#if MOTOR_RM_TX_DEBUG_ENABLE
         motor_rm_tx_debug.pending_tx_groups = manager->pending_tx_groups;
         motor_rm_tx_debug.flush_count++;
+#endif
     }
     return ret;
 }
