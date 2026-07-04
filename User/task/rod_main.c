@@ -23,6 +23,7 @@ volatile RodNew_DebugControl_t g_rod_new_debug = {
   BSP_PWM_ROD_SERVO,
   0.0f,
   ROD_NEW_SERVO_PULSE_NEUTRAL_US,
+  ROD_NEW_SERVO_PULSE_NEUTRAL_US,
   ROD_NEW_GRIP_RELEASE,
 };
 

@@ -773,6 +773,9 @@ static bool AutoCtrlFeed_StartOreAction(AutoOre_Action_t action) {
     case AUTO_ORE_ACTION_PICK_NEG_200:
       result = AutoOre_StartPickNeg200(&auto_ore_ctrl, now_ms);
       break;
+    case AUTO_ORE_ACTION_RECOVER_STORE:
+      result = AutoOre_StartRecoverStore(&auto_ore_ctrl, now_ms);
+      break;
     case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD:
       result = AutoOre_StartStepPickStoreAscend200Head(&auto_ore_ctrl,
                                                        now_ms);

@@ -22,8 +22,8 @@ extern "C" {
 #define ROD_NEW_ERR_NULL (-2)
 
 /* 舵机PWM参数 ----------------------------------------------------------- */
-#define ROD_NEW_SERVO_PULSE_MIN_US 766U    /* 水平位脉宽 */
-#define ROD_NEW_SERVO_PULSE_MAX_US 1544U   /* 等待位脉宽 */
+#define ROD_NEW_SERVO_PULSE_MIN_US 733U    /* 水平位脉宽 */
+#define ROD_NEW_SERVO_PULSE_MAX_US 1512U   /* 等待位脉宽 */
 #define ROD_NEW_SERVO_PULSE_NEUTRAL_US ROD_NEW_SERVO_PULSE_MIN_US
 #define ROD_NEW_SERVO_DEADBAND_US 1U        /* 死区 */
 #define ROD_NEW_SERVO_DEFAULT_FREQ_HZ 50U   /* 默认频率 50Hz */
@@ -100,6 +100,7 @@ typedef struct {
   volatile BSP_PWM_Channel_t pwm_channel;
   volatile float target_angle_rad;
   volatile uint32_t pulse_us;
+  volatile uint32_t output_pulse_us;
   volatile RodNew_GripState_t grip;
 } RodNew_DebugControl_t;
 

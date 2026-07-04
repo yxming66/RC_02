@@ -80,6 +80,8 @@ int8_t RodNew_Init(RodNew_t *r, const RodNew_Params_t *param,
   BSP_PWM_SetPulseUs(param->servo.pwm_channel,
                      (uint32_t)RodNew_AngleToPulseUs(r->servo.tracked_angle_rad,
                                                       &param->servo));
+  g_rod_new_debug.output_pulse_us =
+      (uint32_t)RodNew_AngleToPulseUs(r->servo.tracked_angle_rad, &param->servo);
   SharedValve_SetRodRequest(false);
 
   return ROD_NEW_OK;
@@ -185,6 +187,7 @@ void RodNew_Output(RodNew_t *r) {
     r->servo.target_angle_rad = r->servo.tracked_angle_rad;
     r->servo.tracked_vel_rad_s = 0.0f;
     r->servo.at_target = true;
+    g_rod_new_debug.output_pulse_us = pulse_us;
     BSP_PWM_SetPulseUs(pwm_channel, pulse_us);
     SharedValve_SetRodRequest(g_rod_new_debug.grip == ROD_NEW_GRIP_GRAB);
     return;
@@ -227,6 +230,7 @@ void RodNew_Output(RodNew_t *r) {
 
   const uint32_t pulse_us =
       (uint32_t)RodNew_AngleToPulseUs(r->servo.tracked_angle_rad, &r->param->servo);
+  g_rod_new_debug.output_pulse_us = pulse_us;
   BSP_PWM_SetPulseUs(r->param->servo.pwm_channel, pulse_us);
 
   /* 夹爪IO输出 */

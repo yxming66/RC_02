@@ -2788,6 +2788,9 @@ static void AutoOre_RunRecoverStore(AutoOre_t *ctrl, uint32_t now_ms) {
         AutoOre_FailStoreInvalidOccupancy(ctrl);
         return;
       }
+      ctrl->prealign_target_yaw_rad = ctrl->feedback.yaw_auto_rad;
+      ctrl->prealign_yaw_target_valid = true;
+      AutoOre_UpdatePrealignYawError(ctrl);
       AutoOre_NextStep(ctrl);
       return;
     case 1:
