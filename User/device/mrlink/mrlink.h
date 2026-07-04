@@ -86,9 +86,9 @@ extern "C" {
 #define MRLINK_MAX_PAYLOAD_DEFAULT (64u)
 
 /** Handler dispatch table size / handler 表大小.
- *  32 槽足够覆盖典型 5~15 种命令；超过返回 MRLINK_ERR。
+ *  64 槽
  *  若需更大表，修改此宏并重新编译。 */
-#define MRLINK_MAX_HANDLERS (32u)
+#define MRLINK_MAX_HANDLERS (64u)
 
 /** 单帧最大长度 (header 2 + len 1 + cmd 1 + max_payload + crc 2)
  *  默认 max_payload=64, use_crc16=true 时 = 70. 当前 parser 与内部 frame_buf
@@ -99,7 +99,7 @@ extern "C" {
    MRLINK_CMD_FIELD_LEN + MRLINK_MAX_PAYLOAD_DEFAULT + \
    MRLINK_CRC_LEN)
 
-#define MRLINK_INSTANCE_STORAGE_SIZE (768u)
+#define MRLINK_INSTANCE_STORAGE_SIZE (1024u)
 
 /* Exported types ----------------------------------------------------------- */
 

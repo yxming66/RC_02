@@ -414,6 +414,10 @@ Config_RobotParam_t robot_config = {
             .fetch_chassis_move_ms = 1000u,
             /* 取 -200 矿：底盘向矿位前进的独立持续时间；可设为 0 禁止底盘前进，避免走太多掉下去。 */
             .fetch_neg_200_chassis_move_ms = 1000u,
+            /* 回收地面矿：0mm 取矿位吸附后，前进、静止吸附、后退避障的时间参数。 */
+            .recover_chassis_forward_ms = 1000u,
+            .recover_suction_settle_ms = 200u,
+            .recover_chassis_retreat_ms = 500u,
             /* 融合取矿/存矿/上台阶动作延时；0 使用代码默认值。 */
             .fused_prealign_stable_ms = 120u,          /* 融合动作 yaw 对正后稳定等待时间，单位 ms。 */
             .fused_pick_precontact_timeout_ms = 2000u, /* 融合取矿低速靠近超时，单位 ms。 */
@@ -436,6 +440,9 @@ Config_RobotParam_t robot_config = {
         .fetch_chassis_vx_mps = 0.20f,
         /* 取 -200 矿时底盘前进速度，单位 m/s；可设为 0 禁止底盘前进。 */
         .fetch_neg_200_chassis_vx_mps = 0.20f,
+        /* 回收地面矿时底盘低速前进/后退速度，单位 m/s。 */
+        .recover_chassis_forward_vx_mps = 0.20f,
+        .recover_chassis_retreat_vx_mps = 0.20f,
         /* 低位存矿完成后，transform 从高位 LIFT 回低位 STANDBY 的梯形速度规划；<=0 使用默认值。 */
         .store_low_return_velocity_rad_s = 30.0f,
         .store_low_return_accel_rad_s2 = 60.0f,

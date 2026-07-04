@@ -12,9 +12,9 @@
   *   - 链接 src/mrlink.c (本文件不重写协议层, 仅做 typed 包装)
   *
   * 内存 / Memory (per Instance):
-  *   - MrLink_t 内部: ~384 字节 (32 槽 raw handler)
+   *   - MrLink_t 内部: ~1 KB opaque storage (64 槽 raw/typed handler)
   *   - 本 wrapper: 16 槽 typed slot × ~40 字节 (std::function) ≈ 640 字节
-  *   - 合计 ~1 KB / 实例
+   *   - 合计约 2 KB / 实例
   *
   * 限制 / Limits:
   *   - 当前 C core parser 与内部 frame buffer 以编译期 MRLINK_MAX_FRAME_SIZE

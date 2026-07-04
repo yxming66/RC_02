@@ -26,6 +26,8 @@
 #define AUTO_ORE_DEFAULT_CHAMBER_ARM_SETTLE_MS (100u)
 #define AUTO_ORE_DEFAULT_CHAMBER_CYLINDER_OPEN_MS (50u)
 #define AUTO_ORE_DEFAULT_FETCH_CHASSIS_MOVE_MS (300u)
+#define AUTO_ORE_DEFAULT_RECOVER_SUCTION_SETTLE_MS (200u)
+#define AUTO_ORE_DEFAULT_RECOVER_CHASSIS_RETREAT_MS (500u)
 #define AUTO_ORE_DEFAULT_STEP_TIMEOUT_MS (5000u)
 #define AUTO_ORE_DEFAULT_FETCH_CHASSIS_VX_MPS (0.20f)
 #define AUTO_ORE_DEFAULT_FUSED_PREALIGN_STABLE_MS (100u)
@@ -412,6 +414,35 @@ static float AutoOre_FetchChassisVxMps(const AutoOre_t *ctrl) {
   return (ctrl->param.fetch_chassis_vx_mps > 0.0f)
              ? ctrl->param.fetch_chassis_vx_mps
              : AUTO_ORE_DEFAULT_FETCH_CHASSIS_VX_MPS;
+}
+
+static uint32_t AutoOre_RecoverForwardMs(const AutoOre_t *ctrl) {
+  return AutoOre_TimingValue(ctrl->param.timing.recover_chassis_forward_ms,
+                             AutoOre_TimingValue(
+                                 ctrl->param.timing.fetch_chassis_move_ms,
+                                 AUTO_ORE_DEFAULT_FETCH_CHASSIS_MOVE_MS));
+}
+
+static uint32_t AutoOre_RecoverSuctionSettleMs(const AutoOre_t *ctrl) {
+  return AutoOre_TimingValue(ctrl->param.timing.recover_suction_settle_ms,
+                             AUTO_ORE_DEFAULT_RECOVER_SUCTION_SETTLE_MS);
+}
+
+static uint32_t AutoOre_RecoverRetreatMs(const AutoOre_t *ctrl) {
+  return AutoOre_TimingValue(ctrl->param.timing.recover_chassis_retreat_ms,
+                             AUTO_ORE_DEFAULT_RECOVER_CHASSIS_RETREAT_MS);
+}
+
+static float AutoOre_RecoverForwardVxMps(const AutoOre_t *ctrl) {
+  return (ctrl != 0 && ctrl->param.recover_chassis_forward_vx_mps > 0.0f)
+             ? ctrl->param.recover_chassis_forward_vx_mps
+             : AutoOre_FetchChassisVxMps(ctrl);
+}
+
+static float AutoOre_RecoverRetreatVxMps(const AutoOre_t *ctrl) {
+  return (ctrl != 0 && ctrl->param.recover_chassis_retreat_vx_mps > 0.0f)
+             ? ctrl->param.recover_chassis_retreat_vx_mps
+             : AutoOre_RecoverForwardVxMps(ctrl);
 }
 
 static bool AutoOre_CheckTimeout(AutoOre_t *ctrl, uint32_t now_ms) {
@@ -1575,6 +1606,10 @@ static bool AutoOre_ActionIsPick(AutoOre_Action_t action) {
          action == AUTO_ORE_ACTION_PICK_NEG_200;
 }
 
+static bool AutoOre_ActionIsRecoverStore(AutoOre_Action_t action) {
+  return action == AUTO_ORE_ACTION_RECOVER_STORE;
+}
+
 static bool AutoOre_ActionIsFused(AutoOre_Action_t action) {
   return action == AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD ||
          action == AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD ||
@@ -1634,6 +1669,10 @@ static ArmSimple_BehaviorPoint_t AutoOre_PickArmPoint(
     default:
       return ARM_SIMPLE_BEHAVIOR_STANDBY;
   }
+}
+
+static ArmSimple_BehaviorPoint_t AutoOre_RecoverArmPoint(void) {
+  return ARM_SIMPLE_BEHAVIOR_PICK_POS_200;
 }
 
 static const float *AutoOre_FusedStepStartPoleTarget(const AutoOre_t *ctrl) {
@@ -2732,6 +2771,121 @@ static void AutoOre_RunPickOre(AutoOre_t *ctrl, uint32_t now_ms) {
   }
 }
 
+static void AutoOre_RunRecoverStore(AutoOre_t *ctrl, uint32_t now_ms) {
+  switch (ctrl->step_index) {
+    case 0:
+      AutoOre_EnterStep(ctrl, now_ms);
+      if (ctrl->occupancy.arm_has_ore) {
+        AutoOre_AddFailureMask(ctrl, AUTO_ORE_FAILURE_SETUP);
+        ctrl->state = AUTO_ORE_STATE_FAIL;
+        ctrl->result = AUTO_ORE_RESULT_FAIL;
+        ctrl->fault = AUTO_ORE_FAULT_INVALID_OCCUPANCY;
+        return;
+      }
+      ctrl->fused_store_position = AutoOre_FusedSelectStorePosition(ctrl);
+      if (ctrl->fused_store_position != AUTO_ORE_POSITION_TRANSFORM_LOW &&
+          ctrl->fused_store_position != AUTO_ORE_POSITION_TRANSFORM_HIGH) {
+        AutoOre_FailStoreInvalidOccupancy(ctrl);
+        return;
+      }
+      AutoOre_NextStep(ctrl);
+      return;
+    case 1:
+      AutoOre_EnterStep(ctrl, now_ms);
+      if (!AutoOre_CommandArm(ctrl, AutoOre_RecoverArmPoint(), SUCTION_ON,
+                              &ctrl->param.arm_speed.pick_place)) {
+        AutoOre_FailPickInvalidParam(ctrl);
+        return;
+      }
+      if (AutoOre_WaitArmCommandTarget(ctrl, now_ms)) {
+        AutoOre_NextStep(ctrl);
+      } else {
+        (void)AutoOre_CheckTimeoutWithFailure(
+            ctrl, now_ms, AUTO_ORE_FAILURE_PICK_ORE);
+      }
+      return;
+    case 2:
+      AutoOre_EnterStep(ctrl, now_ms);
+      if (!AutoOre_CommandArm(ctrl, AutoOre_RecoverArmPoint(), SUCTION_ON,
+                              &ctrl->param.arm_speed.pick_fetch)) {
+        AutoOre_FailPickInvalidParam(ctrl);
+        return;
+      }
+      AutoOre_CommandChassisMove(ctrl, AutoOre_RecoverForwardVxMps(ctrl));
+      if (AutoOre_StepElapsed(ctrl, now_ms) >= AutoOre_RecoverForwardMs(ctrl)) {
+        AutoOre_NextStep(ctrl);
+      }
+      return;
+    case 3:
+      AutoOre_EnterStep(ctrl, now_ms);
+      AutoOre_CommandChassisHold(ctrl);
+      if (!AutoOre_CommandArm(ctrl, AutoOre_RecoverArmPoint(), SUCTION_ON,
+                              &ctrl->param.arm_speed.pick_fetch)) {
+        AutoOre_FailPickInvalidParam(ctrl);
+        return;
+      }
+      if (AutoOre_StepElapsed(ctrl, now_ms) >=
+          AutoOre_RecoverSuctionSettleMs(ctrl)) {
+        AutoOre_NextStep(ctrl);
+      }
+      return;
+    case 4:
+      AutoOre_EnterStep(ctrl, now_ms);
+      if (!AutoOre_CommandArm(ctrl, AutoOre_RecoverArmPoint(), SUCTION_ON,
+                              &ctrl->param.arm_speed.pick_fetch)) {
+        AutoOre_FailPickInvalidParam(ctrl);
+        return;
+      }
+      AutoOre_CommandChassisMove(ctrl, -AutoOre_RecoverRetreatVxMps(ctrl));
+      if (AutoOre_StepElapsed(ctrl, now_ms) >= AutoOre_RecoverRetreatMs(ctrl)) {
+        AutoOre_NextStep(ctrl);
+      }
+      return;
+    case 5:
+      AutoOre_EnterStep(ctrl, now_ms);
+      AutoOre_CommandChassisHold(ctrl);
+      if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_PICK_LIFT_DETECT,
+                              SUCTION_ON,
+                              &ctrl->param.arm_speed.pick_lift_detect)) {
+        AutoOre_FailPickInvalidParam(ctrl);
+        return;
+      }
+      if (AutoOre_WaitConditionThenDelay(
+              ctrl, now_ms, ctrl->feedback.arm_at_target,
+              AutoOre_FusedPickLiftDetectMs(ctrl)) &&
+          AutoOre_ArmPhotoConfirmed(ctrl, now_ms, false)) {
+        AutoOre_SetArmHasOre(ctrl, true);
+        AutoOre_NextStep(ctrl);
+      } else {
+        (void)AutoOre_CheckTimeoutWithFailure(
+            ctrl, now_ms, AUTO_ORE_FAILURE_PICK_ORE);
+      }
+      return;
+    case 6:
+      AutoOre_EnterStep(ctrl, now_ms);
+      AutoOre_CommandChassisHold(ctrl);
+      if (!ctrl->fused_store_done) {
+        AutoOre_RunFusedStore(ctrl, now_ms);
+      }
+      if (ctrl->state != AUTO_ORE_STATE_RUNNING) {
+        return;
+      }
+      if (ctrl->fused_store_done) {
+        AutoOre_NextStep(ctrl);
+      } else {
+        (void)AutoOre_CheckTimeoutWithFailure(
+            ctrl, now_ms, AUTO_ORE_FAILURE_STORE_ORE);
+      }
+      return;
+    case 7:
+      AutoOre_FinishSuccess(ctrl);
+      return;
+    default:
+      AutoOre_FinishSuccess(ctrl);
+      return;
+  }
+}
+
 void AutoOre_Init(AutoOre_t *ctrl, const AutoOre_Params_t *param,
                   const AutoOre_Occupancy_t *initial_occupancy) {
   if (ctrl == 0) {
@@ -2835,6 +2989,10 @@ static bool AutoOre_Start(AutoOre_t *ctrl, AutoOre_Action_t action,
     if (!ctrl->occupancy.arm_has_ore) {
       position = AUTO_ORE_POSITION_ARM;
     }
+  } else if (AutoOre_ActionIsRecoverStore(action)) {
+    if (!ctrl->occupancy.arm_has_ore) {
+      position = AUTO_ORE_POSITION_ARM;
+    }
   } else if (AutoOre_ActionIsDropStoreFused(action)) {
     if (!ctrl->occupancy.transform_high_has_ore) {
       AutoOre_FailInvalidOccupancy(ctrl);
@@ -2888,6 +3046,10 @@ bool AutoOre_StartPickPos200(AutoOre_t *ctrl, uint32_t now_ms) {
 
 bool AutoOre_StartPickNeg200(AutoOre_t *ctrl, uint32_t now_ms) {
   return AutoOre_Start(ctrl, AUTO_ORE_ACTION_PICK_NEG_200, now_ms);
+}
+
+bool AutoOre_StartRecoverStore(AutoOre_t *ctrl, uint32_t now_ms) {
+  return AutoOre_Start(ctrl, AUTO_ORE_ACTION_RECOVER_STORE, now_ms);
 }
 
 bool AutoOre_StartStepPickStoreAscend200Head(AutoOre_t *ctrl,
@@ -2952,7 +3114,8 @@ void AutoOre_Update(AutoOre_t *ctrl, const AutoOre_Feedback_t *feedback,
   }
   if ((!AutoOre_ActionIsPick(ctrl->action) ||
       AutoOre_ActionIsFused(ctrl->action) ||
-      AutoOre_ActionIsPickStoreFused(ctrl->action)) &&
+      AutoOre_ActionIsPickStoreFused(ctrl->action) ||
+      AutoOre_ActionIsRecoverStore(ctrl->action)) &&
       !ctrl->feedback.ore_store_all_homed) {
     ctrl->state = AUTO_ORE_STATE_FAIL;
     ctrl->result = AUTO_ORE_RESULT_FAIL;
@@ -3020,6 +3183,14 @@ void AutoOre_Update(AutoOre_t *ctrl, const AutoOre_Feedback_t *feedback,
   } else if (AutoOre_ActionIsPickStoreFused(ctrl->action)) {
     if (ctrl->active_position == AUTO_ORE_POSITION_ARM) {
       AutoOre_RunPickStoreFused(ctrl, now_ms);
+    } else {
+      ctrl->state = AUTO_ORE_STATE_FAIL;
+      ctrl->result = AUTO_ORE_RESULT_FAIL;
+      ctrl->fault = AUTO_ORE_FAULT_INVALID_OCCUPANCY;
+    }
+  } else if (AutoOre_ActionIsRecoverStore(ctrl->action)) {
+    if (ctrl->active_position == AUTO_ORE_POSITION_ARM) {
+      AutoOre_RunRecoverStore(ctrl, now_ms);
     } else {
       ctrl->state = AUTO_ORE_STATE_FAIL;
       ctrl->result = AUTO_ORE_RESULT_FAIL;

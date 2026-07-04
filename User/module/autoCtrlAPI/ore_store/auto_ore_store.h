@@ -22,6 +22,7 @@ typedef enum {
   AUTO_ORE_ACTION_PICK_POS_400,
   AUTO_ORE_ACTION_PICK_POS_200,
   AUTO_ORE_ACTION_PICK_NEG_200,
+  AUTO_ORE_ACTION_RECOVER_STORE,
   AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD,
   AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD,
   AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD,
@@ -133,6 +134,9 @@ typedef struct {
   uint32_t chamber_cylinder_open_ms;
   uint32_t fetch_chassis_move_ms;
   uint32_t fetch_neg_200_chassis_move_ms;
+  uint32_t recover_chassis_forward_ms;
+  uint32_t recover_suction_settle_ms;
+  uint32_t recover_chassis_retreat_ms;
   uint32_t fused_prealign_stable_ms;
   uint32_t fused_pick_precontact_timeout_ms;
   uint32_t fused_pick_lift_detect_ms;
@@ -194,6 +198,8 @@ typedef struct {
   bool release_lift_detect_sick_greater_than_threshold;
   float fetch_chassis_vx_mps;
   float fetch_neg_200_chassis_vx_mps;
+  float recover_chassis_forward_vx_mps;
+  float recover_chassis_retreat_vx_mps;
   float store_low_return_velocity_rad_s;
   float store_low_return_accel_rad_s2;
   float store_low_return_decel_rad_s2;
@@ -279,6 +285,7 @@ bool AutoOre_StartPickPos400(AutoOre_t *ctrl, uint32_t now_ms);
 bool AutoOre_StartPickPos200(AutoOre_t *ctrl, uint32_t now_ms);
 bool AutoOre_StartPickNeg200(AutoOre_t *ctrl, uint32_t now_ms);
 bool AutoOre_StartStepPickStoreAscend200Head(AutoOre_t *ctrl, uint32_t now_ms);
+bool AutoOre_StartRecoverStore(AutoOre_t *ctrl, uint32_t now_ms);
 bool AutoOre_StartStepPickStoreDescend200Head(AutoOre_t *ctrl, uint32_t now_ms);
 bool AutoOre_StartStepPickStoreAscend400Head(AutoOre_t *ctrl, uint32_t now_ms);
 bool AutoOre_StartStepDropStoreAscend200Head(AutoOre_t *ctrl, uint32_t now_ms);

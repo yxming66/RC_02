@@ -94,6 +94,8 @@ static AutoOre_DebugRequest_t PcComm_MapAutoAction(uint8_t action) {
             return AUTO_ORE_DEBUG_REQUEST_PICK_POS_200;
         case PC_AUTO_ACTION_PICK_NEG_200:
             return AUTO_ORE_DEBUG_REQUEST_PICK_NEG_200;
+        case PC_AUTO_ACTION_RECOVER_STORE:
+            return AUTO_ORE_DEBUG_REQUEST_RECOVER_STORE;
         case PC_AUTO_ACTION_ROD_SPEARHEAD:
             return AUTO_ORE_DEBUG_REQUEST_ROD_SPEARHEAD;
         case PC_AUTO_ACTION_ROD_SPEARHEAD_STEP1:

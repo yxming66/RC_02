@@ -227,7 +227,8 @@ typedef enum {
     PC_AUTO_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD = 29, /* 融合取矿存矿并头向上 400mm 台阶 */
     PC_AUTO_ACTION_STEP_DROP_STORE_ASCEND_200_HEAD = 30, /* 丢矿版融合取矿存矿并头向上 200mm 台阶 */
     PC_AUTO_ACTION_STEP_DROP_STORE_DESCEND_200_HEAD = 31, /* 丢矿版融合取矿存矿并头向下 200mm 台阶 */
-    PC_AUTO_ACTION_STEP_DROP_STORE_ASCEND_400_HEAD = 32, /* 丢矿版融合取矿存矿并头向上 400mm 台阶 */ 
+    PC_AUTO_ACTION_STEP_DROP_STORE_ASCEND_400_HEAD = 32, /* 丢矿版融合取矿存矿并头向上 400mm 台阶 */
+    PC_AUTO_ACTION_RECOVER_STORE = 33,    /* 回收地面矿并存矿 */
 } PC_AutoAction_t;
 
 typedef enum {
@@ -251,9 +252,10 @@ typedef struct {
 } PC_AutoActionCMD_t;
 
 typedef enum {
-    PC_R2_READY_STATE_NOT_READY = 0,  /* R2 未准备完毕，对应灯效 1 号模式 */
-    PC_R2_READY_STATE_READY = 1,      /* R2 已准备完毕，对应灯效 2 号模式 */
-    PC_R2_READY_STATE_RETRY = 2,      /* R2 需要重试，对应灯效 3 号模式 */
+    PC_R2_READY_STATE_NOT_READY = 0,  /* 上位机未准备完毕，对应灯效 0 号模式 */
+    PC_R2_READY_STATE_READY = 1,      /* 上位机已准备完毕，对应灯效 1 号模式 */
+    PC_R2_READY_STATE_RETRY = 2,      /* 上位机请求重试，对应灯效 2 号模式 */
+    PC_R2_READY_STATE_FAIL = 3,       /* 上位机/流程失败，对应灯效 3 号模式 */
 } PC_R2ReadyState_t;
 
 typedef struct {

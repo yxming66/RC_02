@@ -10,6 +10,7 @@
 #include "device/mrlink/mrlink_channel.h"
 #include "device/mrlink/mrlink.hpp"
 #include "main.h"
+#include "module/light_effect.h"
 #include "module/mrlink_pc_comm/pc_messages.hpp"
 
 namespace {
@@ -24,8 +25,6 @@ constexpr uint16_t kMrlinkRxBufSize = MRLINK_PC_RX_STREAM_BUF_SIZE;
 constexpr uint16_t kMrlinkTxBufSize = MRLINK_PC_MAX_FRAME_SIZE;
 constexpr uint32_t kAutoActionRepeatReleaseMs = 300u;
 constexpr uint32_t kModuleCommandTimeoutMs = 10000u;
-constexpr BSP_CAN_t kR2LightCanBus = BSP_CAN_2;
-constexpr uint32_t kR2LightCanId = 0x322u;
 
 #ifndef MRLINK_PC_DEBUG_FULL_UPDATE_PERIOD_MS
 #define MRLINK_PC_DEBUG_FULL_UPDATE_PERIOD_MS (50u)
@@ -341,29 +340,25 @@ void OnIrOreAck(const PC_IrOreAckCMD_t &cmd) {
 void OnR2ReadyState(const wire::R2ReadyStateCmd &cmd) {
   s_state.cmd.r2_ready_state.state = cmd.state;
 
-  uint8_t light_mode = 1u;
+  LightEffect_Mode_t light_mode = LIGHT_EFFECT_MODE_OFF;
   switch (static_cast<PC_R2ReadyState_t>(cmd.state)) {
     case PC_R2_READY_STATE_READY:
-      light_mode = 2u;
+      light_mode = LIGHT_EFFECT_MODE_PC_READY;
       break;
     case PC_R2_READY_STATE_RETRY:
-      light_mode = 3u;
+      light_mode = LIGHT_EFFECT_MODE_RETRY;
+      break;
+    case PC_R2_READY_STATE_FAIL:
+      light_mode = LIGHT_EFFECT_MODE_FAIL;
       break;
     case PC_R2_READY_STATE_NOT_READY:
     default:
-      light_mode = 1u;
+      light_mode = LIGHT_EFFECT_MODE_OFF;
       break;
   }
 
-  BSP_CAN_StdDataFrame_t frame = {};
-  frame.id = kR2LightCanId;
-  frame.dlc = 1u;
-  frame.data[0] = light_mode;
-  const int8_t can_init_ret = BSP_CAN_Init();
-  if (can_init_ret == BSP_OK || can_init_ret == BSP_ERR_INITED) {
-    (void)BSP_CAN_TransmitStdDataFrame(kR2LightCanBus, &frame);
-  }
-  g_pc_comm_debug.r2_ready_light_mode = light_mode;
+  (void)LightEffect_SendMode(light_mode);
+  g_pc_comm_debug.r2_ready_light_mode = (uint8_t)light_mode;
   MarkRxFrame(PC_CMD_R2_READY_STATE, sizeof(cmd), MRLINK_OK);
   TouchOnline(PC_CMD_R2_READY_STATE);
 }

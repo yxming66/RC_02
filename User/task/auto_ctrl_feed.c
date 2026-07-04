@@ -15,6 +15,7 @@
 #include "module/autoCtrlAPI/rod/auto_rod_spearhead.h"
 #include "module/chassis.h"
 #include "module/config.h"
+#include "module/light_effect.h"
 #include "module/mrlink_pc_comm/mrlink_pc_comm.h"
 
 #include <math.h>
@@ -49,6 +50,10 @@ auto_ctrl_feedback_t feedback = {0};
 static Sick_Output_t auto_ctrl_sick_output = {0};
 static PC_AutoAction_t auto_action_last_action = PC_AUTO_ACTION_NONE;
 static AutoOre_Action_t auto_ore_last_action = AUTO_ORE_ACTION_NONE;
+static AutoOre_Position_t auto_ore_release_light_position =
+  AUTO_ORE_POSITION_NONE;
+static uint8_t auto_ore_light_last_mode = 0xFFu;
+static uint8_t auto_ore_light_last_fail_action = PC_AUTO_ACTION_NONE;
 static PhotoTransfer_Snapshot_t photo_transfer_snapshot = {0};
 static bool photo_transfer_inited = false;
 
@@ -72,6 +77,30 @@ static uint32_t auto_ore_debug_last_update_ms = 0u;
 
 /* Private function --------------------------------------------------------- */
 static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms, bool update_debug);
+
+static void AutoCtrlFeed_SendLightEffect(LightEffect_Mode_t mode,
+                                         bool force) {
+  const uint8_t mode_value = (uint8_t)mode;
+  if (!force && auto_ore_light_last_mode == mode_value) {
+    return;
+  }
+  if (LightEffect_SendMode(mode) == BSP_OK) {
+    auto_ore_light_last_mode = mode_value;
+  }
+}
+
+static bool AutoCtrlFeed_IsReleaseAction(AutoOre_Action_t action) {
+  return action == AUTO_ORE_ACTION_RELEASE ||
+         action == AUTO_ORE_ACTION_RELEASE_LIFT_DETECT;
+}
+
+static void AutoCtrlFeed_SendReleaseLevelLight(AutoOre_Position_t position) {
+  if (position == AUTO_ORE_POSITION_TRANSFORM_LOW) {
+    AutoCtrlFeed_SendLightEffect(LIGHT_EFFECT_MODE_RELEASE_LEVEL2, true);
+  } else if (position == AUTO_ORE_POSITION_TRANSFORM_HIGH) {
+    AutoCtrlFeed_SendLightEffect(LIGHT_EFFECT_MODE_RELEASE_LEVEL3, true);
+  }
+}
 
 static float AutoCtrlFeed_SelectYawRad(void) {
   if (AutoCtrl_GetYawSource(&auto_ctrl) == AUTO_CTRL_YAW_SOURCE_PC &&
@@ -167,6 +196,8 @@ static PC_AutoAction_t AutoCtrlFeed_MapOreAction(AutoOre_Action_t action) {
       return PC_AUTO_ACTION_PICK_POS_200;
     case AUTO_ORE_ACTION_PICK_NEG_200:
       return PC_AUTO_ACTION_PICK_NEG_200;
+    case AUTO_ORE_ACTION_RECOVER_STORE:
+      return PC_AUTO_ACTION_RECOVER_STORE;
     case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD:
       return PC_AUTO_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD;
     case AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD:
@@ -208,6 +239,8 @@ static AutoOre_Action_t AutoCtrlFeed_RequestToOreAction(
       return AUTO_ORE_ACTION_PICK_POS_200;
     case AUTO_ORE_DEBUG_REQUEST_PICK_NEG_200:
       return AUTO_ORE_ACTION_PICK_NEG_200;
+    case AUTO_ORE_DEBUG_REQUEST_RECOVER_STORE:
+      return AUTO_ORE_ACTION_RECOVER_STORE;
     case AUTO_ORE_DEBUG_REQUEST_STEP_PICK_STORE_ASCEND_200_HEAD:
       return AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD;
     case AUTO_ORE_DEBUG_REQUEST_STEP_PICK_STORE_DESCEND_200_HEAD:
@@ -461,6 +494,7 @@ static bool AutoCtrlFeed_IsOreAction(PC_AutoAction_t action) {
     case PC_AUTO_ACTION_PICK_POS_400:
     case PC_AUTO_ACTION_PICK_POS_200:
     case PC_AUTO_ACTION_PICK_NEG_200:
+    case PC_AUTO_ACTION_RECOVER_STORE:
     case PC_AUTO_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD:
     case PC_AUTO_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD:
     case PC_AUTO_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD:
@@ -597,6 +631,22 @@ static bool AutoCtrlFeed_IsSickCorrectAction(PC_AutoAction_t action) {
          action == PC_AUTO_ACTION_SICK_CORRECT_ORE_RELEASE;
 }
 
+static void AutoCtrlFeed_UpdateLightEffectFromAutoActionFeedback(
+    const PC_AutoActionFeedback_t *feedback) {
+  if (feedback == NULL) {
+    return;
+  }
+  if (feedback->finished == 0u ||
+      feedback->result != (uint8_t)PC_AUTO_ACTION_RESULT_FAIL) {
+    return;
+  }
+  if (auto_ore_light_last_fail_action == feedback->action) {
+    return;
+  }
+  auto_ore_light_last_fail_action = feedback->action;
+  AutoCtrlFeed_SendLightEffect(LIGHT_EFFECT_MODE_FAIL, true);
+}
+
 static bool AutoCtrlFeed_IsRodSpearheadSickCorrectRequest(
     AutoOre_DebugRequest_t request) {
   return request >= AUTO_ORE_DEBUG_REQUEST_SICK_CORRECT_ROD_SPEARHEAD_POS1 &&
@@ -641,6 +691,7 @@ static uint16_t AutoCtrlFeed_OreActionFailureMask(AutoOre_Action_t action) {
     case AUTO_ORE_ACTION_PICK_POS_400:
     case AUTO_ORE_ACTION_PICK_POS_200:
     case AUTO_ORE_ACTION_PICK_NEG_200:
+    case AUTO_ORE_ACTION_RECOVER_STORE:
       return PC_AUTO_ACTION_FAILURE_PICK_ORE;
     case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD:
     case AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD:
@@ -764,6 +815,15 @@ static bool AutoCtrlFeed_StartOreAction(AutoOre_Action_t action) {
   if (result || AutoOre_GetState(&auto_ore_ctrl) == AUTO_ORE_STATE_FAIL) {
     AutoCtrlFeed_RememberOreAction(action);
   }
+  if (AutoCtrlFeed_IsReleaseAction(action)) {
+    if (result) {
+      auto_ore_release_light_position =
+          AutoOre_GetActivePosition(&auto_ore_ctrl);
+      AutoCtrlFeed_SendReleaseLevelLight(auto_ore_release_light_position);
+    } else if (AutoOre_GetState(&auto_ore_ctrl) == AUTO_ORE_STATE_FAIL) {
+      AutoCtrlFeed_SendLightEffect(LIGHT_EFFECT_MODE_FAIL, true);
+    }
+  }
   return result;
 }
 
@@ -872,6 +932,7 @@ static void AutoCtrlFeed_PublishAutoActionFeedback(void) {
       AutoCtrlFeed_IsStepAction(auto_action_last_action)) {
     pc_feedback.busy = 1u;
     pc_feedback.action = (uint8_t)auto_action_last_action;
+    AutoCtrlFeed_UpdateLightEffectFromAutoActionFeedback(&pc_feedback);
     (void)MrlinkPc_PublishFeedback(PC_FEEDBACK_AUTO_ACTION, &pc_feedback);
     return;
   }
@@ -881,6 +942,7 @@ static void AutoCtrlFeed_PublishAutoActionFeedback(void) {
   AutoCtrlFeed_SetSplitFeedback(&pc_feedback);
 
   if (pc_feedback.busy != 0u || auto_action_last_action == PC_AUTO_ACTION_NONE) {
+    AutoCtrlFeed_UpdateLightEffectFromAutoActionFeedback(&pc_feedback);
     (void)MrlinkPc_PublishFeedback(PC_FEEDBACK_AUTO_ACTION, &pc_feedback);
     return;
   }
@@ -948,6 +1010,7 @@ static void AutoCtrlFeed_PublishAutoActionFeedback(void) {
     }
   }
 
+  AutoCtrlFeed_UpdateLightEffectFromAutoActionFeedback(&pc_feedback);
   (void)MrlinkPc_PublishFeedback(PC_FEEDBACK_AUTO_ACTION, &pc_feedback);
 }
 
@@ -1135,6 +1198,20 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms, bool update_debug) {
     }
   }
   AutoOre_Update(&auto_ore_ctrl, &auto_ore_feedback, now_ms);
+
+  if (auto_ore_ctrl.state != AUTO_ORE_STATE_RUNNING) {
+    auto_ore_release_light_position = AUTO_ORE_POSITION_NONE;
+    auto_ore_light_last_fail_action = PC_AUTO_ACTION_NONE;
+  } else if (auto_ore_release_light_position ==
+                 AUTO_ORE_POSITION_TRANSFORM_HIGH &&
+             auto_ore_ctrl.action == AUTO_ORE_ACTION_RELEASE_LIFT_DETECT &&
+             auto_ore_ctrl.active_position == AUTO_ORE_POSITION_ARM &&
+             auto_ore_ctrl.step_index == 1u &&
+             auto_ore_ctrl.release_lift_observer_active &&
+             !auto_ore_ctrl.release_lift_detected) {
+    AutoCtrlFeed_SendLightEffect(
+        LIGHT_EFFECT_MODE_RELEASE_LEVEL3_WAIT_LIFT, false);
+  }
 
   const AutoOre_Occupancy_t occupancy = AutoOre_GetOccupancy(&auto_ore_ctrl);
   g_auto_ore_debug.transform_low_has_ore = occupancy.transform_low_has_ore;
@@ -1437,6 +1514,10 @@ bool Task_AutoOreStartPickNeg200(void) {
   return AutoCtrlFeed_StartOreAction(AUTO_ORE_ACTION_PICK_NEG_200);
 }
 
+bool Task_AutoOreStartRecoverStore(void) {
+  return AutoCtrlFeed_StartOreAction(AUTO_ORE_ACTION_RECOVER_STORE);
+}
+
 bool Task_AutoOreStartStepPickStoreAscend200Head(void) {
   return AutoCtrlFeed_StartOreAction(
       AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD);
@@ -1545,6 +1626,9 @@ static void AutoCtrlFeed_HandleAutoOreDebugRequest(void) {
       break;
     case AUTO_ORE_DEBUG_REQUEST_PICK_NEG_200:
       result = Task_AutoOreStartPickNeg200();
+      break;
+    case AUTO_ORE_DEBUG_REQUEST_RECOVER_STORE:
+      result = Task_AutoOreStartRecoverStore();
       break;
     case AUTO_ORE_DEBUG_REQUEST_STEP_PICK_STORE_ASCEND_200_HEAD:
       result = Task_AutoOreStartStepPickStoreAscend200Head();

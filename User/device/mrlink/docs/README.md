@@ -62,7 +62,7 @@ use_crc16 = false: [0x4D][0x52][len][cmd][payload...]
 | 组件 | 大小 / 实例 |
 |---|---|
 | `SpscRingBuf_t` | 约 12 字节 (head/tail + 指针，32-bit MCU) |
-| `MrLink_t` (32 槽 + frame_buf) | ~456 字节 (含 70B typed 内部 buffer) |
+| `MrLink_t` (64 槽 + frame_buf) | 1024 字节 opaque storage (当前内部实际约 924B，含 70B typed 内部 buffer) |
 | `mr::link::Instance` (默认 16 typed + 16 latest slot) | ~2 KB 级别 (含 std::function 与 latest payload 缓存) |
 
 可通过编译宏调整 C++ wrapper 容量：
