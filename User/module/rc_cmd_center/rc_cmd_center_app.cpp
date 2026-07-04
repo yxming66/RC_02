@@ -2079,7 +2079,8 @@ static void Rc_ConfigureCmdCenter(void) {
           cmd::from<RcRuntimeInput, RcPolePcRoute>()
               .when<RcPlanIn<RC_CMD_PLAN_PC,
                      RC_CMD_PLAN_AUTO_ROD_STEP1_PC_OUTPUT,
-                     RC_CMD_PLAN_AUTO_ROD_STEP2_PC_POLE_OUTPUT> >()
+              RC_CMD_PLAN_AUTO_ROD_STEP2_PC_POLE_OUTPUT,
+              RC_CMD_PLAN_AUTO_ROD_DOCK_WAIT_PC_CHASSIS_OUTPUT> >()
               .priority(cmd::Priority::Remote),
           cmd::from<RcRuntimeInput, RcPoleAutoCtrlRoute>()
               .when<RcPlanIn<RC_CMD_PLAN_AUTO_CTRL_OUTPUT,
@@ -2100,8 +2101,7 @@ static void Rc_ConfigureCmdCenter(void) {
                              RC_CMD_PLAN_ARM_SIMPLE,
                              RC_CMD_PLAN_ORE_STORE,
                              RC_CMD_PLAN_ROD_NEW,
-                     RC_CMD_PLAN_AUTO_ORE_STANDBY,
-                     RC_CMD_PLAN_AUTO_ROD_DOCK_WAIT_PC_CHASSIS_OUTPUT> >()
+                 RC_CMD_PLAN_AUTO_ORE_STANDBY> >()
               .priority(cmd::Priority::Fallback));
 
   rc_cmd_center
