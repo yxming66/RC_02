@@ -529,6 +529,35 @@ static bool AutoCtrlFeed_IsFusedOreAction(AutoOre_Action_t action) {
   }
 }
 
+static bool AutoCtrlFeed_IsFusedPcOreAction(PC_AutoAction_t action) {
+  switch (action) {
+    case PC_AUTO_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD:
+    case PC_AUTO_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD:
+    case PC_AUTO_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD:
+    case PC_AUTO_ACTION_STEP_DROP_STORE_ASCEND_200_HEAD:
+    case PC_AUTO_ACTION_STEP_DROP_STORE_DESCEND_200_HEAD:
+    case PC_AUTO_ACTION_STEP_DROP_STORE_ASCEND_400_HEAD:
+    case PC_AUTO_ACTION_PICK_STORE_POS_400:
+    case PC_AUTO_ACTION_PICK_STORE_POS_200:
+    case PC_AUTO_ACTION_PICK_STORE_NEG_200:
+      return true;
+    default:
+      return false;
+  }
+}
+
+static void AutoCtrlFeed_SetSplitFeedback(PC_AutoActionFeedback_t *feedback) {
+  if (feedback == 0 || !auto_ore_inited ||
+      !AutoCtrlFeed_IsFusedPcOreAction((PC_AutoAction_t)feedback->action)) {
+    return;
+  }
+  if (AutoOre_HasSplitResult(&auto_ore_ctrl) ||
+      AutoOre_GetResult(&auto_ore_ctrl) == AUTO_ORE_RESULT_SUCCESS) {
+    feedback->lower_finished = AutoOre_IsLowerFinished(&auto_ore_ctrl) ? 1u : 0u;
+    feedback->upper_finished = AutoOre_IsUpperFinished(&auto_ore_ctrl) ? 1u : 0u;
+  }
+}
+
 static bool AutoCtrlFeed_ShouldForcePcSuccess(PC_AutoAction_t action) {
   switch (action) {
     case PC_AUTO_ACTION_STORE:
@@ -849,6 +878,7 @@ static void AutoCtrlFeed_PublishAutoActionFeedback(void) {
 
   pc_feedback.busy = (ore_busy || rod_busy || sick_busy) ? 1u : 0u;
   pc_feedback.action = (uint8_t)auto_action_last_action;
+  AutoCtrlFeed_SetSplitFeedback(&pc_feedback);
 
   if (pc_feedback.busy != 0u || auto_action_last_action == PC_AUTO_ACTION_NONE) {
     (void)MrlinkPc_PublishFeedback(PC_FEEDBACK_AUTO_ACTION, &pc_feedback);
@@ -862,6 +892,7 @@ static void AutoCtrlFeed_PublishAutoActionFeedback(void) {
   } else if (AutoCtrlFeed_IsOreAction(auto_action_last_action) &&
              auto_ore_inited) {
     pc_feedback.action = (uint8_t)AutoCtrlFeed_GetOreFeedbackAction();
+    AutoCtrlFeed_SetSplitFeedback(&pc_feedback);
     const AutoOre_Result_t result = AutoOre_GetResult(&auto_ore_ctrl);
     if (result == AUTO_ORE_RESULT_SUCCESS) {
       AutoCtrlFeed_SetFeedbackSuccess(&pc_feedback);

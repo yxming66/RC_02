@@ -3052,6 +3052,32 @@ bool AutoOre_IsBusy(const AutoOre_t *ctrl) {
   return ctrl != 0 && ctrl->state == AUTO_ORE_STATE_RUNNING;
 }
 
+bool AutoOre_HasSplitResult(const AutoOre_t *ctrl) {
+  return ctrl != 0 &&
+         (AutoOre_ActionIsFused(ctrl->action) ||
+          AutoOre_ActionIsPickStoreFused(ctrl->action));
+}
+
+bool AutoOre_IsLowerFinished(const AutoOre_t *ctrl) {
+  if (ctrl == 0) {
+    return false;
+  }
+  if (ctrl->state == AUTO_ORE_STATE_SUCCESS) {
+    return true;
+  }
+  return AutoOre_HasSplitResult(ctrl) && ctrl->fused_step_done;
+}
+
+bool AutoOre_IsUpperFinished(const AutoOre_t *ctrl) {
+  if (ctrl == 0) {
+    return false;
+  }
+  if (ctrl->state == AUTO_ORE_STATE_SUCCESS) {
+    return true;
+  }
+  return AutoOre_HasSplitResult(ctrl) && ctrl->fused_store_done;
+}
+
 AutoOre_State_t AutoOre_GetState(const AutoOre_t *ctrl) {
   return (ctrl == 0) ? AUTO_ORE_STATE_IDLE : ctrl->state;
 }

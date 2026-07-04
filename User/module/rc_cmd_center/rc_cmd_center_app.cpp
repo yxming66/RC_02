@@ -138,6 +138,7 @@ typedef enum {
   RC_CMD_PLAN_AUTO_ORE_STANDBY,
   RC_CMD_PLAN_AUTO_CTRL_OUTPUT,
   RC_CMD_PLAN_AUTO_ORE_OUTPUT,
+  RC_CMD_PLAN_AUTO_ORE_PC_CHASSIS_OUTPUT,
   RC_CMD_PLAN_AUTO_ROD_OUTPUT,
   RC_CMD_PLAN_AUTO_ROD_STEP1_PC_OUTPUT,
   RC_CMD_PLAN_AUTO_ROD_STEP2_PC_POLE_OUTPUT,
@@ -1443,6 +1444,13 @@ static bool Rc_AutoOreReleaseIsBusy(void) {
          auto_ore_ctrl.action == AUTO_ORE_ACTION_RELEASE;
 }
 
+static bool Rc_AutoOreLowerFinishedPcChassisReady(RcBehavior_t behavior) {
+  return auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl) &&
+         AutoOre_HasSplitResult(&auto_ore_ctrl) &&
+         AutoOre_IsLowerFinished(&auto_ore_ctrl) &&
+         behavior == RC_BEHAVIOR_PC && Rc_ShouldUsePcCommand();
+}
+
 static RcCommandPlan_t Rc_SelectCommandPlan(RcBehavior_t behavior) {
   rc_current_behavior = behavior;
 
@@ -1454,6 +1462,9 @@ static RcCommandPlan_t Rc_SelectCommandPlan(RcBehavior_t behavior) {
       g_rc_control_debug.ore_store_active = true;
       g_rc_control_debug.arm_simple_active = true;
       g_auto_ore_debug.force_output_count++;
+      if (Rc_AutoOreLowerFinishedPcChassisReady(behavior)) {
+        return RC_CMD_PLAN_AUTO_ORE_PC_CHASSIS_OUTPUT;
+      }
       return RC_CMD_PLAN_AUTO_ORE_OUTPUT;
     }
   }
@@ -1498,6 +1509,11 @@ static RcCommandPlan_t Rc_SelectCommandPlan(RcBehavior_t behavior) {
   }
 
   if (auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl)) {
+    if (Rc_AutoOreLowerFinishedPcChassisReady(behavior)) {
+      g_rc_control_debug.ore_store_active = true;
+      g_rc_control_debug.arm_simple_active = true;
+      return RC_CMD_PLAN_AUTO_ORE_PC_CHASSIS_OUTPUT;
+    }
     if (behavior == RC_BEHAVIOR_AUTO_ORE || Rc_AutoOreReleaseIsBusy()) {
       g_rc_control_debug.ore_store_active = true;
       g_rc_control_debug.arm_simple_active = true;
@@ -2025,6 +2041,7 @@ static void Rc_ConfigureCmdCenter(void) {
               .priority(cmd::Priority::Manual),
           cmd::from<RcRuntimeInput, RcChassisPcRoute>()
               .when<RcPlanIn<RC_CMD_PLAN_PC,
+              RC_CMD_PLAN_AUTO_ORE_PC_CHASSIS_OUTPUT,
               RC_CMD_PLAN_AUTO_ROD_STEP1_PC_OUTPUT,
               RC_CMD_PLAN_AUTO_ROD_DOCK_WAIT_PC_CHASSIS_OUTPUT> >()
               .priority(cmd::Priority::Remote),
@@ -2069,7 +2086,8 @@ static void Rc_ConfigureCmdCenter(void) {
                              RC_CMD_PLAN_PC_AUTO_CTRL> >()
               .priority(cmd::Priority::Auto),
           cmd::from<RcRuntimeInput, RcPoleAutoOreRoute>()
-              .when<RcPlanIn<RC_CMD_PLAN_AUTO_ORE_OUTPUT> >()
+              .when<RcPlanIn<RC_CMD_PLAN_AUTO_ORE_OUTPUT,
+                     RC_CMD_PLAN_AUTO_ORE_PC_CHASSIS_OUTPUT> >()
               .priority(cmd::Priority::CriticalAuto),
           cmd::from<RcRuntimeInput, RcPoleAutoSickCorrectRoute>()
               .when<RcPlanIn<RC_CMD_PLAN_AUTO_SICK_CORRECT_OUTPUT> >()
@@ -2100,7 +2118,8 @@ static void Rc_ConfigureCmdCenter(void) {
               .when<RcPlanIn<RC_CMD_PLAN_PC> >()
               .priority(cmd::Priority::Remote),
           cmd::from<RcRuntimeInput, RcArmSimpleAutoOreRoute>()
-              .when<RcPlanIn<RC_CMD_PLAN_AUTO_ORE_OUTPUT> >()
+              .when<RcPlanIn<RC_CMD_PLAN_AUTO_ORE_OUTPUT,
+                     RC_CMD_PLAN_AUTO_ORE_PC_CHASSIS_OUTPUT> >()
               .priority(cmd::Priority::CriticalAuto),
           cmd::from<RcRuntimeInput, RcArmSimpleHoldRoute>()
               .when<RcPlanIn<RC_CMD_PLAN_DRIVE,
@@ -2131,7 +2150,8 @@ static void Rc_ConfigureCmdCenter(void) {
               .when<RcPlanIn<RC_CMD_PLAN_PC> >()
               .priority(cmd::Priority::Remote),
           cmd::from<RcRuntimeInput, RcOreStoreAutoOreRoute>()
-              .when<RcPlanIn<RC_CMD_PLAN_AUTO_ORE_OUTPUT> >()
+              .when<RcPlanIn<RC_CMD_PLAN_AUTO_ORE_OUTPUT,
+                     RC_CMD_PLAN_AUTO_ORE_PC_CHASSIS_OUTPUT> >()
               .priority(cmd::Priority::CriticalAuto),
           cmd::from<RcRuntimeInput, RcOreStoreAutoRodRoute>()
               .when<RcPlanIn<RC_CMD_PLAN_AUTO_ROD_OUTPUT,

@@ -352,6 +352,8 @@ typedef struct {
     uint8_t finished;               /* 是否已有结束结果，0=无，1=有 */
     uint8_t result;                 /* 结束结果，见 PC_AutoActionResult_t */
     uint16_t failure_mask;          /* 失败部位 bitmask，见 PC_AUTO_ACTION_FAILURE_* */
+    uint8_t lower_finished;         /* 下层/底盘侧动作是否已成功完成，0/1 */
+    uint8_t upper_finished;         /* 上层机构侧动作是否已成功完成，0/1 */
 } PC_AutoActionFeedback_t;
 
 typedef struct {

@@ -291,6 +291,9 @@ void AutoOre_Update(AutoOre_t *ctrl, const AutoOre_Feedback_t *feedback,
                     uint32_t now_ms);
 void AutoOre_Abort(AutoOre_t *ctrl);
 bool AutoOre_IsBusy(const AutoOre_t *ctrl);
+bool AutoOre_HasSplitResult(const AutoOre_t *ctrl);
+bool AutoOre_IsLowerFinished(const AutoOre_t *ctrl);
+bool AutoOre_IsUpperFinished(const AutoOre_t *ctrl);
 AutoOre_State_t AutoOre_GetState(const AutoOre_t *ctrl);
 AutoOre_Result_t AutoOre_GetResult(const AutoOre_t *ctrl);
 AutoOre_Fault_t AutoOre_GetFault(const AutoOre_t *ctrl);
