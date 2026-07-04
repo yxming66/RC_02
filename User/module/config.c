@@ -66,7 +66,7 @@ Config_RobotParam_t robot_config = {
                 .d = 0.0f,
                 .i_limit = 2.0f,
                 .out_limit = 6.0f,
-                .d_cutoff_freq = 80.0f,
+                .d_cutoff_freq = 35.0f,
                 .range = 0.0f,
             },
             .motor_high_pole_pid_param = {
@@ -243,7 +243,7 @@ Config_RobotParam_t robot_config = {
                 /* 平台等待矛头对接位置 */
                 [ORE_STORE_TRANSFORM_SPEARHEAD_DOCK_WAIT] = 0.340454519f,
                 /* 取矛头平台预设位 */
-                [ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP] = 22.3003597f,
+                [ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP] = 22.3003597//23.2407284f//22.3003597f,
             },
         },
         .fixed_ore_cylinder = {    
@@ -532,12 +532,12 @@ Config_RobotParam_t robot_config = {
         /* 模块参数：SICK 一键校正 sick_correct，取矛头/放矿前的 SICK 对位参数。 */
         .sick_correct = {
             .rod_spearhead_position = {
-                [0] = CONFIG_SICK_ROD_SPEARHEAD_PARAM(666.0f,  1028.0f),
-                [1] = CONFIG_SICK_ROD_SPEARHEAD_PARAM(1599.0f, 1028.0f),
-                [2] = CONFIG_SICK_ROD_SPEARHEAD_PARAM(2566.0f, 1028.0f),
-                [3] = CONFIG_SICK_ROD_SPEARHEAD_PARAM(3500.0f, 1028.0f),
-                [4] = CONFIG_SICK_ROD_SPEARHEAD_PARAM(4406.0f, 1028.0f),
-                [5] = CONFIG_SICK_ROD_SPEARHEAD_PARAM(5377.0f, 1028.0f),
+                [0] = CONFIG_SICK_ROD_SPEARHEAD_PARAM(666.0f,  1006.0f),
+                [1] = CONFIG_SICK_ROD_SPEARHEAD_PARAM(1599.0f, 1006.0f),
+                [2] = CONFIG_SICK_ROD_SPEARHEAD_PARAM(2566.0f, 1006.0f),
+                [3] = CONFIG_SICK_ROD_SPEARHEAD_PARAM(3500.0f, 1006.0f),
+                [4] = CONFIG_SICK_ROD_SPEARHEAD_PARAM(4406.0f, 1006.0f),
+                [5] = CONFIG_SICK_ROD_SPEARHEAD_PARAM(5377.0f, 1006.0f),
             },
             /* 放矿前 SICK 校正：只使用 rawdata[0] 做 x 方向校正。 */
             .ore_release = {  
