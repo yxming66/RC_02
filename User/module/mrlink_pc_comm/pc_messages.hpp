@@ -137,7 +137,7 @@ struct __attribute__((packed)) OreStoreFeedback {
   float platform_position_rad;     /* 平台轴当前位置，单位 rad */
   uint8_t transform_low_has_ore;    /* 变形机构低位占矿状态，0/1 */
   uint8_t transform_high_has_ore;   /* 变形机构高位占矿状态，0/1 */
-  uint8_t arm_has_ore;              /* 机械臂持矿状态，0/1 */
+  uint8_t arm_has_ore;              /* 机械臂持矿状态，0/1 */      
   uint8_t release_grid_has_ore;     /* 放矿目标格占矿检测结果，0/1 */
 };
 
