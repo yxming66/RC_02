@@ -243,7 +243,7 @@ Config_RobotParam_t robot_config = {
                 /* 平台等待矛头对接位置 */
                 [ORE_STORE_TRANSFORM_SPEARHEAD_DOCK_WAIT] = 0.340454519f,
                 /* 取矛头平台预设位 */
-                [ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP] = 22.15003597//23.2407284f//22.3003597f,
+                [ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP] = 22.0003597//23.2407284f//22.3003597f,
             },
         },
         .fixed_ore_cylinder = {    

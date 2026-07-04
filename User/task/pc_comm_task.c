@@ -166,7 +166,6 @@ static bool PcComm_ProcessAutoActionCommand(void) {
 
     if (g_auto_ore_debug.request != AUTO_ORE_DEBUG_REQUEST_NONE &&
         request != AUTO_ORE_DEBUG_REQUEST_ABORT) {
-        MrlinkPc_ClearAutoActionCommand();
         return true;
     }
 

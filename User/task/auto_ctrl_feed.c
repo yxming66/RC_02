@@ -592,26 +592,14 @@ static void AutoCtrlFeed_SetSplitFeedback(PC_AutoActionFeedback_t *feedback) {
   }
 }
 
-static bool AutoCtrlFeed_ShouldForcePcSuccess(PC_AutoAction_t action) {
-  switch (action) {
-    case PC_AUTO_ACTION_STORE:
-    case PC_AUTO_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD:
-    case PC_AUTO_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD:
-    case PC_AUTO_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD:
-    case PC_AUTO_ACTION_STEP_DROP_STORE_ASCEND_200_HEAD:
-    case PC_AUTO_ACTION_STEP_DROP_STORE_DESCEND_200_HEAD:
-    case PC_AUTO_ACTION_STEP_DROP_STORE_ASCEND_400_HEAD:
-    case PC_AUTO_ACTION_PICK_STORE_POS_400:
-    case PC_AUTO_ACTION_PICK_STORE_POS_200:
-    case PC_AUTO_ACTION_PICK_STORE_NEG_200:
-    case PC_AUTO_ACTION_STEP_ASCEND_200_HEAD:
-    case PC_AUTO_ACTION_STEP_DESCEND_200_HEAD:
-    case PC_AUTO_ACTION_STEP_ASCEND_400_HEAD:
-    case PC_AUTO_ACTION_STEP_DESCEND_400_HEAD:
-      return true;
-    default:
-      return false;
+static void AutoCtrlFeed_SetStepCompleteFeedback(
+    PC_AutoActionFeedback_t *feedback) {
+  if (feedback == 0 ||
+      !AutoCtrlFeed_IsStepAction((PC_AutoAction_t)feedback->action)) {
+    return;
   }
+  feedback->lower_finished = 1u;
+  feedback->upper_finished = 1u;
 }
 
 static bool AutoCtrlFeed_IsRodSpearheadAction(PC_AutoAction_t action) {
@@ -952,8 +940,6 @@ static void AutoCtrlFeed_PublishAutoActionFeedback(void) {
 
   if (auto_action_last_action == PC_AUTO_ACTION_ABORT) {
     AutoCtrlFeed_SetFeedbackFail(&pc_feedback, PC_AUTO_ACTION_FAILURE_ABORTED);
-  } else if (AutoCtrlFeed_ShouldForcePcSuccess(auto_action_last_action)) {
-    AutoCtrlFeed_SetFeedbackSuccess(&pc_feedback);
   } else if (AutoCtrlFeed_IsOreAction(auto_action_last_action) &&
              auto_ore_inited) {
     pc_feedback.action = (uint8_t)AutoCtrlFeed_GetOreFeedbackAction();
@@ -973,6 +959,7 @@ static void AutoCtrlFeed_PublishAutoActionFeedback(void) {
     const auto_ctrl_result_e result = AutoCtrl_GetResult(&auto_ctrl);
     if (result == AUTO_CTRL_RESULT_SUCCESS) {
       AutoCtrlFeed_SetFeedbackSuccess(&pc_feedback);
+      AutoCtrlFeed_SetStepCompleteFeedback(&pc_feedback);
     } else if (result == AUTO_CTRL_RESULT_FAIL) {
       AutoCtrlFeed_SetFeedbackFail(&pc_feedback,
                                    PC_AUTO_ACTION_FAILURE_STEP);
@@ -1335,19 +1322,26 @@ static void AutoCtrlFeed_UpdateAutoRodSpearhead(uint32_t now_ms,
     return;
   }
 
+  uint32_t dock_complete_rx_ms = 0u;
+  if (IrDock_IsDockCompleteFresh(now_ms)) {
+    dock_complete_rx_ms = g_ir_dock_debug.last_complete_rx_ms;
+  }
+  if (MrlinkPc_IsR2Ready()) {
+    const uint32_t r2_ready_tick_ms = MrlinkPc_GetR2ReadyStateTickMs();
+    if (r2_ready_tick_ms > dock_complete_rx_ms) {
+      dock_complete_rx_ms = r2_ready_tick_ms;
+    }
+  }
+
   AutoRodSpearhead_Feedback_t feedback = {
       .rod_photo_triggered = AutoCtrlFeed_ReadRodSpearheadPhoto(),
       .rod_at_target = false,
       .ore_store_at_target = false,
       .ore_store_position_valid = false,
       .ore_store_platform_position_rad = 0.0f,
-      .dock_complete_received = IrDock_IsDockCompleteFresh(now_ms) ||
-                                MrlinkPc_IsR2Ready(),
-      .dock_complete_rx_ms = g_ir_dock_debug.last_complete_rx_ms,
+      .dock_complete_received = dock_complete_rx_ms > 0u,
+      .dock_complete_rx_ms = dock_complete_rx_ms,
   };
-  if (MrlinkPc_IsR2Ready()) {
-    feedback.dock_complete_rx_ms = now_ms;
-  }
   const RodNew_Feedback_t *rod_fb = Task_RodNewGetFeedback();
   if (rod_fb != NULL) {
     feedback.rod_at_target = rod_fb->at_target;

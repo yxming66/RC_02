@@ -48,10 +48,16 @@ static bool IrDock_LeaveZone1CmdIsValid(uint8_t cmd) {
 }
 
 static bool IrDock_ClearedOreIdIsValid(uint8_t ore_id) {
+  if (ore_id == IR_DOCK_CLEARED_ORE_NONE) {
+    return true;
+  }
   return ore_id <= 12u && ore_id != 5u && ore_id != 8u;
 }
 
 static bool IrDock_Zone3R2StateIsValid(uint8_t state) {
+  if (state == IR_DOCK_ZONE3_R2_UNKNOWN) {
+    return true;
+  }
   return state == IR_DOCK_ZONE3_R2_WORK ||
          state == IR_DOCK_ZONE3_R2_STANDBY;
 }

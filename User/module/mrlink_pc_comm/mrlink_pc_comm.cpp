@@ -78,6 +78,7 @@ static uint32_t s_arm_simple_cmd_tick = 0u;
 static uint32_t s_rod_new_cmd_tick = 0u;
 static uint32_t s_ore_store_cmd_tick = 0u;
 static bool s_ir_ore_ack_pending = false;
+static uint32_t s_r2_ready_state_tick = 0u;
 static uint32_t s_debug_last_full_update_ms = 0u;
 
 bool IsRecentCommand(bool received, uint32_t tick, uint32_t now_ms) {
@@ -338,7 +339,9 @@ void OnIrOreAck(const PC_IrOreAckCMD_t &cmd) {
 }
 
 void OnR2ReadyState(const wire::R2ReadyStateCmd &cmd) {
+  const uint32_t now_ms = BSP_TIME_Get_ms();
   s_state.cmd.r2_ready_state.state = cmd.state;
+  s_r2_ready_state_tick = now_ms;
 
   LightEffect_Mode_t light_mode = LIGHT_EFFECT_MODE_OFF;
   switch (static_cast<PC_R2ReadyState_t>(cmd.state)) {
@@ -814,6 +817,10 @@ extern "C" const PC_R2ReadyStateCMD_t *MrlinkPc_GetR2ReadyStateCMD(void) {
 
 extern "C" bool MrlinkPc_IsR2Ready(void) {
   return s_state.cmd.r2_ready_state.state == PC_R2_READY_STATE_READY;
+}
+
+extern "C" uint32_t MrlinkPc_GetR2ReadyStateTickMs(void) {
+  return s_r2_ready_state_tick;
 }
 
 extern "C" bool MrlinkPc_PublishFeedback(uint8_t topic,

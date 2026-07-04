@@ -504,9 +504,14 @@ static void AutoRodSpearhead_RunDockWait(
     const AutoRodSpearhead_Feedback_t *feedback,
     uint32_t now_ms) {
   const bool dock_complete_received =
-      feedback != 0 && feedback->dock_complete_received;
+      feedback != 0 && feedback->dock_complete_received &&
+      feedback->dock_complete_rx_ms >= ctrl->dock_wait_start_time_ms;
   if (dock_complete_received) {
     ctrl->dock_complete_latched = true;
+  }
+  if (ctrl->dock_complete_latched && ctrl->step_index < 2u) {
+    ctrl->step_index = 2u;
+    ctrl->step_entered = false;
   }
   const bool transform_position_high =
       feedback == 0 || !feedback->ore_store_position_valid ||

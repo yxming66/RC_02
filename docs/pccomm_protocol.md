@@ -442,7 +442,8 @@ payload 为 8 字节，Python unpack 格式为 `<BBBBHBB`。
 4. `ABORT` 也按失败处理：`result=1`，`failure_mask` 包含 `ABORTED`。
 5. `action` 始终表示当前运行或最近结束的一键动作；空闲且从未执行过时为 `PC_AUTO_ACTION_NONE`。
 6. 对融合取矿/存矿/上下台阶动作，`lower_finished=1` 表示下层/底盘侧流程已成功完成，PC 可以进入下一个导航航点；`upper_finished=1` 表示上层机构侧流程也已成功完成，PC 才应启动下一次融合上下台阶动作。
-7. 对非融合动作，`lower_finished/upper_finished` 固定按保留字段处理，PC 不应依赖它们判定普通动作完成。
+7. 对普通上下台阶动作，成功结束时 `lower_finished=1` 且 `upper_finished=1`，PC 可以统一按 `lower_finished` 切换航点；失败或运行中保持为 0。
+8. 对其它非融合动作，`lower_finished/upper_finished` 固定按保留字段处理，PC 不应依赖它们判定动作完成。
 
 Python 示例：
 

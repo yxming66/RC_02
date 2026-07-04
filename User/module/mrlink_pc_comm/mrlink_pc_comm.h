@@ -215,7 +215,7 @@ typedef enum {
     PC_AUTO_ACTION_SICK_CORRECT_ROD_SPEARHEAD_POS2 = 17, /* 取矛头位置2 SICK 校正 */
     PC_AUTO_ACTION_SICK_CORRECT_ROD_SPEARHEAD_POS3 = 18, /* 取矛头位置3 SICK 校正 */
     PC_AUTO_ACTION_SICK_CORRECT_ROD_SPEARHEAD_POS4 = 19, /* 取矛头位置4 SICK 校正 */
-    PC_AUTO_ACTION_SICK_CORRECT_ROD_SPEARHEAD_POS5 = 20, /* 取矛头位置5 SICK 校正 */
+    PC_AUTO_ACTION_SICK_CORRECT_ROD_SPEARHEAD_POS5 = 20, /* 取矛头位置5 SICK 校正 */ 
     PC_AUTO_ACTION_SICK_CORRECT_ROD_SPEARHEAD_POS6 = 21, /* 取矛头位置6 SICK 校正 */
     PC_AUTO_ACTION_SICK_CORRECT_ORE_RELEASE = 22, /* 放矿前 SICK 一键校正 */
     PC_AUTO_ACTION_STEP_ASCEND_200_HEAD = 23, /* 普通头向上 200mm 台阶 */
@@ -692,6 +692,9 @@ const PC_R2ReadyStateCMD_t *MrlinkPc_GetR2ReadyStateCMD(void);
 
 /* 最近一次 PC_CMD_R2_READY_STATE 是否为 READY。 */
 bool MrlinkPc_IsR2Ready(void);
+
+/* 最近一次 PC_CMD_R2_READY_STATE 接收 tick，单位 ms；未收到过时为 0。 */
+uint32_t MrlinkPc_GetR2ReadyStateTickMs(void);
 
 /* 发布某个反馈 topic 的最新数据；topic 见 PC_FeedbackCMD_t，feedback 指向对应反馈结构体。 */
 bool MrlinkPc_PublishFeedback(uint8_t topic, const void *feedback);
