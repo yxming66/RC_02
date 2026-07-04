@@ -18,7 +18,7 @@
         .front_index = SICK_ROD_FRONT_INDEX, \
         .rod_front_index = SICK_ROD_FRONT_INDEX, \
         .rear_index = SICK_REAR_INDEX, \
-        .rod_rear_index = SICK_REAR_INDEX, \
+        .rod_rear_index = SICK_ROD_REAR_INDEX, \
         .valid_adc_min = 0u, \
         .valid_adc_max = 32100u, \
         .x_target_adc = (x_target), \
@@ -66,7 +66,7 @@ Config_RobotParam_t robot_config = {
                 .d = 0.0f,
                 .i_limit = 2.0f,
                 .out_limit = 6.0f,
-                .d_cutoff_freq = 35.0f,
+                .d_cutoff_freq = 80.0f,
                 .range = 0.0f,
             },
             .motor_high_pole_pid_param = {
@@ -532,22 +532,22 @@ Config_RobotParam_t robot_config = {
         /* 模块参数：SICK 一键校正 sick_correct，取矛头/放矿前的 SICK 对位参数。 */
         .sick_correct = {
             .rod_spearhead_position = {
-                [0] = CONFIG_SICK_ROD_SPEARHEAD_PARAM(666.0f, 1103.0f),
-                [1] = CONFIG_SICK_ROD_SPEARHEAD_PARAM(1599.0f, 1103.0f),
-                [2] = CONFIG_SICK_ROD_SPEARHEAD_PARAM(2566.0f, 1103.0f),
-                [3] = CONFIG_SICK_ROD_SPEARHEAD_PARAM(3500.0f, 1103.0f),
-                [4] = CONFIG_SICK_ROD_SPEARHEAD_PARAM(4406.0f, 1507.0f),
-                [5] = CONFIG_SICK_ROD_SPEARHEAD_PARAM(5377.0f, 1504.0f),
+                [0] = CONFIG_SICK_ROD_SPEARHEAD_PARAM(666.0f,  1028.0f),
+                [1] = CONFIG_SICK_ROD_SPEARHEAD_PARAM(1599.0f, 1028.0f),
+                [2] = CONFIG_SICK_ROD_SPEARHEAD_PARAM(2566.0f, 1028.0f),
+                [3] = CONFIG_SICK_ROD_SPEARHEAD_PARAM(3500.0f, 1028.0f),
+                [4] = CONFIG_SICK_ROD_SPEARHEAD_PARAM(4406.0f, 1028.0f),
+                [5] = CONFIG_SICK_ROD_SPEARHEAD_PARAM(5377.0f, 1028.0f),
             },
-            /* 放矿前 SICK 校正：只使用 rawdata[2] 做 x 方向校正。 */
+            /* 放矿前 SICK 校正：只使用 rawdata[0] 做 x 方向校正。 */
             .ore_release = {  
-                .front_index = SICK_ROD_FRONT_INDEX,
+                .front_index = SICK_REAR_INDEX,
                 .rod_front_index = SICK_ROD_FRONT_INDEX,
                 .rear_index = SICK_REAR_INDEX,
                 .rod_rear_index = SICK_ROD_REAR_INDEX,
                 .valid_adc_min = 0u,               /* 有效 ADC 下限。 */
                 .valid_adc_max = 32100u,             /* 有效 ADC 上限。 */
-                .x_target_adc = 1303.0f,             /* rawdata[2] 的 x 目标 ADC。 */
+                .x_target_adc = 1303.0f,             /* rawdata[0] 的 x 目标 ADC。 */
                 .y_target_adc = 1.0f,                /* 放矿校正不使用 y，仅保持参数有效。 */
                 .yaw_target_diff_adc = 0.0f,         /* 目标 ADC：矛头前侧 - 矛头后侧。 */
                 .x_tolerance_adc = 200.0f,           /* 允许的 x ADC 误差。     */
