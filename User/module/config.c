@@ -410,7 +410,7 @@ Config_RobotParam_t robot_config = {
             .chamber_low_clamp_ms = 400u,
             .chamber_arm_settle_ms = 400u,
             .chamber_cylinder_open_ms = 400u,
-            /* 取矿：正向 200/400 取矿时，底盘向矿位前进的持续时间。 */
+            /* 取矿：正向 200/400 取矿时，底盘向矿位前进的持续时间。 */ 
             .fetch_chassis_move_ms = 1000u,
             /* 取 -200 矿：底盘向矿位前进的独立持续时间；可设为 0 禁止底盘前进，避免走太多掉下去。 */
             .fetch_neg_200_chassis_move_ms = 1000u,
@@ -539,18 +539,18 @@ Config_RobotParam_t robot_config = {
                 [4] = CONFIG_SICK_ROD_SPEARHEAD_PARAM(4406.0f, 1019.0f),
                 [5] = CONFIG_SICK_ROD_SPEARHEAD_PARAM(5377.0f, 1019.0f),
             },
-            /* 放矿前 SICK 校正：只使用 rawdata[0] 做 x 方向校正。 */
+            /* 放矿前 SICK 校正：只使用 rawdata[2] 做 x 方向校正。 */
             .ore_release = {  
-                .front_index = SICK_REAR_INDEX,
+                .front_index = SICK_ROD_FRONT_INDEX,
                 .rod_front_index = SICK_ROD_FRONT_INDEX,
                 .rear_index = SICK_REAR_INDEX,
                 .rod_rear_index = SICK_ROD_REAR_INDEX,
                 .valid_adc_min = 0u,               /* 有效 ADC 下限。 */
                 .valid_adc_max = 32100u,             /* 有效 ADC 上限。 */
-                .x_target_adc = 1303.0f,             /* rawdata[0] 的 x 目标 ADC。 */
+                .x_target_adc = 1079.0f,             /* rawdata[2] 的 x 目标 ADC。 */
                 .y_target_adc = 1.0f,                /* 放矿校正不使用 y，仅保持参数有效。 */
                 .yaw_target_diff_adc = 0.0f,         /* 目标 ADC：矛头前侧 - 矛头后侧。 */
-                .x_tolerance_adc = 200.0f,           /* 允许的 x ADC 误差。     */
+                .x_tolerance_adc = 100.0f,           /* 允许的 x ADC 误差。     */
                 .y_tolerance_adc = 1.0f,             /* 放矿校正不使用 y。 */
                 .yaw_tolerance_adc = 30.0f,          /* 允许的 yaw/z ADC 误差。 */
                 .x_kp_mps_per_adc = -0.0010f,         /* x 误差到 vx 的增益。 */
@@ -562,7 +562,7 @@ Config_RobotParam_t robot_config = {
                 .pole_target_lift = 3.0f,            /* 校正阶段撑杆目标高度。 */
                 .pole_speed = 50.0f,                 /* 校正阶段撑杆速度。 */
                 .finish_stable_ms = 120u,            /* 成功前需要保持稳定的时间。 */
-                .timeout_ms = 5000u,                 /* 校正总超时，单位 ms。 */
+                .timeout_ms = 5000u,                 /* 校正总超时，单位 ms。 */ 
             },
         },
         /* 头向 / 上台阶 / 200mm 模板参数。 */

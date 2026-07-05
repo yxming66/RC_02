@@ -3111,6 +3111,7 @@ void AutoOre_Update(AutoOre_t *ctrl, const AutoOre_Feedback_t *feedback,
   if (feedback != 0) {
     ctrl->feedback = *feedback;
   }
+  AutoOre_ApplyFeedbackOccupancy(ctrl);
   if (ctrl->state != AUTO_ORE_STATE_RUNNING) {
     AutoOre_ClearOutputs(ctrl);
     return;

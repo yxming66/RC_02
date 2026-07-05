@@ -1147,6 +1147,11 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms, bool update_debug) {
   const bool spear_photo_triggered = AutoCtrlFeed_ReadRodSpearheadPhoto();
   const ArmSimple_Feedback_t *arm_fb = Task_ArmSimpleGetFeedback();
   const Chassis_Feedback_t *chassis_feedback = Task_ChassisGetFeedback();
+  const uint8_t release_lift_sick_index =
+      (auto_ore_ctrl.param.release_lift_detect_sick_index <
+       SICK_OUTPUT_CHANNEL_COUNT)
+          ? auto_ore_ctrl.param.release_lift_detect_sick_index
+          : SICK_REAR_INDEX;
 
   AutoOre_Feedback_t auto_ore_feedback = {
       .arm_at_target = arm_at_target,
@@ -1166,9 +1171,10 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms, bool update_debug) {
       .yaw_auto_rad = feedback.yaw_auto_rad,
       .yaw_rate_cmd_rad_s = auto_ctrl.yaw_rate_cmd_rad_s,
       .imu_accl_z_g = chassis_imu.accl.z,
-        .release_lift_sick_adc_raw =
-          auto_ctrl_sick_output.adc_raw[SICK_REAR_INDEX],
-        .release_lift_sick_valid = auto_ctrl_sick_output.valid[SICK_REAR_INDEX],
+      .release_lift_sick_adc_raw =
+          auto_ctrl_sick_output.adc_raw[release_lift_sick_index],
+      .release_lift_sick_valid =
+          auto_ctrl_sick_output.valid[release_lift_sick_index],
       .arm_joint1_rad = (arm_fb != NULL) ? arm_fb->joint1_angle_rad : 0.0f,
       .arm_joint2_rad = (arm_fb != NULL) ? arm_fb->joint2_angle_rad : 0.0f,
       .pole_front_lift_rad = feedback.pole_front_lift_rad,
