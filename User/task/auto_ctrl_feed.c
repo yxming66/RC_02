@@ -528,8 +528,6 @@ static bool AutoCtrlFeed_IsOreAction(PC_AutoAction_t action) {
     case PC_AUTO_ACTION_PICK_STORE_POS_400:
     case PC_AUTO_ACTION_PICK_STORE_POS_200:
     case PC_AUTO_ACTION_PICK_STORE_NEG_200:
-    case PC_AUTO_ACTION_RELEASE_STEP1:
-    case PC_AUTO_ACTION_RELEASE_LIFT_DETECT_STEP1:
       return true;
     default:
       return false;
@@ -600,6 +598,8 @@ static bool AutoCtrlFeed_IsFusedPcOreAction(PC_AutoAction_t action) {
     case PC_AUTO_ACTION_PICK_STORE_POS_400:
     case PC_AUTO_ACTION_PICK_STORE_POS_200:
     case PC_AUTO_ACTION_PICK_STORE_NEG_200:
+    case PC_AUTO_ACTION_RELEASE_STEP1:
+    case PC_AUTO_ACTION_RELEASE_LIFT_DETECT_STEP1:
       return true;
     default:
       return false;

@@ -1320,6 +1320,7 @@ static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
       if (!AutoOre_ActionUsesReleaseLiftDetect(ctrl->action)) {
         if (grid_check_done) {
           if (AutoOre_ActionIsReleaseStep1(ctrl->action)) {
+            ctrl->fused_step_done = true;
             ctrl->fused_store_done = true;
             AutoOre_CommandChassisZeroVector(ctrl);
             return;
@@ -1337,6 +1338,7 @@ static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
       if (lift_settled) {
         if (grid_check_done) {
           if (AutoOre_ActionIsReleaseStep1(ctrl->action)) {
+            ctrl->fused_step_done = true;
             ctrl->fused_store_done = true;
             AutoOre_CommandChassisZeroVector(ctrl);
             return;
