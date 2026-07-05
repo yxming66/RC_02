@@ -54,6 +54,7 @@ inline constexpr Topic kFeedbackIrOreBridge = PC_FEEDBACK_IR_ORE_BRIDGE;
 inline constexpr Topic kFeedbackIrDock = PC_FEEDBACK_IR_DOCK;
 inline constexpr Topic kFeedbackCameraYaw = PC_FEEDBACK_CAMERA_YAW;
 inline constexpr Topic kFeedbackSickCorrect = PC_FEEDBACK_SICK_CORRECT;
+inline constexpr Topic kFeedbackSickFrontOre = PC_FEEDBACK_SICK_FRONT_ORE;
 inline constexpr Topic kFeedbackStatus = PC_FEEDBACK_STATUS;
 
 struct __attribute__((packed)) PoleCmd {
@@ -169,6 +170,18 @@ struct __attribute__((packed)) SickCorrectFeedback {
   float y_sample_adc;         /* Y 方向 SICK 实时 ADC 值 */
 };
 
+struct __attribute__((packed)) SickFrontOreFeedback {
+  uint8_t sample_valid;       /* 前 SICK 样本有效，0/1 */
+  uint8_t in_region;          /* 当前距离是否落在检测区域内，0/1 */
+  uint8_t detected;           /* 稳定确认后的矿检测结果，0/1 */
+  uint8_t channel_index;      /* 使用的 SICK rawdata 通道 */
+  uint16_t adc_raw;           /* 前 SICK ADC 原始值 */
+  uint16_t min_distance_mm;   /* 检测窗口近端，单位 mm */
+  uint16_t max_distance_mm;   /* 检测窗口远端，单位 mm */
+  uint16_t reserved;          /* 固定为 0 */
+  float distance_mm;          /* 前 SICK 测距，单位 mm */
+};
+
 template <typename T>
 constexpr bool IsValidWirePayload() {
   return std::is_trivially_copyable<T>::value &&
@@ -202,6 +215,7 @@ static_assert(IsValidWirePayload<OreStoreFeedback>(), "OreStoreFeedback payload 
 static_assert(IsValidWirePayload<StepFeedback>(), "StepFeedback payload is invalid");
 static_assert(IsValidWirePayload<StatusFeedback>(), "StatusFeedback payload is invalid");
 static_assert(IsValidWirePayload<SickCorrectFeedback>(), "SickCorrectFeedback payload is invalid");
+static_assert(IsValidWirePayload<SickFrontOreFeedback>(), "SickFrontOreFeedback payload is invalid");
 
 static_assert(sizeof(PC_ChassisCMD_t) == 12u, "PC_CMD_CHASSIS wire size changed");
 static_assert(sizeof(PC_ImuCMD_t) == 28u, "PC_CMD_IMU wire size changed");
@@ -244,6 +258,8 @@ static_assert(sizeof(StatusFeedback) == 10u,
               "PC_FEEDBACK_STATUS wire size changed");
 static_assert(sizeof(SickCorrectFeedback) == 20u,
               "PC_FEEDBACK_SICK_CORRECT wire size changed");
+static_assert(sizeof(SickFrontOreFeedback) == 16u,
+              "PC_FEEDBACK_SICK_FRONT_ORE wire size changed");
 
 }  // namespace pc_comm::wire
 
@@ -275,6 +291,7 @@ MRLINK_PC_MESSAGE_TRAIT(PC_IrOreBridgeFeedback_t, PC_FEEDBACK_IR_ORE_BRIDGE);
 MRLINK_PC_MESSAGE_TRAIT(PC_IrDockFeedback_t, PC_FEEDBACK_IR_DOCK);
 MRLINK_PC_MESSAGE_TRAIT(PC_CameraYawFeedback_t, PC_FEEDBACK_CAMERA_YAW);
 MRLINK_PC_MESSAGE_TRAIT(pc_comm::wire::SickCorrectFeedback, PC_FEEDBACK_SICK_CORRECT);
+MRLINK_PC_MESSAGE_TRAIT(pc_comm::wire::SickFrontOreFeedback, PC_FEEDBACK_SICK_FRONT_ORE);
 MRLINK_PC_MESSAGE_TRAIT(pc_comm::wire::ArmSimpleFeedback, PC_FEEDBACK_ARM_SIMPLE);
 MRLINK_PC_MESSAGE_TRAIT(pc_comm::wire::RodNewFeedback, PC_FEEDBACK_ROD_NEW);
 MRLINK_PC_MESSAGE_TRAIT(pc_comm::wire::OreStoreFeedback, PC_FEEDBACK_ORE_STORE);

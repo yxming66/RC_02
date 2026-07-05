@@ -15,10 +15,10 @@
 #define CONFIG_AUTO_ORE_PREALIGN_YAW_TOLERANCE_RAD (0.0872664626f)
 #define CONFIG_SICK_ROD_SPEARHEAD_PARAM(x_target, y_target) \
     { \
-        .front_index = SICK_ROD_FRONT_INDEX, \
-        .rod_front_index = SICK_ROD_FRONT_INDEX, \
-        .rear_index = SICK_REAR_INDEX, \
-        .rod_rear_index = SICK_ROD_REAR_INDEX, \
+        .front_index = SICK_FRONT_PHOTO_INDEX, \
+        .rod_front_index = SICK_ROD_SIDE_PHOTO_INDEX, \
+        .rear_index = SICK_BOTTOM_PHOTO_INDEX, \
+        .rod_rear_index = SICK_ROD_SIDE_PHOTO_INDEX, \
         .valid_adc_min = 0u, \
         .valid_adc_max = 32100u, \
         .x_target_adc = (x_target), \
@@ -433,7 +433,7 @@ Config_RobotParam_t robot_config = {
         .pole_arrive_threshold_rad = 0.30f,
         .prealign_yaw_tolerance_rad =
             CONFIG_AUTO_ORE_PREALIGN_YAW_TOLERANCE_RAD,
-        .release_lift_detect_sick_index = SICK_REAR_INDEX,
+        .release_lift_detect_sick_index = SICK_BOTTOM_PHOTO_INDEX,
         .release_lift_detect_sick_adc_threshold = 3200u,
         .release_lift_detect_sick_greater_than_threshold = true,
         /* 取矿流程中正向 200/400 取矿的底盘前进速度，单位 m/s；与融合上台阶取矿靠近速度保持一致。 */
@@ -495,7 +495,7 @@ Config_RobotParam_t robot_config = {
     .auto_rod_spearhead_param = {
         /* One-key spearhead action timing; rod_param is filled during init. */
         .open_delay_ms = 20u,
-        .grab_high_delay_ms = 1500u,
+        .grab_high_delay_ms = 60u,
         .detect_grip_delay_ms = 100u,
         .detect_pose_delay_ms = 600u,
         .detect_success_hold_ms = 500u,
@@ -520,11 +520,11 @@ Config_RobotParam_t robot_config = {
         },
         /*
          * SICK 校正参数：
-         * - index 字段选择校正使用的 4 路 SICK ADC 通道。
-         *   当前硬件：前侧=3，后侧=0，矛头侧后侧=1，矛头侧前侧=2。
+         * - index 字段选择 SICK 采样板 4 路 ADC 通道。
+         *   当前硬件：rawdata[3]=前光电，rawdata[1]=rod 侧光电，rawdata[0]=下光电，rawdata[2]=未用。
          * - 取矛头校正由 auto_sick_correct.c 的 X/Y 轴宏开关控制；
          *   当前 x/y 两轴都关闭，动作会直接返回成功。
-         *   重新开启时，y 使用后侧 SICK rawdata[0]，x 使用矛头侧前侧 SICK rawdata[2]。
+         *   重新开启时，y 使用 rod 侧光电 rawdata[1]，x 使用前光电 rawdata[3]。
          * - yaw_sample_diff_adc 保留给其他 SICK 校正动作调试。
          * - *_kp 字段把 ADC 误差映射到底盘速度；*_limit 字段做命令限幅。
          *   tolerance/stable/timeout 用于判定校正完成。
@@ -532,24 +532,24 @@ Config_RobotParam_t robot_config = {
         /* 模块参数：SICK 一键校正 sick_correct，取矛头/放矿前的 SICK 对位参数。 */
         .sick_correct = {
             .rod_spearhead_position = {
-                [0] = CONFIG_SICK_ROD_SPEARHEAD_PARAM(666.0f,  1019.0f),
-                [1] = CONFIG_SICK_ROD_SPEARHEAD_PARAM(1599.0f, 1019.0f),
-                [2] = CONFIG_SICK_ROD_SPEARHEAD_PARAM(2566.0f, 1019.0f),
-                [3] = CONFIG_SICK_ROD_SPEARHEAD_PARAM(3500.0f, 1019.0f),
-                [4] = CONFIG_SICK_ROD_SPEARHEAD_PARAM(4406.0f, 1019.0f),
-                [5] = CONFIG_SICK_ROD_SPEARHEAD_PARAM(5377.0f, 1019.0f),
+                [0] = CONFIG_SICK_ROD_SPEARHEAD_PARAM(666.0f,  1021.0f),
+                [1] = CONFIG_SICK_ROD_SPEARHEAD_PARAM(1599.0f, 1021.0f),
+                [2] = CONFIG_SICK_ROD_SPEARHEAD_PARAM(2566.0f, 1021.0f),
+                [3] = CONFIG_SICK_ROD_SPEARHEAD_PARAM(3500.0f, 1021.0f),
+                [4] = CONFIG_SICK_ROD_SPEARHEAD_PARAM(4406.0f, 1021.0f),
+                [5] = CONFIG_SICK_ROD_SPEARHEAD_PARAM(5377.0f, 1021.0f),
             },
-            /* 放矿前 SICK 校正：只使用 rawdata[2] 做 x 方向校正。 */
+            /* 放矿前 SICK 校正：只使用前光电 rawdata[3] 做 x 方向校正。 */
             .ore_release = {  
-                .front_index = SICK_ROD_FRONT_INDEX,
-                .rod_front_index = SICK_ROD_FRONT_INDEX,
-                .rear_index = SICK_REAR_INDEX,
-                .rod_rear_index = SICK_ROD_REAR_INDEX,
+                .front_index = SICK_FRONT_PHOTO_INDEX,
+                .rod_front_index = SICK_ROD_SIDE_PHOTO_INDEX,
+                .rear_index = SICK_BOTTOM_PHOTO_INDEX,
+                .rod_rear_index = SICK_ROD_SIDE_PHOTO_INDEX,
                 .valid_adc_min = 0u,               /* 有效 ADC 下限。 */
                 .valid_adc_max = 32100u,             /* 有效 ADC 上限。 */
-                .x_target_adc = 1079.0f,             /* rawdata[2] 的 x 目标 ADC。 */
+                .x_target_adc = 1079.0f,             /* 前光电 rawdata[3] 的 x 目标 ADC。 */
                 .y_target_adc = 1.0f,                /* 放矿校正不使用 y，仅保持参数有效。 */
-                .yaw_target_diff_adc = 0.0f,         /* 目标 ADC：矛头前侧 - 矛头后侧。 */
+                .yaw_target_diff_adc = 0.0f,         /* 当前硬件没有成对 yaw 传感器。 */
                 .x_tolerance_adc = 100.0f,           /* 允许的 x ADC 误差。     */
                 .y_tolerance_adc = 1.0f,             /* 放矿校正不使用 y。 */
                 .yaw_tolerance_adc = 30.0f,          /* 允许的 yaw/z ADC 误差。 */

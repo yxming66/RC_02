@@ -271,7 +271,7 @@ static uint8_t AutoOre_ReleaseLiftDetectSickIndex(const AutoOre_t *ctrl) {
   return (ctrl->param.release_lift_detect_sick_index <
           SICK_OUTPUT_CHANNEL_COUNT)
              ? ctrl->param.release_lift_detect_sick_index
-             : SICK_REAR_INDEX;
+             : SICK_BOTTOM_PHOTO_INDEX;
 }
 
 static uint16_t AutoOre_ReleaseLiftDetectSickAdcThreshold(

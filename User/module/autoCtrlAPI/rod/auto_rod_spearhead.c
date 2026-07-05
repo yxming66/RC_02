@@ -26,6 +26,13 @@ static uint32_t AutoRodSpearhead_DetectGripDelayMs(
              : AUTO_ROD_SPEARHEAD_DEFAULT_DETECT_GRIP_DELAY_MS;
 }
 
+static uint32_t AutoRodSpearhead_GrabHighDelayMs(
+    const AutoRodSpearhead_t *ctrl) {
+  return ctrl->param.grab_high_delay_ms > 0u
+             ? ctrl->param.grab_high_delay_ms
+             : AUTO_ROD_SPEARHEAD_DEFAULT_DETECT_SUCCESS_HOLD_MS;
+}
+
 static uint32_t AutoRodSpearhead_DetectPoseDelayMs(
     const AutoRodSpearhead_t *ctrl) {
   return ctrl->param.detect_pose_delay_ms > 0u
@@ -322,7 +329,7 @@ static void AutoRodSpearhead_RunPickupStep2(
       AutoRodSpearhead_EnterStep(ctrl, now_ms);
       if (!AutoRodSpearhead_CommandOreStore(
               ctrl, ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP, false) ||
-          !AutoRodSpearhead_CommandRod(ctrl, ROD_NEW_POSE_DOCK_WAIT,
+          !AutoRodSpearhead_CommandRod(ctrl, ROD_NEW_POSE_STANDBY,
                                        ROD_NEW_GRIP_RELEASE)) {
         return;
       }
@@ -339,7 +346,7 @@ static void AutoRodSpearhead_RunPickupStep2(
       AutoRodSpearhead_EnterStep(ctrl, now_ms);
       if (!AutoRodSpearhead_CommandOreStore(
               ctrl, ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP, false) ||
-          !AutoRodSpearhead_CommandRod(ctrl, ROD_NEW_POSE_DOCK_WAIT,
+          !AutoRodSpearhead_CommandRod(ctrl, ROD_NEW_POSE_STANDBY,
                                        ROD_NEW_GRIP_RELEASE)) {
         return;
       }
@@ -352,12 +359,12 @@ static void AutoRodSpearhead_RunPickupStep2(
       AutoRodSpearhead_EnterStep(ctrl, now_ms);
       if (!AutoRodSpearhead_CommandOreStore(
               ctrl, ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP, false) ||
-          !AutoRodSpearhead_CommandRod(ctrl, ROD_NEW_POSE_DOCK_WAIT,
+          !AutoRodSpearhead_CommandRod(ctrl, ROD_NEW_POSE_STANDBY,
                                        ROD_NEW_GRIP_GRAB)) {
         return;
       }
       if (AutoRodSpearhead_StepElapsed(ctrl, now_ms) >=
-          AutoRodSpearhead_DetectGripDelayMs(ctrl)) {
+          AutoRodSpearhead_GrabHighDelayMs(ctrl)) {
         AutoRodSpearhead_NextStep(ctrl);
       }
       return;

@@ -47,6 +47,7 @@ static const uint8_t s_feedback_cmds[] = {
     PC_FEEDBACK_CAMERA_YAW,
     PC_FEEDBACK_STEP,
     PC_FEEDBACK_SICK_CORRECT,
+    PC_FEEDBACK_SICK_FRONT_ORE,
     PC_FEEDBACK_IR_DOCK,
     PC_FEEDBACK_STATUS,
     /* PC_FEEDBACK_IR_ORE 不在自动循环里：由 PcComm_TryUpdateIrOreFeedback
@@ -280,6 +281,27 @@ static void PcComm_UpdateSickCorrectFeedback(void) {
     }
 
     (void)MrlinkPc_PublishFeedback(PC_FEEDBACK_SICK_CORRECT, &feedback);
+}
+
+static void PcComm_UpdateSickFrontOreFeedback(void) {
+    Sick_FrontOreDetect_t detect = {0};
+    PC_SickFrontOreFeedback_t feedback = {0};
+    feedback.channel_index = SICK_FRONT_PHOTO_INDEX;
+    feedback.min_distance_mm = SICK_FRONT_ORE_DETECT_MIN_DISTANCE_MM;
+    feedback.max_distance_mm = SICK_FRONT_ORE_DETECT_MAX_DISTANCE_MM;
+
+    if (SICK_GetFrontOreDetect(&detect)) {
+        feedback.sample_valid = detect.sample_valid ? 1u : 0u;
+        feedback.in_region = detect.in_region ? 1u : 0u;
+        feedback.detected = detect.detected ? 1u : 0u;
+        feedback.channel_index = detect.channel_index;
+        feedback.adc_raw = detect.adc_raw;
+        feedback.min_distance_mm = detect.min_distance_mm;
+        feedback.max_distance_mm = detect.max_distance_mm;
+        feedback.distance_mm = detect.distance_mm;
+    }
+
+    (void)MrlinkPc_PublishFeedback(PC_FEEDBACK_SICK_FRONT_ORE, &feedback);
 }
 
 static bool PcComm_AppendStartMatchFrame(uint16_t *tx_len) {
@@ -564,6 +586,7 @@ static bool PcComm_TransmitFeedback(void) {
     PcComm_UpdateStatusFeedback();
     PcComm_UpdateModuleFeedback();
     PcComm_UpdateSickCorrectFeedback();
+    PcComm_UpdateSickFrontOreFeedback();
     PcComm_UpdateIrDockFeedback(now);
     const bool ir_ore_pending = PcComm_TryUpdateIrOreFeedback(now);
     const bool start_match_pending = PcComm_AppendStartMatchFrame(&tx_len);

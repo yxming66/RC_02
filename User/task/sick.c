@@ -22,6 +22,7 @@ static bool Task_SickDebugPeriodicDue(uint32_t now_ms) {
 
 static void Task_SickUpdateDebug(void) {
   Sick_Output_t output = {0};
+  Sick_FrontOreDetect_t front_ore = {0};
   g_sick_debug.can_bus = SICK_CAN_BUS;
   g_sick_debug.can_id = SICK_CAN_ID;
 
@@ -35,6 +36,24 @@ static void Task_SickUpdateDebug(void) {
     g_sick_debug.distance_mm[i] = output.distance_mm[i];
     g_sick_debug.distance_m[i] = output.distance_m[i];
     g_sick_debug.valid[i] = output.valid[i];
+  }
+  g_sick_debug.front_adc_raw = output.adc_raw[SICK_FRONT_PHOTO_INDEX];
+  g_sick_debug.rod_side_adc_raw = output.adc_raw[SICK_ROD_SIDE_PHOTO_INDEX];
+  g_sick_debug.bottom_adc_raw = output.adc_raw[SICK_BOTTOM_PHOTO_INDEX];
+  g_sick_debug.unused_adc_raw = output.adc_raw[SICK_UNUSED_PHOTO_INDEX];
+  g_sick_debug.front_valid = output.valid[SICK_FRONT_PHOTO_INDEX];
+  g_sick_debug.rod_side_valid = output.valid[SICK_ROD_SIDE_PHOTO_INDEX];
+  g_sick_debug.bottom_valid = output.valid[SICK_BOTTOM_PHOTO_INDEX];
+  g_sick_debug.unused_valid = output.valid[SICK_UNUSED_PHOTO_INDEX];
+  if (SICK_GetFrontOreDetect(&front_ore)) {
+    g_sick_debug.front_ore_sample_valid = front_ore.sample_valid ? 1u : 0u;
+    g_sick_debug.front_ore_in_region = front_ore.in_region ? 1u : 0u;
+    g_sick_debug.front_ore_detected = front_ore.detected ? 1u : 0u;
+    g_sick_debug.front_ore_adc_raw = front_ore.adc_raw;
+    g_sick_debug.front_ore_distance_mm = front_ore.distance_mm;
+    g_sick_debug.front_ore_min_distance_mm = front_ore.min_distance_mm;
+    g_sick_debug.front_ore_max_distance_mm = front_ore.max_distance_mm;
+    g_sick_debug.front_ore_stable_since_ms = front_ore.stable_since_ms;
   }
   g_sick_debug.miss_count = output.miss_count;
   g_sick_debug.update_tick = output.update_tick;

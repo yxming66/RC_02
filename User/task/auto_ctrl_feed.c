@@ -1189,7 +1189,7 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms, bool update_debug) {
       (auto_ore_ctrl.param.release_lift_detect_sick_index <
        SICK_OUTPUT_CHANNEL_COUNT)
           ? auto_ore_ctrl.param.release_lift_detect_sick_index
-          : SICK_REAR_INDEX;
+          : SICK_BOTTOM_PHOTO_INDEX;
 
   AutoOre_Feedback_t auto_ore_feedback = {
       .arm_at_target = arm_at_target,
@@ -2035,10 +2035,10 @@ void Task_auto_ctrl(void *argument) {
       /* 新 SICK 布局没有成对前侧传感器，保持旧 yaw 辅助无效。 */
       (void)Task_SickGetLatestOutput(&auto_ctrl_sick_output);
       feedback.sick_front_left_cm =
-          auto_ctrl_sick_output.valid[SICK_FRONT_INDEX]
-                    ? auto_ctrl_sick_output.distance_m[SICK_FRONT_INDEX] *
-                          100.0f
-                    : -1.0f;
+          auto_ctrl_sick_output.valid[SICK_FRONT_PHOTO_INDEX]
+          ? auto_ctrl_sick_output.distance_m[SICK_FRONT_PHOTO_INDEX] *
+            100.0f
+          : -1.0f;
       feedback.sick_front_right_cm = -1.0f;
 
       feedback.pe13_photo1_triggered =

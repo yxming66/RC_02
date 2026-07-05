@@ -68,6 +68,7 @@ typedef enum {
     PC_FEEDBACK_IR_ORE_BRIDGE = 0x99,/* 红外对接桥接调试反馈，含 msg_id/side/原始 18 字节帧 */
     PC_FEEDBACK_IR_DOCK = 0x9A,      /* R1/R2 红外对接新协议状态反馈 */
     PC_FEEDBACK_SICK_CORRECT = 0x9B, /* 取矛头 SICK 校正标准值/实时值反馈 */
+    PC_FEEDBACK_SICK_FRONT_ORE = 0x9C, /* 前 SICK 区域正方形矿检测反馈 */
 } PC_FeedbackCMD_t;
  
 #define MRLINK_PC_MAX_PAYLOAD_SIZE (64u)    /* 单帧 payload 最大字节数，上位机结构体不能超过该值 */
@@ -376,6 +377,18 @@ typedef struct {
 #define PC_SICK_CORRECT_VALID_X (1u << 0)
 #define PC_SICK_CORRECT_VALID_Y (1u << 1)
 
+typedef struct {
+    uint8_t sample_valid;       /* 前 SICK 样本有效，0/1 */
+    uint8_t in_region;          /* 当前距离是否落在检测区域内，0/1 */
+    uint8_t detected;           /* 稳定确认后的矿检测结果，0/1 */
+    uint8_t channel_index;      /* 使用的 SICK rawdata 通道，当前为前光电 rawdata[3] */
+    uint16_t adc_raw;           /* 前 SICK ADC 原始值 */
+    uint16_t min_distance_mm;   /* 检测窗口近端，单位 mm */
+    uint16_t max_distance_mm;   /* 检测窗口远端，单位 mm */
+    uint16_t reserved;          /* 保留，发送端固定为 0 */
+    float distance_mm;          /* 前 SICK 测距，单位 mm */
+} PC_SickFrontOreFeedback_t;
+
 typedef enum {
     PC_ORE_TYPE_UNKNOWN = 0,    /* 矿种未知或未收到 */
     PC_ORE_TYPE_R1 = 1,         /* R1 矿 */
@@ -502,6 +515,7 @@ typedef struct {
     PC_CameraYawFeedback_t camera_yaw;     /* 相机云台 yaw 反馈缓存 */
     PC_StepFeedback_t step;                /* 自动台阶反馈缓存 */
     PC_SickCorrectFeedback_t sick_correct; /* 取矛头 SICK 校正反馈缓存 */
+    PC_SickFrontOreFeedback_t sick_front_ore; /* 前 SICK 区域正方形矿检测反馈缓存 */
     PC_StatusFeedback_t status;            /* 通信/系统状态反馈缓存 */
     PC_IrDockFeedback_t ir_dock;           /* R1/R2 红外对接反馈缓存 */
     PC_IrOreBridgeFeedback_t ir_ore_bridge;  /* 红外对接桥接反馈缓存 */

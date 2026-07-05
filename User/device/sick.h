@@ -33,26 +33,43 @@ extern "C" {
 #define SICK_CAN_BUS BSP_CAN_2
 #endif
 
-/* SICK ADC channel mapping:
- * [0] rear SICK
- * [1] rod-side rear SICK
- * [2] rod-side front SICK
- * [3] front SICK
+/* SICK sampling board sends 4 ADC channels per CAN frame.
+ * Current mechanism uses 3 photoelectric sensors:
+ * [0] bottom photoelectric
+ * [1] rod-side photoelectric
+ * [2] unused
+ * [3] front photoelectric
  */
+#ifndef SICK_BOTTOM_PHOTO_INDEX
+#define SICK_BOTTOM_PHOTO_INDEX (0u)
+#endif
+
+#ifndef SICK_ROD_SIDE_PHOTO_INDEX
+#define SICK_ROD_SIDE_PHOTO_INDEX (1u)
+#endif
+
+#ifndef SICK_UNUSED_PHOTO_INDEX
+#define SICK_UNUSED_PHOTO_INDEX (2u)
+#endif
+
+#ifndef SICK_FRONT_PHOTO_INDEX
+#define SICK_FRONT_PHOTO_INDEX (3u)
+#endif
+
 #ifndef SICK_FRONT_INDEX
-#define SICK_FRONT_INDEX (3u)
+#define SICK_FRONT_INDEX SICK_FRONT_PHOTO_INDEX
 #endif
 
 #ifndef SICK_ROD_FRONT_INDEX
-#define SICK_ROD_FRONT_INDEX (2u)
+#define SICK_ROD_FRONT_INDEX SICK_ROD_SIDE_PHOTO_INDEX
 #endif
 
 #ifndef SICK_REAR_INDEX
-#define SICK_REAR_INDEX (0u)
+#define SICK_REAR_INDEX SICK_BOTTOM_PHOTO_INDEX
 #endif
 
 #ifndef SICK_ROD_REAR_INDEX
-#define SICK_ROD_REAR_INDEX (1u)
+#define SICK_ROD_REAR_INDEX SICK_ROD_SIDE_PHOTO_INDEX
 #endif
 
 #ifndef SICK_CHANNEL_2_ADC_OFFSET
@@ -67,6 +84,18 @@ extern "C" {
 #define SICK_CHANNEL_4_ADC_OFFSET (0u)
 #endif
 
+#ifndef SICK_FRONT_ORE_DETECT_MIN_DISTANCE_MM
+#define SICK_FRONT_ORE_DETECT_MIN_DISTANCE_MM (80u)
+#endif
+
+#ifndef SICK_FRONT_ORE_DETECT_MAX_DISTANCE_MM
+#define SICK_FRONT_ORE_DETECT_MAX_DISTANCE_MM (900u)
+#endif
+
+#ifndef SICK_FRONT_ORE_DETECT_STABLE_MS
+#define SICK_FRONT_ORE_DETECT_STABLE_MS (60u)
+#endif
+
 /* USER DEFINE END */
 
 /* Exported types ----------------------------------------------------------- */
@@ -79,10 +108,24 @@ typedef struct {
     uint32_t update_tick;
 } Sick_Output_t;
 
+typedef struct {
+    uint8_t channel_index;
+    bool sample_valid;
+    bool in_region;
+    bool detected;
+    uint16_t adc_raw;
+    uint16_t min_distance_mm;
+    uint16_t max_distance_mm;
+    float distance_mm;
+    uint32_t stable_since_ms;
+    uint32_t update_tick;
+} Sick_FrontOreDetect_t;
+
 /* Exported functions prototypes -------------------------------------------- */
 int8_t SICK_Init(void);
 void SICK_Update(uint32_t now_ms);
 bool SICK_GetLatestOutput(Sick_Output_t *output);
+bool SICK_GetFrontOreDetect(Sick_FrontOreDetect_t *detect);
 
 #ifdef __cplusplus
 }
