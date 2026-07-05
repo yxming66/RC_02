@@ -155,6 +155,10 @@ typedef enum {
     AUTO_ORE_DEBUG_REQUEST_STEP_DROP_STORE_DESCEND_200_HEAD = 31,
     AUTO_ORE_DEBUG_REQUEST_STEP_DROP_STORE_ASCEND_400_HEAD = 32,
     AUTO_ORE_DEBUG_REQUEST_RECOVER_STORE = 33,
+    AUTO_ORE_DEBUG_REQUEST_RELEASE_STEP1 = 34,
+    AUTO_ORE_DEBUG_REQUEST_RELEASE_STEP2 = 35,
+    AUTO_ORE_DEBUG_REQUEST_RELEASE_LIFT_DETECT_STEP1 = 36,
+    AUTO_ORE_DEBUG_REQUEST_RELEASE_LIFT_DETECT_STEP2 = 37,
 } AutoOre_DebugRequest_t;
 
 typedef struct {
@@ -493,6 +497,10 @@ bool Task_PoleMainGetHoldCommand(Pole_CMD_t *cmd);
 bool Task_AutoOreStartStore(void);
 bool Task_AutoOreStartRelease(void);
 bool Task_AutoOreStartReleaseLiftDetect(void);
+bool Task_AutoOreStartReleaseStep1(void);
+bool Task_AutoOreStartReleaseStep2(void);
+bool Task_AutoOreStartReleaseLiftDetectStep1(void);
+bool Task_AutoOreStartReleaseLiftDetectStep2(void);
 bool Task_AutoOreStartChamber(void);
 bool Task_AutoOreStartPickPos400(void);
 bool Task_AutoOreStartPickPos200(void);

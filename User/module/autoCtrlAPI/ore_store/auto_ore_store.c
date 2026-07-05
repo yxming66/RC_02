@@ -80,11 +80,27 @@ static void AutoOre_FinishSuccess(AutoOre_t *ctrl);
 
 static bool AutoOre_ActionIsReleaseLike(AutoOre_Action_t action) {
   return action == AUTO_ORE_ACTION_RELEASE ||
-         action == AUTO_ORE_ACTION_RELEASE_LIFT_DETECT;
+         action == AUTO_ORE_ACTION_RELEASE_LIFT_DETECT ||
+         action == AUTO_ORE_ACTION_RELEASE_STEP1 ||
+         action == AUTO_ORE_ACTION_RELEASE_STEP2 ||
+         action == AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP1 ||
+         action == AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP2;
 }
 
 static bool AutoOre_ActionUsesReleaseLiftDetect(AutoOre_Action_t action) {
-  return action == AUTO_ORE_ACTION_RELEASE_LIFT_DETECT;
+  return action == AUTO_ORE_ACTION_RELEASE_LIFT_DETECT ||
+         action == AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP1 ||
+         action == AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP2;
+}
+
+static bool AutoOre_ActionIsReleaseStep1(AutoOre_Action_t action) {
+  return action == AUTO_ORE_ACTION_RELEASE_STEP1 ||
+         action == AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP1;
+}
+
+static bool AutoOre_ActionIsReleaseStep2(AutoOre_Action_t action) {
+  return action == AUTO_ORE_ACTION_RELEASE_STEP2 ||
+         action == AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP2;
 }
 
 static bool AutoOre_ActionIsPickStoreFused(AutoOre_Action_t action) {
@@ -1303,6 +1319,11 @@ static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
                                        : false;
       if (!AutoOre_ActionUsesReleaseLiftDetect(ctrl->action)) {
         if (grid_check_done) {
+          if (AutoOre_ActionIsReleaseStep1(ctrl->action)) {
+            ctrl->fused_store_done = true;
+            AutoOre_CommandChassisZeroVector(ctrl);
+            return;
+          }
           AutoOre_NextStep(ctrl);
         } else {
           (void)AutoOre_CheckTimeout(ctrl, now_ms);
@@ -1315,6 +1336,11 @@ static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
               AutoOre_ReleaseLiftDetectSettleMs(ctrl);
       if (lift_settled) {
         if (grid_check_done) {
+          if (AutoOre_ActionIsReleaseStep1(ctrl->action)) {
+            ctrl->fused_store_done = true;
+            AutoOre_CommandChassisZeroVector(ctrl);
+            return;
+          }
           AutoOre_NextStep(ctrl);
         } else {
           (void)AutoOre_CheckTimeout(ctrl, now_ms);
@@ -2944,6 +2970,9 @@ static bool AutoOre_StartResolved(AutoOre_t *ctrl, AutoOre_Action_t action,
   ctrl->step_condition_met = false;
   ctrl->step_condition_time_ms = now_ms;
   ctrl->step_enter_time_ms = now_ms;
+  if (AutoOre_ActionIsReleaseStep2(action)) {
+    ctrl->step_index = 2u;
+  }
   ctrl->step_ctrl_active = false;
   ctrl->step_ctrl_started = false;
   ctrl->fused_step_done = false;
@@ -3033,6 +3062,24 @@ bool AutoOre_StartRelease(AutoOre_t *ctrl, uint32_t now_ms) {
 
 bool AutoOre_StartReleaseLiftDetect(AutoOre_t *ctrl, uint32_t now_ms) {
   return AutoOre_Start(ctrl, AUTO_ORE_ACTION_RELEASE_LIFT_DETECT, now_ms);
+}
+
+bool AutoOre_StartReleaseStep1(AutoOre_t *ctrl, uint32_t now_ms) {
+  return AutoOre_Start(ctrl, AUTO_ORE_ACTION_RELEASE_STEP1, now_ms);
+}
+
+bool AutoOre_StartReleaseStep2(AutoOre_t *ctrl, uint32_t now_ms) {
+  return AutoOre_Start(ctrl, AUTO_ORE_ACTION_RELEASE_STEP2, now_ms);
+}
+
+bool AutoOre_StartReleaseLiftDetectStep1(AutoOre_t *ctrl, uint32_t now_ms) {
+  return AutoOre_Start(ctrl, AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP1,
+                       now_ms);
+}
+
+bool AutoOre_StartReleaseLiftDetectStep2(AutoOre_t *ctrl, uint32_t now_ms) {
+  return AutoOre_Start(ctrl, AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP2,
+                       now_ms);
 }
 
 bool AutoOre_StartChamber(AutoOre_t *ctrl, uint32_t now_ms) {
@@ -3230,7 +3277,8 @@ bool AutoOre_IsBusy(const AutoOre_t *ctrl) {
 bool AutoOre_HasSplitResult(const AutoOre_t *ctrl) {
   return ctrl != 0 &&
          (AutoOre_ActionIsFused(ctrl->action) ||
-          AutoOre_ActionIsPickStoreFused(ctrl->action));
+          AutoOre_ActionIsPickStoreFused(ctrl->action) ||
+          AutoOre_ActionIsReleaseStep1(ctrl->action));
 }
 
 bool AutoOre_IsLowerFinished(const AutoOre_t *ctrl) {

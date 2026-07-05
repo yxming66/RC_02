@@ -32,6 +32,10 @@ typedef enum {
   AUTO_ORE_ACTION_STEP_DROP_STORE_ASCEND_200_HEAD,
   AUTO_ORE_ACTION_STEP_DROP_STORE_DESCEND_200_HEAD,
   AUTO_ORE_ACTION_STEP_DROP_STORE_ASCEND_400_HEAD,
+  AUTO_ORE_ACTION_RELEASE_STEP1,
+  AUTO_ORE_ACTION_RELEASE_STEP2,
+  AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP1,
+  AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP2,
 } AutoOre_Action_t;
 
 typedef enum {
@@ -280,6 +284,10 @@ bool AutoOre_StartStoreAtPosition(AutoOre_t *ctrl,
                                   uint32_t now_ms);
 bool AutoOre_StartRelease(AutoOre_t *ctrl, uint32_t now_ms);
 bool AutoOre_StartReleaseLiftDetect(AutoOre_t *ctrl, uint32_t now_ms);
+bool AutoOre_StartReleaseStep1(AutoOre_t *ctrl, uint32_t now_ms);
+bool AutoOre_StartReleaseStep2(AutoOre_t *ctrl, uint32_t now_ms);
+bool AutoOre_StartReleaseLiftDetectStep1(AutoOre_t *ctrl, uint32_t now_ms);
+bool AutoOre_StartReleaseLiftDetectStep2(AutoOre_t *ctrl, uint32_t now_ms);
 bool AutoOre_StartChamber(AutoOre_t *ctrl, uint32_t now_ms);
 bool AutoOre_StartPickPos400(AutoOre_t *ctrl, uint32_t now_ms);
 bool AutoOre_StartPickPos200(AutoOre_t *ctrl, uint32_t now_ms);

@@ -91,7 +91,11 @@ static void AutoCtrlFeed_SendLightEffect(LightEffect_Mode_t mode,
 
 static bool AutoCtrlFeed_IsReleaseAction(AutoOre_Action_t action) {
   return action == AUTO_ORE_ACTION_RELEASE ||
-         action == AUTO_ORE_ACTION_RELEASE_LIFT_DETECT;
+         action == AUTO_ORE_ACTION_RELEASE_LIFT_DETECT ||
+         action == AUTO_ORE_ACTION_RELEASE_STEP1 ||
+         action == AUTO_ORE_ACTION_RELEASE_STEP2 ||
+         action == AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP1 ||
+         action == AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP2;
 }
 
 static void AutoCtrlFeed_SendReleaseLevelLight(AutoOre_Position_t position) {
@@ -188,6 +192,14 @@ static PC_AutoAction_t AutoCtrlFeed_MapOreAction(AutoOre_Action_t action) {
       return PC_AUTO_ACTION_RELEASE;
     case AUTO_ORE_ACTION_RELEASE_LIFT_DETECT:
       return PC_AUTO_ACTION_RELEASE_LIFT_DETECT;
+    case AUTO_ORE_ACTION_RELEASE_STEP1:
+      return PC_AUTO_ACTION_RELEASE_STEP1;
+    case AUTO_ORE_ACTION_RELEASE_STEP2:
+      return PC_AUTO_ACTION_RELEASE_STEP2;
+    case AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP1:
+      return PC_AUTO_ACTION_RELEASE_LIFT_DETECT_STEP1;
+    case AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP2:
+      return PC_AUTO_ACTION_RELEASE_LIFT_DETECT_STEP2;
     case AUTO_ORE_ACTION_CHAMBER:
       return PC_AUTO_ACTION_CHAMBER;
     case AUTO_ORE_ACTION_PICK_POS_400:
@@ -231,6 +243,14 @@ static AutoOre_Action_t AutoCtrlFeed_RequestToOreAction(
       return AUTO_ORE_ACTION_RELEASE;
     case AUTO_ORE_DEBUG_REQUEST_RELEASE_LIFT_DETECT:
       return AUTO_ORE_ACTION_RELEASE_LIFT_DETECT;
+    case AUTO_ORE_DEBUG_REQUEST_RELEASE_STEP1:
+      return AUTO_ORE_ACTION_RELEASE_STEP1;
+    case AUTO_ORE_DEBUG_REQUEST_RELEASE_STEP2:
+      return AUTO_ORE_ACTION_RELEASE_STEP2;
+    case AUTO_ORE_DEBUG_REQUEST_RELEASE_LIFT_DETECT_STEP1:
+      return AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP1;
+    case AUTO_ORE_DEBUG_REQUEST_RELEASE_LIFT_DETECT_STEP2:
+      return AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP2;
     case AUTO_ORE_DEBUG_REQUEST_CHAMBER:
       return AUTO_ORE_ACTION_CHAMBER;
     case AUTO_ORE_DEBUG_REQUEST_PICK_POS_400:
@@ -490,6 +510,10 @@ static bool AutoCtrlFeed_IsOreAction(PC_AutoAction_t action) {
     case PC_AUTO_ACTION_STORE:
     case PC_AUTO_ACTION_RELEASE:
     case PC_AUTO_ACTION_RELEASE_LIFT_DETECT:
+    case PC_AUTO_ACTION_RELEASE_STEP1:
+    case PC_AUTO_ACTION_RELEASE_STEP2:
+    case PC_AUTO_ACTION_RELEASE_LIFT_DETECT_STEP1:
+    case PC_AUTO_ACTION_RELEASE_LIFT_DETECT_STEP2:
     case PC_AUTO_ACTION_CHAMBER:
     case PC_AUTO_ACTION_PICK_POS_400:
     case PC_AUTO_ACTION_PICK_POS_200:
@@ -504,6 +528,8 @@ static bool AutoCtrlFeed_IsOreAction(PC_AutoAction_t action) {
     case PC_AUTO_ACTION_PICK_STORE_POS_400:
     case PC_AUTO_ACTION_PICK_STORE_POS_200:
     case PC_AUTO_ACTION_PICK_STORE_NEG_200:
+    case PC_AUTO_ACTION_RELEASE_STEP1:
+    case PC_AUTO_ACTION_RELEASE_LIFT_DETECT_STEP1:
       return true;
     default:
       return false;
@@ -748,6 +774,18 @@ static bool AutoCtrlFeed_StartOreAction(AutoOre_Action_t action) {
       break;
     case AUTO_ORE_ACTION_RELEASE_LIFT_DETECT:
       result = AutoOre_StartReleaseLiftDetect(&auto_ore_ctrl, now_ms);
+      break;
+    case AUTO_ORE_ACTION_RELEASE_STEP1:
+      result = AutoOre_StartReleaseStep1(&auto_ore_ctrl, now_ms);
+      break;
+    case AUTO_ORE_ACTION_RELEASE_STEP2:
+      result = AutoOre_StartReleaseStep2(&auto_ore_ctrl, now_ms);
+      break;
+    case AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP1:
+      result = AutoOre_StartReleaseLiftDetectStep1(&auto_ore_ctrl, now_ms);
+      break;
+    case AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP2:
+      result = AutoOre_StartReleaseLiftDetectStep2(&auto_ore_ctrl, now_ms);
       break;
     case AUTO_ORE_ACTION_CHAMBER:
       result = AutoOre_StartChamber(&auto_ore_ctrl, now_ms);
@@ -1501,6 +1539,22 @@ bool Task_AutoOreStartReleaseLiftDetect(void) {
   return AutoCtrlFeed_StartOreAction(AUTO_ORE_ACTION_RELEASE_LIFT_DETECT);
 }
 
+bool Task_AutoOreStartReleaseStep1(void) {
+  return AutoCtrlFeed_StartOreAction(AUTO_ORE_ACTION_RELEASE_STEP1);
+}
+
+bool Task_AutoOreStartReleaseStep2(void) {
+  return AutoCtrlFeed_StartOreAction(AUTO_ORE_ACTION_RELEASE_STEP2);
+}
+
+bool Task_AutoOreStartReleaseLiftDetectStep1(void) {
+  return AutoCtrlFeed_StartOreAction(AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP1);
+}
+
+bool Task_AutoOreStartReleaseLiftDetectStep2(void) {
+  return AutoCtrlFeed_StartOreAction(AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP2);
+}
+
 bool Task_AutoOreStartChamber(void) {
   return AutoCtrlFeed_StartOreAction(AUTO_ORE_ACTION_CHAMBER);
 }
@@ -1617,6 +1671,44 @@ static void AutoCtrlFeed_HandleAutoOreDebugRequest(void) {
       break;
     case AUTO_ORE_DEBUG_REQUEST_RELEASE_LIFT_DETECT:
       result = Task_AutoOreStartReleaseLiftDetect();
+      break;
+    case AUTO_ORE_DEBUG_REQUEST_RELEASE_STEP1:
+      result = Task_AutoOreStartReleaseStep1();
+      break;
+    case AUTO_ORE_DEBUG_REQUEST_RELEASE_STEP2:
+      if (auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl) &&
+          auto_ore_ctrl.action == AUTO_ORE_ACTION_RELEASE_STEP1 &&
+          AutoOre_IsUpperFinished(&auto_ore_ctrl)) {
+        auto_ore_ctrl.action = AUTO_ORE_ACTION_RELEASE_STEP2;
+        auto_ore_ctrl.step_index = 2u;
+        auto_ore_ctrl.step_entered = false;
+        auto_ore_ctrl.step_condition_met = false;
+        auto_ore_ctrl.step_condition_time_ms = BSP_TIME_Get_ms();
+        auto_ore_ctrl.step_enter_time_ms = auto_ore_ctrl.step_condition_time_ms;
+        auto_ore_ctrl.fused_store_done = false;
+        result = true;
+      } else {
+        result = Task_AutoOreStartReleaseStep2();
+      }
+      break;
+    case AUTO_ORE_DEBUG_REQUEST_RELEASE_LIFT_DETECT_STEP1:
+      result = Task_AutoOreStartReleaseLiftDetectStep1();
+      break;
+    case AUTO_ORE_DEBUG_REQUEST_RELEASE_LIFT_DETECT_STEP2:
+      if (auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl) &&
+          auto_ore_ctrl.action == AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP1 &&
+          AutoOre_IsUpperFinished(&auto_ore_ctrl)) {
+        auto_ore_ctrl.action = AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP2;
+        auto_ore_ctrl.step_index = 2u;
+        auto_ore_ctrl.step_entered = false;
+        auto_ore_ctrl.step_condition_met = false;
+        auto_ore_ctrl.step_condition_time_ms = BSP_TIME_Get_ms();
+        auto_ore_ctrl.step_enter_time_ms = auto_ore_ctrl.step_condition_time_ms;
+        auto_ore_ctrl.fused_store_done = false;
+        result = true;
+      } else {
+        result = Task_AutoOreStartReleaseLiftDetectStep2();
+      }
       break;
     case AUTO_ORE_DEBUG_REQUEST_CHAMBER:
       result = Task_AutoOreStartChamber();

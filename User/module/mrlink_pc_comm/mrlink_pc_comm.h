@@ -229,6 +229,10 @@ typedef enum {
     PC_AUTO_ACTION_STEP_DROP_STORE_DESCEND_200_HEAD = 31, /* 丢矿版融合取矿存矿并头向下 200mm 台阶 */
     PC_AUTO_ACTION_STEP_DROP_STORE_ASCEND_400_HEAD = 32, /* 丢矿版融合取矿存矿并头向上 400mm 台阶 */
     PC_AUTO_ACTION_RECOVER_STORE = 33,    /* 回收地面矿并存矿 */
+    PC_AUTO_ACTION_RELEASE_STEP1 = 34,    /* 放矿 step1：竖直观察目标格，占矿结果上报后保持矿 */
+    PC_AUTO_ACTION_RELEASE_STEP2 = 35,    /* 放矿 step2：确认目标格后继续释放矿 */
+    PC_AUTO_ACTION_RELEASE_LIFT_DETECT_STEP1 = 36, /* 三层放矿 step1：竖直观察目标格并等待抬升检测 */
+    PC_AUTO_ACTION_RELEASE_LIFT_DETECT_STEP2 = 37, /* 三层放矿 step2：确认目标格/抬升后继续释放矿 */
 } PC_AutoAction_t;
 
 typedef enum {
