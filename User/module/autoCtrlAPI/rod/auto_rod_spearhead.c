@@ -10,6 +10,7 @@
 #define AUTO_ROD_SPEARHEAD_DEFAULT_PHOTO_CHECK_MS (1000u)
 #define AUTO_ROD_SPEARHEAD_DOCK_WAIT_POSE_DELAY_MS (300u)
 #define AUTO_ROD_SPEARHEAD_DOCK_WAIT_STANDBY_THRESHOLD_RAD (15.0f)
+#define AUTO_ROD_SPEARHEAD_STEP1_PICKUP_OFFSET_RAD (1.0f)
 
 static uint32_t AutoRodSpearhead_OpenDelayMs(
     const AutoRodSpearhead_t *ctrl) {
@@ -139,6 +140,18 @@ static bool AutoRodSpearhead_CommandOreStore(
   return ctrl->ore_store_cmd_valid;
 }
 
+static bool AutoRodSpearhead_CommandOreStoreOffset(
+    AutoRodSpearhead_t *ctrl,
+    OreStore_TransformPoint_t transform,
+    bool cylinder_closed,
+    float offset_rad) {
+  if (!AutoRodSpearhead_CommandOreStore(ctrl, transform, cylinder_closed)) {
+    return false;
+  }
+  ctrl->ore_store_cmd.platform_target_rad += offset_rad;
+  return true;
+}
+
 static void AutoRodSpearhead_ClearOutputs(AutoRodSpearhead_t *ctrl) {
   ctrl->rod_cmd_valid = false;
   ctrl->ore_store_cmd_valid = false;
@@ -261,8 +274,9 @@ static void AutoRodSpearhead_RunPickupStep1(
   switch (ctrl->step_index) {
     case 0:
       AutoRodSpearhead_EnterStep(ctrl, now_ms);
-      if (!AutoRodSpearhead_CommandOreStore(
-              ctrl, ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP, false)) {
+      if (!AutoRodSpearhead_CommandOreStoreOffset(
+              ctrl, ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP, false,
+              AUTO_ROD_SPEARHEAD_STEP1_PICKUP_OFFSET_RAD)) {
         return;
       }
       if (ore_store_at_target) {
@@ -276,8 +290,9 @@ static void AutoRodSpearhead_RunPickupStep1(
       return;
     case 1:
       AutoRodSpearhead_EnterStep(ctrl, now_ms);
-      if (!AutoRodSpearhead_CommandOreStore(
-              ctrl, ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP, false) ||
+      if (!AutoRodSpearhead_CommandOreStoreOffset(
+              ctrl, ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP, false,
+              AUTO_ROD_SPEARHEAD_STEP1_PICKUP_OFFSET_RAD) ||
           !AutoRodSpearhead_CommandRod(ctrl, ROD_NEW_POSE_STANDBY,
                                        ROD_NEW_GRIP_RELEASE)) {
         return;
@@ -299,9 +314,41 @@ static void AutoRodSpearhead_RunPickupStep2(
     uint32_t now_ms) {
   const bool rod_photo_triggered =
       feedback != 0 && feedback->rod_photo_triggered;
+  const bool ore_store_at_target =
+      feedback != 0 && feedback->ore_store_at_target;
 
   switch (ctrl->step_index) {
     case 0:
+      AutoRodSpearhead_EnterStep(ctrl, now_ms);
+      if (!AutoRodSpearhead_CommandOreStore(
+              ctrl, ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP, false) ||
+          !AutoRodSpearhead_CommandRod(ctrl, ROD_NEW_POSE_DOCK_WAIT,
+                                       ROD_NEW_GRIP_RELEASE)) {
+        return;
+      }
+      if (ore_store_at_target) {
+        AutoRodSpearhead_NextStep(ctrl);
+        return;
+      }
+      if (AutoRodSpearhead_StepElapsed(ctrl, now_ms) >=
+          AutoRodSpearhead_DockWaitDelayMs(ctrl)) {
+        AutoRodSpearhead_FinishTimeout(ctrl);
+      }
+      return;
+    case 1:
+      AutoRodSpearhead_EnterStep(ctrl, now_ms);
+      if (!AutoRodSpearhead_CommandOreStore(
+              ctrl, ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP, false) ||
+          !AutoRodSpearhead_CommandRod(ctrl, ROD_NEW_POSE_DOCK_WAIT,
+                                       ROD_NEW_GRIP_RELEASE)) {
+        return;
+      }
+      if (AutoRodSpearhead_StepElapsed(ctrl, now_ms) >=
+          AutoRodSpearhead_DetectGripDelayMs(ctrl)) {
+        AutoRodSpearhead_NextStep(ctrl);
+      }
+      return;
+    case 2:
       AutoRodSpearhead_EnterStep(ctrl, now_ms);
       if (!AutoRodSpearhead_CommandOreStore(
               ctrl, ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP, false) ||
@@ -314,7 +361,7 @@ static void AutoRodSpearhead_RunPickupStep2(
         AutoRodSpearhead_NextStep(ctrl);
       }
       return;
-    case 1:
+    case 3:
       AutoRodSpearhead_EnterStep(ctrl, now_ms);
       if (!AutoRodSpearhead_CommandOreStore(
               ctrl, ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP, false) ||
@@ -330,7 +377,7 @@ static void AutoRodSpearhead_RunPickupStep2(
         AutoRodSpearhead_NextStep(ctrl);
       }
       return;
-    case 2:
+    case 4:
       AutoRodSpearhead_EnterStep(ctrl, now_ms);
       if (!AutoRodSpearhead_CommandOreStore(
               ctrl, ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP, false) ||
@@ -362,7 +409,7 @@ static void AutoRodSpearhead_RunPickupStep2(
       }
       AutoRodSpearhead_NextStep(ctrl);
       return;
-    case 3:
+    case 5:
       AutoRodSpearhead_EnterStep(ctrl, now_ms);
       if (!AutoRodSpearhead_CommandOreStore(
               ctrl, ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP, false) ||
