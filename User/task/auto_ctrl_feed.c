@@ -2042,15 +2042,15 @@ void Task_auto_ctrl(void *argument) {
       feedback.sick_front_right_cm = -1.0f;
 
       feedback.pe13_photo1_triggered =
-          AutoCtrlFeed_ReadPhotoTransferBit(PHOTO_TRANSFER_BIT_PHOTO1_FRONT);
+          !AutoCtrlFeed_ReadPhotoTransferBit(PHOTO_TRANSFER_BIT_PHOTO1_FRONT);
       feedback.pe9_photo2_triggered =
-          AutoCtrlFeed_ReadPhotoTransferBit(
+          !AutoCtrlFeed_ReadPhotoTransferBit(
               PHOTO_TRANSFER_BIT_PHOTO2_THIRD_LAST);
       feedback.pa2_photo3_triggered =
-          AutoCtrlFeed_ReadPhotoTransferBit(
+          !AutoCtrlFeed_ReadPhotoTransferBit(
               PHOTO_TRANSFER_BIT_PHOTO3_SECOND_LAST);
       feedback.pa0_photo4_triggered =
-          AutoCtrlFeed_ReadPhotoTransferBit(PHOTO_TRANSFER_BIT_PHOTO4_LAST);
+          !AutoCtrlFeed_ReadPhotoTransferBit(PHOTO_TRANSFER_BIT_PHOTO4_LAST);
       float pole_front_lift_rad = 0.0f;
       float pole_rear_lift_rad = 0.0f;
       (void)Task_PoleMainGetSupportLift(&pole_front_lift_rad,
