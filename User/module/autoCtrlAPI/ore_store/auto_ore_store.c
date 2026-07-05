@@ -794,6 +794,12 @@ static void AutoOre_CommandChassisZeroVector(AutoOre_t *ctrl) {
   ctrl->chassis_cmd_valid = true;
 }
 
+static void AutoOre_ReleaseChassisCommand(AutoOre_t *ctrl) {
+  memset(&ctrl->chassis_cmd, 0, sizeof(ctrl->chassis_cmd));
+  ctrl->chassis_cmd.mode = CHASSIS_MODE_RELAX;
+  ctrl->chassis_cmd_valid = false;
+}
+
 static float AutoOre_PrealignYawToleranceRad(const AutoOre_t *ctrl) {
   return (ctrl != 0 && ctrl->param.prealign_yaw_tolerance_rad > 0.0f)
              ? ctrl->param.prealign_yaw_tolerance_rad
@@ -2376,7 +2382,7 @@ static void AutoOre_FinishFusedStepSide(AutoOre_t *ctrl) {
   ctrl->fused_step_done = true;
   ctrl->step_ctrl_active = false;
   ctrl->fused_step_template_start_step_index = 0u;
-  AutoOre_CommandChassisHold(ctrl);
+  AutoOre_ReleaseChassisCommand(ctrl);
 }
 
 static void AutoOre_RunFusedStepSide(AutoOre_t *ctrl, uint32_t now_ms,
@@ -2448,7 +2454,7 @@ static void AutoOre_RunFusedStoreAndStepParallel(AutoOre_t *ctrl,
   if (!ctrl->fused_step_done) {
     AutoOre_RunFusedStepSide(ctrl, now_ms, fused);
   } else {
-    AutoOre_CommandChassisHold(ctrl);
+    AutoOre_ReleaseChassisCommand(ctrl);
   }
 
   if (ctrl->state != AUTO_ORE_STATE_RUNNING) {
