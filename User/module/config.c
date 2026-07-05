@@ -588,7 +588,7 @@ Config_RobotParam_t robot_config = {
             .rear_retract_timeout_ms = 5000u,   /* 后光电触发后，全收腿动作超时，单位 ms。 */
             .rear_retract_move_ms = 300u,       /* 后光电触发后，全收腿移动持续时间，单位 ms。 */
             .second_photo_retract_move_speed = 0.40f, /* 后一个光电触发收腿时向头向移动 vx，单位 m/s。 */
-            .final_move_speed = 0.8f,          /* 收尾离开台阶 vx，单位 m/s。 */
+            .final_move_speed = 1.5f,          /* 收尾离开台阶 vx，单位 m/s。 */
             .final_move_ms = 1200u,              /* 收尾离开台阶角度门控兜底超时，单位 ms。 */
             .final_photo_sprint_ms = 100u,       /* 末尾光电触发后继续冲刺时间，单位 ms。 */
             .final_move_wheel_delta_rad = 0.0f, /* 编码器门控的收尾离开轮转角阈值，单位 rad；>0 优先按角度切步，<=0 使用 final_move_ms。 */
