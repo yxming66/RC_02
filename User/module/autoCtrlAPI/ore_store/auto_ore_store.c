@@ -1101,7 +1101,7 @@ static void AutoOre_RunStoreLow(AutoOre_t *ctrl, uint32_t now_ms) {
     case 2:
       AutoOre_EnterStep(ctrl, now_ms);
       if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_STORE_ORE,
-          SUCTION_ON, &ctrl->param.arm_speed.store_place) ||
+          SUCTION_OFF, &ctrl->param.arm_speed.store_place) ||
           !AutoOre_CommandOreStore(ctrl, ORE_STORE_TRANSFORM_MID_WAIT, true)) {
         AutoOre_FailInvalidParam(ctrl);
         return;
@@ -2059,7 +2059,7 @@ static void AutoOre_RunFusedStoreLow(AutoOre_t *ctrl, uint32_t now_ms) {
       }
       return;
     case 2:
-      if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_STORE_ORE, SUCTION_ON,
+      if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_STORE_ORE, SUCTION_OFF,
                               &ctrl->param.arm_speed.store_place) ||
           !AutoOre_CommandOreStore(ctrl, ORE_STORE_TRANSFORM_MID_WAIT, true)) {
         AutoOre_FailStoreInvalidParam(ctrl);

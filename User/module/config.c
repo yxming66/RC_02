@@ -375,9 +375,9 @@ Config_RobotParam_t robot_config = {
         /* ArmSimple 一键行为速度上限，单位 rad/s；<=0 表示使用 arm_simple_param.vel_limit 默认值。 */
         .arm_speed = {
             /* store_*：一键存矿流程，wait=等待/预备位，place=伸到存矿位，standby=回待机位。 */
-            .store_wait = {.joint1_max_vel_rad_s = 1.5f, .joint2_max_vel_rad_s = 4.0f},
-            .store_place = {.joint1_max_vel_rad_s = 1.5f, .joint2_max_vel_rad_s = 4.0f},
-            .store_standby = {.joint1_max_vel_rad_s =1.5f, .joint2_max_vel_rad_s = 4.0f},
+            .store_wait = {.joint1_max_vel_rad_s = 2.5f, .joint2_max_vel_rad_s = 4.5f},
+            .store_place = {.joint1_max_vel_rad_s = 2.5f, .joint2_max_vel_rad_s = 4.5f},
+            .store_standby = {.joint1_max_vel_rad_s = 2.5f, .joint2_max_vel_rad_s = 4.5f},
             /* release_*：一键放矿流程，wait=放矿前等待位，assist=放矿辅助进位，place=放矿位，standby=放矿后回待机位。 */
             .release_wait = {.joint1_max_vel_rad_s = 3.0f, .joint2_max_vel_rad_s = 2.0f},
             .release_assist = {.joint1_max_vel_rad_s = 3.0f, .joint2_max_vel_rad_s = 2.0f},
@@ -396,10 +396,10 @@ Config_RobotParam_t robot_config = {
         /* 一键存/放/上膛/取矿流程中的动作延时，单位 ms；<=0 时使用状态机内置默认值。 */
         .timing = {
             /* 存矿：arm 到存矿位后的稳定等待、固矿气缸关闭等待、气缸重新打开等待。 */
-            .store_arm_settle_ms = 300u,
-            .store_cylinder_close_ms = 200u,
-            .store_arm_suction_off_ms = 2300u,
-            .store_cylinder_open_ms = 200u, 
+            .store_arm_settle_ms = 150u,
+            .store_cylinder_close_ms = 120u,
+            .store_arm_suction_off_ms = 1200u,
+            .store_cylinder_open_ms = 120u, 
             /* 放矿：放矿前等待、Pole 到位后抬升观测超时、抬升确认后稳定等待、到放矿位后短暂停稳、吸盘关闭后矿石脱离等待。 */
             .release_wait_ms = 400u,
             .release_lift_detect_timeout_ms = 20000u,
@@ -444,7 +444,7 @@ Config_RobotParam_t robot_config = {
         .recover_chassis_forward_vx_mps = 0.30f,
         .recover_chassis_retreat_vx_mps = 0.30f,
         /* 低位存矿完成后，transform 从高位 LIFT 回低位 STANDBY 的梯形速度规划；<=0 使用默认值。 */
-        .store_low_return_velocity_rad_s = 30.0f,
+        .store_low_return_velocity_rad_s = 50.0f,
         .store_low_return_accel_rad_s2 = 60.0f,
         .store_low_return_decel_rad_s2 = 60.0f,
         /*
