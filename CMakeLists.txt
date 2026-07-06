@@ -129,6 +129,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     User/module/chassis/front_omni_rear_mecanum.cpp
     User/module/chassis/mecanum.cpp
     User/module/light_effect.c
+    User/module/light_effect_test.c
     User/module/shared_valve.c
     User/module/ore_store.cpp
     User/module/pole.cpp
