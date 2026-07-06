@@ -2278,6 +2278,19 @@ static void AutoOre_ResetFusedStepTemplateCtx(AutoOre_t *ctrl,
   ctrl->step_ctrl.template_ctx.step_index = step_index;
 }
 
+static void AutoOre_SkipFusedStepPrealign(AutoOre_t *ctrl,
+                                          uint32_t now_ms,
+                                          uint8_t step_index) {
+  ctrl->step_ctrl.state = AUTO_CTRL_STATE_RUN_TEMPLATE;
+  ctrl->step_ctrl.state_enter_time_ms = now_ms;
+  ctrl->step_ctrl.yaw_zero_offset_rad = ctrl->step_ctrl.yaw_raw_rad;
+  ctrl->step_ctrl.feedback.yaw_auto_rad = 0.0f;
+  ctrl->step_ctrl.target_yaw_rad = 0.0f;
+  ctrl->step_ctrl.yaw_error_rad = 0.0f;
+  AutoOre_ResetFusedStepTemplateCtx(ctrl, step_index);
+  ctrl->fused_step_template_start_step_index = 0u;
+}
+
 static void AutoOre_ApplyFusedStepTemplateOverrides(
     AutoOre_t *ctrl, const AutoOre_FusedParam_t *param) {
   if (ctrl == 0 || param == 0) {
@@ -2324,6 +2337,11 @@ static void AutoOre_RunFusedStepTemplate(AutoOre_t *ctrl, uint32_t now_ms) {
                                 sensor_mode, now_ms)) {
       AutoOre_FailStepInvalidParam(ctrl);
       return;
+    }
+    if (ctrl->fused_step_template_start_step_index != 0u &&
+        AutoOre_FusedTemplateStartsAtHeldPoleTarget(template_id)) {
+      AutoOre_SkipFusedStepPrealign(
+          ctrl, now_ms, ctrl->fused_step_template_start_step_index);
     }
     ctrl->step_ctrl_started = true;
     ctrl->step_ctrl_active = true;

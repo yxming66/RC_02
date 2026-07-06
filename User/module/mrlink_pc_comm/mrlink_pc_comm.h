@@ -68,7 +68,7 @@ typedef enum {
     PC_FEEDBACK_IR_ORE_BRIDGE = 0x99,/* 红外对接桥接调试反馈，含 msg_id/side/原始 18 字节帧 */
     PC_FEEDBACK_IR_DOCK = 0x9A,      /* R1/R2 红外对接新协议状态反馈 */
     PC_FEEDBACK_SICK_CORRECT = 0x9B, /* 取矛头 SICK 校正标准值/实时值反馈 */
-    PC_FEEDBACK_SICK_FRONT_ORE = 0x9C, /* 前 SICK 区域正方形矿检测反馈 */
+    PC_FEEDBACK_SICK_FRONT_ORE = 0x9C, /* 前 SICK 区域正方形矿检测反馈。 */
 } PC_FeedbackCMD_t;
  
 #define MRLINK_PC_MAX_PAYLOAD_SIZE (64u)    /* 单帧 payload 最大字节数，上位机结构体不能超过该值 */

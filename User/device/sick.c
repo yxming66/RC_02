@@ -84,8 +84,8 @@ static bool SICK_FrontOreDistanceInRegion(float distance_mm) {
          distance_mm <= (float)SICK_FRONT_ORE_DETECT_MAX_DISTANCE_MM;
 }
 
-static void SICK_UpdateFrontOreDetect(const Sick_Output_t *output,
-                                      uint32_t now_ms) {
+static Sick_FrontOreDetect_t SICK_MakeFrontOreDetect(
+  const Sick_Output_t *output, uint32_t now_ms) {
   Sick_FrontOreDetect_t detect = {0};
   detect.channel_index = SICK_FRONT_PHOTO_INDEX;
   detect.min_distance_mm = SICK_FRONT_ORE_DETECT_MIN_DISTANCE_MM;
@@ -113,7 +113,7 @@ static void SICK_UpdateFrontOreDetect(const Sick_Output_t *output,
                      (uint32_t)(now_ms - sick_front_ore_stable_since_ms) >=
                          SICK_FRONT_ORE_DETECT_STABLE_MS);
 
-  sick_front_ore_detect = detect;
+  return detect;
 }
 
 static void SICK_PublishLatestOutput(uint32_t now_ms) {
@@ -128,10 +128,12 @@ static void SICK_PublishLatestOutput(uint32_t now_ms) {
 
   output.miss_count = sick_miss_count;
   output.update_tick = now_ms;
-  SICK_UpdateFrontOreDetect(&output, now_ms);
+  const Sick_FrontOreDetect_t front_ore_detect =
+      SICK_MakeFrontOreDetect(&output, now_ms);
 
   if (sick_mutex != NULL && osMutexAcquire(sick_mutex, osWaitForever) == osOK) {
     sick_latest_output = output;
+    sick_front_ore_detect = front_ore_detect;
     osMutexRelease(sick_mutex);
   }
 }
