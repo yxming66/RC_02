@@ -423,7 +423,7 @@ Config_RobotParam_t robot_config = {
             .fused_pick_precontact_timeout_ms = 2000u, /* 融合取矿低速靠近超时，单位 ms。 */
             .fused_pick_lift_detect_ms = 200u,         /* 融合取矿抬矿检测位到位后的确认延时，单位 ms。 */
             .fused_arm_photo_stable_ms = 120u,         /* 机械臂取矿传感器稳定确认时间，单位 ms。 */
-            .fused_photo1_lift_delay_ms = 200u,        /* 检测到光电1后，延迟抬 arm/开始并行存矿，单位 ms。 */
+            .fused_photo1_lift_delay_ms = 0u,        /* 检测到光电1后，延迟抬 arm/开始并行存矿，单位 ms。 */
         },
         /* 单个状态机 step 的超时时间，单位 ms。 */
         .default_step_timeout_ms = 5000u,
