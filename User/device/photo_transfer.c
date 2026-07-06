@@ -76,13 +76,13 @@ void PhotoTransfer_Update(uint32_t now_ms) {
         photo_transfer_snapshot.last_update_ms = msg.timestamp;
         photo_transfer_snapshot.age_ms = now_ms - msg.timestamp;
         photo_transfer_snapshot.rx_count++;
-        photo_transfer_received = true;
+          photo_transfer_received = true;
+        }
       }
     }
-  }
 
-  PhotoTransfer_RefreshAgeAndValidity(now_ms);
-}
+    PhotoTransfer_RefreshAgeAndValidity(now_ms);
+  }
 
 PhotoTransfer_Snapshot_t PhotoTransfer_GetSnapshot(uint32_t now_ms) {
   PhotoTransfer_RefreshAgeAndValidity(now_ms);
