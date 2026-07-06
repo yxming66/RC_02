@@ -579,15 +579,7 @@ wire::SickCorrectFeedback MakeSickCorrectFeedbackWire(
 wire::SickFrontOreFeedback MakeSickFrontOreFeedbackWire(
     const PC_SickFrontOreFeedback_t &feedback) {
   wire::SickFrontOreFeedback wire_feedback = {};
-  wire_feedback.sample_valid = feedback.sample_valid;
-  wire_feedback.in_region = feedback.in_region;
   wire_feedback.detected = feedback.detected;
-  wire_feedback.channel_index = feedback.channel_index;
-  wire_feedback.adc_raw = feedback.adc_raw;
-  wire_feedback.min_distance_mm = feedback.min_distance_mm;
-  wire_feedback.max_distance_mm = feedback.max_distance_mm;
-  wire_feedback.reserved = 0u;
-  wire_feedback.distance_mm = feedback.distance_mm;
   return wire_feedback;
 }
 

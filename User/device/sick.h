@@ -37,8 +37,8 @@ extern "C" {
  * Current mechanism uses 3 photoelectric sensors:
  * [0] bottom photoelectric
  * [1] rod-side photoelectric
- * [2] unused
- * [3] front photoelectric
+ * [2] front photoelectric
+ * [3] unused
  */
 #ifndef SICK_BOTTOM_PHOTO_INDEX
 #define SICK_BOTTOM_PHOTO_INDEX (0u)
@@ -49,11 +49,11 @@ extern "C" {
 #endif
 
 #ifndef SICK_UNUSED_PHOTO_INDEX
-#define SICK_UNUSED_PHOTO_INDEX (2u)
+#define SICK_UNUSED_PHOTO_INDEX (3u)
 #endif
 
 #ifndef SICK_FRONT_PHOTO_INDEX
-#define SICK_FRONT_PHOTO_INDEX (3u)
+#define SICK_FRONT_PHOTO_INDEX (2u)
 #endif
 
 #ifndef SICK_FRONT_INDEX
@@ -84,18 +84,6 @@ extern "C" {
 #define SICK_CHANNEL_4_ADC_OFFSET (0u)
 #endif
 
-#ifndef SICK_FRONT_ORE_DETECT_MIN_DISTANCE_MM
-#define SICK_FRONT_ORE_DETECT_MIN_DISTANCE_MM (80u)
-#endif
-
-#ifndef SICK_FRONT_ORE_DETECT_MAX_DISTANCE_MM
-#define SICK_FRONT_ORE_DETECT_MAX_DISTANCE_MM (900u)
-#endif
-
-#ifndef SICK_FRONT_ORE_DETECT_STABLE_MS
-#define SICK_FRONT_ORE_DETECT_STABLE_MS (60u)
-#endif
-
 /* USER DEFINE END */
 
 /* Exported types ----------------------------------------------------------- */
@@ -111,13 +99,8 @@ typedef struct {
 typedef struct {
     uint8_t channel_index;
     bool sample_valid;
-    bool in_region;
-    bool detected;
     uint16_t adc_raw;
-    uint16_t min_distance_mm;
-    uint16_t max_distance_mm;
     float distance_mm;
-    uint32_t stable_since_ms;
     uint32_t update_tick;
 } Sick_FrontOreDetect_t;
 

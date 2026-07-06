@@ -34,6 +34,9 @@ typedef struct {
   float sick_norm_err_to_rad;    /* SICK 归一化误差到 yaw 辅助量的比例，单位 rad。 */
   float sick_assist_max_rad;     /* SICK yaw 辅助量限幅，单位 rad。 */
   float sick_assist_gain;        /* SICK 辅助修正增益。 */
+  uint16_t sick_front_ore_adc_min; /* 前 SICK 矿检测 ADC 下限。 */
+  uint16_t sick_front_ore_adc_max; /* 前 SICK 矿检测 ADC 上限。 */
+  uint32_t sick_front_ore_stable_ms; /* 前 SICK 矿检测稳定确认时间，单位 ms。 */
 } AutoCtrl_CommonParam_t;
 
 typedef struct {

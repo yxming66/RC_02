@@ -423,7 +423,7 @@ Config_RobotParam_t robot_config = {
             .fused_pick_precontact_timeout_ms = 2000u, /* 融合取矿低速靠近超时，单位 ms。 */
             .fused_pick_lift_detect_ms = 200u,         /* 融合取矿抬矿检测位到位后的确认延时，单位 ms。 */
             .fused_arm_photo_stable_ms = 120u,         /* 机械臂取矿传感器稳定确认时间，单位 ms。 */
-            .fused_photo1_lift_delay_ms = 0u,        /* 检测到光电1后，延迟抬 arm/开始并行存矿，单位 ms。 */
+            .fused_photo1_lift_delay_ms = 0u,        /* 检测到光电1后，延迟抬 arm/开始并行存矿，单位 ms；0 表示立即。 */
         },
         /* 单个状态机 step 的超时时间，单位 ms。 */
         .default_step_timeout_ms = 5000u,
@@ -517,14 +517,17 @@ Config_RobotParam_t robot_config = {
             .sick_norm_err_to_rad = 0.50f,   /* SICK 归一化误差到 yaw 辅助角的映射系数，单位 rad。 */
             .sick_assist_max_rad = 0.35f,    /* SICK yaw 辅助角限幅，单位 rad。 */
             .sick_assist_gain = 1.0f,        /* SICK yaw 辅助量融合增益。 */
+            .sick_front_ore_adc_min = 2739u, /* 前 SICK 矿检测 ADC 下限；按实测修正。 */
+            .sick_front_ore_adc_max = 4206u, /* 前 SICK 矿检测 ADC 上限；按实测修正。 */
+            .sick_front_ore_stable_ms = 60u, /* 前 SICK 矿检测稳定确认时间，单位 ms。 */
         },
         /*
          * SICK 校正参数：
          * - index 字段选择 SICK 采样板 4 路 ADC 通道。
-         *   当前硬件：rawdata[3]=前光电，rawdata[1]=rod 侧光电，rawdata[0]=下光电，rawdata[2]=未用。
+         *   当前硬件：rawdata[2]=前光电，rawdata[1]=rod 侧光电，rawdata[0]=下光电，rawdata[3]=未用。
          * - 取矛头校正由 auto_sick_correct.c 的 X/Y 轴宏开关控制；
          *   当前 x/y 两轴都关闭，动作会直接返回成功。
-         *   重新开启时，y 使用 rod 侧光电 rawdata[1]，x 使用前光电 rawdata[3]。
+         *   重新开启时，y 使用 rod 侧光电 rawdata[1]，x 使用前光电 rawdata[2]。
          * - yaw_sample_diff_adc 保留给其他 SICK 校正动作调试。
          * - *_kp 字段把 ADC 误差映射到底盘速度；*_limit 字段做命令限幅。
          *   tolerance/stable/timeout 用于判定校正完成。
@@ -539,7 +542,7 @@ Config_RobotParam_t robot_config = {
                 [4] = CONFIG_SICK_ROD_SPEARHEAD_PARAM(4406.0f, 1021.0f),
                 [5] = CONFIG_SICK_ROD_SPEARHEAD_PARAM(5377.0f, 1021.0f),
             },
-            /* 放矿前 SICK 校正：只使用前光电 rawdata[3] 做 x 方向校正。 */
+            /* 放矿前 SICK 校正：只使用前光电 rawdata[2] 做 x 方向校正。 */
             .ore_release = {  
                 .front_index = SICK_FRONT_PHOTO_INDEX,
                 .rod_front_index = SICK_ROD_SIDE_PHOTO_INDEX,
@@ -547,7 +550,7 @@ Config_RobotParam_t robot_config = {
                 .rod_rear_index = SICK_ROD_SIDE_PHOTO_INDEX,
                 .valid_adc_min = 0u,               /* 有效 ADC 下限。 */
                 .valid_adc_max = 32100u,             /* 有效 ADC 上限。 */
-                .x_target_adc = 1079.0f,             /* 前光电 rawdata[3] 的 x 目标 ADC。 */
+                .x_target_adc = 1079.0f,             /* 前光电 rawdata[2] 的 x 目标 ADC。 */
                 .y_target_adc = 1.0f,                /* 放矿校正不使用 y，仅保持参数有效。 */
                 .yaw_target_diff_adc = 0.0f,         /* 当前硬件没有成对 yaw 传感器。 */
                 .x_tolerance_adc = 100.0f,           /* 允许的 x ADC 误差。     */
@@ -643,6 +646,8 @@ Config_RobotParam_t robot_config = {
             .photo_stop_settle_ms = 0u,
             .descend_start_pole_lift_threshold = 2.0f,
             /*
+     
+            
              * 头向下 200mm 优化流程：
              * - step0：使用 mid_move_speed 快速靠近，持续 mid_move_ms。
              * - step1：使用 rear_retract_move_speed 慢速捕获 PA2/photo3 下降沿。

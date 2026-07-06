@@ -22,8 +22,6 @@ static osMutexId_t sick_mutex = NULL;
 static Sick_Output_t sick_latest_output = {0};
 static Sick_FrontOreDetect_t sick_front_ore_detect = {0};
 static const uint32_t sick_can_id = SICK_CAN_ID;
-static bool sick_front_ore_last_in_region = false;
-static uint32_t sick_front_ore_stable_since_ms = 0u;
 
 /* Private function --------------------------------------------------------- */
 static double SICK_MapAdcToDistanceM(uint16_t adc_raw_value) {
@@ -79,39 +77,17 @@ static uint16_t SICK_AdjustAdcRaw(uint8_t index, uint16_t adc_raw_value) {
   return adc_raw_value;
 }
 
-static bool SICK_FrontOreDistanceInRegion(float distance_mm) {
-  return distance_mm >= (float)SICK_FRONT_ORE_DETECT_MIN_DISTANCE_MM &&
-         distance_mm <= (float)SICK_FRONT_ORE_DETECT_MAX_DISTANCE_MM;
-}
-
 static Sick_FrontOreDetect_t SICK_MakeFrontOreDetect(
   const Sick_Output_t *output, uint32_t now_ms) {
   Sick_FrontOreDetect_t detect = {0};
   detect.channel_index = SICK_FRONT_PHOTO_INDEX;
-  detect.min_distance_mm = SICK_FRONT_ORE_DETECT_MIN_DISTANCE_MM;
-  detect.max_distance_mm = SICK_FRONT_ORE_DETECT_MAX_DISTANCE_MM;
   detect.update_tick = now_ms;
 
   if (output != NULL && SICK_FRONT_PHOTO_INDEX < SICK_OUTPUT_CHANNEL_COUNT) {
     detect.sample_valid = output->valid[SICK_FRONT_PHOTO_INDEX];
     detect.adc_raw = output->adc_raw[SICK_FRONT_PHOTO_INDEX];
     detect.distance_mm = output->distance_mm[SICK_FRONT_PHOTO_INDEX];
-    detect.in_region = detect.sample_valid &&
-                       SICK_FrontOreDistanceInRegion(detect.distance_mm);
   }
-
-  if (detect.in_region != sick_front_ore_last_in_region) {
-    sick_front_ore_last_in_region = detect.in_region;
-    sick_front_ore_stable_since_ms = detect.in_region ? now_ms : 0u;
-  } else if (detect.in_region && sick_front_ore_stable_since_ms == 0u) {
-    sick_front_ore_stable_since_ms = now_ms;
-  }
-
-  detect.stable_since_ms = sick_front_ore_stable_since_ms;
-  detect.detected = detect.in_region &&
-                    (SICK_FRONT_ORE_DETECT_STABLE_MS == 0u ||
-                     (uint32_t)(now_ms - sick_front_ore_stable_since_ms) >=
-                         SICK_FRONT_ORE_DETECT_STABLE_MS);
 
   return detect;
 }
@@ -213,8 +189,6 @@ int8_t SICK_Init(void) {
   memset(sick_distance_m, 0, sizeof(sick_distance_m));
   memset(&sick_latest_output, 0, sizeof(sick_latest_output));
   memset(&sick_front_ore_detect, 0, sizeof(sick_front_ore_detect));
-  sick_front_ore_last_in_region = false;
-  sick_front_ore_stable_since_ms = 0u;
   sick_miss_count = 0u;
   return DEVICE_OK;
 }

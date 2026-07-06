@@ -171,15 +171,7 @@ struct __attribute__((packed)) SickCorrectFeedback {
 };
 
 struct __attribute__((packed)) SickFrontOreFeedback {
-  uint8_t sample_valid;       /* 前 SICK 样本有效，0/1 */
-  uint8_t in_region;          /* 当前距离是否落在检测区域内，0/1 */
-  uint8_t detected;           /* 稳定确认后的矿检测结果，0/1 */
-  uint8_t channel_index;      /* 使用的 SICK rawdata 通道 */
-  uint16_t adc_raw;           /* 前 SICK ADC 原始值 */
-  uint16_t min_distance_mm;   /* 检测窗口近端，单位 mm */
-  uint16_t max_distance_mm;   /* 检测窗口远端，单位 mm */
-  uint16_t reserved;          /* 固定为 0 */
-  float distance_mm;          /* 前 SICK 测距，单位 mm */
+  uint8_t detected;           /* 前 SICK 区域正方形矿检测结果，0=无矿，1=有矿 */
 };
 
 template <typename T>
@@ -258,7 +250,7 @@ static_assert(sizeof(StatusFeedback) == 10u,
               "PC_FEEDBACK_STATUS wire size changed");
 static_assert(sizeof(SickCorrectFeedback) == 20u,
               "PC_FEEDBACK_SICK_CORRECT wire size changed");
-static_assert(sizeof(SickFrontOreFeedback) == 16u,
+static_assert(sizeof(SickFrontOreFeedback) == 1u,
               "PC_FEEDBACK_SICK_FRONT_ORE wire size changed");
 
 }  // namespace pc_comm::wire

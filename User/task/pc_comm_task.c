@@ -10,6 +10,7 @@
 #include "device/ore_info/ore_info.h"
 #include "device/sick.h"
 #include "module/mrlink_pc_comm/mrlink_pc_comm.h"
+#include "module/config.h"
 #include "module/autoCtrlAPI/api/auto_ctrl_api.h"
 #include "module/arm_simple.h"
 #include "module/camera_yaw.h"
@@ -36,6 +37,8 @@ static uint32_t s_pc_comm_last_tx_tick = 0u;
 static uint32_t s_ir_ore_last_tx_tick = 0u;
 static uint32_t s_ir_ore_last_frame_rx_count = 0u;
 static bool s_ir_ore_feedback_started = false;
+static bool s_sick_front_ore_last_in_region = false;
+static uint32_t s_sick_front_ore_stable_since_ms = 0u;
 static const uint8_t s_feedback_cmds[] = {
     PC_FEEDBACK_HEARTBEAT,
     PC_FEEDBACK_AUTO_ACTION,
@@ -286,19 +289,36 @@ static void PcComm_UpdateSickCorrectFeedback(void) {
 static void PcComm_UpdateSickFrontOreFeedback(void) {
     Sick_FrontOreDetect_t detect = {0};
     PC_SickFrontOreFeedback_t feedback = {0};
-    feedback.channel_index = SICK_FRONT_PHOTO_INDEX;
-    feedback.min_distance_mm = SICK_FRONT_ORE_DETECT_MIN_DISTANCE_MM;
-    feedback.max_distance_mm = SICK_FRONT_ORE_DETECT_MAX_DISTANCE_MM;
+    const Config_RobotParam_t *cfg = Config_GetRobotParam();
+    const AutoCtrl_CommonParam_t *common =
+        (cfg != NULL) ? &cfg->auto_ctrl_param.common : NULL;
+    const uint16_t adc_min =
+        (common != NULL) ? common->sick_front_ore_adc_min : 0u;
+    const uint16_t adc_max =
+        (common != NULL) ? common->sick_front_ore_adc_max : 0u;
+    const uint32_t stable_ms =
+        (common != NULL) ? common->sick_front_ore_stable_ms : 0u;
+    const uint32_t now_ms = BSP_TIME_Get_ms();
 
     if (SICK_GetFrontOreDetect(&detect)) {
-        feedback.sample_valid = detect.sample_valid ? 1u : 0u;
-        feedback.in_region = detect.in_region ? 1u : 0u;
-        feedback.detected = detect.detected ? 1u : 0u;
-        feedback.channel_index = detect.channel_index;
-        feedback.adc_raw = detect.adc_raw;
-        feedback.min_distance_mm = detect.min_distance_mm;
-        feedback.max_distance_mm = detect.max_distance_mm;
-        feedback.distance_mm = detect.distance_mm;
+        const bool adc_window_valid = adc_min <= adc_max;
+        const bool in_region = detect.sample_valid && adc_window_valid &&
+                               detect.adc_raw >= adc_min &&
+                               detect.adc_raw <= adc_max;
+        if (in_region != s_sick_front_ore_last_in_region) {
+            s_sick_front_ore_last_in_region = in_region;
+            s_sick_front_ore_stable_since_ms = in_region ? now_ms : 0u;
+        } else if (in_region && s_sick_front_ore_stable_since_ms == 0u) {
+            s_sick_front_ore_stable_since_ms = now_ms;
+        }
+
+        feedback.detected =
+            (in_region &&
+             (stable_ms == 0u ||
+              (uint32_t)(now_ms - s_sick_front_ore_stable_since_ms) >=
+                  stable_ms))
+                ? 1u
+                : 0u;
     }
 
     (void)MrlinkPc_PublishFeedback(PC_FEEDBACK_SICK_FRONT_ORE, &feedback);

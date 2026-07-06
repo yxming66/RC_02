@@ -304,9 +304,9 @@ typedef struct {
     volatile uint8_t front_ore_in_region;
     volatile uint8_t front_ore_detected;
     volatile uint16_t front_ore_adc_raw;
+    volatile uint16_t front_ore_adc_min;
+    volatile uint16_t front_ore_adc_max;
     volatile float front_ore_distance_mm;
-    volatile uint16_t front_ore_min_distance_mm;
-    volatile uint16_t front_ore_max_distance_mm;
     volatile uint32_t front_ore_stable_since_ms;
     volatile uint16_t miss_count;
     volatile uint32_t update_tick;

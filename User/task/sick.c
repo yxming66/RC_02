@@ -1,5 +1,7 @@
 #include "task/user_task.h"
 
+#include "module/config.h"
+
 #ifndef SICK_DEBUG_UPDATE_PERIOD_MS
 #define SICK_DEBUG_UPDATE_PERIOD_MS (50u)
 #endif
@@ -9,6 +11,8 @@ volatile Sick_Debug_t g_sick_debug = {0};
 static bool sick_init_attempted = false;
 static bool sick_inited = false;
 static uint32_t sick_debug_last_update_ms = 0u;
+static bool sick_debug_front_ore_last_in_region = false;
+static uint32_t sick_debug_front_ore_stable_since_ms = 0u;
 
 static bool Task_SickDebugPeriodicDue(uint32_t now_ms) {
   if (sick_debug_last_update_ms == 0u ||
@@ -23,6 +27,16 @@ static bool Task_SickDebugPeriodicDue(uint32_t now_ms) {
 static void Task_SickUpdateDebug(void) {
   Sick_Output_t output = {0};
   Sick_FrontOreDetect_t front_ore = {0};
+  Config_RobotParam_t *cfg = Config_GetRobotParam();
+  const AutoCtrl_CommonParam_t *common =
+    (cfg != 0) ? &cfg->auto_ctrl_param.common : 0;
+  const uint16_t adc_min =
+    (common != 0) ? common->sick_front_ore_adc_min : 0u;
+  const uint16_t adc_max =
+    (common != 0) ? common->sick_front_ore_adc_max : 0u;
+  const uint32_t stable_ms =
+    (common != 0) ? common->sick_front_ore_stable_ms : 0u;
+  const uint32_t now_ms = BSP_TIME_Get_ms();
   g_sick_debug.can_bus = SICK_CAN_BUS;
   g_sick_debug.can_id = SICK_CAN_ID;
 
@@ -46,14 +60,32 @@ static void Task_SickUpdateDebug(void) {
   g_sick_debug.bottom_valid = output.valid[SICK_BOTTOM_PHOTO_INDEX];
   g_sick_debug.unused_valid = output.valid[SICK_UNUSED_PHOTO_INDEX];
   if (SICK_GetFrontOreDetect(&front_ore)) {
+    const bool adc_window_valid = adc_min <= adc_max;
+    const bool in_region = front_ore.sample_valid && adc_window_valid &&
+                           front_ore.adc_raw >= adc_min &&
+                           front_ore.adc_raw <= adc_max;
+    if (in_region != sick_debug_front_ore_last_in_region) {
+      sick_debug_front_ore_last_in_region = in_region;
+      sick_debug_front_ore_stable_since_ms = in_region ? now_ms : 0u;
+    } else if (in_region && sick_debug_front_ore_stable_since_ms == 0u) {
+      sick_debug_front_ore_stable_since_ms = now_ms;
+    }
+
     g_sick_debug.front_ore_sample_valid = front_ore.sample_valid ? 1u : 0u;
-    g_sick_debug.front_ore_in_region = front_ore.in_region ? 1u : 0u;
-    g_sick_debug.front_ore_detected = front_ore.detected ? 1u : 0u;
+    g_sick_debug.front_ore_in_region = in_region ? 1u : 0u;
+    g_sick_debug.front_ore_detected =
+        (in_region &&
+         (stable_ms == 0u ||
+          (uint32_t)(now_ms - sick_debug_front_ore_stable_since_ms) >=
+              stable_ms))
+            ? 1u
+            : 0u;
     g_sick_debug.front_ore_adc_raw = front_ore.adc_raw;
+    g_sick_debug.front_ore_adc_min = adc_min;
+    g_sick_debug.front_ore_adc_max = adc_max;
     g_sick_debug.front_ore_distance_mm = front_ore.distance_mm;
-    g_sick_debug.front_ore_min_distance_mm = front_ore.min_distance_mm;
-    g_sick_debug.front_ore_max_distance_mm = front_ore.max_distance_mm;
-    g_sick_debug.front_ore_stable_since_ms = front_ore.stable_since_ms;
+    g_sick_debug.front_ore_stable_since_ms =
+        sick_debug_front_ore_stable_since_ms;
   }
   g_sick_debug.miss_count = output.miss_count;
   g_sick_debug.update_tick = output.update_tick;

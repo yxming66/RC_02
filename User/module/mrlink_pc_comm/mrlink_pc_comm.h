@@ -378,15 +378,7 @@ typedef struct {
 #define PC_SICK_CORRECT_VALID_Y (1u << 1)
 
 typedef struct {
-    uint8_t sample_valid;       /* 前 SICK 样本有效，0/1 */
-    uint8_t in_region;          /* 当前距离是否落在检测区域内，0/1 */
-    uint8_t detected;           /* 稳定确认后的矿检测结果，0/1 */
-    uint8_t channel_index;      /* 使用的 SICK rawdata 通道，当前为前光电 rawdata[3] */
-    uint16_t adc_raw;           /* 前 SICK ADC 原始值 */
-    uint16_t min_distance_mm;   /* 检测窗口近端，单位 mm */
-    uint16_t max_distance_mm;   /* 检测窗口远端，单位 mm */
-    uint16_t reserved;          /* 保留，发送端固定为 0 */
-    float distance_mm;          /* 前 SICK 测距，单位 mm */
+    uint8_t detected;           /* 前 SICK 区域正方形矿检测结果，0=无矿，1=有矿 */
 } PC_SickFrontOreFeedback_t;
 
 typedef enum {

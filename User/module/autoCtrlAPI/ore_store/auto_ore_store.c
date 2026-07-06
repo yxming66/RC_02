@@ -34,7 +34,7 @@
 #define AUTO_ORE_DEFAULT_FUSED_PICK_PRECONTACT_TIMEOUT_MS (2000u)
 #define AUTO_ORE_DEFAULT_FUSED_PICK_LIFT_DETECT_MS (200u)
 #define AUTO_ORE_DEFAULT_FUSED_ARM_PHOTO_STABLE_MS (120u)
-#define AUTO_ORE_DEFAULT_FUSED_PHOTO1_LIFT_DELAY_MS (200u)
+#define AUTO_ORE_DEFAULT_FUSED_PHOTO1_LIFT_DELAY_MS (0u)
 #define AUTO_ORE_FUSED_STEP_PHOTO_STABLE_MS (20u)
 #define AUTO_ORE_PICK_STORE_FETCH_PHOTO_DELAY_MS (100u)
 #define AUTO_ORE_PICK_STORE_RETREAT_PHOTO_DELAY_MS (100u)
@@ -934,6 +934,11 @@ static void AutoOre_FailStoreInvalidOccupancy(AutoOre_t *ctrl) {
   AutoOre_FailInvalidOccupancy(ctrl);
 }
 
+static void AutoOre_FailReleaseInvalidOccupancy(AutoOre_t *ctrl) {
+  AutoOre_AddFailureMask(ctrl, AUTO_ORE_FAILURE_RELEASE_ORE);
+  AutoOre_FailInvalidOccupancy(ctrl);
+}
+
 static void AutoOre_FailStepInvalidParam(AutoOre_t *ctrl) {
   AutoOre_AddFailureMask(ctrl, AUTO_ORE_FAILURE_STEP);
   AutoOre_FailInvalidParam(ctrl);
@@ -1325,6 +1330,10 @@ static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
                                        : false;
       if (!AutoOre_ActionUsesReleaseLiftDetect(ctrl->action)) {
         if (grid_check_done) {
+          if (ctrl->release_grid_has_ore) {
+            AutoOre_FailReleaseInvalidOccupancy(ctrl);
+            return;
+          }
           if (AutoOre_ActionIsReleaseStep1(ctrl->action)) {
             ctrl->fused_step_done = true;
             ctrl->fused_store_done = true;
@@ -1343,6 +1352,10 @@ static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
               AutoOre_ReleaseLiftDetectSettleMs(ctrl);
       if (lift_settled) {
         if (grid_check_done) {
+          if (ctrl->release_grid_has_ore) {
+            AutoOre_FailReleaseInvalidOccupancy(ctrl);
+            return;
+          }
           if (AutoOre_ActionIsReleaseStep1(ctrl->action)) {
             ctrl->fused_step_done = true;
             ctrl->fused_store_done = true;
