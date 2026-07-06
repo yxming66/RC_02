@@ -29,8 +29,8 @@ typedef struct {
 static const BSP_PWM_Config_t PWM_Map[BSP_PWM_NUM] = {
     {&htim12, TIM_CHANNEL_2},   /* 蜂鸣器 */
     {&htim3, TIM_CHANNEL_4},    /* IMU加热 */
-    {&htim4, TIM_CHANNEL_4},    /* 取矿/armsimple舵机 PD15 */
-  {&htim4, TIM_CHANNEL_3},    /* 取矛头/rodnew舵机 PD14 */
+    {&htim1, TIM_CHANNEL_1},    /* 取矿/armsimple舵机 PE9 */
+  {&htim1, TIM_CHANNEL_3},    /* 取矛头/rodnew舵机 PE13 */
 };
 
 static uint32_t BSP_PWM_GetTimerClock(TIM_HandleTypeDef *htim) {

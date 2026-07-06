@@ -704,7 +704,6 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
       AutoCtrlPrimitive_ApplyPrealignWithMove(ctrl, param->final_move_speed,
                                               0.0f);
-      ctrl->chassis_cmd.ctrl_vec.wz = 0.0f;
       AutoCtrlTemplate_CommandPole(ctrl, pole.all_retract[0],
                                    pole.all_retract[1],
                                    param->pole_front_retract_speed,

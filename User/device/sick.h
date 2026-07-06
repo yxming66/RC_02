@@ -41,11 +41,11 @@ extern "C" {
  * [3] unused
  */
 #ifndef SICK_BOTTOM_PHOTO_INDEX
-#define SICK_BOTTOM_PHOTO_INDEX (0u)
+#define SICK_BOTTOM_PHOTO_INDEX (1u)
 #endif
 
 #ifndef SICK_ROD_SIDE_PHOTO_INDEX
-#define SICK_ROD_SIDE_PHOTO_INDEX (1u)
+#define SICK_ROD_SIDE_PHOTO_INDEX (0u)
 #endif
 
 #ifndef SICK_UNUSED_PHOTO_INDEX

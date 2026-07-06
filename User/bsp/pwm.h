@@ -25,8 +25,8 @@ extern "C" {
 typedef enum {
   BSP_PWM_BUZZER,
   BSP_PWM_IMU_HEAT,
-  BSP_PWM_ARM_SERVO,       /* 取矿/armsimple舵机 TIM4_CH4 PD15 */
-  BSP_PWM_ROD_SERVO,       /* 取矛头/rodnew舵机 TIM4_CH3 PD14 */
+  BSP_PWM_ARM_SERVO,       /* 取矿/armsimple舵机 TIM1_CH1 PE9 */
+  BSP_PWM_ROD_SERVO,       /* 取矛头/rodnew舵机 TIM1_CH3 PE13 */
   BSP_PWM_NUM,
   BSP_PWM_ERR,
 } BSP_PWM_Channel_t;

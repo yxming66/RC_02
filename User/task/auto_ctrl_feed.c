@@ -54,6 +54,7 @@ static AutoOre_Position_t auto_ore_release_light_position =
   AUTO_ORE_POSITION_NONE;
 static uint8_t auto_ore_light_last_mode = 0xFFu;
 static uint8_t auto_ore_light_last_fail_action = PC_AUTO_ACTION_NONE;
+static uint8_t auto_ore_light_last_success_action = PC_AUTO_ACTION_NONE;
 static PhotoTransfer_Snapshot_t photo_transfer_snapshot = {0};
 static bool photo_transfer_inited = false;
 
@@ -650,15 +651,21 @@ static void AutoCtrlFeed_UpdateLightEffectFromAutoActionFeedback(
   if (feedback == NULL) {
     return;
   }
-  if (feedback->finished == 0u ||
-      feedback->result != (uint8_t)PC_AUTO_ACTION_RESULT_FAIL) {
+  if (feedback->finished == 0u) {
     return;
   }
-  if (auto_ore_light_last_fail_action == feedback->action) {
-    return;
+
+  if (feedback->result == (uint8_t)PC_AUTO_ACTION_RESULT_SUCCESS) {
+    if (auto_ore_light_last_success_action != feedback->action) {
+      auto_ore_light_last_success_action = feedback->action;
+      AutoCtrlFeed_SendLightEffect(LIGHT_EFFECT_MODE_ACTION_SUCCESS, true);
+    }
+  } else if (feedback->result == (uint8_t)PC_AUTO_ACTION_RESULT_FAIL) {
+    if (auto_ore_light_last_fail_action != feedback->action) {
+      auto_ore_light_last_fail_action = feedback->action;
+      AutoCtrlFeed_SendLightEffect(LIGHT_EFFECT_MODE_FAIL, true);
+    }
   }
-  auto_ore_light_last_fail_action = feedback->action;
-  AutoCtrlFeed_SendLightEffect(LIGHT_EFFECT_MODE_FAIL, true);
 }
 
 static bool AutoCtrlFeed_IsRodSpearheadSickCorrectRequest(
@@ -1236,6 +1243,7 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms, bool update_debug) {
   if (auto_ore_ctrl.state != AUTO_ORE_STATE_RUNNING) {
     auto_ore_release_light_position = AUTO_ORE_POSITION_NONE;
     auto_ore_light_last_fail_action = PC_AUTO_ACTION_NONE;
+    auto_ore_light_last_success_action = PC_AUTO_ACTION_NONE;
   } else if (auto_ore_release_light_position ==
                  AUTO_ORE_POSITION_TRANSFORM_HIGH &&
              auto_ore_ctrl.action == AUTO_ORE_ACTION_RELEASE_LIFT_DETECT &&
