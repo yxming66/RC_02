@@ -1767,7 +1767,7 @@ void Task_AutoOreAbort(void) {
   }
 }
 
-static void AutoCtrlFeed_HandleAutoOreDebugRequest(void) {
+static void AutoCtrlFeed_HandleAutoOreDebugRequest(uint32_t now_ms) {
   const AutoOre_DebugRequest_t request = g_auto_ore_debug.request;
   bool result = false;
 
@@ -1801,7 +1801,7 @@ static void AutoCtrlFeed_HandleAutoOreDebugRequest(void) {
       result = Task_AutoOreStartReleaseStep1();
       break;
     case AUTO_ORE_DEBUG_REQUEST_RELEASE_STEP2:
-      if (AutoCtrlFeed_ContinueReleaseStep2(request, BSP_TIME_Get_ms())) {
+      if (AutoCtrlFeed_ContinueReleaseStep2(request, now_ms)) {
         result = true;
       } else if (AutoCtrlFeed_RequestMatchesReleaseStep1(request)) {
         pending_release_step2_request = request;
@@ -1814,7 +1814,7 @@ static void AutoCtrlFeed_HandleAutoOreDebugRequest(void) {
       result = Task_AutoOreStartReleaseLiftDetectStep1();
       break;
     case AUTO_ORE_DEBUG_REQUEST_RELEASE_LIFT_DETECT_STEP2:
-      if (AutoCtrlFeed_ContinueReleaseStep2(request, BSP_TIME_Get_ms())) {
+      if (AutoCtrlFeed_ContinueReleaseStep2(request, now_ms)) {
         result = true;
       } else if (AutoCtrlFeed_RequestMatchesReleaseStep1(request)) {
         pending_release_step2_request = request;
@@ -2198,7 +2198,7 @@ void Task_auto_ctrl(void *argument) {
       AutoCtrlFeed_UpdateYawRateCommand();
 
       AutoCtrl_Update(&auto_ctrl, now_ms);
-      AutoCtrlFeed_HandleAutoOreDebugRequest();
+      AutoCtrlFeed_HandleAutoOreDebugRequest(now_ms);
       const bool update_auto_ore_debug = AutoCtrlFeed_DebugPeriodicDue(now_ms);
       AutoCtrlFeed_UpdateAutoOre(now_ms, update_auto_ore_debug);
       AutoCtrlFeed_TryPendingReleaseStep2(now_ms);
