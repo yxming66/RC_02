@@ -10,6 +10,7 @@
 #include <stdint.h>
 #include "debug_config.h"
 #include "bsp/time.h"
+#include "component/container/latest_slot.h"
 #include "module/autoCtrlAPI/api/auto_ctrl_api.h"
 #include "module/autoCtrlAPI/ore_store/auto_ore_store.h"
 #include "module/autoCtrlAPI/rod/auto_rod_spearhead.h"
@@ -381,18 +382,8 @@ typedef struct {
     struct {
         struct {
             osMessageQueueId_t imu;
-            osMessageQueueId_t cmd;
             osMessageQueueId_t yaw;
         } chassis;
-        struct {
-            osMessageQueueId_t cmd;
-        } pole;
-        struct {
-            osMessageQueueId_t cmd;
-        } arm_simple;
-        struct {
-            osMessageQueueId_t cmd;
-        } rod;
         struct {
             osMessageQueueId_t cmd;
         } camera_yaw;
@@ -400,6 +391,29 @@ typedef struct {
             osMessageQueueId_t cmd;
         } ore_store;
     } msgq;
+
+    struct {
+        struct {
+            LatestSlot_t slot;
+            Chassis_CMD_t storage;
+            uint32_t read_seq;
+        } chassis_cmd;
+        struct {
+            LatestSlot_t slot;
+            Pole_CMD_t storage;
+            uint32_t read_seq;
+        } pole_cmd;
+        struct {
+            LatestSlot_t slot;
+            ArmSimple_CMD_t storage;
+            uint32_t read_seq;
+        } arm_simple_cmd;
+        struct {
+            LatestSlot_t slot;
+            RodNew_CMD_t storage;
+            uint32_t read_seq;
+        } rod_cmd;
+    } latest;
     /* USER MESSAGE END */
 
     /* 机器人状态 */

@@ -264,7 +264,9 @@ extern "C" void Task_pole_main(void *argument) {
                                TASK_PERIOD_US(POLE_MAIN_FREQ));
     tick += delay_tick;
 
-    osMessageQueueGet(task_runtime.msgq.pole.cmd, &pole_cmd, nullptr, 0);
+    (void)LatestSlot_ReadIfUpdated(
+      &task_runtime.latest.pole_cmd.slot, &pole_cmd, sizeof(pole_cmd),
+      &task_runtime.latest.pole_cmd.read_seq);
     Pole_UpdateFeedback(&pole);
 
     const uint32_t now_ms = BSP_TIME_Get_ms();

@@ -32,26 +32,33 @@ void Task_Init(void *argument) {
 
   task_runtime.msgq.chassis.imu =
       osMessageQueueNew(1u, sizeof(Chassis_IMU_t), NULL);
-  task_runtime.msgq.chassis.cmd =
-      osMessageQueueNew(1u, sizeof(Chassis_CMD_t), NULL);
-  task_runtime.msgq.pole.cmd =
-      osMessageQueueNew(1u, sizeof(Pole_CMD_t), NULL);
-  task_runtime.msgq.arm_simple.cmd =
-      osMessageQueueNew(1u, sizeof(ArmSimple_CMD_t), NULL);
-  task_runtime.msgq.rod.cmd =
-      osMessageQueueNew(1u, sizeof(RodNew_CMD_t), NULL);
   task_runtime.msgq.camera_yaw.cmd =
       osMessageQueueNew(1u, sizeof(CameraYaw_GroupCMD_t), NULL);
   task_runtime.msgq.ore_store.cmd =
       osMessageQueueNew(1u, sizeof(OreStore_CMD_t), NULL);
 
+  const bool latest_slots_ok =
+      LatestSlot_Init(&task_runtime.latest.chassis_cmd.slot,
+                      &task_runtime.latest.chassis_cmd.storage,
+                      sizeof(task_runtime.latest.chassis_cmd.storage)) ==
+          LATEST_SLOT_OK &&
+      LatestSlot_Init(&task_runtime.latest.pole_cmd.slot,
+                      &task_runtime.latest.pole_cmd.storage,
+                      sizeof(task_runtime.latest.pole_cmd.storage)) ==
+          LATEST_SLOT_OK &&
+      LatestSlot_Init(&task_runtime.latest.arm_simple_cmd.slot,
+                      &task_runtime.latest.arm_simple_cmd.storage,
+                      sizeof(task_runtime.latest.arm_simple_cmd.storage)) ==
+          LATEST_SLOT_OK &&
+      LatestSlot_Init(&task_runtime.latest.rod_cmd.slot,
+                      &task_runtime.latest.rod_cmd.storage,
+                      sizeof(task_runtime.latest.rod_cmd.storage)) ==
+          LATEST_SLOT_OK;
+
     if (task_runtime.msgq.chassis.imu == NULL ||
-            task_runtime.msgq.chassis.cmd == NULL ||
-            task_runtime.msgq.pole.cmd == NULL ||
-            task_runtime.msgq.arm_simple.cmd == NULL ||
-            task_runtime.msgq.rod.cmd == NULL ||
             task_runtime.msgq.camera_yaw.cmd == NULL ||
-            task_runtime.msgq.ore_store.cmd == NULL) {
+            task_runtime.msgq.ore_store.cmd == NULL ||
+            !latest_slots_ok) {
         osKernelUnlock();
         osThreadTerminate(osThreadGetId());
         return;

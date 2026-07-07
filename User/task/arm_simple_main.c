@@ -124,9 +124,9 @@ void Task_ArmSimpleStep(void) {
         arm_simple.target.joint2_max_vel_rad_s;
 
     ArmSimple_CMD_t cmd;
-    if (task_runtime.msgq.arm_simple.cmd != NULL &&
-        osMessageQueueGet(task_runtime.msgq.arm_simple.cmd, &cmd, NULL,
-                          0U) == osOK) {
+    if (LatestSlot_ReadIfUpdated(&task_runtime.latest.arm_simple_cmd.slot,
+                                 &cmd, sizeof(cmd),
+                                 &task_runtime.latest.arm_simple_cmd.read_seq)) {
         ArmSimple_Control(&arm_simple, &cmd);
     }
 

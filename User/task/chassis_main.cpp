@@ -49,7 +49,9 @@ void Task_ChassisMainStep(void) {
   const uint32_t loop_tick = BSP_TIME_Get_ms();
 
   osMessageQueueGet(task_runtime.msgq.chassis.imu, &chassis_imu, nullptr, 0);
-  osMessageQueueGet(task_runtime.msgq.chassis.cmd, &chassis_cmd, nullptr, 0);
+  (void)LatestSlot_ReadIfUpdated(
+      &task_runtime.latest.chassis_cmd.slot, &chassis_cmd,
+      sizeof(chassis_cmd), &task_runtime.latest.chassis_cmd.read_seq);
 
   chassis.SetGimbalYaw(chassis_imu.eulr.yaw);
   float pole_front_lift_rad = 0.0f;

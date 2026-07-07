@@ -61,7 +61,9 @@ void Task_RodNewStep(void) {
   const uint32_t profile_start_us =
       Task_ProfilerLoopBegin(TASK_PROFILE_ROD, TASK_PERIOD_US(ROD_FREQ));
 
-  osMessageQueueGet(task_runtime.msgq.rod.cmd, &rod_new_cmd, NULL, 0);
+  (void)LatestSlot_ReadIfUpdated(&task_runtime.latest.rod_cmd.slot,
+                                 &rod_new_cmd, sizeof(rod_new_cmd),
+                                 &task_runtime.latest.rod_cmd.read_seq);
 
   if (!g_rod_new_debug.enable) {
     const uint32_t now_ms = BSP_TIME_Get_ms();

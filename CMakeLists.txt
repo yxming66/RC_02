@@ -65,6 +65,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # User/component sources
     User/component/crc16.c
     User/component/crc8.c
+    User/component/container/latest_slot.c
     User/component/filter.c
     User/component/limiter.c
     User/component/pid.c
