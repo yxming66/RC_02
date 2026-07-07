@@ -252,6 +252,10 @@ typedef enum {
 #define PC_AUTO_ACTION_FAILURE_SICK_CORRECT (1u << 8)   /* SICK 校正失败 */
 #define PC_AUTO_ACTION_FAILURE_ABORTED (1u << 9)        /* 人为中止 */
 
+#define PC_AUTO_ACTION_SEGMENT_PICK (1u << 0)  /* 取矿/arm 交矿侧动作完成 */
+#define PC_AUTO_ACTION_SEGMENT_STORE (1u << 1) /* 存矿机构侧动作完成 */
+#define PC_AUTO_ACTION_SEGMENT_STEP (1u << 2)  /* 台阶/底盘侧动作完成 */
+
 typedef struct {
     uint8_t action;    /* 一键动作类型，见 PC_AutoAction_t */
 } PC_AutoActionCMD_t;
@@ -356,11 +360,11 @@ typedef struct {
 typedef struct {
     uint8_t action;                 /* 当前/最近一键动作，见 PC_AutoAction_t */
     uint8_t busy;                   /* 任意一键动作是否正在执行，0=空闲，1=忙 */
-    uint8_t pick_finished;          /* 取矿/arm 交矿侧动作是否已成功完成，0/1 */
+    uint8_t finished;               /* 是否已有总动作结束结果，0=无，1=有 */
     uint8_t result;                 /* 结束结果，见 PC_AutoActionResult_t */
     uint16_t failure_mask;          /* 失败部位 bitmask，见 PC_AUTO_ACTION_FAILURE_* */
-    uint8_t store_finished;         /* 存矿机构侧动作是否已成功完成，0/1 */
-    uint8_t step_finished;          /* 台阶/底盘侧动作是否已成功完成，0/1 */
+    uint8_t segment_finished_mask;  /* 分段完成 bit0=pick/arm交矿，bit1=store，bit2=step */
+    uint8_t reserved;               /* 保留字段，发送端固定为 0 */
 } PC_AutoActionFeedback_t;
 
 typedef struct {

@@ -428,11 +428,11 @@ payload 为 8 字节，Python unpack 格式为 `<BBBBHBB`。
 |---:|---|---|---|
 | 0 | u8 | `action` | 当前或最近一键动作，见 `PC_AutoAction_t` |
 | 1 | u8 | `busy` | 任意一键动作是否正在执行，`0/1` |
-| 2 | u8 | `pick_finished` | 取矿/arm 交矿侧动作是否已成功完成，`0/1` |
-| 3 | u8 | `result` | 仅 `busy=0 && action!=0` 时用于最近结束结果，`0=SUCCESS`，`1=FAIL` |
+| 2 | u8 | `finished` | 是否已有总动作结束结果，`0/1`；为 0 时忽略 `result` |
+| 3 | u8 | `result` | 仅 `finished=1` 有效，`0=SUCCESS`，`1=FAIL` |
 | 4 | u16 | `failure_mask` | 仅 `result=FAIL` 有效，little-endian bitmask |
-| 6 | u8 | `store_finished` | 存矿机构侧动作是否已成功完成，`0/1` |
-| 7 | u8 | `step_finished` | 台阶/底盘侧动作是否已成功完成，`0/1` |
+| 6 | u8 | `segment_finished_mask` | 分段完成 bitmask：bit0=pick/arm交矿，bit1=store，bit2=step |
+| 7 | u8 | `reserved` | 保留字段，发送端固定为 0 |
 
 `failure_mask`：
 
@@ -451,14 +451,14 @@ payload 为 8 字节，Python unpack 格式为 `<BBBBHBB`。
 
 上位机解析规则：
 
-1. `busy=1` 表示一键动作正在执行，此时不要使用 `result/failure_mask` 判定最终结束，但可以读取 `pick_finished/store_finished/step_finished` 做分段调度。
-2. `busy=0 && action!=0 && result=0` 表示最近一次一键动作成功结束，`failure_mask=0`。
-3. `busy=0 && action!=0 && result=1` 表示最近一次一键动作失败结束，按 `failure_mask` 判断失败部位；融合动作可能同时置多个 bit，例如 `STORE_ORE | STEP`。
+1. `busy=1` 表示一键动作正在执行，此时 `finished=0`，不要使用 `result/failure_mask` 判定最终结束，但可以读取 `segment_finished_mask` 做分段调度。
+2. `busy=0 && finished=1 && result=0` 表示最近一次一键动作成功结束，`failure_mask=0`。
+3. `busy=0 && finished=1 && result=1` 表示最近一次一键动作失败结束，按 `failure_mask` 判断失败部位；融合动作可能同时置多个 bit，例如 `STORE_ORE | STEP`。
 4. `ABORT` 也按失败处理：`result=1`，`failure_mask` 包含 `ABORTED`。
 5. `action` 始终表示当前运行或最近结束的一键动作；空闲且从未执行过时为 `PC_AUTO_ACTION_NONE`。
-6. 对融合取矿/存矿/上下台阶动作，`pick_finished=1` 表示 arm 已把矿交给存矿机构并退出交接位，可准备取下一个矿；低位存矿中对应 `WAIT_STORE_ORE + SUCTION_OFF` 到位。
-7. 对融合取矿/存矿/上下台阶动作，`store_finished=1` 表示存矿机构侧流程完成；`step_finished=1` 表示台阶/底盘侧流程完成，PC 可以进入下一个导航航点。
-8. 对普通上下台阶动作，成功结束时 `step_finished=1`；失败或运行中保持为 0。对其它非融合动作，三个分段完成位固定按保留字段处理，PC 不应依赖它们判定动作完成。
+6. 对融合取矿/存矿/上下台阶动作，`segment_finished_mask & bit0` 表示 arm 已把矿交给存矿机构并退出交接位，可准备取下一个矿；低位存矿中对应 `WAIT_STORE_ORE + SUCTION_OFF` 到位。
+7. 对融合取矿/存矿/上下台阶动作，`segment_finished_mask & bit1` 表示存矿机构侧流程完成；`segment_finished_mask & bit2` 表示台阶/底盘侧流程完成，PC 可以进入下一个导航航点。
+8. 对普通上下台阶动作，成功结束时 `segment_finished_mask & bit2`；失败或运行中保持为 0。对其它非融合动作，分段完成 mask 固定按保留字段处理，PC 不应依赖它判定动作完成。
 
 Python 示例：
 
@@ -478,9 +478,12 @@ FAILURE_BITS = {
     9: "ABORTED",
 }
 
-action, busy, pick_finished, result, failure_mask, store_finished, step_finished = struct.unpack(
+action, busy, finished, result, failure_mask, segment_finished_mask, reserved = struct.unpack(
     "<BBBBHBB", payload
 )
+pick_finished = bool(segment_finished_mask & (1 << 0))
+store_finished = bool(segment_finished_mask & (1 << 1))
+step_finished = bool(segment_finished_mask & (1 << 2))
 if busy:
     if step_finished and not store_finished:
         status = "STEP_DONE_STORE_RUNNING"
@@ -488,9 +491,9 @@ if busy:
         status = "PICK_DONE_STORE_RUNNING"
     else:
         status = "RUNNING"
-elif action != 0 and result == 0:
+elif finished and result == 0:
     status = "SUCCESS"
-elif action != 0 and result == 1:
+elif finished and result == 1:
     failed_parts = [
         name for bit, name in FAILURE_BITS.items() if failure_mask & (1 << bit)
     ]

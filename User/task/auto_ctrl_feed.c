@@ -21,6 +21,16 @@
 
 #include <math.h>
 
+#ifndef PC_AUTO_ACTION_SEGMENT_PICK
+#define PC_AUTO_ACTION_SEGMENT_PICK (1u << 0)
+#endif
+#ifndef PC_AUTO_ACTION_SEGMENT_STORE
+#define PC_AUTO_ACTION_SEGMENT_STORE (1u << 1)
+#endif
+#ifndef PC_AUTO_ACTION_SEGMENT_STEP
+#define PC_AUTO_ACTION_SEGMENT_STEP (1u << 2)
+#endif
+
 /* USER INCLUDE END */
 
 /* Private typedef ---------------------------------------------------------- */
@@ -673,9 +683,15 @@ static void AutoCtrlFeed_SetSplitFeedback(PC_AutoActionFeedback_t *feedback) {
   }
   if (AutoOre_HasSplitResult(&auto_ore_ctrl) ||
       AutoOre_GetResult(&auto_ore_ctrl) == AUTO_ORE_RESULT_SUCCESS) {
-    feedback->pick_finished = AutoOre_IsPickFinished(&auto_ore_ctrl) ? 1u : 0u;
-    feedback->store_finished = AutoOre_IsStoreFinished(&auto_ore_ctrl) ? 1u : 0u;
-    feedback->step_finished = AutoOre_IsStepFinished(&auto_ore_ctrl) ? 1u : 0u;
+    if (AutoOre_IsPickFinished(&auto_ore_ctrl)) {
+      feedback->segment_finished_mask |= PC_AUTO_ACTION_SEGMENT_PICK;
+    }
+    if (AutoOre_IsStoreFinished(&auto_ore_ctrl)) {
+      feedback->segment_finished_mask |= PC_AUTO_ACTION_SEGMENT_STORE;
+    }
+    if (AutoOre_IsStepFinished(&auto_ore_ctrl)) {
+      feedback->segment_finished_mask |= PC_AUTO_ACTION_SEGMENT_STEP;
+    }
   }
 }
 
@@ -685,7 +701,7 @@ static void AutoCtrlFeed_SetStepCompleteFeedback(
       !AutoCtrlFeed_IsStepAction((PC_AutoAction_t)feedback->action)) {
     return;
   }
-  feedback->step_finished = 1u;
+  feedback->segment_finished_mask |= PC_AUTO_ACTION_SEGMENT_STEP;
 }
 
 static void AutoCtrlFeed_SetRodSpearheadCompleteFeedback(
@@ -697,11 +713,11 @@ static void AutoCtrlFeed_SetRodSpearheadCompleteFeedback(
   switch ((PC_AutoAction_t)feedback->action) {
     case PC_AUTO_ACTION_ROD_SPEARHEAD:
     case PC_AUTO_ACTION_ROD_SPEARHEAD_STEP2:
-      feedback->pick_finished = 1u;
+      feedback->segment_finished_mask |= PC_AUTO_ACTION_SEGMENT_PICK;
       break;
     case PC_AUTO_ACTION_ROD_SPEARHEAD_STEP1:
     case PC_AUTO_ACTION_ROD_DOCK_WAIT:
-      feedback->store_finished = 1u;
+      feedback->segment_finished_mask |= PC_AUTO_ACTION_SEGMENT_STORE;
       break;
     default:
       break;
@@ -730,7 +746,7 @@ static void AutoCtrlFeed_UpdateLightEffectFromAutoActionFeedback(
   if (feedback == NULL) {
     return;
   }
-  if (feedback->busy != 0u || feedback->action == (uint8_t)PC_AUTO_ACTION_NONE) {
+  if (feedback->finished == 0u) {
     return;
   }
 
@@ -825,12 +841,14 @@ static uint16_t AutoCtrlFeed_RodFailureMask(PC_AutoAction_t action) {
 
 static void AutoCtrlFeed_SetFeedbackSuccess(
     PC_AutoActionFeedback_t *feedback) {
+  feedback->finished = 1u;
   feedback->result = (uint8_t)PC_AUTO_ACTION_RESULT_SUCCESS;
   feedback->failure_mask = 0u;
 }
 
 static void AutoCtrlFeed_SetFeedbackFail(PC_AutoActionFeedback_t *feedback,
                                          uint16_t failure_mask) {
+  feedback->finished = 1u;
   feedback->result = (uint8_t)PC_AUTO_ACTION_RESULT_FAIL;
   feedback->failure_mask = failure_mask;
 }
