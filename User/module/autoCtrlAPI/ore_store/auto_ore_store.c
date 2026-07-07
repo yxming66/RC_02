@@ -42,6 +42,10 @@
 #define AUTO_ORE_FUSED_HEAD_DESCEND_FIRST_EDGE_STEP_INDEX (1u)
 #define AUTO_ORE_FUSED_ARM_PHOTO_ENABLE_JOINT1_RAD (0.6981317f)
 
+#ifndef AUTO_CTRL_STM32_YAW_WZ_ENABLE
+#define AUTO_CTRL_STM32_YAW_WZ_ENABLE (0u)
+#endif
+
 #define AUTO_ORE_OCCUPANCY_SOURCE_STATE_MACHINE_VALUE (0u)
 #define AUTO_ORE_OCCUPANCY_SOURCE_PHOTOELECTRIC_VALUE (1u)
 
@@ -829,6 +833,10 @@ static float AutoOre_SelectPrealignWz(AutoOre_t *ctrl) {
   if (ctrl->feedback.yaw_source == AUTO_CTRL_YAW_SOURCE_PC) {
     return ctrl->feedback.yaw_rate_cmd_rad_s;
   }
+
+#if !AUTO_CTRL_STM32_YAW_WZ_ENABLE
+  return 0.0f;
+#endif
 
   Config_RobotParam_t *robot_param = Config_GetRobotParam();
   if (robot_param == 0) {

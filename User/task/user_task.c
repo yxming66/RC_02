@@ -4,6 +4,7 @@ Task_Runtime_t task_runtime;
 Buzzer_AlarmRequest_t g_buzzer_alarm_request;
 
 uint32_t Task_ProfilerLoopBegin(Task_ProfileId_t id, uint32_t target_period_us) {
+#if TASK_RUNTIME_PROFILER_ENABLE
   const uint32_t now_us = (uint32_t)BSP_TIME_Get_us();
   if (id >= TASK_PROFILE_COUNT) {
     return now_us;
@@ -34,9 +35,15 @@ uint32_t Task_ProfilerLoopBegin(Task_ProfileId_t id, uint32_t target_period_us) 
   }
 
   return now_us;
+#else
+  (void)id;
+  (void)target_period_us;
+  return 0U;
+#endif
 }
 
 void Task_ProfilerLoopEnd(Task_ProfileId_t id, uint32_t loop_start_us) {
+#if TASK_RUNTIME_PROFILER_ENABLE
   const uint32_t now_us = (uint32_t)BSP_TIME_Get_us();
   if (id >= TASK_PROFILE_COUNT) {
     return;
@@ -51,6 +58,10 @@ void Task_ProfilerLoopEnd(Task_ProfileId_t id, uint32_t loop_start_us) {
   if (stats->target_period_us != 0U && exec_us > stats->target_period_us) {
     stats->overrun_count++;
   }
+#else
+  (void)id;
+  (void)loop_start_us;
+#endif
 }
 
 void Task_DelayUntil(Task_ProfileId_t id, uint32_t *wake_tick,
@@ -63,6 +74,7 @@ void Task_DelayUntil(Task_ProfileId_t id, uint32_t *wake_tick,
   const uint32_t now_tick = osKernelGetTickCount();
   if ((int32_t)(now_tick - *wake_tick) >= 0) {
     const uint32_t late_tick = now_tick - *wake_tick;
+#if TASK_RUNTIME_PROFILER_ENABLE
     if (id < TASK_PROFILE_COUNT) {
       Task_ProfileStats_t *stats = &task_runtime.profile[id];
       stats->deadline_miss_count++;
@@ -72,6 +84,10 @@ void Task_DelayUntil(Task_ProfileId_t id, uint32_t *wake_tick,
       }
       stats->resync_count++;
     }
+#else
+    (void)id;
+    (void)late_tick;
+#endif
     *wake_tick = now_tick + delay_tick;
   }
 
@@ -142,7 +158,7 @@ const osThreadAttr_t attr_rc_main = {
 };
 const osThreadAttr_t attr_auto_ctrl = {
     .name = "auto_ctrl",
-    .priority = osPriorityHigh,
+  .priority = osPriorityNormal,
     .stack_size = 512 * 4,
 };
 const osThreadAttr_t attr_upper_mech = {

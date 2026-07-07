@@ -13,6 +13,10 @@
 #include "component/math/scalar.hpp"
 #include "module/config.h"
 
+#ifndef AUTO_CTRL_STM32_YAW_WZ_ENABLE
+#define AUTO_CTRL_STM32_YAW_WZ_ENABLE (0u)
+#endif
+
 static const AutoCtrl_TemplateParam_t *AutoCtrlPrimitive_GetTemplateParams(
     const Config_RobotParam_t *robot_param, auto_ctrl_template_e template_id) {
   if (robot_param == nullptr) {
@@ -77,6 +81,11 @@ void AutoCtrlPrimitive_ApplyPrealign(auto_ctrl_t *ctrl) {
         AutoCtrlPrimitive_GetActiveYawRateCommand(ctrl);
     return;
   }
+
+#if !AUTO_CTRL_STM32_YAW_WZ_ENABLE
+  ctrl->chassis_cmd.ctrl_vec.wz = 0.0f;
+  return;
+#endif
 
   ctrl->chassis_cmd.ctrl_vec.wz = AutoCtrlPrimitive_Clamp(
       ctrl->yaw_error_rad * robot_param->auto_ctrl_param.common.prealign_kp,

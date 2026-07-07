@@ -62,6 +62,9 @@ extern "C" {
 #define ORE_INFO_INIT_DELAY (0)
 /* Exported defines --------------------------------------------------------- */
 #define TASK_PERIOD_US(freq) ((uint32_t)(1000000.0f / (float)(freq)))
+#ifndef TASK_RUNTIME_PROFILER_ENABLE
+#define TASK_RUNTIME_PROFILER_ENABLE (0)
+#endif
 /* Exported macro ----------------------------------------------------------- */
 /* Exported types ----------------------------------------------------------- */
 typedef enum {
