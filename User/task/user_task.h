@@ -35,7 +35,7 @@ extern "C" {
 #define POLE_MAIN_FREQ (1000.0)
 #define RC_MAIN_FREQ (500.0)
 #define SICK_FREQ (100.0)
-#define AUTO_CTRL_FREQ (100.0)
+#define AUTO_CTRL_FREQ (200.0)
 #define CAMERA_YAW_FREQ (200.0)
 #define ARM_SIMPLE_FREQ (200.0)
 #define ROD_FREQ (200.0)

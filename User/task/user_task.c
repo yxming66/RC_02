@@ -142,7 +142,7 @@ const osThreadAttr_t attr_rc_main = {
 };
 const osThreadAttr_t attr_auto_ctrl = {
     .name = "auto_ctrl",
-    .priority = osPriorityNormal,
+    .priority = osPriorityHigh,
     .stack_size = 512 * 4,
 };
 const osThreadAttr_t attr_upper_mech = {
