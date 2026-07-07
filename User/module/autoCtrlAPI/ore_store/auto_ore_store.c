@@ -2048,6 +2048,7 @@ static void AutoOre_FusedStoreNextStep(AutoOre_t *ctrl) {
 
 static void AutoOre_FusedStoreMarkDone(AutoOre_t *ctrl) {
   ctrl->fused_store_done = true;
+  ctrl->fused_pick_done = true;
   ctrl->fused_store_step_index = 0u;
   ctrl->fused_store_step_phase = 0u;
   if (AutoOre_IsPositionValid(ctrl->fused_store_position)) {
@@ -2133,6 +2134,7 @@ static void AutoOre_RunFusedStoreLow(AutoOre_t *ctrl, uint32_t now_ms) {
         return;
       }
       if (AutoOre_WaitArmCommandTarget(ctrl, now_ms)) {
+        ctrl->fused_pick_done = true;
         AutoOre_FusedStoreNextStep(ctrl);
       }
       return;
@@ -3024,6 +3026,7 @@ static bool AutoOre_StartResolved(AutoOre_t *ctrl, AutoOre_Action_t action,
   }
   ctrl->step_ctrl_active = false;
   ctrl->step_ctrl_started = false;
+  ctrl->fused_pick_done = false;
   ctrl->fused_step_done = false;
   ctrl->fused_store_done = false;
   ctrl->pick_lift_confirmed = false;
@@ -3348,6 +3351,36 @@ bool AutoOre_IsUpperFinished(const AutoOre_t *ctrl) {
     return true;
   }
   return AutoOre_HasSplitResult(ctrl) && ctrl->fused_store_done;
+}
+
+bool AutoOre_IsPickFinished(const AutoOre_t *ctrl) {
+  if (ctrl == 0) {
+    return false;
+  }
+  if (ctrl->state == AUTO_ORE_STATE_SUCCESS) {
+    return true;
+  }
+  return AutoOre_HasSplitResult(ctrl) && ctrl->fused_pick_done;
+}
+
+bool AutoOre_IsStoreFinished(const AutoOre_t *ctrl) {
+  if (ctrl == 0) {
+    return false;
+  }
+  if (ctrl->state == AUTO_ORE_STATE_SUCCESS) {
+    return true;
+  }
+  return AutoOre_HasSplitResult(ctrl) && ctrl->fused_store_done;
+}
+
+bool AutoOre_IsStepFinished(const AutoOre_t *ctrl) {
+  if (ctrl == 0) {
+    return false;
+  }
+  if (ctrl->state == AUTO_ORE_STATE_SUCCESS) {
+    return true;
+  }
+  return AutoOre_HasSplitResult(ctrl) && ctrl->fused_step_done;
 }
 
 AutoOre_State_t AutoOre_GetState(const AutoOre_t *ctrl) {

@@ -356,11 +356,11 @@ typedef struct {
 typedef struct {
     uint8_t action;                 /* 当前/最近一键动作，见 PC_AutoAction_t */
     uint8_t busy;                   /* 任意一键动作是否正在执行，0=空闲，1=忙 */
-    uint8_t finished;               /* 是否已有结束结果，0=无，1=有 */
+    uint8_t pick_finished;          /* 取矿/arm 交矿侧动作是否已成功完成，0/1 */
     uint8_t result;                 /* 结束结果，见 PC_AutoActionResult_t */
     uint16_t failure_mask;          /* 失败部位 bitmask，见 PC_AUTO_ACTION_FAILURE_* */
-    uint8_t lower_finished;         /* 下层/底盘侧动作是否已成功完成，0/1 */
-    uint8_t upper_finished;         /* 上层机构侧动作是否已成功完成，0/1 */
+    uint8_t store_finished;         /* 存矿机构侧动作是否已成功完成，0/1 */
+    uint8_t step_finished;          /* 台阶/底盘侧动作是否已成功完成，0/1 */
 } PC_AutoActionFeedback_t;
 
 typedef struct {

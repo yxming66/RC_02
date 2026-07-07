@@ -204,6 +204,7 @@ typedef struct {
     volatile bool pick_lift_confirmed;
     volatile float fused_wheel_delta_rad;
     volatile float fused_target_wheel_delta_rad;
+    volatile bool fused_pick_done;
     volatile bool fused_step_done;
     volatile bool fused_store_done;
     volatile bool arm_at_target;

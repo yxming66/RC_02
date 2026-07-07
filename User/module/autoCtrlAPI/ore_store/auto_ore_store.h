@@ -237,6 +237,7 @@ typedef struct {
   auto_ctrl_t step_ctrl;
   bool step_ctrl_active;
   bool step_ctrl_started;
+  bool fused_pick_done;
   bool fused_step_done;
   bool fused_store_done;
   bool pick_lift_confirmed;
@@ -307,6 +308,9 @@ void AutoOre_Update(AutoOre_t *ctrl, const AutoOre_Feedback_t *feedback,
 void AutoOre_Abort(AutoOre_t *ctrl);
 bool AutoOre_IsBusy(const AutoOre_t *ctrl);
 bool AutoOre_HasSplitResult(const AutoOre_t *ctrl);
+bool AutoOre_IsPickFinished(const AutoOre_t *ctrl);
+bool AutoOre_IsStoreFinished(const AutoOre_t *ctrl);
+bool AutoOre_IsStepFinished(const AutoOre_t *ctrl);
 bool AutoOre_IsLowerFinished(const AutoOre_t *ctrl);
 bool AutoOre_IsUpperFinished(const AutoOre_t *ctrl);
 AutoOre_State_t AutoOre_GetState(const AutoOre_t *ctrl);

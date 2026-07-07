@@ -2,7 +2,7 @@
 
 #ifdef __cplusplus
 extern "C" {
-#endif
+#endif  
 
 #include <stdbool.h>
 #include <stdint.h>

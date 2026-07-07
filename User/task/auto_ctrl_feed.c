@@ -670,8 +670,9 @@ static void AutoCtrlFeed_SetSplitFeedback(PC_AutoActionFeedback_t *feedback) {
   }
   if (AutoOre_HasSplitResult(&auto_ore_ctrl) ||
       AutoOre_GetResult(&auto_ore_ctrl) == AUTO_ORE_RESULT_SUCCESS) {
-    feedback->lower_finished = AutoOre_IsLowerFinished(&auto_ore_ctrl) ? 1u : 0u;
-    feedback->upper_finished = AutoOre_IsUpperFinished(&auto_ore_ctrl) ? 1u : 0u;
+    feedback->pick_finished = AutoOre_IsPickFinished(&auto_ore_ctrl) ? 1u : 0u;
+    feedback->store_finished = AutoOre_IsStoreFinished(&auto_ore_ctrl) ? 1u : 0u;
+    feedback->step_finished = AutoOre_IsStepFinished(&auto_ore_ctrl) ? 1u : 0u;
   }
 }
 
@@ -681,8 +682,7 @@ static void AutoCtrlFeed_SetStepCompleteFeedback(
       !AutoCtrlFeed_IsStepAction((PC_AutoAction_t)feedback->action)) {
     return;
   }
-  feedback->lower_finished = 1u;
-  feedback->upper_finished = 1u;
+  feedback->step_finished = 1u;
 }
 
 static bool AutoCtrlFeed_IsRodSpearheadAction(PC_AutoAction_t action) {
@@ -707,7 +707,7 @@ static void AutoCtrlFeed_UpdateLightEffectFromAutoActionFeedback(
   if (feedback == NULL) {
     return;
   }
-  if (feedback->finished == 0u) {
+  if (feedback->busy != 0u || feedback->action == (uint8_t)PC_AUTO_ACTION_NONE) {
     return;
   }
 
@@ -802,14 +802,12 @@ static uint16_t AutoCtrlFeed_RodFailureMask(PC_AutoAction_t action) {
 
 static void AutoCtrlFeed_SetFeedbackSuccess(
     PC_AutoActionFeedback_t *feedback) {
-  feedback->finished = 1u;
   feedback->result = (uint8_t)PC_AUTO_ACTION_RESULT_SUCCESS;
   feedback->failure_mask = 0u;
 }
 
 static void AutoCtrlFeed_SetFeedbackFail(PC_AutoActionFeedback_t *feedback,
                                          uint16_t failure_mask) {
-  feedback->finished = 1u;
   feedback->result = (uint8_t)PC_AUTO_ACTION_RESULT_FAIL;
   feedback->failure_mask = failure_mask;
 }
@@ -1410,6 +1408,7 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms, bool update_debug) {
   g_auto_ore_debug.fused_wheel_delta_rad = auto_ore_ctrl.wheel_delta_rad;
   g_auto_ore_debug.fused_target_wheel_delta_rad =
       auto_ore_ctrl.target_wheel_delta_rad;
+  g_auto_ore_debug.fused_pick_done = auto_ore_ctrl.fused_pick_done;
   g_auto_ore_debug.fused_step_done = auto_ore_ctrl.fused_step_done;
   g_auto_ore_debug.fused_store_done = auto_ore_ctrl.fused_store_done;
   if (arm_fb != NULL) {
