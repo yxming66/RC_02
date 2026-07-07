@@ -3,6 +3,7 @@
 #include <cmath>
 #include <cstring>
 
+#include "debug_config.h"
 #include "task/user_task.h"
 
 #include "module/config.h"
@@ -12,7 +13,6 @@
 #define POLE_TEMP_WARNING_ALARM_MS (3000u)
 #define POLE_TEMP_OVER_LIMIT_ALARM_MS (5000u)
 #define POLE_TEMP_ALARM_UPDATE_PERIOD_MS (50u)
-#define POLE_PID_DEBUG_UPDATE_PERIOD_MS (10u)
 #define POLE_PC_FEEDBACK_PERIOD_MS (20u)
 
 namespace {

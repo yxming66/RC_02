@@ -2,6 +2,7 @@
  * Ore store task.
  */
 
+#include "debug_config.h"
 #include "task/user_task.h"
 
 #include <math.h>
@@ -94,10 +95,6 @@ volatile CameraYaw_DebugControl_t g_camera_yaw_debug = {
 #define ORE_STORE_TEMP_WARNING_ALARM_MS (3000u)
 #define ORE_STORE_TEMP_OVER_LIMIT_ALARM_MS (5000u)
 #define ORE_STORE_POWER_ON_HOME_READY_TIMEOUT_MS (10000u)
-
-#ifndef ORE_STORE_DEBUG_UPDATE_PERIOD_MS
-#define ORE_STORE_DEBUG_UPDATE_PERIOD_MS (50u)
-#endif
 
 static uint32_t ore_store_debug_last_update_ms = 0u;
 

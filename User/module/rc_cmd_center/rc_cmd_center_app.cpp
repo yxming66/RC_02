@@ -5,6 +5,7 @@
 /* Includes ----------------------------------------------------------------- */
 #include "task/user_task.h"
 /* USER INCLUDE BEGIN */
+#include "debug_config.h"
 #include "bsp/uart.h"
 #include "bsp/gpio.h"
 #include "device/dr16.h"
@@ -64,10 +65,6 @@
 
 #ifndef RC_PC_RETRY_CH_L_X_THRESHOLD
 #define RC_PC_RETRY_CH_L_X_THRESHOLD (0.90f)
-#endif
-
-#ifndef RC_DEBUG_UPDATE_PERIOD_MS
-#define RC_DEBUG_UPDATE_PERIOD_MS (50u)
 #endif
 
 #ifndef RC_MANUAL_IO_CH_THRESHOLD

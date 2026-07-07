@@ -1,10 +1,7 @@
+#include "debug_config.h"
 #include "task/user_task.h"
 
 #include "module/config.h"
-
-#ifndef SICK_DEBUG_UPDATE_PERIOD_MS
-#define SICK_DEBUG_UPDATE_PERIOD_MS (50u)
-#endif
 
 volatile Sick_Debug_t g_sick_debug = {0};
 

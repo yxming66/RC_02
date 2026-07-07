@@ -8,6 +8,7 @@
 /* USER INCLUDE BEGIN */
 #include <stdbool.h>
 #include <stdint.h>
+#include "debug_config.h"
 #include "bsp/time.h"
 #include "module/autoCtrlAPI/api/auto_ctrl_api.h"
 #include "module/autoCtrlAPI/ore_store/auto_ore_store.h"
@@ -62,9 +63,6 @@ extern "C" {
 #define ORE_INFO_INIT_DELAY (0)
 /* Exported defines --------------------------------------------------------- */
 #define TASK_PERIOD_US(freq) ((uint32_t)(1000000.0f / (float)(freq)))
-#ifndef TASK_RUNTIME_PROFILER_ENABLE
-#define TASK_RUNTIME_PROFILER_ENABLE (0)
-#endif
 /* Exported macro ----------------------------------------------------------- */
 /* Exported types ----------------------------------------------------------- */
 typedef enum {

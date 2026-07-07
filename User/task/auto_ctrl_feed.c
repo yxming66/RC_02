@@ -6,6 +6,7 @@
 /* Includes ----------------------------------------------------------------- */
 #include "task/user_task.h"
 /* USER INCLUDE BEGIN */
+#include "debug_config.h"
 #include "main.h"
 #include "device/dr16.h"
 #include "device/ir_dock/ir_dock.h"
@@ -66,10 +67,6 @@ static AutoOre_DebugRequest_t pending_release_step2_request =
 
 #ifndef AUTO_CTRL_POLE_TARGET_STABLE_CYCLES
 #define AUTO_CTRL_POLE_TARGET_STABLE_CYCLES (5u)
-#endif
-
-#ifndef AUTO_ORE_DEBUG_UPDATE_PERIOD_MS
-#define AUTO_ORE_DEBUG_UPDATE_PERIOD_MS (50u)
 #endif
 
 static uint8_t pole_front_at_target_stable_count = 0u;

@@ -747,7 +747,6 @@ void Task_PcCommStep(void) {
         }
     }
 
-    MrlinkPc_DebugUpdate();
     task_runtime.heartbeat.pc_comm++;
     Task_ProfilerLoopEnd(TASK_PROFILE_PC_COMM, profile_start_us);
 }
