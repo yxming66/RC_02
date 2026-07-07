@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <new>
 
+#include "debug_config.h"
 #include "bsp/can.h"
 #include "component/math/scalar.hpp"
 #include "device/device.h"
@@ -19,7 +20,6 @@ namespace scalar = mr::component::math;
 constexpr float kRotorWzMin = 0.6f;
 constexpr float kRotorWzMax = 0.8f;
 constexpr float kRotorOmega = 0.001f;
-constexpr float kFollowOffset35DegRad = M_2PI * 7.0f / 72.0f;
 constexpr float kDefaultDtS = 0.001f;
 constexpr float kMinDtS = 0.0005f;
 constexpr float kMaxDtS = 0.050f;
@@ -205,15 +205,19 @@ int8_t MecanumController::Control(const Chassis_CMD_t &cmd, uint32_t now) {
   }
 
   dt_ = CalcDt(now);
+#if CHASSIS_RUNTIME_DEBUG_ENABLE
   debug_.dt_s = dt_;
   debug_.target_vec = cmd.ctrl_vec;
+#endif
 
   const int8_t mode_ret = SetMode(cmd.mode, now);
   if (mode_ret != CHASSIS_OK) {
     return mode_ret;
   }
   UpdateWheelPidSelection();
+#if CHASSIS_RUNTIME_DEBUG_ENABLE
   debug_.mode = mode_;
+#endif
 
   switch (mode_) {
     case CHASSIS_MODE_BREAK:
@@ -221,20 +225,14 @@ int8_t MecanumController::Control(const Chassis_CMD_t &cmd, uint32_t now) {
       move_vec_.vy = 0.0f;
       break;
     case CHASSIS_MODE_INDEPENDENT:
+    case CHASSIS_MODE_OPEN:
+    case CHASSIS_MODE_FOLLOW_GIMBAL:
+    case CHASSIS_MODE_FOLLOW_GIMBAL_35:
+    case CHASSIS_MODE_ROTOR:
+    case CHASSIS_MODE_RELAX:
       move_vec_.vx = cmd.ctrl_vec.vx;
       move_vec_.vy = cmd.ctrl_vec.vy;
       break;
-    default: {
-      float beta = feedback_.encoder_gimbalYawMotor - mech_zero_;
-      if (param_->reverse.yaw) {
-        beta = -beta;
-      }
-      const float cos_beta = std::cos(beta);
-      const float sin_beta = std::sin(beta);
-      move_vec_.vx = cos_beta * cmd.ctrl_vec.vx - sin_beta * cmd.ctrl_vec.vy;
-      move_vec_.vy = sin_beta * cmd.ctrl_vec.vx + cos_beta * cmd.ctrl_vec.vy;
-      break;
-    }
   }
 
   switch (mode_) {
@@ -244,17 +242,9 @@ int8_t MecanumController::Control(const Chassis_CMD_t &cmd, uint32_t now) {
       break;
     case CHASSIS_MODE_INDEPENDENT:
     case CHASSIS_MODE_OPEN:
-      move_vec_.wz = cmd.ctrl_vec.wz;
-      break;
     case CHASSIS_MODE_FOLLOW_GIMBAL:
-      move_vec_.wz =
-          PID_Calc(&follow_pid_, mech_zero_, feedback_.encoder_gimbalYawMotor,
-                   0.0f, dt_);
-      break;
     case CHASSIS_MODE_FOLLOW_GIMBAL_35:
-      move_vec_.wz =
-          PID_Calc(&follow_pid_, mech_zero_ + kFollowOffset35DegRad,
-                   feedback_.encoder_gimbalYawMotor, 0.0f, dt_);
+      move_vec_.wz = cmd.ctrl_vec.wz;
       break;
     case CHASSIS_MODE_ROTOR:
       move_vec_.wz =
@@ -264,7 +254,9 @@ int8_t MecanumController::Control(const Chassis_CMD_t &cmd, uint32_t now) {
   }
 
   LimitMoveVector();
+#if CHASSIS_RUNTIME_DEBUG_ENABLE
   debug_.output_vec = move_vec_;
+#endif
 
   if (ShouldHoldZeroCommand()) {
     const bool hold_ready =
@@ -293,8 +285,10 @@ int8_t MecanumController::Control(const Chassis_CMD_t &cmd, uint32_t now) {
     float pid_out = 0.0f;
     KPID_t *active_pid = ActiveWheelSpeedPid(i);
 
+  #if CHASSIS_RUNTIME_DEBUG_ENABLE
     debug_.wheel_speed_ref_mps[i] = ref_speed;
     debug_.wheel_speed_fdb_mps[i] = feedback;
+  #endif
 
     switch (mode_) {
       case CHASSIS_MODE_BREAK:
@@ -313,14 +307,18 @@ int8_t MecanumController::Control(const Chassis_CMD_t &cmd, uint32_t now) {
         break;
     }
 
+#if CHASSIS_RUNTIME_DEBUG_ENABLE
     if (active_pid != nullptr) {
       debug_.wheel_pid_error[i] = active_pid->last.err;
       debug_.wheel_pid_integral[i] = active_pid->i;
     }
     debug_.wheel_torque_pid_out[i] = pid_out;
+#endif
     out_.motor[i] = LowPassFilter2p_Apply(&output_filter_[i], torque_cmd);
     out_.motor[i] = ClampSymmetric(out_.motor[i], param_->limit.max_torque_cmd);
+#if CHASSIS_RUNTIME_DEBUG_ENABLE
     debug_.wheel_torque_cmd_nm[i] = out_.motor[i];
+#endif
   }
 
   for (uint8_t i = 0; i < kWheelCount; ++i) {
@@ -399,7 +397,9 @@ void MecanumController::ResetRuntime() {
   wheel_speed_ref_planned_ = {};
   move_vec_ = {};
   feedback_ = {};
+#if CHASSIS_RUNTIME_DEBUG_ENABLE
   debug_ = {};
+#endif
   out_ = {};
   last_wakeup_us_ = 0U;
   dt_ = 0.0f;
@@ -476,7 +476,9 @@ void MecanumController::ResetWheelSpeedPlanner() {
 void MecanumController::UpdateWheelPidSelection() {
   const bool use_high_pole_pid =
       ShouldUseHighPoleWheelPid(param_, pole_lift_max_rad_);
+#if CHASSIS_RUNTIME_DEBUG_ENABLE
   debug_.wheel_high_pole_pid_active = wheel_high_pole_pid_active_;
+#endif
   if (use_high_pole_pid == wheel_high_pole_pid_active_) {
     return;
   }
@@ -486,7 +488,9 @@ void MecanumController::UpdateWheelPidSelection() {
     PID_Reset(&wheel_pid_[i]);
     PID_Reset(&wheel_high_pole_pid_[i]);
   }
+#if CHASSIS_RUNTIME_DEBUG_ENABLE
   debug_.wheel_high_pole_pid_active = wheel_high_pole_pid_active_;
+#endif
 }
 
 KPID_t *MecanumController::ActiveWheelSpeedPid(uint8_t idx) {
@@ -540,7 +544,9 @@ void MecanumController::UpdateBodyVelocityFeedback() {
       LowPassFilter2p_Apply(&body_velocity_filter_[1], raw_velocity.vy_mps);
   feedback_.chassis_vel.wz =
       LowPassFilter2p_Apply(&body_velocity_filter_[2], raw_velocity.wz_rad_s);
+#if CHASSIS_RUNTIME_DEBUG_ENABLE
   debug_.feedback_vec = feedback_.chassis_vel;
+#endif
 }
 
 int8_t MecanumController::ComputeWheelSpeeds() {
@@ -695,13 +701,17 @@ int8_t MecanumController::ControlWheelHold() {
                             position_rad, 0.0f, dt_);
       wheel_hold_last_position_rad_[i] = position_rad;
     }
+#if CHASSIS_RUNTIME_DEBUG_ENABLE
     debug_.wheel_speed_ref_mps[i] = 0.0f;
     debug_.wheel_speed_fdb_mps[i] = WheelSpeedFeedback(i);
     debug_.wheel_pid_error[i] = wheel_hold_pid_[i].last.err;
     debug_.wheel_pid_integral[i] = wheel_hold_pid_[i].i;
     debug_.wheel_torque_pid_out[i] = torque_cmd;
+#endif
     out_.motor[i] = ClampSymmetric(torque_cmd, param_->limit.max_torque_cmd);
+#if CHASSIS_RUNTIME_DEBUG_ENABLE
     debug_.wheel_torque_cmd_nm[i] = out_.motor[i];
+#endif
 
     out_.set_torque_ret[i] = wheel->SetTorque(out_.motor[i]);
     if (out_.set_torque_ret[i] == DEVICE_OK) {

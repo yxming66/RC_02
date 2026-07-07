@@ -5,6 +5,7 @@
 #include "motor_rm.h"
 #include <stdbool.h>
 #include <string.h>
+#include "debug_config.h"
 #include "bsp/can.h"
 #include "bsp/mm.h"
 #include "bsp/time.h"
@@ -36,10 +37,6 @@
 #define MOTOR_RM_TX_GROUP_M3508_M2006_HIGH (1u)
 #define MOTOR_RM_TX_GROUP_GM6020_HIGH      (2u)
 #define MOTOR_RM_TX_GROUP_MASK(group)      ((uint8_t)(1u << (group)))
-
-#ifndef MOTOR_RM_TX_DEBUG_ENABLE
-#define MOTOR_RM_TX_DEBUG_ENABLE           (0)
-#endif
 
 #define MOTOR_ENC_RES            (8192)   /* 电机编码器分辨率 */
 #define MOTOR_CUR_RES            (16384)  /* 电机转矩电流分辨率 */

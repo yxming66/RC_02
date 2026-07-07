@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstring>
 
+#include "debug_config.h"
 #include "bsp/time.h"
 #include "bsp/uart.h"
 #include "bsp/can.h"
@@ -25,10 +26,6 @@ constexpr uint16_t kMrlinkRxBufSize = MRLINK_PC_RX_STREAM_BUF_SIZE;
 constexpr uint16_t kMrlinkTxBufSize = MRLINK_PC_MAX_FRAME_SIZE;
 constexpr uint32_t kAutoActionRepeatReleaseMs = 300u;
 constexpr uint32_t kModuleCommandTimeoutMs = 10000u;
-
-#ifndef MRLINK_PC_DEBUG_FULL_UPDATE_PERIOD_MS
-#define MRLINK_PC_DEBUG_FULL_UPDATE_PERIOD_MS (50u)
-#endif
 
 static_assert(kRxDmaSlotCount >= 2u, "MRLINK_PC_RX_DMA_SLOT_COUNT must be >= 2");
 static_assert(kRxDmaBufSize >= MRLINK_PC_MAX_FRAME_SIZE,

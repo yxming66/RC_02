@@ -6,6 +6,7 @@
 #include <type_traits>
 
 #include "component/math/scalar.hpp"
+#include "debug_config.h"
 #include "device/device.h"
 #include "device/motor.h"
 #include "device/motor/core/motor_instance_config.hpp"
@@ -83,7 +84,9 @@ public:
         protocol_.ClearPendingCommand();
         state_.command_pending = false;
     }
+#if MOTOR_PROTOCOL_DEBUG_ENABLE
     const auto& ProtocolDebug() const { return protocol_.GetDebugSnapshot(); }
+#endif
 
     void SetTemperatureProtection(const MotorTemperatureProtectionConfig& config) {
         temperature_protection_ = NormalizeTemperatureProtection(config);

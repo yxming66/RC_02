@@ -27,7 +27,6 @@ RmM3508Wheel::RmM3508Wheel(const RmM3508WheelConfig& config)
       motor_(nullptr),
       controller_(nullptr),
       state_{},
-      debug_{},
       controller_storage_{} {
   const auto motor_config =
       MotorInstanceConfig<MotorKind::RM>::FromVendorParam(config.motor_param);
@@ -58,7 +57,6 @@ int8_t RmM3508Wheel::Relax() {
     return DEVICE_ERR_NULL;
   }
   const int8_t ret = controller_->Relax();
-  RefreshDebug();
   return ret;
 }
 
@@ -70,7 +68,6 @@ int8_t RmM3508Wheel::Update() {
   if (ret == DEVICE_OK) {
     RefreshState();
   }
-  RefreshDebug();
   return ret;
 }
 
@@ -82,7 +79,6 @@ int8_t RmM3508Wheel::UpdateFeedback() {
   if (ret == DEVICE_OK) {
     RefreshState();
   }
-  RefreshDebug();
   return ret;
 }
 
@@ -90,18 +86,14 @@ int8_t RmM3508Wheel::UpdateCommand() {
   if (controller_ == nullptr) {
     return DEVICE_ERR_NULL;
   }
-  const int8_t ret = controller_->UpdateCommand();
-  RefreshDebug();
-  return ret;
+  return controller_->UpdateCommand();
 }
 
 int8_t RmM3508Wheel::SetTorque(float torque_nm) {
   if (controller_ == nullptr) {
     return DEVICE_ERR_NULL;
   }
-  const int8_t ret = controller_->SetTorque(torque_nm);
-  RefreshDebug();
-  return ret;
+  return controller_->SetTorque(torque_nm);
 }
 
 int8_t RmM3508Wheel::SetPosition(float position_rad,
@@ -109,19 +101,14 @@ int8_t RmM3508Wheel::SetPosition(float position_rad,
   if (controller_ == nullptr) {
     return DEVICE_ERR_NULL;
   }
-  const int8_t ret =
-      controller_->SetPosition(position_rad, max_velocity_rad_s);
-  RefreshDebug();
-  return ret;
+  return controller_->SetPosition(position_rad, max_velocity_rad_s);
 }
 
 int8_t RmM3508Wheel::CommitCommand() {
   if (controller_ == nullptr) {
     return DEVICE_ERR_NULL;
   }
-  const int8_t ret = controller_->CommitCommand();
-  RefreshDebug();
-  return ret;
+  return controller_->CommitCommand();
 }
 
 bool RmM3508Wheel::HasPendingCommand() const {
@@ -133,7 +120,6 @@ void RmM3508Wheel::ClearPendingCommand() {
     return;
   }
   controller_->ClearPendingCommand();
-  RefreshDebug();
 }
 
 void RmM3508Wheel::RefreshState() {
@@ -152,24 +138,6 @@ void RmM3508Wheel::RefreshState() {
   state_.temperature_over_limit = motor_state.temperature_over_limit;
   state_.temperature_limit_latched = motor_state.temperature_limit_latched;
   state_.online = motor_state.online;
-}
-
-void RmM3508Wheel::RefreshDebug() {
-  if (motor_ == nullptr) {
-    debug_ = {};
-    debug_.last_set_torque_ret = DEVICE_ERR_NULL;
-    debug_.last_commit_ret = DEVICE_ERR_NULL;
-    return;
-  }
-
-  const mr::motor::RmProtocolDebugSnapshot& motor_debug =
-      motor_->ProtocolDebug();
-  debug_.pending_valid = motor_debug.pending_valid;
-  debug_.pending_torque_current = motor_debug.pending_torque_current;
-  debug_.last_set_torque_nm = motor_debug.last_set_torque_nm;
-  debug_.last_set_torque_ret = motor_debug.last_set_torque_ret;
-  debug_.last_commit_ret = motor_debug.last_commit_ret;
-  debug_.last_commit_skipped = motor_debug.last_commit_skipped;
 }
 
 }  // namespace mr::wheel

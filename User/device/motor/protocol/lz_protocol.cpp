@@ -225,7 +225,9 @@ int8_t MotorProtocol<MotorKind::LZ, Model>::CommitCommand() {
             return DEVICE_OK;
     }
 
+#if MOTOR_PROTOCOL_DEBUG_ENABLE
     debug_.last_commit_ret = ret;
+#endif
     state_.last_commit_ok = (ret == DEVICE_OK);
     if (ret == DEVICE_OK) {
         ClearPendingCommand();
@@ -240,11 +242,13 @@ void MotorProtocol<MotorKind::LZ, Model>::ClearPendingCommand() {
     pending_position_ = 0.0f;
     pending_position_velocity_limit_ = 0.0f;
     pending_motion_output_ = {};
+#if MOTOR_PROTOCOL_DEBUG_ENABLE
     debug_.pending_type = pending_type_;
     debug_.pending_velocity = pending_velocity_;
     debug_.pending_position = pending_position_;
     debug_.pending_position_velocity_limit = pending_position_velocity_limit_;
     debug_.pending_motion_torque = pending_motion_output_.torque;
+#endif
     MarkNoPendingCommand(state_);
 }
 
@@ -270,8 +274,10 @@ template <MotorModel Model>
 int8_t MotorProtocol<MotorKind::LZ, Model>::SetVelocity(float velocity) {
     pending_velocity_ = PrepareVelocityCommand(mapper_, velocity, MotorTraits<MotorKind::LZ, Model>::kMaxVelocity);
     pending_type_ = PendingCommandType::Velocity;
+#if MOTOR_PROTOCOL_DEBUG_ENABLE
     debug_.pending_type = pending_type_;
     debug_.pending_velocity = pending_velocity_;
+#endif
     state_.command_pending = true;
     return DEVICE_OK;
 }
@@ -288,9 +294,11 @@ int8_t MotorProtocol<MotorKind::LZ, Model>::SetPosition(float position, float ma
     pending_position_ = command.rotor_position;
     pending_position_velocity_limit_ = command.rotor_velocity_limit;
     pending_type_ = PendingCommandType::Position;
+#if MOTOR_PROTOCOL_DEBUG_ENABLE
     debug_.pending_type = pending_type_;
     debug_.pending_position = pending_position_;
     debug_.pending_position_velocity_limit = pending_position_velocity_limit_;
+#endif
     state_.command_pending = true;
     return DEVICE_OK;
 }
@@ -313,18 +321,22 @@ int8_t MotorProtocol<MotorKind::LZ, Model>::SetMIT(float position, float velocit
     pending_motion_output_.kd = kd;
     pending_motion_output_.torque = command.torque_ff;
     pending_type_ = PendingCommandType::Mit;
+#if MOTOR_PROTOCOL_DEBUG_ENABLE
     debug_.pending_type = pending_type_;
     debug_.pending_position = pending_motion_output_.target_angle;
     debug_.pending_velocity = pending_motion_output_.target_velocity;
     debug_.pending_motion_torque = pending_motion_output_.torque;
+#endif
     state_.command_pending = true;
     return DEVICE_OK;
 }
 
+#if MOTOR_PROTOCOL_DEBUG_ENABLE
 template <MotorModel Model>
 const LzProtocolDebugSnapshot& MotorProtocol<MotorKind::LZ, Model>::GetDebugSnapshot() const {
     return debug_;
 }
+#endif
 
 template class MotorProtocol<MotorKind::LZ, MotorModel::RSO0>;
 template class MotorProtocol<MotorKind::LZ, MotorModel::RSO1>;

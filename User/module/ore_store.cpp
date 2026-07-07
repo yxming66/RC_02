@@ -171,42 +171,6 @@ void ResetAxisPid(OreStore_t *store, uint8_t axis) {
   (void)PlatformControllerPtr(store)->ResetControllers();
 }
 
-bool ControllerHasPendingCommand(const OreStore_t *store, uint8_t axis) {
-  (void)axis;
-  return PlatformControllerPtr(store)->HasPendingCommand();
-}
-
-float ControllerLastSetTorqueNm(const OreStore_t *store, uint8_t axis) {
-  (void)axis;
-  return PlatformControllerPtr(store)
-    ->GetMotor()
-    .ProtocolDebug()
-    .last_set_torque_nm;
-}
-
-float ControllerPendingCurrentA(const OreStore_t *store, uint8_t axis) {
-  (void)axis;
-  return PlatformControllerPtr(store)
-    ->GetMotor()
-    .ProtocolDebug()
-    .pending_torque_current;
-}
-
-float ControllerFilteredPosition(const OreStore_t *store, uint8_t axis) {
-  (void)axis;
-  return PlatformControllerPtr(store)->GetLastFeedbackPosition();
-}
-
-float ControllerFilteredVelocity(const OreStore_t *store, uint8_t axis) {
-  (void)axis;
-  return PlatformControllerPtr(store)->GetLastFeedbackVelocity();
-}
-
-float ControllerFilteredOutputTorque(const OreStore_t *store, uint8_t axis) {
-  (void)axis;
-  return PlatformControllerPtr(store)->GetLastOutputTorque();
-}
-
 mr::motor::MotorState ControllerState(const OreStore_t *store, uint8_t axis) {
   (void)axis;
   return PlatformControllerPtr(store)->GetState();
@@ -327,77 +291,6 @@ float CommandTarget(const OreStore_CMD_t *cmd, uint8_t axis) {
              : 0.0f;
 }
 
-void RefreshDebugAxis(OreStore_t *store, uint8_t axis) {
-  if (store == nullptr || !AxisValid(axis)) {
-    return;
-  }
-
-  mr::motor::SoftLimitLearning *limit = SoftLimitPtr(store, axis);
-  store->debug.target_position_rad[axis] = store->target_position_rad[axis];
-  store->debug.command_position_rad[axis] = store->command_position_rad[axis];
-  store->debug.zero_offset_rad[axis] = store->zero_offset_rad[axis];
-  store->debug.learned_lower_raw_rad[axis] = store->learned_lower_raw_rad[axis];
-  store->debug.travel_rad[axis] = AxisTravel(store->param, axis);
-  store->debug.velocity_setpoint_rad_s[axis] =
-      store->velocity_setpoint_rad_s[axis];
-  store->debug.online_wait_s[axis] = store->homing_online_wait_s[axis];
-  store->debug.seek_velocity_rad_s[axis] =
-      (limit != nullptr) ? limit->GetSeekVelocity() : 0.0f;
-  store->debug.soft_limit_state[axis] =
-      (limit != nullptr)
-          ? static_cast<uint8_t>(limit->GetState())
-          : static_cast<uint8_t>(mr::motor::SoftLimitLearningState::Failed);
-  store->debug.stall_cycles[axis] =
-      (limit != nullptr) ? limit->GetStallCycles() : 0u;
-  store->debug.seek_travel_rad[axis] =
-      (limit != nullptr) ? limit->GetSeekTravelRad() : 0.0f;
-  store->debug.homing_started[axis] = store->homing_started[axis];
-  store->debug.axis_failed[axis] = store->axis_failed[axis];
-  store->debug.command_pending[axis] =
-      (store->controller[axis] != nullptr)
-          ? ControllerHasPendingCommand(store, axis)
-          : false;
-  if (store->controller[axis] != nullptr) {
-    store->debug.filtered_position_rad[axis] =
-        ControllerFilteredPosition(store, axis);
-    store->debug.filtered_velocity_rad_s[axis] =
-        ControllerFilteredVelocity(store, axis);
-    store->debug.filtered_output_torque_nm[axis] =
-        ControllerFilteredOutputTorque(store, axis);
-  } else {
-    store->debug.filtered_position_rad[axis] = store->feedback.position_rad[axis];
-    store->debug.filtered_velocity_rad_s[axis] = store->feedback.velocity_rad_s[axis];
-    store->debug.filtered_output_torque_nm[axis] = 0.0f;
-  }
-  store->debug.motor_torque_nm[axis] = store->feedback.motor[axis].torque_current;
-  if (store->controller[axis] != nullptr) {
-    store->debug.rm_last_set_torque_nm[axis] =
-        ControllerLastSetTorqueNm(store, axis);
-    store->debug.rm_pending_current_a[axis] =
-        ControllerPendingCurrentA(store, axis);
-  } else {
-    store->debug.rm_last_set_torque_nm[axis] = 0.0f;
-    store->debug.rm_pending_current_a[axis] = 0.0f;
-  }
-  store->debug.power_on_fixed_position_rad[axis] =
-      AxisFixedPowerOnPosition(store, axis);
-  store->debug.power_on_assume_ret[axis] = store->power_on_assume_ret[axis];
-  store->debug.power_on_assume_count[axis] = store->power_on_assume_count[axis];
-  const MOTOR_RM_Param_t *motor_param = &store->param->motor_param[axis];
-  const int8_t logical_index = (motor_param->id >= 0x201u &&
-                               motor_param->id <= 0x208u)
-                                  ? (int8_t)(motor_param->id - 0x201u)
-                                  : -1;
-  if (logical_index >= 0) {
-    const MOTOR_RM_SlotTxDebug_t *tx_debug =
-        MOTOR_RM_GetSlotTxDebug((uint8_t)logical_index);
-    if (tx_debug != nullptr && tx_debug->valid && tx_debug->can == motor_param->can) {
-      store->debug.rm_output_raw[axis] = tx_debug->output_value;
-      store->debug.rm_tx_frame_id[axis] = tx_debug->tx_frame_id;
-    }
-  }
-}
-
 void ResetAxisHoming(OreStore_t *store, uint8_t axis) {
   if (store == nullptr || !AxisValid(axis)) {
     return;
@@ -420,7 +313,6 @@ void ResetAxisHoming(OreStore_t *store, uint8_t axis) {
   store->command_position_rad[axis] = 0.0f;
   store->velocity_setpoint_rad_s[axis] = 0.0f;
   ResetAxisPid(store, axis);
-  RefreshDebugAxis(store, axis);
 }
 
 void ResetAllHoming(OreStore_t *store) {
@@ -769,10 +661,8 @@ int8_t OreStore_Control(OreStore_t *store, const OreStore_CMD_t *cmd,
                                   store->nominal_dt * 3.0f);
   store->last_wakeup_us = now_us;
   store->last_wakeup = now;
-  store->debug.dt_s = store->dt;
   store->fixed_ore_cylinder_closed = cmd->fixed_ore_cylinder_closed;
   store->feedback.fixed_ore_cylinder_closed = store->fixed_ore_cylinder_closed;
-  store->debug.fixed_ore_cylinder_closed = store->fixed_ore_cylinder_closed;
   const OreStore_Mode_t previous_mode = store->mode;
   store->mode = cmd->mode;
 
@@ -846,7 +736,6 @@ void OreStore_Output(OreStore_t *store) {
     } else {
       store->debug.commit_ret[axis] = ControllerCommit(store, axis);
     }
-    RefreshDebugAxis(store, axis);
   }
 
   (void)MOTOR_RM_FlushGroup(
@@ -864,7 +753,6 @@ void OreStore_ResetOutput(OreStore_t *store) {
     }
     store->debug.set_command_ret[axis] = DEVICE_OK;
     store->debug.commit_ret[axis] = ORE_STORE_ERR_NULL;
-    RefreshDebugAxis(store, axis);
   }
   OreStore_Output(store);
 }
@@ -898,7 +786,6 @@ int8_t OreStore_AssumeAxisHomedAtCurrent(OreStore_t *store, uint8_t axis,
   if (!limit->SetRange(0.0f, travel_rad)) {
     store->axis_failed[axis] = true;
     limit->MarkFailed();
-    RefreshDebugAxis(store, axis);
     return ORE_STORE_ERR;
   }
 
@@ -918,7 +805,6 @@ int8_t OreStore_AssumeAxisHomedAtCurrent(OreStore_t *store, uint8_t axis,
   store->feedback.position_rad[axis] = position_rad;
   store->feedback.homed[axis] = AxisHomed(store, axis);
   store->feedback.all_homed = AllHomed(store);
-  RefreshDebugAxis(store, axis);
   return ORE_STORE_OK;
 }
 

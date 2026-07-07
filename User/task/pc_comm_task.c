@@ -176,8 +176,17 @@ static bool PcComm_ProcessAutoActionCommand(void) {
         return false;
     }
 
+    const bool release_step2_continue =
+        (request == AUTO_ORE_DEBUG_REQUEST_RELEASE_STEP2 ||
+         request == AUTO_ORE_DEBUG_REQUEST_RELEASE_LIFT_DETECT_STEP2) &&
+        auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl) &&
+        (auto_ore_ctrl.action == AUTO_ORE_ACTION_RELEASE_STEP1 ||
+         auto_ore_ctrl.action == AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP1) &&
+        AutoOre_IsUpperFinished(&auto_ore_ctrl);
+
     if (g_auto_ore_debug.request != AUTO_ORE_DEBUG_REQUEST_NONE &&
-        request != AUTO_ORE_DEBUG_REQUEST_ABORT) {
+        request != AUTO_ORE_DEBUG_REQUEST_ABORT &&
+        !release_step2_continue) {
         return true;
     }
 
@@ -712,11 +721,11 @@ void Task_PcCommStep(void) {
         s_pc_comm_last_tx_tick = now;
     }
 
-    if (g_pc_command_source == PC_COMMAND_SOURCE_PC &&
-        MrlinkPc_IsPCControlMode()) {
+    if (MrlinkPc_IsPCControlMode()) {
         const bool auto_action_pending = PcComm_ProcessAutoActionCommand();
         const PC_AutoStepParams_t *step_params =
-            (auto_ctrl_inited && !auto_action_pending)
+            (g_pc_command_source == PC_COMMAND_SOURCE_PC && auto_ctrl_inited &&
+             !auto_action_pending)
                 ? MrlinkPc_GetAutoStepParams()
                 : NULL;
         if (step_params != NULL && !AutoCtrl_IsBusy(&auto_ctrl) &&
@@ -738,7 +747,6 @@ void Task_PcCommStep(void) {
         }
     }
 
-    MrlinkPc_DebugUpdate();
     task_runtime.heartbeat.pc_comm++;
     Task_ProfilerLoopEnd(TASK_PROFILE_PC_COMM, profile_start_us);
 }
@@ -810,71 +818,5 @@ void Task_pc_comm_sick(void *argument) {
         task_runtime.heartbeat.pc_comm_sick++;
         Task_ProfilerLoopEnd(TASK_PROFILE_PC_COMM_SICK, profile_start_us);
         Task_DelayUntil(TASK_PROFILE_PC_COMM_SICK, &tick, base_delay_tick);
-    }
-}
-
-static void Task_pc_comm_legacy(void *argument) {
-    (void)argument;
-
-    while (!MrlinkPc_CommInit()) {
-        PcComm_DebugRecordInitFail(g_pc_comm_debug.last_init_error);
-        osDelay(20u);
-    }
-
-    while (MrlinkPc_RegisterTxCallbacks(PcComm_TxDoneCallback,
-                             PcComm_TxErrorCallback) !=
-            MRLINK_CHANNEL_OK) {
-        PcComm_DebugRecordInitFail(-30);
-        osDelay(20u);
-    }
-
-    uint32_t last_tx_tick = BSP_TIME_Get_ms();
-
-    while (1) {
-        const uint32_t profile_start_us =
-            Task_ProfilerLoopBegin(TASK_PROFILE_PC_COMM,
-                                   PC_COMM_LOOP_PERIOD_MS * 1000U);
-
-        uint32_t now = BSP_TIME_Get_ms();
-
-        MrlinkPc_CommProcess(now);
-        PcComm_ProcessIrOreAckCommand(now);
-        PcComm_UpdateCameraYawCommand(now);
-
-        if ((now - last_tx_tick) >= PC_COMM_TX_PERIOD_MS) {
-            (void)PcComm_TransmitFeedback();
-            last_tx_tick = now;
-        }
-
-        if (g_pc_command_source == PC_COMMAND_SOURCE_PC &&
-            MrlinkPc_IsPCControlMode()) {
-            const bool auto_action_pending = PcComm_ProcessAutoActionCommand();
-            const PC_AutoStepParams_t *step_params =
-                (auto_ctrl_inited && !auto_action_pending)
-                    ? MrlinkPc_GetAutoStepParams()
-                    : NULL;
-            if (step_params != NULL && !AutoCtrl_IsBusy(&auto_ctrl) &&
-                !(auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl)) &&
-                !Task_AutoRodSpearheadIsBusy() &&
-                !Task_AutoSickCorrectIsBusy()) {
-                AutoCtrl_SetYawSource(&auto_ctrl, AUTO_CTRL_YAW_SOURCE_PC);
-                AutoCtrl_SetYawZeroOffset(&auto_ctrl, 0.0f);
-                if (AutoCtrl_StartTemplate(
-                    &auto_ctrl,
-                    step_params->template_id,
-                    step_params->travel_dir,
-                    step_params->target_yaw_rad,
-                    step_params->yaw_tolerance_rad,
-                    AUTO_CTRL_SENSOR_MODE_NONE,
-                    now)) {
-                    MrlinkPc_ClearStepCommand();
-                }
-            }
-        }
-
-        MrlinkPc_DebugUpdate();
-        task_runtime.heartbeat.pc_comm++;
-        Task_ProfilerLoopEnd(TASK_PROFILE_PC_COMM, profile_start_us);
-        osDelay(PC_COMM_LOOP_PERIOD_MS);
     }
 }

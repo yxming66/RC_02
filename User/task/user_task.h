@@ -8,7 +8,9 @@
 /* USER INCLUDE BEGIN */
 #include <stdbool.h>
 #include <stdint.h>
+#include "debug_config.h"
 #include "bsp/time.h"
+#include "component/container/latest_slot.h"
 #include "module/autoCtrlAPI/api/auto_ctrl_api.h"
 #include "module/autoCtrlAPI/ore_store/auto_ore_store.h"
 #include "module/autoCtrlAPI/rod/auto_rod_spearhead.h"
@@ -35,7 +37,7 @@ extern "C" {
 #define POLE_MAIN_FREQ (1000.0)
 #define RC_MAIN_FREQ (500.0)
 #define SICK_FREQ (100.0)
-#define AUTO_CTRL_FREQ (100.0)
+#define AUTO_CTRL_FREQ (200.0)
 #define CAMERA_YAW_FREQ (200.0)
 #define ARM_SIMPLE_FREQ (200.0)
 #define ROD_FREQ (200.0)
@@ -187,6 +189,10 @@ typedef struct {
     volatile bool checkphoto_orehigh_triggered;
     volatile bool checkphoto_release_grid_triggered;
     volatile bool photo_transfer_valid;
+    volatile bool photo1_front_triggered;
+    volatile bool photo2_third_last_triggered;
+    volatile bool photo3_second_last_triggered;
+    volatile bool photo4_last_triggered;
     volatile uint16_t photo_transfer_raw_mask;
     volatile uint32_t photo_transfer_age_ms;
     volatile uint32_t photo_transfer_rx_count;
@@ -222,7 +228,22 @@ typedef struct {
     volatile float ore_store_platform_error_rad;
     volatile float pole_cmd_front_lift_rad;
     volatile float pole_cmd_rear_lift_rad;
+    volatile float pole_setpoint_front_lift_rad;
+    volatile float pole_setpoint_rear_lift_rad;
+    volatile uint8_t pole_setpoint_source;
     volatile float chassis_cmd_vx_mps;
+    volatile uint32_t step_photo_raw_time_ms;
+    volatile uint32_t step_photo_event_time_ms;
+    volatile uint32_t step_pole_cmd_time_ms;
+    volatile uint32_t step_pole_publish_time_ms;
+    volatile uint32_t step_photo_raw_to_event_ms;
+    volatile uint32_t step_photo_raw_to_pole_cmd_ms;
+    volatile uint32_t step_photo_to_pole_cmd_ms;
+    volatile uint32_t step_pole_cmd_to_publish_ms;
+    volatile uint8_t step_photo_event_step_index;
+    volatile uint8_t step_pole_cmd_step_index;
+    volatile uint8_t step_photo_event_id;
+    volatile uint8_t step_pole_cmd_kind;
     volatile uint8_t release_lift_sick_index;
     volatile uint16_t release_lift_sick_adc_raw;
     volatile uint16_t release_lift_sick_adc_threshold;
@@ -361,18 +382,8 @@ typedef struct {
     struct {
         struct {
             osMessageQueueId_t imu;
-            osMessageQueueId_t cmd;
             osMessageQueueId_t yaw;
         } chassis;
-        struct {
-            osMessageQueueId_t cmd;
-        } pole;
-        struct {
-            osMessageQueueId_t cmd;
-        } arm_simple;
-        struct {
-            osMessageQueueId_t cmd;
-        } rod;
         struct {
             osMessageQueueId_t cmd;
         } camera_yaw;
@@ -380,6 +391,29 @@ typedef struct {
             osMessageQueueId_t cmd;
         } ore_store;
     } msgq;
+
+    struct {
+        struct {
+            LatestSlot_t slot;
+            Chassis_CMD_t storage;
+            uint32_t read_seq;
+        } chassis_cmd;
+        struct {
+            LatestSlot_t slot;
+            Pole_CMD_t storage;
+            uint32_t read_seq;
+        } pole_cmd;
+        struct {
+            LatestSlot_t slot;
+            ArmSimple_CMD_t storage;
+            uint32_t read_seq;
+        } arm_simple_cmd;
+        struct {
+            LatestSlot_t slot;
+            RodNew_CMD_t storage;
+            uint32_t read_seq;
+        } rod_cmd;
+    } latest;
     /* USER MESSAGE END */
 
     /* 机器人状态 */

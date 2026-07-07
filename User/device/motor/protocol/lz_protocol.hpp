@@ -3,6 +3,7 @@
 // LZ 电机协议层接口定义。
 // 负责基于 LZ C 驱动 raw 数据完成状态解释、故障位映射与统一控制命令封装。
 
+#include "debug_config.h"
 #include "device/motor/protocol/motor_protocol_fwd.hpp"
 #include "device/motor/core/motor_install_spec.hpp"
 #include "device/motor/core/motor_instance_config.hpp"
@@ -45,7 +46,9 @@ public:
     int8_t SetVelocity(float velocity);
     int8_t SetPosition(float position, float max_velocity);
     int8_t SetMIT(float position, float velocity, float kp, float kd, float torque_ff);
+#if MOTOR_PROTOCOL_DEBUG_ENABLE
     const LzProtocolDebugSnapshot& GetDebugSnapshot() const;
+#endif
 
 private:
     void RefreshStateCache();
@@ -67,7 +70,9 @@ private:
     MOTOR_LZ_Param_t param_{};
     MOTOR_LZ_t* instance_ = nullptr;
     MOTOR_LZ_t vendor_instance_{};
+#if MOTOR_PROTOCOL_DEBUG_ENABLE
     LzProtocolDebugSnapshot debug_{};
+#endif
     bool last_online_ = false;
 };
 

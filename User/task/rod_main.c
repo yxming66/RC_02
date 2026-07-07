@@ -61,7 +61,9 @@ void Task_RodNewStep(void) {
   const uint32_t profile_start_us =
       Task_ProfilerLoopBegin(TASK_PROFILE_ROD, TASK_PERIOD_US(ROD_FREQ));
 
-  osMessageQueueGet(task_runtime.msgq.rod.cmd, &rod_new_cmd, NULL, 0);
+  (void)LatestSlot_ReadIfUpdated(&task_runtime.latest.rod_cmd.slot,
+                                 &rod_new_cmd, sizeof(rod_new_cmd),
+                                 &task_runtime.latest.rod_cmd.read_seq);
 
   if (!g_rod_new_debug.enable) {
     const uint32_t now_ms = BSP_TIME_Get_ms();
@@ -101,54 +103,6 @@ void Task_rod(void *argument) {
   while (1) {
     tick += delay_tick;
     Task_RodNewStep();
-    Task_DelayUntil(TASK_PROFILE_ROD, &tick, delay_tick);
-  }
-}
-
-static void Task_rod_legacy(void *argument) {
-  (void)argument;
- 
-  const uint32_t delay_tick = osKernelGetTickFreq() / ROD_FREQ;
-  osDelay(ROD_INIT_DELAY);
-
-  uint32_t tick = osKernelGetTickCount();
-  Config_RobotParam_t *cfg = Config_GetRobotParam();
-  if (cfg == NULL ||
-      RodNew_Init(&rod_new, &cfg->rod_new_param, ROD_FREQ) != ROD_NEW_OK) {
-    osThreadTerminate(osThreadGetId());
-    return;
-  }
-
-  rod_new_cmd.mode = ROD_NEW_MODE_RELAX;
-  rod_new_cmd.pose = ROD_NEW_POSE_DOCK_WAIT;
-  rod_new_cmd.grip = ROD_NEW_GRIP_RELEASE;
-
-  while (1) {  
-    const uint32_t profile_start_us =
-        Task_ProfilerLoopBegin(TASK_PROFILE_ROD, TASK_PERIOD_US(ROD_FREQ));
-    tick += delay_tick;
-
-    osMessageQueueGet(task_runtime.msgq.rod.cmd, &rod_new_cmd, NULL, 0);
-
-    if (!g_rod_new_debug.enable) {
-      const uint32_t now_ms = BSP_TIME_Get_ms();
-      RodNew_Control(&rod_new, rod_new_cmd.mode, rod_new_cmd.pose,
-                     rod_new_cmd.grip, rod_new_cmd.target_angle_rad,
-                     now_ms);
-    }
-    rod_new_feedback.mode = rod_new.mode;
-    rod_new_feedback.pose = rod_new_cmd.pose;
-    rod_new_feedback.grip = rod_new.gripper.state;
-    rod_new_feedback.target_angle_rad = rod_new.servo.target_angle_rad;
-    rod_new_feedback.tracked_angle_rad = rod_new.servo.tracked_angle_rad;
-    rod_new_feedback.tracked_velocity_rad_s = rod_new.servo.tracked_vel_rad_s;
-    rod_new_feedback.feedback_angle_rad = rod_new.servo.feedback_angle_rad;
-    rod_new_feedback.at_target = rod_new.servo.at_target;
-    RodNew_Output(&rod_new);
-    SharedValve_Output();
-
-    task_runtime.heartbeat.rod++;
-    Task_ProfilerLoopEnd(TASK_PROFILE_ROD, profile_start_us);
     Task_DelayUntil(TASK_PROFILE_ROD, &tick, delay_tick);
   }
 }
