@@ -67,6 +67,7 @@
 #define BMI088_CHIP_ID_GYRO (0x0F)
 
 #define BMI088_LEN_RX_BUFF (19)
+#define BMI088_SIGNAL_ERROR_MASK (0x80000000u)
 /* Private macro ------------------------------------------------------------ */
 #define BMI088_ACCL_NSS_SET() \
   BSP_GPIO_WritePin(BSP_GPIO_ACCL_CS, GPIO_PIN_SET)
@@ -268,10 +269,15 @@ bool BMI088_GyroStable(AHRS_Gyro_t *gyro) {
   return ((gyro->x < 0.03f) && (gyro->y < 0.03f) && (gyro->z < 0.03f));
 }
 
-uint32_t BMI088_WaitNew() {
+static bool BMI088_FlagsOk(uint32_t flags, uint32_t required_flags) {
+  return (flags & BMI088_SIGNAL_ERROR_MASK) == 0u &&
+     (flags & required_flags) == required_flags;
+}
+
+uint32_t BMI088_WaitNew(uint32_t timeout_ms) {
   return osThreadFlagsWait(
       SIGNAL_BMI088_ACCL_NEW_DATA | SIGNAL_BMI088_GYRO_NEW_DATA, osFlagsWaitAll,
-      osWaitForever);
+  timeout_ms);
 }
 
 int8_t BMI088_AcclStartDmaRecv() {
@@ -279,9 +285,9 @@ int8_t BMI088_AcclStartDmaRecv() {
   return DEVICE_OK;
 }
 
-uint32_t BMI088_AcclWaitDmaCplt() {
+uint32_t BMI088_AcclWaitDmaCplt(uint32_t timeout_ms) {
   return osThreadFlagsWait(SIGNAL_BMI088_ACCL_RAW_REDY, osFlagsWaitAll,
-                           osWaitForever);
+                           timeout_ms);
 }
 
 int8_t BMI088_GyroStartDmaRecv() {
@@ -289,9 +295,37 @@ int8_t BMI088_GyroStartDmaRecv() {
   return DEVICE_OK;
 }
 
-uint32_t BMI088_GyroWaitDmaCplt() {
+uint32_t BMI088_GyroWaitDmaCplt(uint32_t timeout_ms) {
   return osThreadFlagsWait(SIGNAL_BMI088_GYRO_RAW_REDY, osFlagsWaitAll,
-                           osWaitForever);
+                           timeout_ms);
+}
+
+bool BMI088_ReadFrameNonBlocking(uint32_t timeout_ms) {
+  if (!BMI088_FlagsOk(BMI088_WaitNew(timeout_ms),
+                      SIGNAL_BMI088_ACCL_NEW_DATA |
+                          SIGNAL_BMI088_GYRO_NEW_DATA)) {
+    return false;
+  }
+
+  if (BMI088_AcclStartDmaRecv() != DEVICE_OK) {
+    return false;
+  }
+  if (!BMI088_FlagsOk(BMI088_AcclWaitDmaCplt(timeout_ms),
+                      SIGNAL_BMI088_ACCL_RAW_REDY)) {
+    BMI088_ACCL_NSS_SET();
+    return false;
+  }
+
+  if (BMI088_GyroStartDmaRecv() != DEVICE_OK) {
+    return false;
+  }
+  if (!BMI088_FlagsOk(BMI088_GyroWaitDmaCplt(timeout_ms),
+                      SIGNAL_BMI088_GYRO_RAW_REDY)) {
+    BMI088_GYRO_NSS_SET();
+    return false;
+  }
+
+  return true;
 }
 
 int8_t BMI088_ParseAccl(BMI088_t *bmi088) {

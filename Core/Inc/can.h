@@ -32,6 +32,8 @@ extern "C" {
 
 /* USER CODE END Includes */
 
+#ifdef HAL_CAN_MODULE_ENABLED
+
 extern CAN_HandleTypeDef hcan1;
 
 extern CAN_HandleTypeDef hcan2;
@@ -42,6 +44,8 @@ extern CAN_HandleTypeDef hcan2;
 
 void MX_CAN1_Init(void);
 void MX_CAN2_Init(void);
+
+#endif /* HAL_CAN_MODULE_ENABLED */
 
 /* USER CODE BEGIN Prototypes */
 

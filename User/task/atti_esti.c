@@ -281,14 +281,16 @@ void Task_atti_esti(void *argument) {
       process_calibration_buzzer();
     }
 
-    BMI088_WaitNew();
-    BMI088_AcclStartDmaRecv();
-    BMI088_AcclWaitDmaCplt();
-
-    BMI088_GyroStartDmaRecv();
-    BMI088_GyroWaitDmaCplt();
+    const bool bmi088_frame_ready = BMI088_ReadFrameNonBlocking(delay_tick * 2u);
 
     /* DMA is complete; keep AHRS math preemptible. */
+
+    if (!bmi088_frame_ready) {
+      task_runtime.heartbeat.atti_esti++;
+      Task_ProfilerLoopEnd(TASK_PROFILE_ATTI_ESTI, profile_start_us);
+      Task_DelayUntil(TASK_PROFILE_ATTI_ESTI, &tick, delay_tick);
+      continue;
+    }
 
     /* 接收完所有数据后，把数据从原始字节加工成方便计算的数据 */
     BMI088_ParseAccl(&bmi088);

@@ -42,7 +42,7 @@ typedef enum {
   AUTO_ROD_SPEARHEAD_ACTION_DOCK_WAIT,
 } AutoRodSpearhead_Action_t;
 
-typedef struct {
+typedef struct { 
   const RodNew_Params_t *rod_param;
   const OreStore_Params_t *ore_store_param;
   uint32_t open_delay_ms;

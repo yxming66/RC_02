@@ -57,7 +57,7 @@ bool BMI088_GyroStable(AHRS_Gyro_t *gyro);
                 UP is z
         All implementation should follow this rule.
  */
-uint32_t BMI088_WaitNew();
+uint32_t BMI088_WaitNew(uint32_t timeout_ms);
 
 /*
   BMI088的Accl和Gyro共用同一个DMA通道，所以一次只能读一个传感器。
@@ -65,9 +65,10 @@ uint32_t BMI088_WaitNew();
   出现 BMI088_GyroStartDmaRecv()。
 */
 int8_t BMI088_AcclStartDmaRecv();
-uint32_t BMI088_AcclWaitDmaCplt();
+uint32_t BMI088_AcclWaitDmaCplt(uint32_t timeout_ms);
 int8_t BMI088_GyroStartDmaRecv();
-uint32_t BMI088_GyroWaitDmaCplt();
+uint32_t BMI088_GyroWaitDmaCplt(uint32_t timeout_ms);
+bool BMI088_ReadFrameNonBlocking(uint32_t timeout_ms);
 int8_t BMI088_ParseAccl(BMI088_t *bmi088);
 int8_t BMI088_ParseGyro(BMI088_t *bmi088);
 float BMI088_GetUpdateFreq(BMI088_t *bmi088);

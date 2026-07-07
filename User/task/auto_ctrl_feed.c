@@ -177,15 +177,18 @@ static float AutoCtrlFeed_SelectYawRad(void) {
 
 static void AutoCtrlFeed_UpdateYawRateCommand(void) {
   float wz_rad_s = 0.0f;
+  float vy_mps = 0.0f;
 
   if (AutoCtrl_GetYawSource(&auto_ctrl) == AUTO_CTRL_YAW_SOURCE_PC &&
       MrlinkPc_IsHeartbeatValid()) {
     const PC_ChassisCMD_t *pc_chassis_cmd = MrlinkPc_GetChassisCMD();
     if (pc_chassis_cmd != NULL) {
+      vy_mps = pc_chassis_cmd->vy;
       wz_rad_s = pc_chassis_cmd->wz;
     }
   }
 
+  AutoCtrl_SetLateralVelocityCommand(&auto_ctrl, vy_mps);
   AutoCtrl_SetYawRateCommand(&auto_ctrl, wz_rad_s);
 }
 
@@ -685,6 +688,26 @@ static void AutoCtrlFeed_SetStepCompleteFeedback(
   feedback->step_finished = 1u;
 }
 
+static void AutoCtrlFeed_SetRodSpearheadCompleteFeedback(
+    PC_AutoActionFeedback_t *feedback) {
+  if (feedback == 0) {
+    return;
+  }
+
+  switch ((PC_AutoAction_t)feedback->action) {
+    case PC_AUTO_ACTION_ROD_SPEARHEAD:
+    case PC_AUTO_ACTION_ROD_SPEARHEAD_STEP2:
+      feedback->pick_finished = 1u;
+      break;
+    case PC_AUTO_ACTION_ROD_SPEARHEAD_STEP1:
+    case PC_AUTO_ACTION_ROD_DOCK_WAIT:
+      feedback->store_finished = 1u;
+      break;
+    default:
+      break;
+  }
+}
+
 static bool AutoCtrlFeed_IsRodSpearheadAction(PC_AutoAction_t action) {
   return action == PC_AUTO_ACTION_ROD_SPEARHEAD ||
          action == PC_AUTO_ACTION_ROD_SPEARHEAD_STEP1 ||
@@ -1074,6 +1097,7 @@ static void AutoCtrlFeed_PublishAutoActionFeedback(void) {
         AutoRodSpearhead_GetResult(&auto_rod_spearhead_ctrl);
     if (result == AUTO_ROD_SPEARHEAD_RESULT_SUCCESS) {
       AutoCtrlFeed_SetFeedbackSuccess(&pc_feedback);
+      AutoCtrlFeed_SetRodSpearheadCompleteFeedback(&pc_feedback);
     } else if (result == AUTO_ROD_SPEARHEAD_RESULT_FAIL) {
       AutoCtrlFeed_SetFeedbackFail(
           &pc_feedback,
@@ -1268,6 +1292,7 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms, bool update_debug) {
       .release_grid_has_ore = release_grid_photo_triggered,
       .yaw_source = AutoCtrl_GetYawSource(&auto_ctrl),
       .yaw_auto_rad = feedback.yaw_auto_rad,
+      .lateral_velocity_cmd_mps = auto_ctrl.lateral_velocity_cmd_mps,
       .yaw_rate_cmd_rad_s = auto_ctrl.yaw_rate_cmd_rad_s,
       .imu_accl_z_g = chassis_imu.accl.z,
       .release_lift_sick_adc_raw =

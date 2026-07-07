@@ -529,7 +529,9 @@ int8_t CloudMusic_PlayMusic(BUZZER_t *buzzer, MUSIC_t music) {
         return DEVICE_ERR;
     }
 
-    return BUZZER_PlayScore(buzzer, &data);
+    static CloudMusic_Player_t compat_player;
+    return BUZZER_PlayerStart(&compat_player, buzzer, &data, false,
+                  osKernelGetTickCount());
 }
 int8_t CloudMusic_PlayerStart(CloudMusic_Player_t *player,
                                 BUZZER_t *buzzer, MUSIC_t music, bool loop,

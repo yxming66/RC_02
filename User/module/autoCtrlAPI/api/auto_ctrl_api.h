@@ -65,6 +65,7 @@ typedef struct {
   float target_yaw_rad;      /* 本次模板要求的目标朝向，单位: rad，范围 [-pi, pi)。 */
   float yaw_tolerance_rad;   /* PREALIGN 通过阈值，单位: rad。 */
   float yaw_error_rad;       /* 目标减当前的有符号朝向误差，单位: rad。 */
+  float lateral_velocity_cmd_mps; /* 外部横向速度命令，单位: m/s。 */
   float yaw_rate_cmd_rad_s;  /* 外部 yaw 修正角速度命令，单位: rad/s。 */
 
   auto_ctrl_prealign_mode_t prealign_mode; /* PREALIGN 当前使用的对正来源。 */
@@ -116,6 +117,9 @@ auto_ctrl_yaw_source_e AutoCtrl_GetYawSource(const auto_ctrl_t *ctrl);
 
 /* 设置外部 yaw 修正角速度命令。 */
 void AutoCtrl_SetYawRateCommand(auto_ctrl_t *ctrl, float wz_rad_s);
+
+/* 设置外部横向速度命令。 */
+void AutoCtrl_SetLateralVelocityCommand(auto_ctrl_t *ctrl, float vy_mps);
 
 /* 更新外部反馈快照（会完成 yaw 零点补偿）。 */
 void AutoCtrl_SetFeedback(auto_ctrl_t *ctrl,

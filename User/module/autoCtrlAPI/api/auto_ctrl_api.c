@@ -286,6 +286,12 @@ void AutoCtrl_SetYawRateCommand(auto_ctrl_t *ctrl, float wz_rad_s) {
   ctrl->yaw_rate_cmd_rad_s = isfinite(wz_rad_s) ? wz_rad_s : 0.0f;
 }
 
+/* 设置外部横向速度命令，非法输入按 0 处理。 */
+void AutoCtrl_SetLateralVelocityCommand(auto_ctrl_t *ctrl, float vy_mps) {
+  if (ctrl == 0) return;
+  ctrl->lateral_velocity_cmd_mps = isfinite(vy_mps) ? vy_mps : 0.0f;
+}
+
 /* 更新反馈并把输入 yaw 转为 auto yaw。 */
 void AutoCtrl_SetFeedback(auto_ctrl_t *ctrl,
                           const auto_ctrl_feedback_t *feedback) {

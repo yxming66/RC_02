@@ -72,8 +72,8 @@ void Task_Init(void *argument) {
 
   task_runtime.thread.blink = 
       osThreadNew(Task_blink, NULL, &attr_blink);
-  task_runtime.thread.atti_esti =
-      osThreadNew(Task_atti_esti, NULL, &attr_atti_esti);
+  // task_runtime.thread.atti_esti =
+  //     osThreadNew(Task_atti_esti, NULL, &attr_atti_esti);
   task_runtime.thread.chassis_ore =
       osThreadNew(Task_chassis_ore, NULL, &attr_chassis_ore);
   task_runtime.thread.upper_mech =

@@ -69,13 +69,22 @@ static float AutoCtrlPrimitive_GetActiveYawRateCommand(auto_ctrl_t *ctrl) {
   return ctrl->yaw_rate_cmd_rad_s;
 }
 
-/* 仅执行 yaw 对齐控制，不注入平移速度。 */
+static float AutoCtrlPrimitive_GetActiveLateralVelocityCommand(auto_ctrl_t *ctrl) {
+  if (ctrl == nullptr || ctrl->yaw_source != AUTO_CTRL_YAW_SOURCE_PC) {
+    return 0.0f;
+  }
+
+  return ctrl->lateral_velocity_cmd_mps;
+}
+
+/* 仅执行 yaw/横向外部修正控制，不注入自动 vx。 */
 void AutoCtrlPrimitive_ApplyPrealign(auto_ctrl_t *ctrl) {
   const Config_RobotParam_t *robot_param = Config_GetRobotParam();
 
   ctrl->chassis_cmd.mode = CHASSIS_MODE_INDEPENDENT;
   ctrl->chassis_cmd.ctrl_vec.vx = 0.0f;
-  ctrl->chassis_cmd.ctrl_vec.vy = 0.0f;
+  ctrl->chassis_cmd.ctrl_vec.vy =
+      AutoCtrlPrimitive_GetActiveLateralVelocityCommand(ctrl);
   if (ctrl->yaw_source == AUTO_CTRL_YAW_SOURCE_PC) {
     ctrl->chassis_cmd.ctrl_vec.wz =
         AutoCtrlPrimitive_GetActiveYawRateCommand(ctrl);
@@ -98,7 +107,8 @@ void AutoCtrlPrimitive_ApplyPrealignWithMove(auto_ctrl_t *ctrl, float vx_mps,
                                              float vy_mps) {
   AutoCtrlPrimitive_ApplyPrealign(ctrl);
   ctrl->chassis_cmd.ctrl_vec.vx = vx_mps;
-  ctrl->chassis_cmd.ctrl_vec.vy = vy_mps;
+  ctrl->chassis_cmd.ctrl_vec.vy =
+      vy_mps + AutoCtrlPrimitive_GetActiveLateralVelocityCommand(ctrl);
 }
 
 /* Add forward velocity (+x) while yaw aligning. */
@@ -107,11 +117,12 @@ void AutoCtrlPrimitive_ApplyPrealignWithForward(auto_ctrl_t *ctrl,
   AutoCtrlPrimitive_ApplyPrealignWithMove(ctrl, vx_mps, 0.0f);
 }
 
-/* Send a pure forward/backward command on vx; vy/wz are cleared. */
+/* Send a forward/backward command on vx while carrying external vy/wz. */
 void AutoCtrlPrimitive_CommandFlatMove(auto_ctrl_t *ctrl, float vx_mps) {
   ctrl->chassis_cmd.mode = CHASSIS_MODE_INDEPENDENT;
   ctrl->chassis_cmd.ctrl_vec.vx = vx_mps;
-  ctrl->chassis_cmd.ctrl_vec.vy = 0.0f;
+  ctrl->chassis_cmd.ctrl_vec.vy =
+      AutoCtrlPrimitive_GetActiveLateralVelocityCommand(ctrl);
   ctrl->chassis_cmd.ctrl_vec.wz = AutoCtrlPrimitive_GetActiveYawRateCommand(ctrl);
 }
 

@@ -777,7 +777,10 @@ static void AutoOre_CommandChassisMove(AutoOre_t *ctrl, float vx_mps) {
   memset(&ctrl->chassis_cmd, 0, sizeof(ctrl->chassis_cmd));
   ctrl->chassis_cmd.mode = CHASSIS_MODE_INDEPENDENT;
   ctrl->chassis_cmd.ctrl_vec.vx = vx_mps;
-  ctrl->chassis_cmd.ctrl_vec.vy = 0.0f;
+  ctrl->chassis_cmd.ctrl_vec.vy =
+      (ctrl->feedback.yaw_source == AUTO_CTRL_YAW_SOURCE_PC)
+          ? ctrl->feedback.lateral_velocity_cmd_mps
+          : 0.0f;
   ctrl->chassis_cmd.ctrl_vec.wz = AutoOre_SelectPrealignWz(ctrl);
   ctrl->chassis_cmd_valid = true;
 }
@@ -2269,6 +2272,8 @@ static void AutoOre_CopyFeedbackToStepCtrl(AutoOre_t *ctrl) {
     step_feedback.wheel_position_rad[i] = ctrl->feedback.wheel_position_rad[i];
   }
   AutoCtrl_SetFeedback(&ctrl->step_ctrl, &step_feedback);
+  AutoCtrl_SetLateralVelocityCommand(&ctrl->step_ctrl,
+                                     ctrl->feedback.lateral_velocity_cmd_mps);
   AutoCtrl_SetYawRateCommand(&ctrl->step_ctrl,
                              ctrl->feedback.yaw_rate_cmd_rad_s);
 }

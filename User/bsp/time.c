@@ -69,7 +69,7 @@ int8_t BSP_TIME_Delay_ms(uint32_t ms) {
   return BSP_OK;
 }
 
-/*阻塞us延迟*/
+/* 微秒忙等延时：只允许极短硬件初始化/临界时序使用，禁止任务流程等待。 */
 int8_t BSP_TIME_Delay_us(uint32_t us) {
     uint64_t start = BSP_TIME_Get_us();
     while (BSP_TIME_Get_us() - start < us) {

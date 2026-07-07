@@ -109,6 +109,7 @@ typedef struct {
   bool ore_store_fixed_ore_cylinder_closed;
   auto_ctrl_yaw_source_e yaw_source;
   float yaw_auto_rad;
+  float lateral_velocity_cmd_mps;
   float yaw_rate_cmd_rad_s;
   float imu_accl_z_g;
   uint16_t release_lift_sick_adc_raw;

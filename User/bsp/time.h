@@ -29,7 +29,7 @@ uint64_t BSP_TIME_Get();
 
 int8_t BSP_TIME_Delay_ms(uint32_t ms);
 
-/*微秒阻塞延时，一般别用*/
+/* 微秒忙等延时：只允许极短硬件初始化/临界时序使用，禁止任务流程等待。 */
 int8_t BSP_TIME_Delay_us(uint32_t us);
 
 int8_t BSP_TIME_Delay(uint32_t ms);

@@ -29,7 +29,7 @@ void AutoCtrlPrimitive_ResetPole(auto_ctrl_t *ctrl);
 /* 浮点限幅工具。 */
 float AutoCtrlPrimitive_Clamp(float value, float min_value, float max_value);
 
-/* 仅执行 yaw 对齐控制（vx/vy 置 0）。 */
+/* 仅执行 yaw/横向外部修正控制（vx 置 0）。 */
 void AutoCtrlPrimitive_ApplyPrealign(auto_ctrl_t *ctrl);
 
 /* Add forward velocity (+x) while yaw aligning. */
@@ -40,7 +40,7 @@ void AutoCtrlPrimitive_ApplyPrealignWithForward(auto_ctrl_t *ctrl,
 void AutoCtrlPrimitive_ApplyPrealignWithMove(auto_ctrl_t *ctrl, float vx_mps,
                                              float vy_mps);
 
-/* Send a pure forward/backward command on vx; vy/wz are cleared. */
+/* Send a forward/backward command on vx while carrying external vy/wz. */
 void AutoCtrlPrimitive_CommandFlatMove(auto_ctrl_t *ctrl, float vx_mps);
 
 /* Send a flat move and apply the active external yaw-rate command if enabled. */

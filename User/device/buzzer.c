@@ -16,6 +16,9 @@
 #define BUZZER_DEFAULT_TONE_DUTY 0.5f
 #define BUZZER_A4_FREQ_HZ 440.0f
 
+static Buzzer_Player_t blocking_compat_player;
+static Tone_t blocking_compat_tone;
+
 static void BUZZER_Update(BUZZER_t *buzzer) {
     buzzer->header.online = true;
     buzzer->header.last_online_time = BSP_TIME_Get_ms();
@@ -120,21 +123,20 @@ int8_t BUZZER_ApplyTone(BUZZER_t *buzzer, NOTE_t note, uint8_t octave) {
 
 int8_t BUZZER_PlayTone(BUZZER_t *buzzer, NOTE_t note, uint8_t octave,
                        uint16_t duration_ms, uint16_t gap_ms) {
-    if (BUZZER_ApplyTone(buzzer, note, octave) != DEVICE_OK) {
+    if (buzzer == NULL || !buzzer->header.online) {
         return DEVICE_ERR;
     }
 
-    BSP_TIME_Delay_ms(duration_ms);
-
-    if (BUZZER_Stop(buzzer) != DEVICE_OK) {
-        return DEVICE_ERR;
-    }
-
-    if (gap_ms > 0U) {
-        BSP_TIME_Delay_ms(gap_ms);
-    }
-
-    return DEVICE_OK;
+    blocking_compat_tone.note = note;
+    blocking_compat_tone.octave = octave;
+    blocking_compat_tone.duration_ms = duration_ms;
+    const Buzzer_Score_t score = {
+        .melody = &blocking_compat_tone,
+        .melody_length = 1U,
+        .tone_gap_ms = gap_ms,
+    };
+    return BUZZER_PlayerStart(&blocking_compat_player, buzzer, &score, false,
+                              osKernelGetTickCount());
 }
 
 int8_t BUZZER_PlayScore(BUZZER_t *buzzer, const Buzzer_Score_t *score) {
@@ -143,18 +145,8 @@ int8_t BUZZER_PlayScore(BUZZER_t *buzzer, const Buzzer_Score_t *score) {
         return DEVICE_ERR;
     }
 
-    for (size_t i = 0; i < score->melody_length; i++) {
-        if (BUZZER_PlayTone(buzzer, score->melody[i].note,
-                            score->melody[i].octave,
-                            score->melody[i].duration_ms,
-                            score->tone_gap_ms) != DEVICE_OK) {
-            BUZZER_Stop(buzzer);
-            return DEVICE_ERR;
-        }
-    }
-
-    BUZZER_Stop(buzzer);
-    return DEVICE_OK;
+    return BUZZER_PlayerStart(&blocking_compat_player, buzzer, score, false,
+                              osKernelGetTickCount());
 }
 
 int8_t BUZZER_PlayerStart(Buzzer_Player_t *player, BUZZER_t *buzzer,
