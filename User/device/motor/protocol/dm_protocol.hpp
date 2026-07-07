@@ -3,6 +3,7 @@
 // DM 电机协议层接口定义。
 // 负责将 DM C 驱动 raw 数据转换为统一状态，并封装 MIT/速度/位置/力矩控制接口。
 
+#include "debug_config.h"
 #include "device/motor/protocol/motor_protocol_fwd.hpp"
 #include "device/motor/core/motor_install_spec.hpp"
 #include "device/motor/core/motor_instance_config.hpp"
@@ -45,7 +46,9 @@ public:
     int8_t SetVelocity(float velocity);
     int8_t SetPosition(float position, float max_velocity);
     int8_t SetMIT(float position, float velocity, float kp, float kd, float torque_ff);
+#if MOTOR_PROTOCOL_DEBUG_ENABLE
     const DmProtocolDebugSnapshot& GetDebugSnapshot() const;
+#endif
 
 private:
     void RefreshStateCache();
@@ -67,7 +70,9 @@ private:
     MOTOR_DM_Param_t param_{};
     MOTOR_DM_t* instance_ = nullptr;
     MOTOR_DM_t vendor_instance_{};
+#if MOTOR_PROTOCOL_DEBUG_ENABLE
     DmProtocolDebugSnapshot debug_{};
+#endif
     bool last_online_ = false;
 };
 

@@ -20,7 +20,6 @@ namespace scalar = mr::component::math;
 constexpr float kRotorWzMin = 0.6f;
 constexpr float kRotorWzMax = 0.8f;
 constexpr float kRotorOmega = 0.001f;
-constexpr float kFollowOffset35DegRad = M_2PI * 7.0f / 72.0f;
 constexpr float kDefaultDtS = 0.001f;
 constexpr float kMinDtS = 0.0005f;
 constexpr float kMaxDtS = 0.050f;
@@ -226,20 +225,14 @@ int8_t MecanumController::Control(const Chassis_CMD_t &cmd, uint32_t now) {
       move_vec_.vy = 0.0f;
       break;
     case CHASSIS_MODE_INDEPENDENT:
+    case CHASSIS_MODE_OPEN:
+    case CHASSIS_MODE_FOLLOW_GIMBAL:
+    case CHASSIS_MODE_FOLLOW_GIMBAL_35:
+    case CHASSIS_MODE_ROTOR:
+    case CHASSIS_MODE_RELAX:
       move_vec_.vx = cmd.ctrl_vec.vx;
       move_vec_.vy = cmd.ctrl_vec.vy;
       break;
-    default: {
-      float beta = feedback_.encoder_gimbalYawMotor - mech_zero_;
-      if (param_->reverse.yaw) {
-        beta = -beta;
-      }
-      const float cos_beta = std::cos(beta);
-      const float sin_beta = std::sin(beta);
-      move_vec_.vx = cos_beta * cmd.ctrl_vec.vx - sin_beta * cmd.ctrl_vec.vy;
-      move_vec_.vy = sin_beta * cmd.ctrl_vec.vx + cos_beta * cmd.ctrl_vec.vy;
-      break;
-    }
   }
 
   switch (mode_) {
@@ -249,17 +242,9 @@ int8_t MecanumController::Control(const Chassis_CMD_t &cmd, uint32_t now) {
       break;
     case CHASSIS_MODE_INDEPENDENT:
     case CHASSIS_MODE_OPEN:
-      move_vec_.wz = cmd.ctrl_vec.wz;
-      break;
     case CHASSIS_MODE_FOLLOW_GIMBAL:
-      move_vec_.wz =
-          PID_Calc(&follow_pid_, mech_zero_, feedback_.encoder_gimbalYawMotor,
-                   0.0f, dt_);
-      break;
     case CHASSIS_MODE_FOLLOW_GIMBAL_35:
-      move_vec_.wz =
-          PID_Calc(&follow_pid_, mech_zero_ + kFollowOffset35DegRad,
-                   feedback_.encoder_gimbalYawMotor, 0.0f, dt_);
+      move_vec_.wz = cmd.ctrl_vec.wz;
       break;
     case CHASSIS_MODE_ROTOR:
       move_vec_.wz =

@@ -3,6 +3,7 @@
 // RM 电机协议层接口定义。
 // 负责将 RM C 驱动的 raw 反馈与电流控制能力包装成统一的 MotorProtocol 行为。
 
+#include "debug_config.h"
 #include "device/motor/protocol/motor_protocol_fwd.hpp"
 #include "device/motor/core/motor_install_spec.hpp"
 #include "device/motor/core/motor_instance_config.hpp"
@@ -49,7 +50,9 @@ public:
 
     int8_t SetTorque(float torque_nm);
     int8_t SetZero();
+#if MOTOR_PROTOCOL_DEBUG_ENABLE
     const RmProtocolDebugSnapshot& GetDebugSnapshot() const;
+#endif
 
 private:
     void ResetStateCache();
@@ -76,7 +79,9 @@ private:
     MOTOR_RM_t vendor_instance_{};
     float pending_torque_current_ = 0.0f;
     bool pending_valid_ = false;
+#if MOTOR_PROTOCOL_DEBUG_ENABLE
     RmProtocolDebugSnapshot debug_{};
+#endif
     bool rotor_position_initialized_ = false;
     bool last_online_ = false;
     MotorProtocolState last_non_fault_protocol_state_ = MotorProtocolState::Unregistered;

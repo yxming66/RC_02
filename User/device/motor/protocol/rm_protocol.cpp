@@ -159,6 +159,7 @@ void MotorProtocol<MotorKind::RM, Model>::RefreshPositionDiagnostics(MotorState&
     next.feedback_lost_count = feedback_lost_count_;
     next.last_feedback_tick = last_feedback_tick_;
 
+#if MOTOR_PROTOCOL_DEBUG_ENABLE
     debug_.rotor_position_initialized = rotor_position_initialized_;
     debug_.angle_valid = angle_valid_;
     debug_.position_fault = position_fault_;
@@ -166,6 +167,7 @@ void MotorProtocol<MotorKind::RM, Model>::RefreshPositionDiagnostics(MotorState&
     debug_.max_abs_delta_rad = max_abs_delta_rad_;
     debug_.feedback_lost_count = feedback_lost_count_;
     debug_.last_feedback_tick = last_feedback_tick_;
+#endif
 }
 
 template <MotorModel Model>
@@ -290,7 +292,9 @@ void MotorProtocol<MotorKind::RM, Model>::RefreshStateCache() {
     } else if (next.protocol_state == MotorProtocolState::Fault) {
         next.protocol_state = last_non_fault_protocol_state_;
     }
+#if MOTOR_PROTOCOL_DEBUG_ENABLE
     debug_.last_error_code = error_code;
+#endif
     RefreshPositionDiagnostics(next);
 
     if (install_.reverse_output) {
@@ -362,27 +366,33 @@ int8_t MotorProtocol<MotorKind::RM, Model>::Update() {
 template <MotorModel Model>
 int8_t MotorProtocol<MotorKind::RM, Model>::CommitCommand() {
     if (!pending_valid_) {
+#if MOTOR_PROTOCOL_DEBUG_ENABLE
         debug_.pending_valid = pending_valid_;
         debug_.pending_torque_current = pending_torque_current_;
         debug_.last_commit_ret = DEVICE_OK;
         debug_.last_commit_skipped = true;
+#endif
         state_.last_commit_ok = true;
         return DEVICE_OK;
     }
 
     int8_t ret = MOTOR_RM_SetTorqueCurrent(&param_, pending_torque_current_);
     if (ret != DEVICE_OK) {
+#if MOTOR_PROTOCOL_DEBUG_ENABLE
         debug_.pending_valid = pending_valid_;
         debug_.pending_torque_current = pending_torque_current_;
         debug_.last_commit_ret = ret;
         debug_.last_commit_skipped = false;
+#endif
         state_.last_commit_ok = false;
         return ret;
     }
+#if MOTOR_PROTOCOL_DEBUG_ENABLE
     debug_.pending_valid = pending_valid_;
     debug_.pending_torque_current = pending_torque_current_;
     debug_.last_commit_ret = DEVICE_OK;
     debug_.last_commit_skipped = false;
+#endif
     state_.last_commit_ok = true;
     ClearPendingCommand();
     return DEVICE_OK;
@@ -392,8 +402,10 @@ template <MotorModel Model>
 void MotorProtocol<MotorKind::RM, Model>::ClearPendingCommand() {
     pending_valid_ = false;
     pending_torque_current_ = 0.0f;
+#if MOTOR_PROTOCOL_DEBUG_ENABLE
     debug_.pending_valid = pending_valid_;
     debug_.pending_torque_current = pending_torque_current_;
+#endif
     MarkNoPendingCommand(state_);
 }
 
@@ -401,18 +413,22 @@ template <MotorModel Model>
 int8_t MotorProtocol<MotorKind::RM, Model>::SetTorque(float torque_nm) {
     const float max_current = (MotorTraits<MotorKind::RM, Model>::kPeakCurrent > 0.0f) ? MotorTraits<MotorKind::RM, Model>::kPeakCurrent : 0.0f;
     if (max_current <= 0.0f) {
+#if MOTOR_PROTOCOL_DEBUG_ENABLE
         debug_.last_set_torque_nm = torque_nm;
         debug_.last_set_torque_ret = DEVICE_ERR;
+#endif
         return DEVICE_ERR;
     }
     pending_torque_current_ = mr::component::math::abs_clip_scalar(
         mapper_.ToTorqueCurrent(torque_nm, install_.reverse_output),
         max_current);
     pending_valid_ = true;
+#if MOTOR_PROTOCOL_DEBUG_ENABLE
     debug_.pending_valid = pending_valid_;
     debug_.pending_torque_current = pending_torque_current_;
     debug_.last_set_torque_nm = torque_nm;
     debug_.last_set_torque_ret = DEVICE_OK;
+#endif
     state_.command_pending = true;
     return DEVICE_OK;
 }
@@ -449,10 +465,12 @@ int8_t MotorProtocol<MotorKind::RM, Model>::SetZero() {
     }
 }
 
+#if MOTOR_PROTOCOL_DEBUG_ENABLE
 template <MotorModel Model>
 const RmProtocolDebugSnapshot& MotorProtocol<MotorKind::RM, Model>::GetDebugSnapshot() const {
     return debug_;
 }
+#endif
 
 template class MotorProtocol<MotorKind::RM, MotorModel::M2006>;
 template class MotorProtocol<MotorKind::RM, MotorModel::M3508>;
