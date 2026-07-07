@@ -3,6 +3,7 @@
 #include <array>
 #include <cstdint>
 
+#include "debug_config.h"
 #include "device/wheel/wheel.hpp"
 #include "module/chassis.h"
 #include "robotics/chassis/front_omni_rear_mecanum_chassis.hpp"
@@ -26,7 +27,9 @@ class FrontOmniRearMecanumController final {
 
   Chassis_Mode_t mode() const { return mode_; }
   const Chassis_Feedback_t &feedback() const { return feedback_; }
+#if CHASSIS_RUNTIME_DEBUG_ENABLE
   const Chassis_Debug_t &debug() const { return debug_; }
+#endif
   const Chassis_Output_t &output() const { return out_; }
 
  private:
@@ -72,7 +75,9 @@ class FrontOmniRearMecanumController final {
   WheelSpeeds wheel_speed_ref_{};
   MoveVector_t move_vec_{};
   Chassis_Feedback_t feedback_{};
+#if CHASSIS_RUNTIME_DEBUG_ENABLE
   Chassis_Debug_t debug_{};
+#endif
   Chassis_Output_t out_{};
   std::array<KPID_t, kWheelCount> wheel_pid_{};
   std::array<KPID_t, kWheelCount> wheel_hold_pid_{};
