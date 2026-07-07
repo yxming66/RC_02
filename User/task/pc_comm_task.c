@@ -176,8 +176,17 @@ static bool PcComm_ProcessAutoActionCommand(void) {
         return false;
     }
 
+    const bool release_step2_continue =
+        (request == AUTO_ORE_DEBUG_REQUEST_RELEASE_STEP2 ||
+         request == AUTO_ORE_DEBUG_REQUEST_RELEASE_LIFT_DETECT_STEP2) &&
+        auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl) &&
+        (auto_ore_ctrl.action == AUTO_ORE_ACTION_RELEASE_STEP1 ||
+         auto_ore_ctrl.action == AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP1) &&
+        AutoOre_IsUpperFinished(&auto_ore_ctrl);
+
     if (g_auto_ore_debug.request != AUTO_ORE_DEBUG_REQUEST_NONE &&
-        request != AUTO_ORE_DEBUG_REQUEST_ABORT) {
+        request != AUTO_ORE_DEBUG_REQUEST_ABORT &&
+        !release_step2_continue) {
         return true;
     }
 
@@ -712,11 +721,11 @@ void Task_PcCommStep(void) {
         s_pc_comm_last_tx_tick = now;
     }
 
-    if (g_pc_command_source == PC_COMMAND_SOURCE_PC &&
-        MrlinkPc_IsPCControlMode()) {
+    if (MrlinkPc_IsPCControlMode()) {
         const bool auto_action_pending = PcComm_ProcessAutoActionCommand();
         const PC_AutoStepParams_t *step_params =
-            (auto_ctrl_inited && !auto_action_pending)
+            (g_pc_command_source == PC_COMMAND_SOURCE_PC && auto_ctrl_inited &&
+             !auto_action_pending)
                 ? MrlinkPc_GetAutoStepParams()
                 : NULL;
         if (step_params != NULL && !AutoCtrl_IsBusy(&auto_ctrl) &&
@@ -846,11 +855,11 @@ static void Task_pc_comm_legacy(void *argument) {
             last_tx_tick = now;
         }
 
-        if (g_pc_command_source == PC_COMMAND_SOURCE_PC &&
-            MrlinkPc_IsPCControlMode()) {
+        if (MrlinkPc_IsPCControlMode()) {
             const bool auto_action_pending = PcComm_ProcessAutoActionCommand();
             const PC_AutoStepParams_t *step_params =
-                (auto_ctrl_inited && !auto_action_pending)
+                (g_pc_command_source == PC_COMMAND_SOURCE_PC && auto_ctrl_inited &&
+                 !auto_action_pending)
                     ? MrlinkPc_GetAutoStepParams()
                     : NULL;
             if (step_params != NULL && !AutoCtrl_IsBusy(&auto_ctrl) &&

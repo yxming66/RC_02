@@ -73,9 +73,9 @@
 #ifndef RC_MANUAL_IO_CH_THRESHOLD
 #define RC_MANUAL_IO_CH_THRESHOLD (0.90f)
 
-#define RC_CHASSIS_VX_SCALE (2.0f)
-#define RC_CHASSIS_VY_SCALE (2.0f)
-#define RC_CHASSIS_WZ_SCALE (3.0f)
+#define RC_CHASSIS_VX_SCALE (4.0f)
+#define RC_CHASSIS_VY_SCALE (4.0f)
+#define RC_CHASSIS_WZ_SCALE (6.0f)
 #endif
 
 #define RC_POLE_MANUAL_INPUT_SCALE (1.5f)
@@ -1238,10 +1238,22 @@ static void Rc_HandleBehaviorEvents(RcBehavior_t behavior) {
 }
 
 static void Rc_PublishCommandsAndDebug(bool update_debug) {
+  const uint32_t publish_ms = BSP_TIME_Get_ms();
   osMessageQueueReset(task_runtime.msgq.chassis.cmd);
   osMessageQueuePut(task_runtime.msgq.chassis.cmd, &chassis_cmd, 0, 0);
   osMessageQueueReset(task_runtime.msgq.pole.cmd);
   osMessageQueuePut(task_runtime.msgq.pole.cmd, &pole_cmd, 0, 0);
+  if (pole_cmd.mode == POLE_MODE_ACTIVE &&
+      (rc_current_plan == RC_CMD_PLAN_AUTO_CTRL_OUTPUT ||
+       rc_current_plan == RC_CMD_PLAN_PC_AUTO_CTRL ||
+       rc_current_plan == RC_CMD_PLAN_AUTO_ORE_OUTPUT ||
+       rc_current_plan == RC_CMD_PLAN_AUTO_ORE_PC_CHASSIS_OUTPUT)) {
+    g_auto_ore_debug.step_pole_publish_time_ms = publish_ms;
+    g_auto_ore_debug.step_pole_cmd_to_publish_ms =
+        (g_auto_ore_debug.step_pole_cmd_time_ms != 0u)
+            ? (publish_ms - g_auto_ore_debug.step_pole_cmd_time_ms)
+            : 0u;
+  }
   osMessageQueueReset(task_runtime.msgq.arm_simple.cmd);
   osMessageQueuePut(task_runtime.msgq.arm_simple.cmd, &arm_simple_cmd, 0, 0);
   osMessageQueueReset(task_runtime.msgq.rod.cmd);

@@ -15,6 +15,83 @@ typedef struct {
 #define AUTO_CTRL_PHOTO_STABLE_MS (5u) /* 光电稳定触发时间，单位 ms。 */
 #define AUTO_CTRL_TIMED_MOVE_YAW_TOLERANCE_DEFAULT_RAD (0.3490329252f)
 
+enum {
+  AUTO_CTRL_TEMPLATE_DEBUG_PHOTO_NONE = 0u,
+  AUTO_CTRL_TEMPLATE_DEBUG_PHOTO_ASCEND_FRONT = 1u,
+  AUTO_CTRL_TEMPLATE_DEBUG_PHOTO_ASCEND_REAR = 2u,
+  AUTO_CTRL_TEMPLATE_DEBUG_PHOTO_DESCEND_FIRST_FALLING = 3u,
+  AUTO_CTRL_TEMPLATE_DEBUG_PHOTO_DESCEND_SECOND_FALLING = 4u,
+  AUTO_CTRL_TEMPLATE_DEBUG_PHOTO_FINAL_RISING = 5u,
+};
+
+enum {
+  AUTO_CTRL_TEMPLATE_DEBUG_POLE_NONE = 0u,
+  AUTO_CTRL_TEMPLATE_DEBUG_POLE_HOLD = 1u,
+  AUTO_CTRL_TEMPLATE_DEBUG_POLE_AFTER_PHOTO = 2u,
+  AUTO_CTRL_TEMPLATE_DEBUG_POLE_DIRECT = 3u,
+};
+
+static void AutoCtrlTemplate_DebugMarkPhotoEvent(auto_ctrl_t *ctrl,
+                                                uint32_t now_ms,
+                                                uint8_t event_id) {
+  uint32_t raw_time_ms;
+
+  if (ctrl == 0) {
+    return;
+  }
+
+  if (ctrl->template_ctx.debug_photo_event_time_ms != 0u &&
+      ctrl->template_ctx.debug_photo_event_step_index ==
+          ctrl->template_ctx.step_index &&
+      ctrl->template_ctx.debug_photo_event_id == event_id) {
+    return;
+  }
+
+  raw_time_ms = now_ms;
+  switch (event_id) {
+    case AUTO_CTRL_TEMPLATE_DEBUG_PHOTO_ASCEND_FRONT:
+      raw_time_ms = ctrl->template_ctx.pe13_photo1_triggered_since_ms;
+      break;
+    case AUTO_CTRL_TEMPLATE_DEBUG_PHOTO_ASCEND_REAR:
+      raw_time_ms = ctrl->template_ctx.pa2_photo3_triggered_since_ms;
+      break;
+    case AUTO_CTRL_TEMPLATE_DEBUG_PHOTO_DESCEND_FIRST_FALLING:
+      raw_time_ms = ctrl->template_ctx.pe9_photo2_released_since_ms;
+      break;
+    case AUTO_CTRL_TEMPLATE_DEBUG_PHOTO_DESCEND_SECOND_FALLING:
+      raw_time_ms = ctrl->template_ctx.pa0_photo4_released_since_ms;
+      break;
+    case AUTO_CTRL_TEMPLATE_DEBUG_PHOTO_FINAL_RISING:
+      raw_time_ms = ctrl->template_ctx.pa0_photo4_triggered_since_ms;
+      break;
+    case AUTO_CTRL_TEMPLATE_DEBUG_PHOTO_NONE:
+    default:
+      break;
+  }
+
+  ctrl->template_ctx.debug_photo_raw_time_ms =
+      (raw_time_ms != 0u) ? raw_time_ms : now_ms;
+  ctrl->template_ctx.debug_photo_event_time_ms = now_ms;
+  ctrl->template_ctx.debug_photo_event_step_index =
+      ctrl->template_ctx.step_index;
+  ctrl->template_ctx.debug_photo_event_id = event_id;
+  ctrl->template_ctx.debug_pole_cmd_time_ms = 0u;
+  ctrl->template_ctx.debug_pole_cmd_step_index = 0u;
+  ctrl->template_ctx.debug_pole_cmd_kind = AUTO_CTRL_TEMPLATE_DEBUG_POLE_NONE;
+}
+
+static void AutoCtrlTemplate_DebugMarkPoleCommand(auto_ctrl_t *ctrl,
+                                                 uint32_t now_ms,
+                                                 uint8_t command_kind) {
+  if (ctrl == 0 || ctrl->template_ctx.debug_photo_event_time_ms == 0u ||
+      ctrl->template_ctx.debug_pole_cmd_time_ms != 0u) {
+    return;
+  }
+  ctrl->template_ctx.debug_pole_cmd_time_ms = now_ms;
+  ctrl->template_ctx.debug_pole_cmd_step_index = ctrl->template_ctx.step_index;
+  ctrl->template_ctx.debug_pole_cmd_kind = command_kind;
+}
+
 static void AutoCtrlTemplate_EnterStep(auto_ctrl_t *ctrl, uint32_t now_ms) {
   if (!ctrl->template_ctx.step_entered) {
     ctrl->template_ctx.step_entered = true;
@@ -525,6 +602,8 @@ static bool AutoCtrlTemplate_FinalPhotoSprintReady(
 
     ctrl->template_ctx.final_photo_sprint_started = true;
     ctrl->template_ctx.final_photo_sprint_start_ms = now_ms;
+    AutoCtrlTemplate_DebugMarkPhotoEvent(
+      ctrl, now_ms, AUTO_CTRL_TEMPLATE_DEBUG_PHOTO_FINAL_RISING);
   }
 
   const uint32_t sprint_ms = (param == 0) ? 0u : param->final_photo_sprint_ms;
@@ -557,11 +636,15 @@ static bool AutoCtrlTemplate_CommandPhotoStopAndPole(
   if (!AutoCtrlTemplate_PhotoStopSettled(ctrl, now_ms, settle_ms)) {
     AutoCtrlTemplate_CommandPole(ctrl, hold_front_target, hold_rear_target,
                                  hold_front_speed, hold_rear_speed);
+    AutoCtrlTemplate_DebugMarkPoleCommand(
+        ctrl, now_ms, AUTO_CTRL_TEMPLATE_DEBUG_POLE_HOLD);
     return false;
   }
 
   AutoCtrlTemplate_CommandPole(ctrl, front_target, rear_target, front_speed,
                                rear_speed);
+  AutoCtrlTemplate_DebugMarkPoleCommand(
+      ctrl, now_ms, AUTO_CTRL_TEMPLATE_DEBUG_POLE_AFTER_PHOTO);
   return true;
 }
 
@@ -605,6 +688,8 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
                                      param->pole_rear_extend_speed);
         return false;
       }
+      AutoCtrlTemplate_DebugMarkPhotoEvent(
+          ctrl, now_ms, AUTO_CTRL_TEMPLATE_DEBUG_PHOTO_ASCEND_FRONT);
       AutoCtrlTemplate_NextStep(ctrl);
       return false;
 
@@ -619,6 +704,8 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
                                    pole.front_retract[1],
                                    param->pole_front_retract_speed,
                                    param->pole_rear_extend_speed);
+        AutoCtrlTemplate_DebugMarkPoleCommand(
+          ctrl, now_ms, AUTO_CTRL_TEMPLATE_DEBUG_POLE_AFTER_PHOTO);
       if (AutoCtrlTemplate_PoleReadyAfterNewTarget(
               ctrl, ctrl->feedback.pole_front_at_target)) {
         AutoCtrlTemplate_NextStep(ctrl);
@@ -632,11 +719,15 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
 
     case 3: /* 前杆收回后的中段定时移动。 */
       if (use_400mm && AutoCtrlTemplate_LatchRearPhotoStable(ctrl, now_ms)) {
+        AutoCtrlTemplate_DebugMarkPhotoEvent(
+          ctrl, now_ms, AUTO_CTRL_TEMPLATE_DEBUG_PHOTO_ASCEND_REAR);
         AutoCtrlTemplate_CommandChassisZeroVector(ctrl);
         AutoCtrlTemplate_CommandPole(ctrl, pole.all_retract[0],
                                      pole.all_retract[1],
                                      param->pole_front_retract_speed,
                                      param->pole_rear_retract_speed);
+        AutoCtrlTemplate_DebugMarkPoleCommand(
+          ctrl, now_ms, AUTO_CTRL_TEMPLATE_DEBUG_POLE_AFTER_PHOTO);
         AutoCtrlTemplate_SetStep(ctrl, 5u);
         return false;
       }
@@ -672,6 +763,8 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
                                      param->pole_rear_extend_speed);
         return false;
       }
+      AutoCtrlTemplate_DebugMarkPhotoEvent(
+          ctrl, now_ms, AUTO_CTRL_TEMPLATE_DEBUG_PHOTO_ASCEND_REAR);
       AutoCtrlTemplate_NextStep(ctrl);
       return false;
 
@@ -686,6 +779,8 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
                                    pole.all_retract[1],
                                    param->pole_front_retract_speed,
                                    param->pole_rear_retract_speed);
+        AutoCtrlTemplate_DebugMarkPoleCommand(
+          ctrl, now_ms, AUTO_CTRL_TEMPLATE_DEBUG_POLE_AFTER_PHOTO);
       if (AutoCtrlTemplate_PoleReadyAfterNewTarget(
               ctrl, ctrl->feedback.pole_all_at_target)) {
         AutoCtrlTemplate_NextStep(ctrl);
@@ -756,6 +851,9 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
       if (AutoCtrlTemplate_DescendFirstPhotoFallingStable(ctrl, use_400mm,
                           now_ms)) {
+        AutoCtrlTemplate_DebugMarkPhotoEvent(
+          ctrl, now_ms,
+          AUTO_CTRL_TEMPLATE_DEBUG_PHOTO_DESCEND_FIRST_FALLING);
         if (AutoCtrlTemplate_CommandPhotoStopAndPole(
             ctrl, now_ms, param->photo_stop_settle_ms, use_400mm,
             use_400mm ? 0.0f : param->rear_retract_move_speed,
@@ -829,6 +927,9 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
       if (AutoCtrlTemplate_DescendSecondPhotoFallingStable(ctrl, use_400mm,
                            now_ms)) {
+        AutoCtrlTemplate_DebugMarkPhotoEvent(
+          ctrl, now_ms,
+          AUTO_CTRL_TEMPLATE_DEBUG_PHOTO_DESCEND_SECOND_FALLING);
         if (AutoCtrlTemplate_CommandPhotoStopAndPole(
             ctrl, now_ms, param->photo_stop_settle_ms, use_400mm,
             use_400mm ? 0.0f : param->front_retract_move_speed,

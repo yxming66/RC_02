@@ -48,6 +48,13 @@ typedef struct {
   uint32_t pe9_photo2_released_since_ms;
   uint32_t pa2_photo3_released_since_ms;
   uint32_t pa0_photo4_released_since_ms;
+  uint32_t debug_photo_raw_time_ms;
+  uint32_t debug_photo_event_time_ms;
+  uint32_t debug_pole_cmd_time_ms;
+  uint8_t debug_photo_event_step_index;
+  uint8_t debug_pole_cmd_step_index;
+  uint8_t debug_photo_event_id;
+  uint8_t debug_pole_cmd_kind;
   bool pole_target_seen_not_ready; /* 当前 step 已检测到支撑杆目标未到位。 */
   bool distance_latch_valid;        /* 轮编码器距离门控已锁存起点位置。 */
   float distance_start_wheel_rad[4]; /* 当前距离门控 step 入口的四轮位置。 */

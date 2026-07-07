@@ -406,8 +406,10 @@ static uint32_t AutoOre_FusedArmPhotoStableMs(const AutoOre_t *ctrl) {
 }
 
 static uint32_t AutoOre_FusedPhoto1LiftDelayMs(const AutoOre_t *ctrl) {
-  return AutoOre_TimingValue(ctrl->param.timing.fused_photo1_lift_delay_ms,
-                             AUTO_ORE_DEFAULT_FUSED_PHOTO1_LIFT_DELAY_MS);
+  if (ctrl == 0) {
+    return AUTO_ORE_DEFAULT_FUSED_PHOTO1_LIFT_DELAY_MS;
+  }
+  return ctrl->param.timing.fused_photo1_lift_delay_ms;
 }
 
 static float AutoOre_OreStoreArriveThresholdRad(const AutoOre_t *ctrl) {

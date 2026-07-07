@@ -57,6 +57,8 @@ static uint8_t auto_ore_light_last_fail_action = PC_AUTO_ACTION_NONE;
 static uint8_t auto_ore_light_last_success_action = PC_AUTO_ACTION_NONE;
 static PhotoTransfer_Snapshot_t photo_transfer_snapshot = {0};
 static bool photo_transfer_inited = false;
+static AutoOre_DebugRequest_t pending_release_step2_request =
+  AUTO_ORE_DEBUG_REQUEST_NONE;
 
 #ifndef AUTO_CTRL_POLE_TARGET_THRESHOLD_RAD
 #define AUTO_CTRL_POLE_TARGET_THRESHOLD_RAD (0.30f)
@@ -78,6 +80,63 @@ static uint32_t auto_ore_debug_last_update_ms = 0u;
 
 /* Private function --------------------------------------------------------- */
 static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms, bool update_debug);
+
+static bool AutoCtrlFeed_RequestIsReleaseStep2(
+    AutoOre_DebugRequest_t request) {
+  return request == AUTO_ORE_DEBUG_REQUEST_RELEASE_STEP2 ||
+         request == AUTO_ORE_DEBUG_REQUEST_RELEASE_LIFT_DETECT_STEP2;
+}
+
+static bool AutoCtrlFeed_RequestMatchesReleaseStep1(
+    AutoOre_DebugRequest_t request) {
+  if (!auto_ore_inited || !AutoOre_IsBusy(&auto_ore_ctrl)) {
+    return false;
+  }
+  if (request == AUTO_ORE_DEBUG_REQUEST_RELEASE_STEP2) {
+    return auto_ore_ctrl.action == AUTO_ORE_ACTION_RELEASE_STEP1;
+  }
+  if (request == AUTO_ORE_DEBUG_REQUEST_RELEASE_LIFT_DETECT_STEP2) {
+    return auto_ore_ctrl.action == AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP1;
+  }
+  return false;
+}
+
+static bool AutoCtrlFeed_ContinueReleaseStep2(
+    AutoOre_DebugRequest_t request, uint32_t now_ms) {
+  if (!AutoCtrlFeed_RequestMatchesReleaseStep1(request) ||
+      !AutoOre_IsUpperFinished(&auto_ore_ctrl)) {
+    return false;
+  }
+
+  auto_ore_ctrl.action =
+      (request == AUTO_ORE_DEBUG_REQUEST_RELEASE_STEP2)
+          ? AUTO_ORE_ACTION_RELEASE_STEP2
+          : AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP2;
+  auto_ore_ctrl.step_index = 2u;
+  auto_ore_ctrl.step_entered = false;
+  auto_ore_ctrl.step_condition_met = false;
+  auto_ore_ctrl.step_condition_time_ms = now_ms;
+  auto_ore_ctrl.step_enter_time_ms = now_ms;
+  auto_ore_ctrl.fused_store_done = false;
+  return true;
+}
+
+static void AutoCtrlFeed_TryPendingReleaseStep2(uint32_t now_ms) {
+  if (!AutoCtrlFeed_RequestIsReleaseStep2(pending_release_step2_request)) {
+    return;
+  }
+
+  if (!AutoCtrlFeed_RequestMatchesReleaseStep1(
+          pending_release_step2_request)) {
+    pending_release_step2_request = AUTO_ORE_DEBUG_REQUEST_NONE;
+    return;
+  }
+
+  if (AutoCtrlFeed_ContinueReleaseStep2(pending_release_step2_request,
+                                        now_ms)) {
+    pending_release_step2_request = AUTO_ORE_DEBUG_REQUEST_NONE;
+  }
+}
 
 static void AutoCtrlFeed_SendLightEffect(LightEffect_Mode_t mode,
                                          bool force) {
@@ -1259,6 +1318,72 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms, bool update_debug) {
   g_auto_ore_debug.transform_low_has_ore = occupancy.transform_low_has_ore;
   g_auto_ore_debug.transform_high_has_ore = occupancy.transform_high_has_ore;
   g_auto_ore_debug.arm_has_ore = occupancy.arm_has_ore;
+    g_auto_ore_debug.photo_transfer_valid = photo_transfer_snapshot.valid;
+    g_auto_ore_debug.photo_transfer_raw_mask = photo_transfer_snapshot.raw_mask;
+    g_auto_ore_debug.photo_transfer_age_ms = photo_transfer_snapshot.age_ms;
+    g_auto_ore_debug.photo_transfer_rx_count = photo_transfer_snapshot.rx_count;
+    g_auto_ore_debug.photo_transfer_timeout_count =
+      photo_transfer_snapshot.timeout_count;
+    g_auto_ore_debug.photo1_front_triggered = feedback.pe13_photo1_triggered;
+    g_auto_ore_debug.photo2_third_last_triggered =
+      feedback.pe9_photo2_triggered;
+    g_auto_ore_debug.photo3_second_last_triggered =
+      feedback.pa2_photo3_triggered;
+    g_auto_ore_debug.photo4_last_triggered = feedback.pa0_photo4_triggered;
+    g_auto_ore_debug.pole_setpoint_source = 0u;
+    if (auto_ore_ctrl.pole_cmd_valid) {
+    g_auto_ore_debug.pole_setpoint_source = 2u;
+    g_auto_ore_debug.pole_setpoint_front_lift_rad =
+      auto_ore_ctrl.pole_cmd.auto_target_lift[0];
+    g_auto_ore_debug.pole_setpoint_rear_lift_rad =
+      auto_ore_ctrl.pole_cmd.auto_target_lift[1];
+    } else if (auto_ctrl_inited && auto_ctrl.pole_cmd.mode == POLE_MODE_ACTIVE) {
+    g_auto_ore_debug.pole_setpoint_source = 1u;
+    g_auto_ore_debug.pole_setpoint_front_lift_rad =
+      auto_ctrl.pole_cmd.auto_target_lift[0];
+    g_auto_ore_debug.pole_setpoint_rear_lift_rad =
+      auto_ctrl.pole_cmd.auto_target_lift[1];
+    }
+
+  const auto_ctrl_template_ctx_t *step_ctx = NULL;
+  if (AutoOre_IsBusy(&auto_ore_ctrl) &&
+      (auto_ore_ctrl.step_ctrl_active || auto_ore_ctrl.step_ctrl_started)) {
+    step_ctx = &auto_ore_ctrl.step_ctrl.template_ctx;
+  } else if (auto_ctrl_inited) {
+    step_ctx = &auto_ctrl.template_ctx;
+  }
+  if (step_ctx != NULL) {
+    g_auto_ore_debug.step_photo_raw_time_ms =
+        step_ctx->debug_photo_raw_time_ms;
+    g_auto_ore_debug.step_photo_event_time_ms =
+        step_ctx->debug_photo_event_time_ms;
+    g_auto_ore_debug.step_pole_cmd_time_ms =
+        step_ctx->debug_pole_cmd_time_ms;
+    g_auto_ore_debug.step_photo_event_step_index =
+        step_ctx->debug_photo_event_step_index;
+    g_auto_ore_debug.step_pole_cmd_step_index =
+        step_ctx->debug_pole_cmd_step_index;
+    g_auto_ore_debug.step_photo_event_id = step_ctx->debug_photo_event_id;
+    g_auto_ore_debug.step_pole_cmd_kind = step_ctx->debug_pole_cmd_kind;
+     g_auto_ore_debug.step_photo_raw_to_event_ms =
+        (step_ctx->debug_photo_raw_time_ms != 0u &&
+        step_ctx->debug_photo_event_time_ms != 0u)
+          ? (step_ctx->debug_photo_event_time_ms -
+            step_ctx->debug_photo_raw_time_ms)
+          : 0u;
+     g_auto_ore_debug.step_photo_raw_to_pole_cmd_ms =
+        (step_ctx->debug_photo_raw_time_ms != 0u &&
+        step_ctx->debug_pole_cmd_time_ms != 0u)
+          ? (step_ctx->debug_pole_cmd_time_ms -
+            step_ctx->debug_photo_raw_time_ms)
+          : 0u;
+    g_auto_ore_debug.step_photo_to_pole_cmd_ms =
+        (step_ctx->debug_photo_event_time_ms != 0u &&
+         step_ctx->debug_pole_cmd_time_ms != 0u)
+            ? (step_ctx->debug_pole_cmd_time_ms -
+               step_ctx->debug_photo_event_time_ms)
+            : 0u;
+  }
 
   if (!update_debug) {
     return;
@@ -1281,12 +1406,6 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms, bool update_debug) {
   g_auto_ore_debug.checkphoto_orehigh_triggered = ore_high_photo_triggered;
   g_auto_ore_debug.checkphoto_release_grid_triggered =
       release_grid_photo_triggered;
-  g_auto_ore_debug.photo_transfer_valid = photo_transfer_snapshot.valid;
-  g_auto_ore_debug.photo_transfer_raw_mask = photo_transfer_snapshot.raw_mask;
-  g_auto_ore_debug.photo_transfer_age_ms = photo_transfer_snapshot.age_ms;
-  g_auto_ore_debug.photo_transfer_rx_count = photo_transfer_snapshot.rx_count;
-  g_auto_ore_debug.photo_transfer_timeout_count =
-      photo_transfer_snapshot.timeout_count;
   g_auto_ore_debug.arm_cmd_valid = auto_ore_ctrl.arm_cmd_valid;
   g_auto_ore_debug.ore_store_cmd_valid = auto_ore_ctrl.ore_store_cmd_valid;
   g_auto_ore_debug.arm_at_target = auto_ore_feedback.arm_at_target;
@@ -1642,6 +1761,7 @@ bool Task_AutoStepStartDescend400Head(void) {
 }
 
 void Task_AutoOreAbort(void) {
+  pending_release_step2_request = AUTO_ORE_DEBUG_REQUEST_NONE;
   if (auto_ore_inited) {
     if (AutoOre_IsBusy(&auto_ore_ctrl)) {
       AutoCtrlFeed_RememberOreAction(auto_ore_ctrl.action);
@@ -1684,16 +1804,10 @@ static void AutoCtrlFeed_HandleAutoOreDebugRequest(void) {
       result = Task_AutoOreStartReleaseStep1();
       break;
     case AUTO_ORE_DEBUG_REQUEST_RELEASE_STEP2:
-      if (auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl) &&
-          auto_ore_ctrl.action == AUTO_ORE_ACTION_RELEASE_STEP1 &&
-          AutoOre_IsUpperFinished(&auto_ore_ctrl)) {
-        auto_ore_ctrl.action = AUTO_ORE_ACTION_RELEASE_STEP2;
-        auto_ore_ctrl.step_index = 2u;
-        auto_ore_ctrl.step_entered = false;
-        auto_ore_ctrl.step_condition_met = false;
-        auto_ore_ctrl.step_condition_time_ms = BSP_TIME_Get_ms();
-        auto_ore_ctrl.step_enter_time_ms = auto_ore_ctrl.step_condition_time_ms;
-        auto_ore_ctrl.fused_store_done = false;
+      if (AutoCtrlFeed_ContinueReleaseStep2(request, BSP_TIME_Get_ms())) {
+        result = true;
+      } else if (AutoCtrlFeed_RequestMatchesReleaseStep1(request)) {
+        pending_release_step2_request = request;
         result = true;
       } else {
         result = Task_AutoOreStartReleaseStep2();
@@ -1703,16 +1817,10 @@ static void AutoCtrlFeed_HandleAutoOreDebugRequest(void) {
       result = Task_AutoOreStartReleaseLiftDetectStep1();
       break;
     case AUTO_ORE_DEBUG_REQUEST_RELEASE_LIFT_DETECT_STEP2:
-      if (auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl) &&
-          auto_ore_ctrl.action == AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP1 &&
-          AutoOre_IsUpperFinished(&auto_ore_ctrl)) {
-        auto_ore_ctrl.action = AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP2;
-        auto_ore_ctrl.step_index = 2u;
-        auto_ore_ctrl.step_entered = false;
-        auto_ore_ctrl.step_condition_met = false;
-        auto_ore_ctrl.step_condition_time_ms = BSP_TIME_Get_ms();
-        auto_ore_ctrl.step_enter_time_ms = auto_ore_ctrl.step_condition_time_ms;
-        auto_ore_ctrl.fused_store_done = false;
+      if (AutoCtrlFeed_ContinueReleaseStep2(request, BSP_TIME_Get_ms())) {
+        result = true;
+      } else if (AutoCtrlFeed_RequestMatchesReleaseStep1(request)) {
+        pending_release_step2_request = request;
         result = true;
       } else {
         result = Task_AutoOreStartReleaseLiftDetectStep2();
@@ -1802,6 +1910,7 @@ static void AutoCtrlFeed_HandleAutoOreDebugRequest(void) {
       if (auto_ctrl_inited) {
         AutoCtrl_Abort(&auto_ctrl);
       }
+      pending_release_step2_request = AUTO_ORE_DEBUG_REQUEST_NONE;
       Task_AutoOreAbort();
       Task_AutoRodSpearheadAbort();
       Task_AutoSickCorrectAbort();
@@ -2095,6 +2204,7 @@ void Task_auto_ctrl(void *argument) {
       AutoCtrlFeed_HandleAutoOreDebugRequest();
       const bool update_auto_ore_debug = AutoCtrlFeed_DebugPeriodicDue(now_ms);
       AutoCtrlFeed_UpdateAutoOre(now_ms, update_auto_ore_debug);
+      AutoCtrlFeed_TryPendingReleaseStep2(now_ms);
       AutoCtrlFeed_UpdateAutoRodSpearhead(now_ms, update_auto_ore_debug);
       AutoCtrlFeed_UpdateAutoSickCorrect(now_ms, update_auto_ore_debug);
       AutoCtrlFeed_PublishAutoActionFeedback();
