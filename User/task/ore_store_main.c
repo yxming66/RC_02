@@ -49,25 +49,13 @@ typedef struct {
   volatile bool platform_homed;
   volatile bool all_homed;
   volatile float platform_position_rad;
-  volatile float platform_filtered_position_rad;
-  volatile float platform_filtered_velocity_rad_s;
   volatile float platform_target_rad;
   volatile float platform_command_rad;
   volatile int8_t platform_update_ret;
   volatile int8_t platform_set_ret;
   volatile int8_t platform_commit_ret;
-  volatile bool platform_command_pending;
-  volatile uint8_t platform_soft_limit_state;
-  volatile uint16_t platform_stall_cycles;
-  volatile float platform_seek_velocity_rad_s;
-  volatile float platform_seek_travel_rad;
   volatile float platform_feedback_torque_nm;
-  volatile float platform_filtered_output_torque_nm;
   volatile float platform_velocity_setpoint_rad_s;
-  volatile float platform_cmd_torque_nm;
-  volatile float platform_cmd_current_a;
-  volatile int16_t platform_rm_output_raw;
-  volatile uint16_t platform_rm_tx_frame_id;
   volatile bool power_on_home_in_progress;
   volatile bool power_on_home_attempt_done;
   volatile bool power_on_home_failed;
@@ -154,7 +142,7 @@ static int8_t OreStoreTask_AssumePowerOnHomeAtLowest(void) {
 
 static bool OreStoreTask_HomeAxisFailed(void) {
   for (uint8_t axis = 0u; axis < ORE_STORE_AXIS_NUM; ++axis) {
-    if (ore_store.debug.axis_failed[axis]) {
+    if (ore_store.axis_failed[axis]) {
       return true;
     }
   }
@@ -385,44 +373,20 @@ static void OreStoreTask_UpdateDebugView(void) {
   g_ore_store_debug_view.all_homed = ore_store.feedback.all_homed;
   g_ore_store_debug_view.platform_position_rad =
       ore_store.feedback.position_rad[ORE_STORE_AXIS_PLATFORM];
-  g_ore_store_debug_view.platform_filtered_position_rad =
-      ore_store.debug.filtered_position_rad[ORE_STORE_AXIS_PLATFORM];
-  g_ore_store_debug_view.platform_filtered_velocity_rad_s =
-      ore_store.debug.filtered_velocity_rad_s[ORE_STORE_AXIS_PLATFORM];
   g_ore_store_debug_view.platform_target_rad =
-      ore_store.debug.target_position_rad[ORE_STORE_AXIS_PLATFORM];
+      ore_store.target_position_rad[ORE_STORE_AXIS_PLATFORM];
   g_ore_store_debug_view.platform_command_rad =
-      ore_store.debug.command_position_rad[ORE_STORE_AXIS_PLATFORM];
+      ore_store.command_position_rad[ORE_STORE_AXIS_PLATFORM];
   g_ore_store_debug_view.platform_update_ret =
       ore_store.debug.controller_update_ret[ORE_STORE_AXIS_PLATFORM];
   g_ore_store_debug_view.platform_set_ret =
       ore_store.debug.set_command_ret[ORE_STORE_AXIS_PLATFORM];
   g_ore_store_debug_view.platform_commit_ret =
       ore_store.debug.commit_ret[ORE_STORE_AXIS_PLATFORM];
-  g_ore_store_debug_view.platform_command_pending =
-      ore_store.debug.command_pending[ORE_STORE_AXIS_PLATFORM];
-  g_ore_store_debug_view.platform_soft_limit_state =
-      ore_store.debug.soft_limit_state[ORE_STORE_AXIS_PLATFORM];
-  g_ore_store_debug_view.platform_stall_cycles =
-      ore_store.debug.stall_cycles[ORE_STORE_AXIS_PLATFORM];
-  g_ore_store_debug_view.platform_seek_velocity_rad_s =
-      ore_store.debug.seek_velocity_rad_s[ORE_STORE_AXIS_PLATFORM];
-  g_ore_store_debug_view.platform_seek_travel_rad =
-      ore_store.debug.seek_travel_rad[ORE_STORE_AXIS_PLATFORM];
   g_ore_store_debug_view.platform_feedback_torque_nm =
-      ore_store.debug.motor_torque_nm[ORE_STORE_AXIS_PLATFORM];
-  g_ore_store_debug_view.platform_filtered_output_torque_nm =
-      ore_store.debug.filtered_output_torque_nm[ORE_STORE_AXIS_PLATFORM];
+      ore_store.feedback.motor[ORE_STORE_AXIS_PLATFORM].torque_current;
   g_ore_store_debug_view.platform_velocity_setpoint_rad_s =
-      ore_store.debug.velocity_setpoint_rad_s[ORE_STORE_AXIS_PLATFORM];
-  g_ore_store_debug_view.platform_cmd_torque_nm =
-      ore_store.debug.rm_last_set_torque_nm[ORE_STORE_AXIS_PLATFORM];
-  g_ore_store_debug_view.platform_cmd_current_a =
-      ore_store.debug.rm_pending_current_a[ORE_STORE_AXIS_PLATFORM];
-  g_ore_store_debug_view.platform_rm_output_raw =
-      ore_store.debug.rm_output_raw[ORE_STORE_AXIS_PLATFORM];
-  g_ore_store_debug_view.platform_rm_tx_frame_id =
-      ore_store.debug.rm_tx_frame_id[ORE_STORE_AXIS_PLATFORM];
+      ore_store.velocity_setpoint_rad_s[ORE_STORE_AXIS_PLATFORM];
   g_ore_store_debug_view.power_on_home_in_progress =
       ore_store_power_on_home_in_progress;
   g_ore_store_debug_view.power_on_home_attempt_done =

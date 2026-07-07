@@ -122,37 +122,10 @@ typedef struct {
 } OreStore_Feedback_t;
 
 typedef struct {
-  float target_position_rad[ORE_STORE_AXIS_NUM];
-  float command_position_rad[ORE_STORE_AXIS_NUM];
-  float zero_offset_rad[ORE_STORE_AXIS_NUM];
-  float learned_lower_raw_rad[ORE_STORE_AXIS_NUM];
-  float travel_rad[ORE_STORE_AXIS_NUM];
-  float velocity_setpoint_rad_s[ORE_STORE_AXIS_NUM];
-  float seek_velocity_rad_s[ORE_STORE_AXIS_NUM];
-  float seek_travel_rad[ORE_STORE_AXIS_NUM];
-  float online_wait_s[ORE_STORE_AXIS_NUM];
-  uint8_t soft_limit_state[ORE_STORE_AXIS_NUM];
-  uint16_t stall_cycles[ORE_STORE_AXIS_NUM];
-  bool homing_started[ORE_STORE_AXIS_NUM];
-  bool axis_failed[ORE_STORE_AXIS_NUM];
   int8_t controller_update_ret[ORE_STORE_AXIS_NUM];
   int8_t controller_control_ret[ORE_STORE_AXIS_NUM];
   int8_t set_command_ret[ORE_STORE_AXIS_NUM];
   int8_t commit_ret[ORE_STORE_AXIS_NUM];
-  bool command_pending[ORE_STORE_AXIS_NUM];
-  float filtered_position_rad[ORE_STORE_AXIS_NUM];
-  float filtered_velocity_rad_s[ORE_STORE_AXIS_NUM];
-  float filtered_output_torque_nm[ORE_STORE_AXIS_NUM];
-  float motor_torque_nm[ORE_STORE_AXIS_NUM];
-  float rm_last_set_torque_nm[ORE_STORE_AXIS_NUM];
-  float rm_pending_current_a[ORE_STORE_AXIS_NUM];
-  int16_t rm_output_raw[ORE_STORE_AXIS_NUM];
-  uint16_t rm_tx_frame_id[ORE_STORE_AXIS_NUM];
-  float power_on_fixed_position_rad[ORE_STORE_AXIS_NUM];
-  int8_t power_on_assume_ret[ORE_STORE_AXIS_NUM];
-  uint32_t power_on_assume_count[ORE_STORE_AXIS_NUM];
-  bool fixed_ore_cylinder_closed;
-  float dt_s;
 } OreStore_Debug_t;
 
 typedef struct {

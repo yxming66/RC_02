@@ -21,15 +21,6 @@ struct WheelState {
   bool online = false;
 };
 
-struct WheelDebugSnapshot {
-  bool pending_valid = false;
-  float pending_torque_current = 0.0f;
-  float last_set_torque_nm = 0.0f;
-  int8_t last_set_torque_ret = DEVICE_OK;
-  int8_t last_commit_ret = DEVICE_OK;
-  bool last_commit_skipped = false;
-};
-
 struct RmM3508WheelConfig {
   MOTOR_RM_Param_t motor_param{};
   mr::motor::MotorInstallSpec install{};
@@ -55,7 +46,6 @@ class RmM3508Wheel final {
   void ClearPendingCommand();
 
   const WheelState& State() const { return state_; }
-  const WheelDebugSnapshot& Debug() const { return debug_; }
   float RadiusM() const { return radius_m_; }
   bool IsValid() const { return controller_ != nullptr; }
 
@@ -66,13 +56,11 @@ class RmM3508Wheel final {
   static float ResolveRadius(float radius_m);
 
   void RefreshState();
-  void RefreshDebug();
 
   float radius_m_;
   Motor* motor_;
   Controller* controller_;
   WheelState state_;
-  WheelDebugSnapshot debug_;
   alignas(Controller) unsigned char controller_storage_[sizeof(Controller)];
 };
 
