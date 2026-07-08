@@ -71,6 +71,8 @@ typedef enum {
     PC_FEEDBACK_SICK_FRONT_ORE = 0x9C, /* 前 SICK 区域正方形矿检测反馈。 */
     PC_FEEDBACK_SICK_RAW = 0x9D,      /* 4 路 SICK 原始 ADC/距离/有效位反馈 */
 } PC_FeedbackCMD_t;
+
+
  
 #define MRLINK_PC_MAX_PAYLOAD_SIZE (64u)    /* 单帧 payload 最大字节数，上位机结构体不能超过该值 */
 #define MRLINK_PC_MAX_FRAME_SIZE (2u + 1u + 1u + MRLINK_PC_MAX_PAYLOAD_SIZE + 2u) /* 完整 mrlink 帧最大长度：帧头+长度+命令+payload+CRC */

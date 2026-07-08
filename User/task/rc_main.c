@@ -12,6 +12,12 @@
 
 DR16_t dr16;
 
+static bool RcMain_Dr16TimedOut(uint64_t now_us) {
+  return dr16.header.online &&
+         (now_us - dr16.header.last_online_time) >
+             RC_MAIN_DR16_OFFLINE_TIMEOUT_US;
+}
+
 void Task_rc_main(void *argument) {
   (void)argument;
 
@@ -47,17 +53,18 @@ void Task_rc_main(void *argument) {
     tick += delay_tick;
     if (DR16_WaitDmaCplt(0)) {
       if (DR16_ParseData(&dr16) != DEVICE_OK) {
-        DR16_Offline(&dr16);
         DR16_Restart();
       }
       if (DR16_StartDmaRecv(&dr16) != DEVICE_OK) {
-        DR16_Offline(&dr16);
         DR16_Restart();
         (void)DR16_StartDmaRecv(&dr16);
       }
-    } else if (dr16.header.online &&
-               (BSP_TIME_Get_us() - dr16.header.last_online_time) >
-                   RC_MAIN_DR16_OFFLINE_TIMEOUT_US) {
+    }
+
+    DR16_Service(&dr16);
+
+    if (RcMain_Dr16TimedOut(BSP_TIME_Get_us())) {
+      DR16_RecordTimeoutOffline();
       DR16_Offline(&dr16);
       DR16_Restart();
       (void)DR16_StartDmaRecv(&dr16);

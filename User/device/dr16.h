@@ -100,6 +100,33 @@ typedef struct {
   DR16_Data_t data;
 } DR16_t;
 
+typedef struct {
+  volatile uint32_t rx_cplt_count;
+  volatile uint32_t rx_event_count;
+  volatile uint32_t rx_error_count;
+  volatile uint32_t parse_ok_count;
+  volatile uint32_t parse_error_count;
+  volatile uint32_t size_error_count;
+  volatile uint32_t corrupt_error_count;
+  volatile uint32_t dma_start_error_count;
+  volatile uint32_t restart_count;
+  volatile uint32_t offline_count;
+  volatile uint32_t timeout_offline_count;
+  volatile uint32_t service_rearm_count;
+  volatile uint16_t last_rx_size;
+  volatile uint16_t dma_remaining;
+  volatile uint32_t uart_isr;
+  volatile uint32_t uart_cr1;
+  volatile uint32_t uart_cr3;
+  volatile uint32_t uart_error_code;
+  volatile uint32_t uart_rx_state;
+  volatile uint32_t uart_reception_type;
+  volatile int8_t last_start_result;
+  volatile int8_t last_parse_result;
+} DR16_Debug_t;
+
+extern volatile DR16_Debug_t g_dr16_debug;
+
 /* Exported functions prototypes -------------------------------------------- */
 int8_t DR16_Init(DR16_t *dr16);
 int8_t DR16_Restart(void);
@@ -107,6 +134,8 @@ int8_t DR16_StartDmaRecv(DR16_t *dr16);
 bool DR16_WaitDmaCplt(uint32_t timeout);
 int8_t DR16_ParseData(DR16_t *dr16);
 int8_t DR16_Offline(DR16_t *dr16);
+void DR16_RecordTimeoutOffline(void);
+void DR16_Service(DR16_t *dr16);
 
 /* USER FUNCTION BEGIN */
 

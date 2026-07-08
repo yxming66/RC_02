@@ -162,7 +162,7 @@ Config_RobotParam_t robot_config = {
             .step_400_all_retract = {0.4f, 0.2f},
 
             /* 200mm 下台阶四杆全伸位。 */
-            .step_200_descend_all_extend = {5.2230465f, 5.20230465f},
+            .step_200_descend_all_extend = {5.20230465f, 5.20230465f},
             /* 200mm 下台阶前杆收回、后杆保持支撑位。 */
             .step_200_descend_front_retract = {0.1f, 5.20230465f},
             /* 200mm 下台阶四杆全收位。 */
@@ -171,7 +171,7 @@ Config_RobotParam_t robot_config = {
             .step_200_descend_small = {0.1f, 0.1f},
             /* 400mm 下台阶四杆全伸位。 */
             .step_400_descend_all_extend = {10.8f, 10.8f},
-            /* 400mm 下台阶前杆收回、后杆保持支撑位。 */
+            /* 400mm 下台阶前杆收回、后杆保持支撑位。         */
             .step_400_descend_front_retract = {0.1f, 10.8f},
             /* 400mm 下台阶四杆全收位。 */
             .step_400_descend_all_retract = {0.4f, 0.4f},
@@ -709,9 +709,9 @@ Config_RobotParam_t robot_config = {
             .second_photo_retract_move_speed = 0.50f, /* step7 第二个下降沿后保持全伸离开 vx，单位 m/s。 */
             .final_move_speed = 0.5f,          /* 收尾离开台阶 vx，单位 m/s。 */
             .final_move_ms = 200u,             /* 收尾离开台阶持续时间，单位 ms。 */
-            .pole_front_extend_speed = 0.0f,   /* 前杆伸出目标跟随速度，单位 rad/s。 */
+            .pole_front_extend_speed = 30.0f,   /* 前杆伸出目标跟随速度，单位 rad/s。 */
             .pole_front_retract_speed = 0.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
-            .pole_rear_extend_speed = 0.0f,    /* 后杆伸出目标跟随速度，单位 rad/s。 */
+            .pole_rear_extend_speed = 30.0f,    /* 后杆伸出目标跟随速度，单位 rad/s。 */
             .pole_rear_retract_speed = 0.0f,   /* 后杆回收目标跟随速度   ，单位 rad/s。 */
             .pole_lift_accel = 0.0f,          /* 当前模板撑杆加速度限幅，单位 rad/s^2。 */
             .front_photo_timeout_ms = 5000u,    /* 等待前光电触发/下降沿超时，单位 ms。 */
