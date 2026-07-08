@@ -35,6 +35,7 @@ static void AutoCtrlTemplate_DebugMarkPhotoEvent(auto_ctrl_t *ctrl,
                                                 uint32_t now_ms,
                                                 uint8_t event_id) {
   uint32_t raw_time_ms;
+  uint32_t high_duration_ms = 0u;
 
   if (ctrl == 0) {
     return;
@@ -57,9 +58,19 @@ static void AutoCtrlTemplate_DebugMarkPhotoEvent(auto_ctrl_t *ctrl,
       break;
     case AUTO_CTRL_TEMPLATE_DEBUG_PHOTO_DESCEND_FIRST_FALLING:
       raw_time_ms = ctrl->template_ctx.pe9_photo2_released_since_ms;
+      if (ctrl->template_ctx.pe9_photo2_released_since_ms >=
+          ctrl->template_ctx.pe9_photo2_triggered_since_ms) {
+        high_duration_ms = ctrl->template_ctx.pe9_photo2_released_since_ms -
+                           ctrl->template_ctx.pe9_photo2_triggered_since_ms;
+      }
       break;
     case AUTO_CTRL_TEMPLATE_DEBUG_PHOTO_DESCEND_SECOND_FALLING:
       raw_time_ms = ctrl->template_ctx.pa0_photo4_released_since_ms;
+      if (ctrl->template_ctx.pa0_photo4_released_since_ms >=
+          ctrl->template_ctx.pa0_photo4_triggered_since_ms) {
+        high_duration_ms = ctrl->template_ctx.pa0_photo4_released_since_ms -
+                           ctrl->template_ctx.pa0_photo4_triggered_since_ms;
+      }
       break;
     case AUTO_CTRL_TEMPLATE_DEBUG_PHOTO_FINAL_RISING:
       raw_time_ms = ctrl->template_ctx.pa0_photo4_triggered_since_ms;
@@ -72,6 +83,7 @@ static void AutoCtrlTemplate_DebugMarkPhotoEvent(auto_ctrl_t *ctrl,
   ctrl->template_ctx.debug_photo_raw_time_ms =
       (raw_time_ms != 0u) ? raw_time_ms : now_ms;
   ctrl->template_ctx.debug_photo_event_time_ms = now_ms;
+    ctrl->template_ctx.debug_photo_high_duration_ms = high_duration_ms;
   ctrl->template_ctx.debug_photo_event_step_index =
       ctrl->template_ctx.step_index;
   ctrl->template_ctx.debug_photo_event_id = event_id;
@@ -113,6 +125,7 @@ static void AutoCtrlTemplate_SetStep(auto_ctrl_t *ctrl, uint8_t step_index) {
   ctrl->template_ctx.final_photo_sprint_started = false;
   ctrl->template_ctx.final_photo_sprint_start_ms = 0u;
   ctrl->template_ctx.descend_start_move_entered = false;
+  ctrl->template_ctx.descend_start_lift_ready = false;
   ctrl->template_ctx.descend_start_move_time_ms = 0u;
   ctrl->template_ctx.distance_latch_valid = false;
   ctrl->template_ctx.wheel_delta_rad = 0.0f;
@@ -316,10 +329,25 @@ static bool AutoCtrlTemplate_RunDescendStartSprint(
     auto_ctrl_t *ctrl, uint32_t now_ms, const AutoCtrl_TemplateParam_t *param,
     float vx_mps, float front_target, float rear_target,
     float front_speed, float rear_speed) {
+  if (param != 0 && param->descend_start_pole_lift_threshold > 0.0f) {
+    const float threshold = param->descend_start_pole_lift_threshold;
+    if (front_target < threshold) {
+      front_target = threshold;
+    }
+    if (rear_target < threshold) {
+      rear_target = threshold;
+    }
+  }
+
   AutoCtrlTemplate_CommandPole(ctrl, front_target, rear_target, front_speed,
                                rear_speed);
 
-  if (!AutoCtrlTemplate_DescendStartPoleLiftReady(ctrl, param)) {
+  if (!ctrl->template_ctx.descend_start_lift_ready) {
+    ctrl->template_ctx.descend_start_lift_ready =
+        AutoCtrlTemplate_DescendStartPoleLiftReady(ctrl, param);
+  }
+
+  if (!ctrl->template_ctx.descend_start_lift_ready) {
     AutoCtrlPrimitive_CommandFlatMoveWithYawRate(ctrl, 0.0f);
     return false;
   }
@@ -413,6 +441,7 @@ static void AutoCtrlTemplate_ResetPhotoDetection(auto_ctrl_t *ctrl) {
   ctrl->template_ctx.pe9_photo2_released_since_ms = 0u;
   ctrl->template_ctx.pa2_photo3_released_since_ms = 0u;
   ctrl->template_ctx.pa0_photo4_released_since_ms = 0u;
+  ctrl->template_ctx.debug_photo_high_duration_ms = 0u;
 }
 
 static bool AutoCtrlTemplate_LatchPhotoStable(bool triggered, bool *latched,

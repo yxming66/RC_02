@@ -1481,6 +1481,8 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms, bool update_debug) {
         step_ctx->debug_pole_cmd_step_index;
     g_auto_ore_debug.step_photo_event_id = step_ctx->debug_photo_event_id;
     g_auto_ore_debug.step_pole_cmd_kind = step_ctx->debug_pole_cmd_kind;
+    g_auto_ore_debug.step_photo_high_duration_ms =
+      step_ctx->debug_photo_high_duration_ms;
      g_auto_ore_debug.step_photo_raw_to_event_ms =
         (step_ctx->debug_photo_raw_time_ms != 0u &&
         step_ctx->debug_photo_event_time_ms != 0u)

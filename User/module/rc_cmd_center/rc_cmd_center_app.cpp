@@ -1245,6 +1245,7 @@ static void Rc_PublishCommandsAndDebug(bool update_debug) {
       (rc_current_plan == RC_CMD_PLAN_AUTO_CTRL_OUTPUT ||
        rc_current_plan == RC_CMD_PLAN_PC_AUTO_CTRL ||
        rc_current_plan == RC_CMD_PLAN_AUTO_ORE_OUTPUT ||
+       rc_current_plan == RC_CMD_PLAN_AUTO_CTRL_WITH_AUTO_ORE_UPPER_OUTPUT ||
        rc_current_plan == RC_CMD_PLAN_AUTO_ORE_PC_CHASSIS_OUTPUT)) {
     g_auto_ore_debug.step_pole_publish_time_ms = publish_ms;
     g_auto_ore_debug.step_pole_cmd_to_publish_ms =

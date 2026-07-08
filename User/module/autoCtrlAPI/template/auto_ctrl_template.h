@@ -20,6 +20,7 @@ typedef struct {
   uint32_t descend_start_move_time_ms; /* 下台阶首次冲刺起始时间，单位 ms。 */
   bool photo_stop_entered;       /* descend photo stop hold has started */
   bool descend_start_move_entered; /* 下台阶首次冲刺计时已启动。 */
+  bool descend_start_lift_ready;  /* 下台阶起步前的撑杆高度已达到安全门限。 */
   uint8_t step_index;            /* 当前模板执行到的 step 编号。 */
   uint32_t step_enter_time_ms;   /* 当前 step 首次进入时刻（ms）。 */
   uint32_t template_start_time_ms; /* 当前模板开始时刻（ms）。 */
@@ -51,6 +52,7 @@ typedef struct {
   uint32_t debug_photo_raw_time_ms;
   uint32_t debug_photo_event_time_ms;
   uint32_t debug_pole_cmd_time_ms;
+  uint32_t debug_photo_high_duration_ms; /* 下台阶下降沿事件前光电保持触发的时长，单位 ms。 */
   uint8_t debug_photo_event_step_index;
   uint8_t debug_pole_cmd_step_index;
   uint8_t debug_photo_event_id;

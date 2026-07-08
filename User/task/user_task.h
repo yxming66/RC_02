@@ -241,6 +241,7 @@ typedef struct {
     volatile uint32_t step_photo_raw_to_pole_cmd_ms;
     volatile uint32_t step_photo_to_pole_cmd_ms;
     volatile uint32_t step_pole_cmd_to_publish_ms;
+    volatile uint32_t step_photo_high_duration_ms;
     volatile uint8_t step_photo_event_step_index;
     volatile uint8_t step_pole_cmd_step_index;
     volatile uint8_t step_photo_event_id;
