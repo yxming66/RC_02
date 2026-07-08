@@ -214,7 +214,7 @@ static bool auto_ctrl_was_busy = false;
 static bool auto_ore_was_busy = false;
 
 #ifndef RC_PC_POLE_SPEED_LIMIT_RAD_S
-#define RC_PC_POLE_SPEED_LIMIT_RAD_S (30.0f)
+#define RC_PC_POLE_SPEED_LIMIT_RAD_S (15.0f)
 #endif
 
 #ifndef RC_PC_POLE_ACCEL_LIMIT_RAD_S2

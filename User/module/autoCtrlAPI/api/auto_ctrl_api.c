@@ -52,22 +52,81 @@ static const AutoCtrl_TemplateParam_t *AutoCtrl_GetTemplateParams(
   }
 }
 
-static const float *AutoCtrl_GetPrealignPoleTarget(
-    const Config_RobotParam_t *robot_param, auto_ctrl_template_e template_id) {
-  if (robot_param == 0) {
-    return 0;
+static void AutoCtrl_CopyPoleTarget(float dst[2], const float src[2]) {
+  if (dst == 0 || src == 0) {
+    return;
+  }
+  dst[0] = src[0];
+  dst[1] = src[1];
+}
+
+static void AutoCtrl_ApplyDescendStartPoleThreshold(
+    float target[2], const AutoCtrl_TemplateParam_t *template_param) {
+  if (target == 0 || template_param == 0 ||
+      template_param->descend_start_pole_lift_threshold <= 0.0f) {
+    return;
   }
 
+  const float threshold = template_param->descend_start_pole_lift_threshold;
+  if (target[0] < threshold) {
+    target[0] = threshold;
+  }
+  if (target[1] < threshold) {
+    target[1] = threshold;
+  }
+}
+
+static bool AutoCtrl_GetTemplateEntryPoleCommand(
+    const Config_RobotParam_t *robot_param, auto_ctrl_template_e template_id,
+    float target[2], float speed[2], float *accel, bool *disable_accel) {
+  if (robot_param == 0 || target == 0 || speed == 0 || accel == 0 ||
+      disable_accel == 0) {
+    return false;
+  }
+
+  const AutoCtrl_TemplateParam_t *template_param =
+      AutoCtrl_GetTemplateParams(robot_param, template_id);
+  *accel = (template_param != 0) ? template_param->pole_lift_accel : 0.0f;
+  *disable_accel = *accel < 0.0f;
+
   switch (template_id) {
-    case AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD:
-      return robot_param->pole_param.preset.step_200_descend_all_retract;
-    case AUTO_CTRL_TEMPLATE_DESCEND_400_HEAD:
-      return robot_param->pole_param.preset.step_400_descend_all_retract;
     case AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD:
+      AutoCtrl_CopyPoleTarget(target,
+                              robot_param->pole_param.preset.step_200_all_extend);
+      speed[0] =
+          robot_param->auto_ctrl_param.head_ascend_200.pole_all_extend_speed;
+      speed[1] =
+          robot_param->auto_ctrl_param.head_ascend_200.pole_all_extend_speed;
+      return true;
     case AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD:
+      AutoCtrl_CopyPoleTarget(target,
+                              robot_param->pole_param.preset.step_400_all_extend);
+      speed[0] =
+          robot_param->auto_ctrl_param.head_ascend_400.pole_all_extend_speed;
+      speed[1] =
+          robot_param->auto_ctrl_param.head_ascend_400.pole_all_extend_speed;
+      return true;
+    case AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD:
+      AutoCtrl_CopyPoleTarget(
+          target, robot_param->pole_param.preset.step_200_descend_all_retract);
+      AutoCtrl_ApplyDescendStartPoleThreshold(target, template_param);
+      speed[0] =
+          robot_param->auto_ctrl_param.head_descend_200.pole_front_retract_speed;
+      speed[1] =
+          robot_param->auto_ctrl_param.head_descend_200.pole_rear_retract_speed;
+      return true;
+    case AUTO_CTRL_TEMPLATE_DESCEND_400_HEAD:
+      AutoCtrl_CopyPoleTarget(
+          target, robot_param->pole_param.preset.step_400_descend_all_retract);
+      AutoCtrl_ApplyDescendStartPoleThreshold(target, template_param);
+      speed[0] =
+          robot_param->auto_ctrl_param.head_descend_400.pole_front_retract_speed;
+      speed[1] =
+          robot_param->auto_ctrl_param.head_descend_400.pole_rear_retract_speed;
+      return true;
     case AUTO_CTRL_TEMPLATE_NONE:
     default:
-      return robot_param->pole_param.preset.step_200_small;
+      return false;
   }
 }
 
@@ -422,14 +481,20 @@ void AutoCtrl_Update(auto_ctrl_t *ctrl, uint32_t now_ms) {
         AutoCtrlPrimitive_ApplyPrealign(ctrl);
       }
       if (robot_param != 0) {
-        const float prealign_pole_speed =
-            robot_param->pole_param.limit.support_lift_speed;
-        const float *prealign_pole_target =
-            AutoCtrl_GetPrealignPoleTarget(robot_param, ctrl->template_id);
-        if (prealign_pole_target != 0) {
+        float prealign_pole_target[2] = {0.0f, 0.0f};
+        float prealign_pole_speed[2] = {0.0f, 0.0f};
+        float prealign_pole_accel = 0.0f;
+        bool prealign_pole_disable_accel = false;
+        if (AutoCtrl_GetTemplateEntryPoleCommand(
+                robot_param, ctrl->template_id, prealign_pole_target,
+                prealign_pole_speed, &prealign_pole_accel,
+                &prealign_pole_disable_accel)) {
           AutoCtrlPrimitive_CommandPoleTargetWithSpeed(
               ctrl, prealign_pole_target[0], prealign_pole_target[1],
-              prealign_pole_speed, prealign_pole_speed);
+              prealign_pole_speed[0], prealign_pole_speed[1]);
+          ctrl->pole_cmd.auto_lift_accel[0] = prealign_pole_accel;
+          ctrl->pole_cmd.auto_lift_accel[1] = prealign_pole_accel;
+          ctrl->pole_cmd.disable_lift_accel = prealign_pole_disable_accel;
         }
       }
 
@@ -447,6 +512,9 @@ void AutoCtrl_Update(auto_ctrl_t *ctrl, uint32_t now_ms) {
         ctrl->target_yaw_rad = 0.0f;
         ctrl->yaw_error_rad = 0.0f;
         memset(&ctrl->template_ctx, 0, sizeof(ctrl->template_ctx));
+        /* PREALIGN already commanded the same pole target as template step 0.
+         * Allow step 0 to pass immediately if the pole is already at target. */
+        ctrl->template_ctx.pole_target_seen_not_ready = true;
         AutoCtrl_EnterState(ctrl, AUTO_CTRL_STATE_RUN_TEMPLATE, now_ms);
       } else if ((now_ms - ctrl->state_enter_time_ms) > ctrl->prealign_timeout_ms) {
         AutoCtrl_Finish(ctrl, AUTO_CTRL_RESULT_FAIL,
