@@ -174,7 +174,7 @@ Config_RobotParam_t robot_config = {
             /* 400mm 下台阶前杆收回、后杆保持支撑位。 */
             .step_400_descend_front_retract = {0.1f, 10.8f},
             /* 400mm 下台阶四杆全收位。 */
-            .step_400_descend_all_retract = {0.1f, 0.1f},
+            .step_400_descend_all_retract = {0.4f, 0.4f},
             /* 一键放矿前撑杆目标位；先填占位值，实车再标定。 */
             .ore_release_target = {10.8f, 10.8f},
             .ore_release_speed = 0.0f,
