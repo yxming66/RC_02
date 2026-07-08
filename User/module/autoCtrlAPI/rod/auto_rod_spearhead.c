@@ -305,7 +305,7 @@ static void AutoRodSpearhead_RunPickupStep1(
         return;
       }
       if (AutoRodSpearhead_StepElapsed(ctrl, now_ms) >=
-          AutoRodSpearhead_OpenDelayMs(ctrl)) {
+          AutoRodSpearhead_DetectPoseDelayMs(ctrl)) {
         AutoRodSpearhead_FinishSuccess(ctrl);
       }
       return;

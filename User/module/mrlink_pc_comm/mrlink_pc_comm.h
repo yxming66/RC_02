@@ -212,7 +212,7 @@ typedef enum {
     PC_AUTO_ACTION_ROD_SPEARHEAD = 12,   /* 一键取矛头 */
     PC_AUTO_ACTION_ROD_SPEARHEAD_STEP1 = 13, /* 取矛头 step1：平台到位并张开待机 */
     PC_AUTO_ACTION_ROD_SPEARHEAD_STEP2 = 14, /* 取矛头 step2：夹取抬高并确认 */
-    PC_AUTO_ACTION_ROD_DOCK_WAIT = 15,   /* 取矛头机构等待对接 */
+    PC_AUTO_ACTION_ROD_DOCK_WAIT = 15,   /* 取矛v头机构等待对接 */
     PC_AUTO_ACTION_SICK_CORRECT_ROD_SPEARHEAD_POS1 = 16, /* 取矛头位置1 SICK 校正 */
     PC_AUTO_ACTION_SICK_CORRECT_ROD_SPEARHEAD_POS2 = 17, /* 取矛头位置2 SICK 校正 */
     PC_AUTO_ACTION_SICK_CORRECT_ROD_SPEARHEAD_POS3 = 18, /* 取矛头位置3 SICK 校正 */

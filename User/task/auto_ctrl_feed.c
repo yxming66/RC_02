@@ -1701,9 +1701,8 @@ static void AutoCtrlFeed_UpdateAutoRodSpearhead(uint32_t now_ms,
   }
 
   uint32_t dock_complete_rx_ms = 0u;
-  if (IrDock_IsDockCompleteFresh(now_ms)) {
-    dock_complete_rx_ms = g_ir_dock_debug.last_complete_rx_ms;
-  }
+  (void)IrDock_IsDockCompleteFresh(now_ms);
+  dock_complete_rx_ms = g_ir_dock_debug.last_complete_rx_ms;
   if (MrlinkPc_IsR2Ready()) {
     const uint32_t r2_ready_tick_ms = MrlinkPc_GetR2ReadyStateTickMs();
     if (r2_ready_tick_ms > dock_complete_rx_ms) {
