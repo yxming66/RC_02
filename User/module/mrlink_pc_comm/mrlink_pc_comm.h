@@ -69,6 +69,7 @@ typedef enum {
     PC_FEEDBACK_IR_DOCK = 0x9A,      /* R1/R2 红外对接新协议状态反馈 */
     PC_FEEDBACK_SICK_CORRECT = 0x9B, /* 取矛头 SICK 校正标准值/实时值反馈 */
     PC_FEEDBACK_SICK_FRONT_ORE = 0x9C, /* 前 SICK 区域正方形矿检测反馈。 */
+    PC_FEEDBACK_SICK_RAW = 0x9D,      /* 4 路 SICK 原始 ADC/距离/有效位反馈 */
 } PC_FeedbackCMD_t;
  
 #define MRLINK_PC_MAX_PAYLOAD_SIZE (64u)    /* 单帧 payload 最大字节数，上位机结构体不能超过该值 */
@@ -86,9 +87,9 @@ typedef enum {
 #define MRLINK_PC_RX_STREAM_BUF_SIZE (512u) /* mrlink 协议解析流缓冲区字节数 */
 #endif
 
-#if !defined(MRLINK_CPP_MAX_LATEST_MESSAGES) || (MRLINK_CPP_MAX_LATEST_MESSAGES < 24u)
+#if !defined(MRLINK_CPP_MAX_LATEST_MESSAGES) || (MRLINK_CPP_MAX_LATEST_MESSAGES < 32u)
 #undef MRLINK_CPP_MAX_LATEST_MESSAGES
-#define MRLINK_CPP_MAX_LATEST_MESSAGES (24u)
+#define MRLINK_CPP_MAX_LATEST_MESSAGES (32u)
 #endif
 
 typedef struct {
@@ -385,6 +386,15 @@ typedef struct {
     uint8_t detected;           /* 前 SICK 区域正方形矿检测结果，0=无矿，1=有矿 */
 } PC_SickFrontOreFeedback_t;
 
+typedef struct {
+    uint32_t update_tick;       /* 最近一次 SICK 数据更新时间，单位 ms */
+    float distance_mm[4];       /* 4 路 SICK 距离，单位 mm */
+    uint16_t adc_raw[4];        /* 4 路 SICK 原始 ADC 值 */
+    uint16_t miss_count;        /* 连续丢帧/失效计数 */
+    uint8_t valid_mask;         /* 4 路有效位 bitmask，bit0~3 对应通道 0~3 */
+    uint8_t reserved;           /* 保留字段，发送端固定为 0 */
+} PC_SickRawFeedback_t;
+
 typedef enum {
     PC_ORE_TYPE_UNKNOWN = 0,    /* 矿种未知或未收到 */
     PC_ORE_TYPE_R1 = 1,         /* R1 矿 */
@@ -512,6 +522,7 @@ typedef struct {
     PC_StepFeedback_t step;                /* 自动台阶反馈缓存 */
     PC_SickCorrectFeedback_t sick_correct; /* 取矛头 SICK 校正反馈缓存 */
     PC_SickFrontOreFeedback_t sick_front_ore; /* 前 SICK 区域正方形矿检测反馈缓存 */
+    PC_SickRawFeedback_t sick_raw;         /* 4 路 SICK 原始数据反馈缓存 */
     PC_StatusFeedback_t status;            /* 通信/系统状态反馈缓存 */
     PC_IrDockFeedback_t ir_dock;           /* R1/R2 红外对接反馈缓存 */
     PC_IrOreBridgeFeedback_t ir_ore_bridge;  /* 红外对接桥接反馈缓存 */

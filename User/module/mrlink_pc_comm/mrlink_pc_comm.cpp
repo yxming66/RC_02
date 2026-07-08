@@ -580,6 +580,20 @@ wire::SickFrontOreFeedback MakeSickFrontOreFeedbackWire(
   return wire_feedback;
 }
 
+wire::SickRawFeedback MakeSickRawFeedbackWire(
+    const PC_SickRawFeedback_t &feedback) {
+  wire::SickRawFeedback wire_feedback = {};
+  wire_feedback.update_tick = feedback.update_tick;
+  for (uint8_t i = 0u; i < 4u; i++) {
+    wire_feedback.distance_mm[i] = feedback.distance_mm[i];
+    wire_feedback.adc_raw[i] = feedback.adc_raw[i];
+  }
+  wire_feedback.miss_count = feedback.miss_count;
+  wire_feedback.valid_mask = feedback.valid_mask;
+  wire_feedback.reserved = 0u;
+  return wire_feedback;
+}
+
 }  // namespace
 
 volatile PC_CommDebug_t g_pc_comm_debug;
@@ -892,6 +906,13 @@ extern "C" bool MrlinkPc_PublishFeedback(uint8_t topic,
         MakeSickFrontOreFeedbackWire(*typed);
       return s_bus.StoreLatest(wire_feedback);
     }
+    case PC_FEEDBACK_SICK_RAW: {
+      const auto *typed = static_cast<const PC_SickRawFeedback_t *>(feedback);
+      s_state.feedback.sick_raw = *typed;
+      const wire::SickRawFeedback wire_feedback =
+          MakeSickRawFeedbackWire(*typed);
+      return s_bus.StoreLatest(wire_feedback);
+    }
     case PC_FEEDBACK_IR_ORE: {
       const auto *typed = static_cast<const PC_IrOreFeedback_t *>(feedback);
       s_ir_ore_feedback = *typed;
@@ -1050,6 +1071,11 @@ extern "C" uint16_t MrlinkPc_BuildFeedbackFrame(uint8_t cmd, uint8_t *tx_buf,
     case PC_FEEDBACK_SICK_FRONT_ORE: {
       const wire::SickFrontOreFeedback fallback =
           MakeSickFrontOreFeedbackWire(s_state.feedback.sick_front_ore);
+      return BuildLatestOrFallback(fallback, tx_buf, buf_size);
+    }
+    case PC_FEEDBACK_SICK_RAW: {
+      const wire::SickRawFeedback fallback =
+          MakeSickRawFeedbackWire(s_state.feedback.sick_raw);
       return BuildLatestOrFallback(fallback, tx_buf, buf_size);
     }
     case PC_FEEDBACK_IR_ORE: {

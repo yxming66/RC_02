@@ -26,7 +26,7 @@
 extern volatile PC_CommandSource_t g_pc_command_source;
 extern DR16_t dr16;
 
-static uint8_t s_tx_buf[384];
+static uint8_t s_tx_buf[512];
 static volatile bool s_tx_dma_busy = false;
 static volatile uint32_t s_tx_dma_start_tick = 0;
 static bool s_pc_comm_channel_inited = false;
@@ -51,6 +51,7 @@ static const uint8_t s_feedback_cmds[] = {
     PC_FEEDBACK_STEP,
     PC_FEEDBACK_SICK_CORRECT,
     PC_FEEDBACK_SICK_FRONT_ORE,
+    PC_FEEDBACK_SICK_RAW,
     PC_FEEDBACK_IR_DOCK,
     PC_FEEDBACK_STATUS,
     /* PC_FEEDBACK_IR_ORE 不在自动循环里：由 PcComm_TryUpdateIrOreFeedback
@@ -331,6 +332,25 @@ static void PcComm_UpdateSickFrontOreFeedback(void) {
     }
 
     (void)MrlinkPc_PublishFeedback(PC_FEEDBACK_SICK_FRONT_ORE, &feedback);
+}
+
+static void PcComm_UpdateSickRawFeedback(void) {
+    Sick_Output_t output = {0};
+    PC_SickRawFeedback_t feedback = {0};
+
+    if (Task_SickGetLatestOutput(&output)) {
+        feedback.update_tick = output.update_tick;
+        feedback.miss_count = output.miss_count;
+        for (uint8_t i = 0u; i < SICK_OUTPUT_CHANNEL_COUNT && i < 4u; i++) {
+            feedback.distance_mm[i] = output.distance_mm[i];
+            feedback.adc_raw[i] = output.adc_raw[i];
+            if (output.valid[i]) {
+                feedback.valid_mask |= (uint8_t)(1u << i);
+            }
+        }
+    }
+
+    (void)MrlinkPc_PublishFeedback(PC_FEEDBACK_SICK_RAW, &feedback);
 }
 
 static bool PcComm_AppendStartMatchFrame(uint16_t *tx_len) {
@@ -616,6 +636,7 @@ static bool PcComm_TransmitFeedback(void) {
     PcComm_UpdateModuleFeedback();
     PcComm_UpdateSickCorrectFeedback();
     PcComm_UpdateSickFrontOreFeedback();
+    PcComm_UpdateSickRawFeedback();
     PcComm_UpdateIrDockFeedback(now);
     const bool ir_ore_pending = PcComm_TryUpdateIrOreFeedback(now);
     const bool start_match_pending = PcComm_AppendStartMatchFrame(&tx_len);
