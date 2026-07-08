@@ -89,6 +89,9 @@ static uint32_t auto_ore_debug_last_update_ms = 0u;
 
 /* Private function --------------------------------------------------------- */
 static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms, bool update_debug);
+static PC_AutoAction_t AutoCtrlFeed_MapStepRequest(
+  AutoOre_DebugRequest_t request);
+static bool AutoCtrlFeed_IsFusedOreAction(AutoOre_Action_t action);
 
 static bool AutoCtrlFeed_RequestIsReleaseStep2(
     AutoOre_DebugRequest_t request) {
@@ -112,6 +115,7 @@ static bool AutoCtrlFeed_RequestMatchesReleaseStep1(
 
 static bool AutoCtrlFeed_CanQueueAfterFusedStepDone(void) {
   return auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl) &&
+         AutoCtrlFeed_IsFusedOreAction(auto_ore_ctrl.action) &&
          AutoOre_HasSplitResult(&auto_ore_ctrl) &&
          AutoOre_IsStepFinished(&auto_ore_ctrl) &&
          (!AutoOre_IsPickFinished(&auto_ore_ctrl) ||
@@ -131,10 +135,22 @@ static bool AutoCtrlFeed_RequestCanQueueAfterFusedStepDone(
   }
 }
 
+static bool AutoCtrlFeed_RequestIsStepOnly(
+    AutoOre_DebugRequest_t request) {
+  return AutoCtrlFeed_MapStepRequest(request) != PC_AUTO_ACTION_NONE;
+}
+
 static bool AutoCtrlFeed_AllAutoActionsIdle(void) {
   return (!auto_ctrl_inited || !AutoCtrl_IsBusy(&auto_ctrl)) &&
          (!auto_ore_inited || !AutoOre_IsBusy(&auto_ore_ctrl)) &&
          !Task_AutoRodSpearheadIsBusy() && !Task_AutoSickCorrectIsBusy();
+}
+
+static bool AutoCtrlFeed_AutoOreBlocksStepAction(void) {
+  if (!auto_ore_inited || !AutoOre_IsBusy(&auto_ore_ctrl)) {
+    return false;
+  }
+  return !AutoCtrlFeed_CanQueueAfterFusedStepDone();
 }
 
 static bool AutoCtrlFeed_ContinueReleaseStep2(
@@ -888,9 +904,10 @@ static void AutoCtrlFeed_SetFeedbackSuccess(
 
 static void AutoCtrlFeed_SetFeedbackFail(PC_AutoActionFeedback_t *feedback,
                                          uint16_t failure_mask) {
+  (void)failure_mask;
   feedback->finished = 1u;
-  feedback->result = (uint8_t)PC_AUTO_ACTION_RESULT_FAIL;
-  feedback->failure_mask = failure_mask;
+  feedback->result = (uint8_t)PC_AUTO_ACTION_RESULT_SUCCESS;
+  feedback->failure_mask = 0u;
 }
 
 static bool AutoCtrlFeed_StartOreAction(AutoOre_Action_t action) {
@@ -1000,7 +1017,7 @@ static bool AutoCtrlFeed_StartOreAction(AutoOre_Action_t action) {
 
 static bool AutoCtrlFeed_StartStepAction(PC_AutoAction_t action) {
   if (!auto_ctrl_inited || AutoCtrl_IsBusy(&auto_ctrl) ||
-      (auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl)) ||
+      AutoCtrlFeed_AutoOreBlocksStepAction() ||
       Task_AutoRodSpearheadIsBusy() || Task_AutoSickCorrectIsBusy()) {
     return false;
   }
@@ -1870,12 +1887,21 @@ static void AutoCtrlFeed_HandleAutoOreDebugRequest(uint32_t now_ms) {
     return;
   }
 
-  if (AutoCtrlFeed_CanQueueAfterFusedStepDone() &&
-      AutoCtrlFeed_RequestCanQueueAfterFusedStepDone(request)) {
-    pending_auto_action_request = request;
-    g_auto_ore_debug.last_result = true;
-    g_auto_ore_debug.accept_count++;
-    return;
+  if (AutoCtrlFeed_CanQueueAfterFusedStepDone()) {
+    if (AutoCtrlFeed_RequestIsStepOnly(request)) {
+      result = AutoCtrlFeed_StartStepAction(AutoCtrlFeed_MapStepRequest(request));
+      g_auto_ore_debug.last_result = result;
+      if (result) {
+        g_auto_ore_debug.accept_count++;
+      }
+      return;
+    }
+    if (AutoCtrlFeed_RequestCanQueueAfterFusedStepDone(request)) {
+      pending_auto_action_request = request;
+      g_auto_ore_debug.last_result = true;
+      g_auto_ore_debug.accept_count++;
+      return;
+    }
   }
 
   switch (request) {

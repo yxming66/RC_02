@@ -134,6 +134,7 @@ typedef enum {
   RC_CMD_PLAN_ROD_NEW,
   RC_CMD_PLAN_AUTO_ORE_STANDBY,
   RC_CMD_PLAN_AUTO_CTRL_OUTPUT,
+  RC_CMD_PLAN_AUTO_CTRL_WITH_AUTO_ORE_UPPER_OUTPUT,
   RC_CMD_PLAN_AUTO_ORE_OUTPUT,
   RC_CMD_PLAN_AUTO_ORE_PC_CHASSIS_OUTPUT,
   RC_CMD_PLAN_AUTO_ROD_OUTPUT,
@@ -1514,6 +1515,13 @@ static RcCommandPlan_t Rc_SelectCommandPlan(RcBehavior_t behavior) {
   if (auto_ctrl_inited && AutoCtrl_IsBusy(&auto_ctrl) &&
       Rc_BehaviorAllowsAutoCtrlOutput(behavior)) {
     g_rc_control_debug.page = Rc_GetAutoCtrlPage(AutoCtrl_GetTemplate(&auto_ctrl));
+    if (auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl) &&
+        AutoOre_HasSplitResult(&auto_ore_ctrl) &&
+        AutoOre_IsStepFinished(&auto_ore_ctrl)) {
+      g_rc_control_debug.ore_store_active = true;
+      g_rc_control_debug.arm_simple_active = true;
+      return RC_CMD_PLAN_AUTO_CTRL_WITH_AUTO_ORE_UPPER_OUTPUT;
+    }
     return RC_CMD_PLAN_AUTO_CTRL_OUTPUT;
   }
 
@@ -2056,6 +2064,7 @@ static void Rc_ConfigureCmdCenter(void) {
               .priority(cmd::Priority::Remote),
           cmd::from<RcRuntimeInput, RcChassisAutoCtrlRoute>()
               .when<RcPlanIn<RC_CMD_PLAN_AUTO_CTRL_OUTPUT,
+                     RC_CMD_PLAN_AUTO_CTRL_WITH_AUTO_ORE_UPPER_OUTPUT,
                              RC_CMD_PLAN_PC_AUTO_CTRL> >()
               .priority(cmd::Priority::Auto),
           cmd::from<RcRuntimeInput, RcChassisAutoOreRoute>()
@@ -2093,6 +2102,7 @@ static void Rc_ConfigureCmdCenter(void) {
               .priority(cmd::Priority::Remote),
           cmd::from<RcRuntimeInput, RcPoleAutoCtrlRoute>()
               .when<RcPlanIn<RC_CMD_PLAN_AUTO_CTRL_OUTPUT,
+                     RC_CMD_PLAN_AUTO_CTRL_WITH_AUTO_ORE_UPPER_OUTPUT,
                              RC_CMD_PLAN_PC_AUTO_CTRL> >()
               .priority(cmd::Priority::Auto),
           cmd::from<RcRuntimeInput, RcPoleAutoOreRoute>()
@@ -2128,6 +2138,7 @@ static void Rc_ConfigureCmdCenter(void) {
               .priority(cmd::Priority::Remote),
           cmd::from<RcRuntimeInput, RcArmSimpleAutoOreRoute>()
               .when<RcPlanIn<RC_CMD_PLAN_AUTO_ORE_OUTPUT,
+              RC_CMD_PLAN_AUTO_CTRL_WITH_AUTO_ORE_UPPER_OUTPUT,
                      RC_CMD_PLAN_AUTO_ORE_PC_CHASSIS_OUTPUT> >()
               .priority(cmd::Priority::CriticalAuto),
           cmd::from<RcRuntimeInput, RcArmSimpleHoldRoute>()
@@ -2160,6 +2171,7 @@ static void Rc_ConfigureCmdCenter(void) {
               .priority(cmd::Priority::Remote),
           cmd::from<RcRuntimeInput, RcOreStoreAutoOreRoute>()
               .when<RcPlanIn<RC_CMD_PLAN_AUTO_ORE_OUTPUT,
+              RC_CMD_PLAN_AUTO_CTRL_WITH_AUTO_ORE_UPPER_OUTPUT,
                      RC_CMD_PLAN_AUTO_ORE_PC_CHASSIS_OUTPUT> >()
               .priority(cmd::Priority::CriticalAuto),
           cmd::from<RcRuntimeInput, RcOreStoreAutoRodRoute>()
