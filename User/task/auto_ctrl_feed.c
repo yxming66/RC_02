@@ -81,6 +81,10 @@ static AutoOre_DebugRequest_t pending_auto_action_request =
 #define AUTO_CTRL_POLE_TARGET_STABLE_CYCLES (5u)
 #endif
 
+#ifndef AUTO_CTRL_MANUAL_STEP_YAW_TOLERANCE_RAD
+#define AUTO_CTRL_MANUAL_STEP_YAW_TOLERANCE_RAD (0.0872664626f)
+#endif
+
 static uint8_t pole_front_at_target_stable_count = 0u;
 static uint8_t pole_rear_at_target_stable_count = 0u;
 static uint8_t pole_all_at_target_stable_count = 0u;
@@ -781,6 +785,43 @@ static void AutoCtrlFeed_SetStepCompleteFeedback(
   feedback->segment_finished_mask |= PC_AUTO_ACTION_SEGMENT_STEP;
 }
 
+static void AutoCtrlFeed_SetOreCompleteFeedback(
+    PC_AutoActionFeedback_t *feedback) {
+  if (feedback == 0) {
+    return;
+  }
+
+  switch ((PC_AutoAction_t)feedback->action) {
+    case PC_AUTO_ACTION_PICK_POS_400:
+    case PC_AUTO_ACTION_PICK_POS_200:
+    case PC_AUTO_ACTION_PICK_NEG_200:
+      feedback->segment_finished_mask |= PC_AUTO_ACTION_SEGMENT_PICK;
+      break;
+    case PC_AUTO_ACTION_STORE:
+      feedback->segment_finished_mask |= PC_AUTO_ACTION_SEGMENT_STORE;
+      break;
+    case PC_AUTO_ACTION_RECOVER_STORE:
+    case PC_AUTO_ACTION_PICK_STORE_POS_400:
+    case PC_AUTO_ACTION_PICK_STORE_POS_200:
+    case PC_AUTO_ACTION_PICK_STORE_NEG_200:
+      feedback->segment_finished_mask |=
+          PC_AUTO_ACTION_SEGMENT_PICK | PC_AUTO_ACTION_SEGMENT_STORE;
+      break;
+    case PC_AUTO_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD:
+    case PC_AUTO_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD:
+    case PC_AUTO_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD:
+    case PC_AUTO_ACTION_STEP_DROP_STORE_ASCEND_200_HEAD:
+    case PC_AUTO_ACTION_STEP_DROP_STORE_DESCEND_200_HEAD:
+    case PC_AUTO_ACTION_STEP_DROP_STORE_ASCEND_400_HEAD:
+      feedback->segment_finished_mask |=
+          PC_AUTO_ACTION_SEGMENT_PICK | PC_AUTO_ACTION_SEGMENT_STORE |
+          PC_AUTO_ACTION_SEGMENT_STEP;
+      break;
+    default:
+      break;
+  }
+}
+
 static void AutoCtrlFeed_SetRodSpearheadCompleteFeedback(
     PC_AutoActionFeedback_t *feedback) {
   if (feedback == 0) {
@@ -878,6 +919,8 @@ static uint16_t AutoCtrlFeed_OreActionFailureMask(AutoOre_Action_t action) {
       return PC_AUTO_ACTION_FAILURE_STORE_ORE;
     case AUTO_ORE_ACTION_RELEASE:
     case AUTO_ORE_ACTION_RELEASE_LIFT_DETECT:
+    case AUTO_ORE_ACTION_RELEASE_STEP1:
+    case AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP1:
       return PC_AUTO_ACTION_FAILURE_RELEASE_ORE;
     case AUTO_ORE_ACTION_CHAMBER:
       return PC_AUTO_ACTION_FAILURE_CHAMBER;
@@ -910,10 +953,23 @@ static uint16_t AutoCtrlFeed_OreFailureMask(AutoOre_Action_t action) {
   return AutoCtrlFeed_OreActionFailureMask(action);
 }
 
+static bool AutoCtrlFeed_OreActionReportsRealResult(
+    PC_AutoAction_t action) {
+  return action == PC_AUTO_ACTION_RELEASE_STEP1 ||
+         action == PC_AUTO_ACTION_RELEASE_LIFT_DETECT_STEP1;
+}
+
 static uint16_t AutoCtrlFeed_RodFailureMask(PC_AutoAction_t action) {
   return (action == PC_AUTO_ACTION_ROD_DOCK_WAIT)
              ? PC_AUTO_ACTION_FAILURE_ROD_DOCK_WAIT
              : PC_AUTO_ACTION_FAILURE_ROD_SPEARHEAD;
+}
+
+static bool AutoCtrlFeed_RodActionReportsRealResult(
+    PC_AutoAction_t action) {
+  return action == PC_AUTO_ACTION_ROD_SPEARHEAD_STEP1 ||
+         action == PC_AUTO_ACTION_ROD_SPEARHEAD_STEP2 ||
+         action == PC_AUTO_ACTION_ROD_DOCK_WAIT;
 }
 
 static void AutoCtrlFeed_SetFeedbackSuccess(
@@ -929,6 +985,13 @@ static void AutoCtrlFeed_SetFeedbackFail(PC_AutoActionFeedback_t *feedback,
   feedback->finished = 1u;
   feedback->result = (uint8_t)PC_AUTO_ACTION_RESULT_SUCCESS;
   feedback->failure_mask = 0u;
+}
+
+static void AutoCtrlFeed_SetFeedbackRealFail(
+    PC_AutoActionFeedback_t *feedback, uint16_t failure_mask) {
+  feedback->finished = 1u;
+  feedback->result = (uint8_t)PC_AUTO_ACTION_RESULT_FAIL;
+  feedback->failure_mask = failure_mask;
 }
 
 static bool AutoCtrlFeed_StartOreAction(AutoOre_Action_t action) {
@@ -1057,7 +1120,7 @@ static bool AutoCtrlFeed_StartStepAction(PC_AutoAction_t action) {
       template_id,
       AUTO_CTRL_TRAVEL_DIR_HEAD_FORWARD,
       feedback.yaw_auto_rad,
-      0.0f,
+      AUTO_CTRL_MANUAL_STEP_YAW_TOLERANCE_RAD,
       AUTO_CTRL_SENSOR_MODE_NONE,
       now_ms);
   if (result) {
@@ -1165,12 +1228,25 @@ static void AutoCtrlFeed_PublishAutoActionFeedback(void) {
     const AutoOre_Result_t result = AutoOre_GetResult(&auto_ore_ctrl);
     if (result == AUTO_ORE_RESULT_SUCCESS) {
       AutoCtrlFeed_SetFeedbackSuccess(&pc_feedback);
+      AutoCtrlFeed_SetOreCompleteFeedback(&pc_feedback);
     } else if (result == AUTO_ORE_RESULT_FAIL) {
-      AutoCtrlFeed_SetFeedbackFail(
-          &pc_feedback, AutoCtrlFeed_OreFailureMask(auto_ore_last_action));
+      const uint16_t failure_mask =
+          AutoCtrlFeed_OreFailureMask(auto_ore_last_action);
+      if (AutoCtrlFeed_OreActionReportsRealResult(
+              (PC_AutoAction_t)pc_feedback.action)) {
+        AutoCtrlFeed_SetFeedbackRealFail(&pc_feedback, failure_mask);
+      } else {
+        AutoCtrlFeed_SetFeedbackFail(&pc_feedback, failure_mask);
+      }
     } else if (result == AUTO_ORE_RESULT_ABORTED) {
-      AutoCtrlFeed_SetFeedbackFail(&pc_feedback,
-                                   PC_AUTO_ACTION_FAILURE_ABORTED);
+      if (AutoCtrlFeed_OreActionReportsRealResult(
+              (PC_AutoAction_t)pc_feedback.action)) {
+        AutoCtrlFeed_SetFeedbackRealFail(&pc_feedback,
+                                         PC_AUTO_ACTION_FAILURE_ABORTED);
+      } else {
+        AutoCtrlFeed_SetFeedbackFail(&pc_feedback,
+                                     PC_AUTO_ACTION_FAILURE_ABORTED);
+      }
     }
   } else if (AutoCtrlFeed_IsStepAction(auto_action_last_action) &&
              auto_ctrl_inited) {
@@ -1181,6 +1257,7 @@ static void AutoCtrlFeed_PublishAutoActionFeedback(void) {
     } else if (result == AUTO_CTRL_RESULT_FAIL) {
       AutoCtrlFeed_SetFeedbackFail(&pc_feedback,
                                    PC_AUTO_ACTION_FAILURE_STEP);
+      AutoCtrlFeed_SetStepCompleteFeedback(&pc_feedback);
     } else if (result == AUTO_CTRL_RESULT_ABORTED) {
       AutoCtrlFeed_SetFeedbackFail(&pc_feedback,
                                    PC_AUTO_ACTION_FAILURE_ABORTED);
@@ -1195,12 +1272,23 @@ static void AutoCtrlFeed_PublishAutoActionFeedback(void) {
       AutoCtrlFeed_SetFeedbackSuccess(&pc_feedback);
       AutoCtrlFeed_SetRodSpearheadCompleteFeedback(&pc_feedback);
     } else if (result == AUTO_ROD_SPEARHEAD_RESULT_FAIL) {
-      AutoCtrlFeed_SetFeedbackFail(
-          &pc_feedback,
-          AutoCtrlFeed_RodFailureMask((PC_AutoAction_t)pc_feedback.action));
+      const uint16_t failure_mask = AutoCtrlFeed_RodFailureMask(
+          (PC_AutoAction_t)pc_feedback.action);
+      if (AutoCtrlFeed_RodActionReportsRealResult(
+              (PC_AutoAction_t)pc_feedback.action)) {
+        AutoCtrlFeed_SetFeedbackRealFail(&pc_feedback, failure_mask);
+      } else {
+        AutoCtrlFeed_SetFeedbackFail(&pc_feedback, failure_mask);
+      }
     } else if (result == AUTO_ROD_SPEARHEAD_RESULT_ABORTED) {
-      AutoCtrlFeed_SetFeedbackFail(&pc_feedback,
-                                   PC_AUTO_ACTION_FAILURE_ABORTED);
+      if (AutoCtrlFeed_RodActionReportsRealResult(
+              (PC_AutoAction_t)pc_feedback.action)) {
+        AutoCtrlFeed_SetFeedbackRealFail(&pc_feedback,
+                                         PC_AUTO_ACTION_FAILURE_ABORTED);
+      } else {
+        AutoCtrlFeed_SetFeedbackFail(&pc_feedback,
+                                     PC_AUTO_ACTION_FAILURE_ABORTED);
+      }
     }
   } else if (AutoCtrlFeed_IsSickCorrectAction(auto_action_last_action) &&
              auto_sick_correct_inited) {

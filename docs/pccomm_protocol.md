@@ -459,7 +459,8 @@ payload 为 8 字节，Python unpack 格式为 `<BBBBHBB`。
 5. `action` 始终表示当前运行或最近结束的一键动作；空闲且从未执行过时为 `PC_AUTO_ACTION_NONE`。
 6. 对融合取矿/存矿/上下台阶动作，`segment_finished_mask & bit0` 表示 arm 已把矿交给存矿机构并退出交接位，可准备取下一个矿；低位存矿中对应 `WAIT_STORE_ORE + SUCTION_OFF` 到位。
 7. 对融合取矿/存矿/上下台阶动作，`segment_finished_mask & bit1` 表示存矿机构侧流程完成；`segment_finished_mask & bit2` 表示台阶/底盘侧流程完成，PC 可以进入下一个导航航点。
-8. 对普通上下台阶动作，成功结束时 `segment_finished_mask & bit2`；失败或运行中保持为 0。对其它非融合动作，分段完成 mask 固定按保留字段处理，PC 不应依赖它判定动作完成。
+8. 对单独取矿动作，成功结束时置 `bit0`；对单独存矿动作，成功结束时置 `bit1`；对普通上下台阶动作，成功结束时置 `bit2`；失败、运行中或中止时对应分段位保持为 0。
+9. 对 `PICK_STORE_POS_*` 和 `RECOVER_STORE`，成功结束时同时置 `bit0 | bit1`；对放矿、上膛、SICK 校正等非分段动作，PC 不应依赖 `segment_finished_mask` 判定动作完成。
 
 Python 示例：
 

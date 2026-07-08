@@ -83,7 +83,7 @@ Config_RobotParam_t robot_config = {
                 .k = 3.1f,
                 .p = 5.0f,
                 .i = 2.0f,
-                .d = 0.50f,
+                .d = 0.00f,
                 .i_limit = 1.0f,
                 .out_limit = 6.0f,
                 .d_cutoff_freq = 0.0f,
@@ -244,7 +244,7 @@ Config_RobotParam_t robot_config = {
                 /* 平台等待矛头对接位置 */
                 [ORE_STORE_TRANSFORM_SPEARHEAD_DOCK_WAIT] = 0.340454519f,
                 /* 取矛头平台预设位 */
-                [ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP] = 22.0003597//23.2407284f//22.3003597f,
+                [ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP] = 23.3183613//23.2407284f//22.3003597f,
             },
         },
         .fixed_ore_cylinder = {    

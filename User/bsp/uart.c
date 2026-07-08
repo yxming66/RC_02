@@ -135,8 +135,8 @@ UART_HandleTypeDef *BSP_UART_GetHandle(BSP_UART_t uart) {
   switch (uart) {
     case BSP_UART_RC:
       return &huart5;
-    case BSP_UART_RF_RC:
-      return &huart9;
+    // case BSP_UART_RF_RC:
+    //   return &huart9;
     case BSP_UART_PC:
       return &huart1;
     case BSP_UART_IR:

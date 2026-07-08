@@ -861,16 +861,11 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
   switch (ctrl->template_ctx.step_index) {
     case 0: /* 头向下台阶起步，杆到起步高度后快速接近。 */
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      // AutoCtrlTemplate_CommandPole(ctrl,
-      //                              use_400mm ? pole.all_retract[0]
-      //                                        : pole.small[0],
-      //                              use_400mm ? pole.all_retract[1]
-      //                                        : pole.small[1],
-      //                              param->pole_front_retract_speed,
-      //                              param->pole_rear_retract_speed);
       if (AutoCtrlTemplate_RunDescendStartSprint(
-              ctrl, now_ms, param, param->mid_move_speed, pole.small[0],
-              pole.small[1], param->pole_front_retract_speed,
+              ctrl, now_ms, param, param->mid_move_speed,
+              use_400mm ? pole.all_retract[0] : pole.small[0],
+              use_400mm ? pole.all_retract[1] : pole.small[1],
+              param->pole_front_retract_speed,
               param->pole_rear_retract_speed)) {
         AutoCtrlTemplate_NextStep(ctrl);
       }
