@@ -49,6 +49,7 @@ typedef enum {
     PC_CMD_IMU = 0x20,           /* PC 下发姿态数据命令 */
     PC_CMD_IR_ORE_ACK = 0x21,    /* PC 透传红外对接 ACK 帧，payload 为 6 字节原始 ACK */
     PC_CMD_R2_READY_STATE = 0x22,/* PC 下发 R2 准备/重试状态，驱动灯效模式 */
+    PC_CMD_DOCK_COMPLETE = 0x23, /* PC 视觉识别到矛头对接完成，payload 为 1 字节 complete */
 } PC_CMD_t;
 
 typedef enum {
@@ -273,6 +274,10 @@ typedef enum {
 typedef struct {
     uint8_t state;    /* 见 PC_R2ReadyState_t */
 } PC_R2ReadyStateCMD_t;
+
+typedef struct {
+    uint8_t complete; /* PC 视觉对接完成信号，0=未完成/清除，1=完成 */
+} PC_DockCompleteCMD_t;
 
 typedef enum {
     PC_STEP_TEMPLATE_NONE = 0,              /* 无自动台阶流程 */
@@ -512,6 +517,7 @@ typedef struct {
     PC_ImuCMD_t imu;                     /* 最近一次 PC 姿态数据 */
     PC_IrOreAckCMD_t ir_ore_ack;             /* 待转发到红外对接 UART 的 ACK 原始帧 */
     PC_R2ReadyStateCMD_t r2_ready_state;     /* 最近一次 PC 下发的 R2 准备/重试状态 */
+    PC_DockCompleteCMD_t dock_complete;      /* 最近一次 PC 视觉对接完成信号 */
 } MrlinkPc_CMD_Data_t;
 
 typedef struct {
@@ -618,6 +624,9 @@ typedef struct {
     PC_R2ReadyStateCMD_t rx_r2_ready_state; /* 调试用：最近一次 R2 准备/重试状态 */
     uint32_t rx_r2_ready_state_count;        /* 收到 PC_CMD_R2_READY_STATE 的次数 */
     uint8_t r2_ready_light_mode;             /* 最近一次 R2 状态映射到的灯效模式 */
+    PC_DockCompleteCMD_t rx_dock_complete;   /* 调试用：最近一次 PC 视觉对接完成信号 */
+    uint32_t rx_dock_complete_count;         /* 收到 PC_CMD_DOCK_COMPLETE 的次数 */
+    uint32_t dock_complete_tick;             /* 最近一次 PC 视觉对接完成 tick，单位 ms */
 
     uint32_t tx_count;                /* 反馈发送尝试次数 */
     uint8_t tx_dma_busy;              /* 发送 DMA 忙标志，0=空闲，1=忙 */
@@ -722,6 +731,12 @@ bool MrlinkPc_IsR2Ready(void);
 
 /* 最近一次 PC_CMD_R2_READY_STATE 接收 tick，单位 ms；未收到过时为 0。 */
 uint32_t MrlinkPc_GetR2ReadyStateTickMs(void);
+
+/* 返回最近一次 PC 视觉对接完成信号是否为 complete=1。 */
+bool MrlinkPc_IsDockComplete(void);
+
+/* 最近一次 PC 视觉对接完成信号接收 tick，单位 ms；未收到过时为 0。 */
+uint32_t MrlinkPc_GetDockCompleteTickMs(void);
 
 /* 发布某个反馈 topic 的最新数据；topic 见 PC_FeedbackCMD_t，feedback 指向对应反馈结构体。 */
 bool MrlinkPc_PublishFeedback(uint8_t topic, const void *feedback);

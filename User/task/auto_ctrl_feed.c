@@ -1700,15 +1700,9 @@ static void AutoCtrlFeed_UpdateAutoRodSpearhead(uint32_t now_ms,
     return;
   }
 
-  uint32_t dock_complete_rx_ms = 0u;
-  (void)IrDock_IsDockCompleteFresh(now_ms);
-  dock_complete_rx_ms = g_ir_dock_debug.last_complete_rx_ms;
-  if (MrlinkPc_IsR2Ready()) {
-    const uint32_t r2_ready_tick_ms = MrlinkPc_GetR2ReadyStateTickMs();
-    if (r2_ready_tick_ms > dock_complete_rx_ms) {
-      dock_complete_rx_ms = r2_ready_tick_ms;
-    }
-  }
+  const uint32_t dock_complete_rx_ms = MrlinkPc_IsDockComplete()
+                                           ? MrlinkPc_GetDockCompleteTickMs()
+                                           : 0u;
 
   AutoRodSpearhead_Feedback_t feedback = {
       .rod_photo_triggered = AutoCtrlFeed_ReadRodSpearheadPhoto(),
@@ -2334,7 +2328,7 @@ const Pole_CMD_t *Task_AutoSickCorrectGetPoleCommand(void) {
 }
 
 bool Task_IrDockIsDockCompleteFresh(void) {
-  return IrDock_IsDockCompleteFresh(BSP_TIME_Get_ms()) || MrlinkPc_IsR2Ready();
+  return MrlinkPc_IsDockComplete();
 }
 
 /* Exported functions ------------------------------------------------------- */

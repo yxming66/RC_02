@@ -109,17 +109,18 @@ static bool IrDock_SendCommandAck(uint8_t cmd, uint32_t now_ms) {
   ir_dock_tx_buf[0] = IR_DOCK_STATUS_ACK_HEAD;
   ir_dock_tx_buf[1] = cmd;
 
-  if (BSP_UART_Transmit(BSP_UART_IR, ir_dock_tx_buf,
-                        IR_DOCK_STATUS_ACK_FRAME_SIZE, true) == HAL_OK) {
-    IrDock_CopyVolatileBytes(g_ir_dock_debug.last_ack_frame, ir_dock_tx_buf,
-                             IR_DOCK_STATUS_ACK_FRAME_SIZE);
-    g_ir_dock_debug.last_tx_status = cmd;
-    g_ir_dock_debug.last_tx_len = IR_DOCK_STATUS_ACK_FRAME_SIZE;
-    g_ir_dock_debug.last_tx_ms = now_ms;
-    g_ir_dock_debug.tx_busy = true;
-    g_ir_dock_debug.tx_count++;
-    g_ir_dock_debug.ack_tx_count++;
-    g_ir_dock_debug.status_ack_tx_count++;
+  // if (BSP_UART_Transmit(BSP_UART_IR, ir_dock_tx_buf,
+  //                       IR_DOCK_STATUS_ACK_FRAME_SIZE, true) == HAL_OK) 
+                        {
+    // IrDock_CopyVolatileBytes(g_ir_dock_debug.last_ack_frame, ir_dock_tx_buf,
+    //                          IR_DOCK_STATUS_ACK_FRAME_SIZE);
+    // g_ir_dock_debug.last_tx_status = cmd;
+    // g_ir_dock_debug.last_tx_len = IR_DOCK_STATUS_ACK_FRAME_SIZE;
+    // g_ir_dock_debug.last_tx_ms = now_ms;
+    // g_ir_dock_debug.tx_busy = true;
+    // g_ir_dock_debug.tx_count++;
+    // g_ir_dock_debug.ack_tx_count++;
+    // g_ir_dock_debug.status_ack_tx_count++;
     return true;
   }
 

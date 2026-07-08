@@ -76,6 +76,7 @@ static uint32_t s_rod_new_cmd_tick = 0u;
 static uint32_t s_ore_store_cmd_tick = 0u;
 static bool s_ir_ore_ack_pending = false;
 static uint32_t s_r2_ready_state_tick = 0u;
+static uint32_t s_dock_complete_tick = 0u;
 static uint32_t s_debug_last_full_update_ms = 0u;
 
 bool IsRecentCommand(bool received, uint32_t tick, uint32_t now_ms) {
@@ -186,6 +187,9 @@ void TouchOnline(uint8_t cmd) {
       break;
     case PC_CMD_R2_READY_STATE:
       g_pc_comm_debug.rx_r2_ready_state_count++;
+      break;
+    case PC_CMD_DOCK_COMPLETE:
+      g_pc_comm_debug.rx_dock_complete_count++;
       break;
     default:
       break;
@@ -363,6 +367,14 @@ void OnR2ReadyState(const wire::R2ReadyStateCmd &cmd) {
   TouchOnline(PC_CMD_R2_READY_STATE);
 }
 
+void OnDockComplete(const wire::DockCompleteCmd &cmd) {
+  const uint32_t now_ms = BSP_TIME_Get_ms();
+  s_state.cmd.dock_complete.complete = cmd.complete ? 1u : 0u;
+  s_dock_complete_tick = now_ms;
+  MarkRxFrame(PC_CMD_DOCK_COMPLETE, sizeof(cmd), MRLINK_OK);
+  TouchOnline(PC_CMD_DOCK_COMPLETE);
+}
+
 void OnMrlinkError(const MrLink_ErrorInfo_t &err) {
   g_pc_comm_debug.mrlink_error_count++;
   g_pc_comm_debug.mrlink_last_error_code = static_cast<uint8_t>(err.code);
@@ -394,6 +406,8 @@ bool RegisterHandlers() {
          s_bus.SubscribeLatest<PC_ImuCMD_t>(OnImu) == MRLINK_OK &&
          s_bus.Subscribe<PC_IrOreAckCMD_t>(OnIrOreAck) == MRLINK_OK &&
          s_bus.SubscribeLatest<wire::R2ReadyStateCmd>(OnR2ReadyState) ==
+           MRLINK_OK &&
+         s_bus.SubscribeLatest<wire::DockCompleteCmd>(OnDockComplete) ==
            MRLINK_OK;
 }
 
@@ -741,6 +755,9 @@ extern "C" void MrlinkPc_DebugUpdate(void) {
   CopyPlainToVolatile(&g_pc_comm_debug.rx_imu, &s_state.cmd.imu);
   CopyPlainToVolatile(&g_pc_comm_debug.rx_r2_ready_state,
                       &s_state.cmd.r2_ready_state);
+  CopyPlainToVolatile(&g_pc_comm_debug.rx_dock_complete,
+                      &s_state.cmd.dock_complete);
+  g_pc_comm_debug.dock_complete_tick = s_dock_complete_tick;
   CopyPlainToVolatile(&g_pc_comm_debug.rx_ir_ore_ack,
                       &s_state.cmd.ir_ore_ack);
   const MrLink_Stats_t *stats = s_bus.GetStats();
@@ -839,6 +856,14 @@ extern "C" bool MrlinkPc_IsR2Ready(void) {
 
 extern "C" uint32_t MrlinkPc_GetR2ReadyStateTickMs(void) {
   return s_r2_ready_state_tick;
+}
+
+extern "C" bool MrlinkPc_IsDockComplete(void) {
+  return s_state.cmd.dock_complete.complete != 0u;
+}
+
+extern "C" uint32_t MrlinkPc_GetDockCompleteTickMs(void) {
+  return s_dock_complete_tick;
 }
 
 extern "C" bool MrlinkPc_PublishFeedback(uint8_t topic,
