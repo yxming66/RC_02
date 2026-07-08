@@ -162,9 +162,9 @@ Config_RobotParam_t robot_config = {
             .step_400_all_retract = {0.4f, 0.2f},
 
             /* 200mm 下台阶四杆全伸位。 */
-            .step_200_descend_all_extend = {5.0230465f, 5.00230465f},
+            .step_200_descend_all_extend = {5.2230465f, 5.20230465f},
             /* 200mm 下台阶前杆收回、后杆保持支撑位。 */
-            .step_200_descend_front_retract = {0.1f, 5.00230465f},
+            .step_200_descend_front_retract = {0.1f, 5.20230465f},
             /* 200mm 下台阶四杆全收位。 */
             .step_200_descend_all_retract = {0.1f, 0.1f},
             /* 200mm 下台阶起步/小抬升位。 */
@@ -647,7 +647,7 @@ Config_RobotParam_t robot_config = {
         /* 模块参数：头向下台阶 200mm head_descend_200。 */
         .head_descend_200 = {
             .photo_stop_settle_ms = 0u,
-            .descend_start_pole_lift_threshold = 2.0f,
+            .descend_start_pole_lift_threshold = 0.0f,
             /*
      
             
@@ -687,7 +687,7 @@ Config_RobotParam_t robot_config = {
         /* 模块参数：头向下台阶 400mm head_descend_400。 */
         .head_descend_400 = {
             .photo_stop_settle_ms = 0u,
-            .descend_start_pole_lift_threshold = 2.0f,
+            .descend_start_pole_lift_threshold = 0.0f,
             /*
              * 固定起步优化流程：
              * - mid_move_speed/mid_move_ms：第一次固定快速靠近。

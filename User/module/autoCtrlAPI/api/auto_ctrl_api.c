@@ -60,8 +60,9 @@ static const float *AutoCtrl_GetPrealignPoleTarget(
 
   switch (template_id) {
     case AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD:
+      return robot_param->pole_param.preset.step_200_descend_all_retract;
     case AUTO_CTRL_TEMPLATE_DESCEND_400_HEAD:
-      return robot_param->pole_param.preset.step_200_descend_small;
+      return robot_param->pole_param.preset.step_400_descend_all_retract;
     case AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD:
     case AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD:
     case AUTO_CTRL_TEMPLATE_NONE:

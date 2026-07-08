@@ -388,7 +388,7 @@ static void AutoCtrlTemplate_SelectPoleTargets(
         robot_param->pole_param.preset.step_400_descend_front_retract;
     targets->all_retract =
         robot_param->pole_param.preset.step_400_descend_all_retract;
-    targets->small = robot_param->pole_param.preset.step_200_descend_small;
+    targets->small = robot_param->pole_param.preset.step_400_descend_all_retract;
     return;
   }
 
@@ -408,7 +408,7 @@ static void AutoCtrlTemplate_SelectPoleTargets(
         robot_param->pole_param.preset.step_200_descend_front_retract;
     targets->all_retract =
         robot_param->pole_param.preset.step_200_descend_all_retract;
-    targets->small = robot_param->pole_param.preset.step_200_descend_small;
+    targets->small = robot_param->pole_param.preset.step_200_descend_all_retract;
     return;
   }
 

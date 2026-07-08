@@ -67,6 +67,10 @@
 #define RC_PC_RETRY_CH_L_X_THRESHOLD (0.90f)
 #endif
 
+#ifndef RC_PC_START_MATCH_ENABLE
+#define RC_PC_START_MATCH_ENABLE (1u)
+#endif
+
 #ifndef RC_MANUAL_IO_CH_THRESHOLD
 #define RC_MANUAL_IO_CH_THRESHOLD (0.90f)
 
@@ -1059,16 +1063,35 @@ static bool Rc_ShouldUsePcCommand(void) {
          dr16.data.sw_r == DR16_SW_UP;
 }
 
-static bool rc_pc_behavior_was_active = false;
+static bool rc_pc_retry_was_active = false;
+
+static bool Rc_ShouldRequestStartMatchBySwitch(void) {
+#if RC_PC_START_MATCH_ENABLE
+  const bool last_switch_valid = last_sw_l != DR16_SW_ERR &&
+                                 last_sw_r != DR16_SW_ERR;
+  const bool current_pc_page = dr16.data.sw_l == DR16_SW_UP &&
+                               dr16.data.sw_r == DR16_SW_UP;
+  const bool previous_pc_page = last_sw_l == DR16_SW_UP &&
+                                last_sw_r == DR16_SW_UP;
+  return dr16.header.online && last_switch_valid && current_pc_page &&
+         !previous_pc_page;
+#else
+  return false;
+#endif
+}
 
 static void Rc_UpdatePcRetryRequest(void) {
   if (!dr16.header.online || dr16.data.sw_l != DR16_SW_UP ||
       dr16.data.sw_r != DR16_SW_UP) {
+    rc_pc_retry_was_active = false;
     return;
   }
 
-  (void)MrlinkPc_RequestRetry(
-      (dr16.data.ch_l_x > RC_PC_RETRY_CH_L_X_THRESHOLD) ? 1u : 0u);
+  const bool retry_active = dr16.data.ch_l_x > RC_PC_RETRY_CH_L_X_THRESHOLD;
+  if (retry_active && !rc_pc_retry_was_active) {
+    (void)MrlinkPc_RequestRetry(1u);
+  }
+  rc_pc_retry_was_active = retry_active;
 }
 
 static RcControlPage_t Rc_PageForBehavior(RcBehavior_t behavior) {
@@ -2252,12 +2275,10 @@ void RcCmdCenterApp_Update(uint32_t now_ms) {
 
   behavior = Rc_SelectMappedBehavior();
   rc_current_plan = Rc_SelectCommandPlan(behavior);
-  const bool pc_behavior_active = (behavior == RC_BEHAVIOR_PC);
-  if (pc_behavior_active && !rc_pc_behavior_was_active) {
+  if (Rc_ShouldRequestStartMatchBySwitch()) {
     (void)MrlinkPc_RequestStartMatch(1u);
   }
   Rc_UpdatePcRetryRequest();
-  rc_pc_behavior_was_active = pc_behavior_active;
   rc_cmd_center.tick(now_ms).publish();
   Rc_PublishCommandsAndDebug(update_debug);
   Rc_UpdateAutoBusyHistory();
