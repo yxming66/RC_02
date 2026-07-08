@@ -110,7 +110,7 @@ static bool IrDock_SendCommandAck(uint8_t cmd, uint32_t now_ms) {
   ir_dock_tx_buf[1] = cmd;
 
   if (BSP_UART_Transmit(BSP_UART_IR, ir_dock_tx_buf,
-                        IR_DOCK_STATUS_ACK_FRAME_SIZE, false) == HAL_OK) {
+                        IR_DOCK_STATUS_ACK_FRAME_SIZE, true) == HAL_OK) {
     IrDock_CopyVolatileBytes(g_ir_dock_debug.last_ack_frame, ir_dock_tx_buf,
                              IR_DOCK_STATUS_ACK_FRAME_SIZE);
     g_ir_dock_debug.last_tx_status = cmd;
@@ -244,7 +244,7 @@ static bool IrDock_TryStartReceive(uint32_t now_ms) {
   }
 
   if (BSP_UART_ReceiveToIdle(BSP_UART_IR, ir_dock_rx_buf,
-                             IR_DOCK_RX_BUFFER_SIZE, false) == HAL_OK) {
+                             IR_DOCK_RX_BUFFER_SIZE, true) == HAL_OK) {
     g_ir_dock_debug.last_rx_start_ms = now_ms;
     g_ir_dock_debug.rx_busy = true;
     return true;
