@@ -184,6 +184,10 @@ typedef struct {
   volatile AutoSickCorrect_Fault_t auto_sick_correct_fault;
   volatile AutoSickCorrect_Action_t auto_sick_correct_action;
   volatile uint8_t auto_sick_correct_step_index;
+  volatile float pc_pole_speed_limit_rad_s;
+  volatile float pc_pole_accel_limit_rad_s;
+  volatile float pc_pole_cmd_front_lift_rad;
+  volatile float pc_pole_cmd_rear_lift_rad;
 } RcControlDebug_t;
 
 volatile RcControlDebug_t g_rc_control_debug = {};
@@ -208,6 +212,14 @@ static bool ore_store_active_initialized = false;
 static bool arm_simple_target_initialized = false;
 static bool auto_ctrl_was_busy = false;
 static bool auto_ore_was_busy = false;
+
+#ifndef RC_PC_POLE_SPEED_LIMIT_RAD_S
+#define RC_PC_POLE_SPEED_LIMIT_RAD_S (30.0f)
+#endif
+
+#ifndef RC_PC_POLE_ACCEL_LIMIT_RAD_S2
+#define RC_PC_POLE_ACCEL_LIMIT_RAD_S2 (0.0f)
+#endif
 static bool auto_rod_spearhead_was_busy = false;
 static bool auto_sick_correct_was_busy = false;
 static bool auto_rod_spearhead_hold_after_finish = false;
@@ -671,11 +683,21 @@ static bool Rc_SetPolePcCommand(bool require_received_cmd) {
   pole_cmd.auto_target_enable[1] = (pole_cmd.mode == POLE_MODE_ACTIVE);
   pole_cmd.auto_target_lift[0] = pc_pole_cmd->lift[0];
   pole_cmd.auto_target_lift[1] = pc_pole_cmd->lift[1];
-  pole_cmd.auto_lift_speed[0] = -1.0f;
-  pole_cmd.auto_lift_speed[1] = -1.0f;
-  pole_cmd.auto_lift_accel[0] = -1.0f;
-  pole_cmd.auto_lift_accel[1] = -1.0f;
-  pole_cmd.disable_lift_accel = false;
+  if (g_rc_control_debug.pc_pole_speed_limit_rad_s == 0.0f) {
+    g_rc_control_debug.pc_pole_speed_limit_rad_s =
+        RC_PC_POLE_SPEED_LIMIT_RAD_S;
+  }
+  if (g_rc_control_debug.pc_pole_accel_limit_rad_s == 0.0f) {
+    g_rc_control_debug.pc_pole_accel_limit_rad_s =
+        RC_PC_POLE_ACCEL_LIMIT_RAD_S2;
+  }
+  pole_cmd.auto_lift_speed[0] = g_rc_control_debug.pc_pole_speed_limit_rad_s;
+  pole_cmd.auto_lift_speed[1] = g_rc_control_debug.pc_pole_speed_limit_rad_s;
+  pole_cmd.auto_lift_accel[0] = g_rc_control_debug.pc_pole_accel_limit_rad_s;
+  pole_cmd.auto_lift_accel[1] = g_rc_control_debug.pc_pole_accel_limit_rad_s;
+  pole_cmd.disable_lift_accel = pole_cmd.auto_lift_accel[0] <= 0.0f;
+  g_rc_control_debug.pc_pole_cmd_front_lift_rad = pc_pole_cmd->lift[0];
+  g_rc_control_debug.pc_pole_cmd_rear_lift_rad = pc_pole_cmd->lift[1];
   return true;
 }
 
