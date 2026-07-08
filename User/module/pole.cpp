@@ -27,11 +27,14 @@ float Pole_ClampTrackedLiftAtLimit(Pole_t *c, uint8_t side, float lift) {
   if (c == NULL || c->param == NULL || side >= 2u) return lift;
 
   const float travel = Pole_PositiveOrZero(c->param->limit.support_total_travel);
+  const float min_target = mr::component::math::clamp_scalar(
+      Pole_PositiveOrZero(c->param->limit.support_min_target_lift), 0.0f,
+      travel);
   const float clamped_lift =
-      mr::component::math::clamp_scalar(lift, 0.0f, travel);
+      mr::component::math::clamp_scalar(lift, min_target, travel);
   float *velocity = &c->support_angle.tracked_target_velocity[side];
 
-  if ((clamped_lift <= kPoleLiftLimitEpsilon && *velocity < 0.0f) ||
+  if ((clamped_lift <= min_target + kPoleLiftLimitEpsilon && *velocity < 0.0f) ||
       (clamped_lift >= travel - kPoleLiftLimitEpsilon && *velocity > 0.0f)) {
     *velocity = 0.0f;
   }
@@ -371,12 +374,15 @@ int8_t Pole_Control(Pole_t *c, const Pole_CMD_t *c_cmd, uint32_t now) {
     }
     c->support_angle.auto_target_was_enabled[side] = auto_target_enabled;
 
+    const float min_target = mr::component::math::clamp_scalar(
+      Pole_PositiveOrZero(c->param->limit.support_min_target_lift), 0.0f,
+      c->param->limit.support_total_travel);
     c->support_angle.final_target_lift[side] = mr::component::math::clamp_scalar(
-        c->support_angle.final_target_lift[side], 0.0f, c->param->limit.support_total_travel);
+      c->support_angle.final_target_lift[side], min_target, c->param->limit.support_total_travel);
     c->support_angle.tracked_target_lift[side] =
       Pole_UpdateTrackedLift(c, side, speed_limit);
     c->support_angle.tracked_target_lift[side] = mr::component::math::clamp_scalar(
-        c->support_angle.tracked_target_lift[side], 0.0f, c->param->limit.support_total_travel);
+      c->support_angle.tracked_target_lift[side], min_target, c->param->limit.support_total_travel);
     c->debug.final_target_lift[side] = c->support_angle.final_target_lift[side];
     c->debug.tracked_target_lift[side] = c->support_angle.tracked_target_lift[side];
     c->debug.tracked_target_velocity[side] =

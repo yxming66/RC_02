@@ -394,7 +394,7 @@ static void PcComm_UpdateModuleFeedback(void) {
 
     const OreStore_Feedback_t *ore_fb = Task_OreStoreGetFeedback();
     if (ore_fb != NULL) {
-        const PC_OreStoreCMD_t *ore_cmd = MrlinkPc_GetOreStoreCMD();
+        const OreStore_CMD_t *ore_cmd = Task_OreStoreGetCommand();
         PC_OreStoreFeedback_t pc_ore = {0};
         pc_ore.mode = (ore_cmd != NULL) ? ore_cmd->mode : 0u;
         pc_ore.all_homed = ore_fb->all_homed ? 1u : 0u;

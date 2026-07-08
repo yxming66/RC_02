@@ -608,6 +608,7 @@ const CameraYaw_GroupFeedback_t *Task_CameraYawGetGroupFeedback(void);
 int8_t Task_CameraYawPostCommand(const CameraYaw_CMD_t *cmd);
 int8_t Task_CameraYawPostGroupCommand(const CameraYaw_GroupCMD_t *cmd);
 const OreStore_Feedback_t *Task_OreStoreGetFeedback(void);
+const OreStore_CMD_t *Task_OreStoreGetCommand(void);
 const OreStore_Debug_t *Task_OreStoreGetDebug(void);
 #ifdef __cplusplus
 }

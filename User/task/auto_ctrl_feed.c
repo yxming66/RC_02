@@ -310,6 +310,27 @@ static bool AutoCtrlFeed_ReadReleaseGridOrePhoto(void) {
   return AutoCtrlFeed_ReadPhotoTransferBit(PHOTO_TRANSFER_BIT_RELEASE_GRID_ORE);
 }
 
+static void AutoCtrlFeed_UpdatePhotoTransferDebugFast(
+    const auto_ctrl_feedback_t *ctrl_feedback) {
+  if (ctrl_feedback == NULL) {
+    return;
+  }
+
+  g_auto_ore_debug.photo_transfer_valid = photo_transfer_snapshot.valid;
+  g_auto_ore_debug.photo_transfer_raw_mask = photo_transfer_snapshot.raw_mask;
+  g_auto_ore_debug.photo_transfer_age_ms = photo_transfer_snapshot.age_ms;
+  g_auto_ore_debug.photo_transfer_rx_count = photo_transfer_snapshot.rx_count;
+  g_auto_ore_debug.photo_transfer_timeout_count =
+      photo_transfer_snapshot.timeout_count;
+  g_auto_ore_debug.photo1_front_triggered =
+      ctrl_feedback->pe13_photo1_triggered;
+  g_auto_ore_debug.photo2_third_last_triggered =
+      ctrl_feedback->pe9_photo2_triggered;
+  g_auto_ore_debug.photo3_second_last_triggered =
+      ctrl_feedback->pa2_photo3_triggered;
+  g_auto_ore_debug.photo4_last_triggered = ctrl_feedback->pa0_photo4_triggered;
+}
+
 static PC_AutoAction_t AutoCtrlFeed_MapOreAction(AutoOre_Action_t action) {
   switch (action) {
     case AUTO_ORE_ACTION_STORE:
@@ -2283,6 +2304,7 @@ void Task_auto_ctrl(void *argument) {
               PHOTO_TRANSFER_BIT_PHOTO3_SECOND_LAST);
       feedback.pa0_photo4_triggered =
           AutoCtrlFeed_ReadPhotoTransferBit(PHOTO_TRANSFER_BIT_PHOTO4_LAST);
+        AutoCtrlFeed_UpdatePhotoTransferDebugFast(&feedback);
       float pole_front_lift_rad = 0.0f;
       float pole_rear_lift_rad = 0.0f;
       (void)Task_PoleMainGetSupportLift(&pole_front_lift_rad,

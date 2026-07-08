@@ -660,6 +660,10 @@ const OreStore_Feedback_t *Task_OreStoreGetFeedback(void) {
   return ore_store_inited ? &ore_store.feedback : NULL;
 }
 
+const OreStore_CMD_t *Task_OreStoreGetCommand(void) {
+  return ore_store_inited ? &ore_store_cmd : NULL;
+}
+
 const OreStore_Debug_t *Task_OreStoreGetDebug(void) {
   return ore_store_inited ? OreStore_GetDebug(&ore_store) : NULL;
 }
