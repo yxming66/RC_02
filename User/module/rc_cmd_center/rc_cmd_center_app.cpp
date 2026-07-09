@@ -233,6 +233,10 @@ static uint32_t rc_debug_last_update_ms = 0u;
 
 static cmd::Center<1, 5, 96, 20, 64, 512, 128> rc_cmd_center;
 
+static RcBehavior_t Rc_SelectMappedBehavior(void);
+static bool Rc_IsAnyAutoActionBusy(void);
+static bool Rc_BehaviorShouldAbortAutoAction(RcBehavior_t behavior);
+
 typedef struct {
   auto_ctrl_template_e template_id;
   auto_ctrl_travel_dir_e travel_dir;
@@ -1061,10 +1065,10 @@ static void Rc_SetAutoDryRunCommands(void) {
 #endif
 
 static bool Rc_ShouldExitAutoActionBySwitch(void) {
-  return dr16.header.online &&
-         (dr16.data.sw_l == DR16_SW_MID || dr16.data.sw_l == DR16_SW_DOWN) &&
-         (last_sw_r == DR16_SW_UP || last_sw_r == DR16_SW_DOWN) &&
-         dr16.data.sw_r == DR16_SW_MID;
+  if (!dr16.header.online || !Rc_IsAnyAutoActionBusy()) {
+    return false;
+  }
+  return Rc_BehaviorShouldAbortAutoAction(Rc_SelectMappedBehavior());
 }
 
 static bool Rc_IsAnyAutoActionBusy(void) {
@@ -1160,6 +1164,18 @@ static RcBehavior_t Rc_SelectMappedBehavior(void) {
 static bool Rc_BehaviorAllowsAutoCtrlOutput(RcBehavior_t behavior) {
   return behavior == RC_BEHAVIOR_AUTO_200_UP_STANDBY ||
          behavior == RC_BEHAVIOR_AUTO_200_DOWN_STANDBY;
+}
+
+static bool Rc_BehaviorAllowsAutoActionOutput(RcBehavior_t behavior) {
+  return behavior == RC_BEHAVIOR_AUTO_200_UP_STANDBY ||
+         behavior == RC_BEHAVIOR_AUTO_200_DOWN_STANDBY ||
+         behavior == RC_BEHAVIOR_AUTO_ORE;
+}
+
+static bool Rc_BehaviorShouldAbortAutoAction(RcBehavior_t behavior) {
+  return behavior == RC_BEHAVIOR_SAFE ||
+         (!Rc_BehaviorAllowsAutoActionOutput(behavior) &&
+          behavior != RC_BEHAVIOR_PC);
 }
 
 static bool Rc_DebugPeriodicDue(uint32_t now_ms) {
