@@ -214,7 +214,7 @@ static bool auto_ctrl_was_busy = false;
 static bool auto_ore_was_busy = false;
 
 #ifndef RC_PC_POLE_SPEED_LIMIT_RAD_S
-#define RC_PC_POLE_SPEED_LIMIT_RAD_S (15.0f)
+#define RC_PC_POLE_SPEED_LIMIT_RAD_S (10.0f)
 #endif
 
 #ifndef RC_PC_POLE_ACCEL_LIMIT_RAD_S2
@@ -1496,8 +1496,16 @@ static void Rc_PrepareSafePlanSideEffects(void) {
 }
 
 static bool Rc_AutoOreReleaseIsBusy(void) {
-  return auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl) &&
-         auto_ore_ctrl.action == AUTO_ORE_ACTION_RELEASE;
+    return auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl) &&
+           (auto_ore_ctrl.action == AUTO_ORE_ACTION_RELEASE ||
+            auto_ore_ctrl.action == AUTO_ORE_ACTION_RELEASE_LIFT_DETECT
+            ||
+            auto_ore_ctrl.action == AUTO_ORE_ACTION_RELEASE_STEP1 ||
+            auto_ore_ctrl.action == AUTO_ORE_ACTION_RELEASE_STEP2 ||
+            auto_ore_ctrl.action ==
+            AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP1 ||
+            auto_ore_ctrl.action ==
+            AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP2);
 }
 
 static bool Rc_AutoOreLowerFinishedPcChassisReady(RcBehavior_t behavior) {
