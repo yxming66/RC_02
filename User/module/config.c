@@ -498,13 +498,13 @@ Config_RobotParam_t robot_config = {
         .open_delay_ms = 20u,
         .grab_high_delay_ms = 60u,
         .detect_grip_delay_ms = 100u,
-        .detect_pose_delay_ms = 600u,
-        .detect_success_hold_ms = 500u,
+        .detect_pose_delay_ms = 450u,
+        .detect_success_hold_ms = 300u,
         .dock_wait_delay_ms = 10000u,
         /* 等待对接时 transform 的目标点；实际角度在 ore_store_param.preset.transform_position_rad 中标定。 */
         .dock_wait_transform = ORE_STORE_TRANSFORM_SPEARHEAD_DOCK_WAIT,
         .use_photo_check = true,
-        .photo_check_ms = 500u,
+        .photo_check_ms = 250u,
     },
     /* 模块参数：自动台阶/自动控制 auto_ctrl_param，台阶模板和 SICK 校正参数。 */
     .auto_ctrl_param = {
