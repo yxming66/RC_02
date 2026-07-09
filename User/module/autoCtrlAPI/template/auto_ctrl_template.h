@@ -58,7 +58,10 @@ typedef struct {
   uint8_t debug_photo_event_id;
   uint8_t debug_pole_cmd_kind;
   bool pole_target_seen_not_ready; /* 当前 step 已检测到支撑杆目标未到位。 */
+  bool pole_motion_latch_valid;    /* 当前 step 撑杆分段速度已锁存起点。 */
   bool distance_latch_valid;        /* 轮编码器距离门控已锁存起点位置。 */
+  float pole_motion_start_lift_rad[2]; /* 当前 pole 运动段入口撑杆位置，单位 rad。 */
+  float pole_motion_target_lift_rad[2]; /* 当前 pole 运动段目标位置，单位 rad。 */
   float distance_start_wheel_rad[4]; /* 当前距离门控 step 入口的四轮位置。 */
   float wheel_delta_rad;            /* 当前距离门控 step 的四轮平均转角，单位 rad。 */
   bool descend_move_override_enabled;

@@ -76,6 +76,98 @@ static void AutoCtrl_ApplyDescendStartPoleThreshold(
   }
 }
 
+static bool AutoCtrl_PoleSegmentsConfigured(
+    const AutoCtrl_PoleSpeedSegment_t segments[AUTO_CTRL_POLE_SPEED_SEGMENT_COUNT]) {
+  if (segments == 0) {
+    return false;
+  }
+
+  for (uint8_t i = 0u; i < AUTO_CTRL_POLE_SPEED_SEGMENT_COUNT; ++i) {
+    if (segments[i].height_rad > 0.0f && segments[i].speed_rad_s > 0.0f) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static float AutoCtrl_SelectPoleSegmentSpeed(
+    const AutoCtrl_PoleSpeedSegment_t segments[AUTO_CTRL_POLE_SPEED_SEGMENT_COUNT],
+    float fallback_speed, float current_height_rad, float target_height_rad) {
+  if (!AutoCtrl_PoleSegmentsConfigured(segments)) {
+    return fallback_speed;
+  }
+
+  const bool extending = target_height_rad >= current_height_rad;
+  float selected_speed = fallback_speed;
+  for (uint8_t i = 0u; i < AUTO_CTRL_POLE_SPEED_SEGMENT_COUNT; ++i) {
+    if (segments[i].speed_rad_s <= 0.0f) {
+      continue;
+    }
+    selected_speed = segments[i].speed_rad_s;
+    if (segments[i].height_rad <= 0.0f) {
+      continue;
+    }
+    if ((extending && current_height_rad <= segments[i].height_rad) ||
+        (!extending && current_height_rad >= segments[i].height_rad) ||
+        i == AUTO_CTRL_POLE_SPEED_SEGMENT_COUNT - 1u) {
+      return segments[i].speed_rad_s;
+    }
+  }
+  return selected_speed;
+}
+
+static void AutoCtrl_LatchEntryPoleMotionStart(auto_ctrl_t *ctrl,
+                                               const float target[2]) {
+  if (ctrl == 0 || target == 0) {
+    return;
+  }
+
+  if (ctrl->template_ctx.pole_motion_latch_valid &&
+      fabsf(ctrl->template_ctx.pole_motion_target_lift_rad[0] - target[0]) <
+          0.0001f &&
+      fabsf(ctrl->template_ctx.pole_motion_target_lift_rad[1] - target[1]) <
+          0.0001f) {
+    return;
+  }
+
+  ctrl->template_ctx.pole_motion_latch_valid = true;
+  ctrl->template_ctx.pole_motion_start_lift_rad[0] =
+      ctrl->feedback.pole_front_lift_rad;
+  ctrl->template_ctx.pole_motion_start_lift_rad[1] =
+      ctrl->feedback.pole_rear_lift_rad;
+  ctrl->template_ctx.pole_motion_target_lift_rad[0] = target[0];
+  ctrl->template_ctx.pole_motion_target_lift_rad[1] = target[1];
+}
+
+static void AutoCtrl_ApplyEntryPoleSpeedProfile(
+    auto_ctrl_t *ctrl, const AutoCtrl_TemplateParam_t *template_param,
+    auto_ctrl_template_e template_id, float target[2], float speed[2]) {
+  if (ctrl == 0 || template_param == 0 || target == 0 || speed == 0) {
+    return;
+  }
+
+  AutoCtrl_LatchEntryPoleMotionStart(ctrl, target);
+  const AutoCtrl_PoleSpeedProfile_t *profile =
+      &template_param->pole_all_extend_profile;
+  if (template_id == AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD ||
+      template_id == AUTO_CTRL_TEMPLATE_DESCEND_400_HEAD) {
+    speed[0] = AutoCtrl_SelectPoleSegmentSpeed(
+        template_param->pole_front_retract_profile.front, speed[0],
+    ctrl->feedback.pole_front_lift_rad, target[0]);
+    speed[1] = AutoCtrl_SelectPoleSegmentSpeed(
+        template_param->pole_rear_retract_profile.rear, speed[1],
+    ctrl->feedback.pole_rear_lift_rad, target[1]);
+    return;
+  }
+
+  speed[0] = AutoCtrl_SelectPoleSegmentSpeed(profile->front, speed[0],
+                       ctrl->feedback.pole_front_lift_rad,
+                       target[0]);
+  speed[1] = AutoCtrl_SelectPoleSegmentSpeed(profile->rear, speed[1],
+                       ctrl->feedback.pole_rear_lift_rad,
+                       target[1]);
+}
+
 static bool AutoCtrl_GetTemplateEntryPoleCommand(
     const Config_RobotParam_t *robot_param, auto_ctrl_template_e template_id,
     float target[2], float speed[2], float *accel, bool *disable_accel) {
@@ -489,6 +581,9 @@ void AutoCtrl_Update(auto_ctrl_t *ctrl, uint32_t now_ms) {
                 robot_param, ctrl->template_id, prealign_pole_target,
                 prealign_pole_speed, &prealign_pole_accel,
                 &prealign_pole_disable_accel)) {
+          AutoCtrl_ApplyEntryPoleSpeedProfile(
+              ctrl, template_param, ctrl->template_id, prealign_pole_target,
+              prealign_pole_speed);
           AutoCtrlPrimitive_CommandPoleTargetWithSpeed(
               ctrl, prealign_pole_target[0], prealign_pole_target[1],
               prealign_pole_speed[0], prealign_pole_speed[1]);
