@@ -241,8 +241,8 @@ Config_RobotParam_t robot_config = {
                 [ORE_STORE_TRANSFORM_MID_WAIT] = 11.0f,
                 /* 平台抬升位/满行程位，用于  低位存矿或低位上膛交接。 */
                 [ORE_STORE_TRANSFORM_LIFT] = 18.4731674f,
-                /* 平台等待矛头对接位置 */
-                [ORE_STORE_TRANSFORM_SPEARHEAD_DOCK_WAIT] = 0.340454519f,
+                /* 平台等待矛头对接位置 */ 
+                [ORE_STORE_TRANSFORM_SPEARHEAD_DOCK_WAIT] = 0.313727468f,
                 /* 取矛头平台预设位 */
                 [ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP] = 23.3183613//23.2407284f//22.3003597f,
             },
@@ -444,10 +444,19 @@ Config_RobotParam_t robot_config = {
         /* 回收地面矿时底盘低速前进/后退速度，单位 m/s。 */
         .recover_chassis_forward_vx_mps = 0.30f,
         .recover_chassis_retreat_vx_mps = 0.30f,
-        /* 低位存矿完成后，transform 从高位 LIFT 回低位 STANDBY 的梯形速度规划；<=0 使用默认值。 */
+        /* 低位存矿完成后，transform 从高位 LIFT 回低位 STANDBY 的旧梯形速度规划；三段速度未配置时兜底使用。 */
         .store_low_return_velocity_rad_s = 50.0f,
         .store_low_return_accel_rad_s2 = 60.0f,
         .store_low_return_decel_rad_s2 = 60.0f,
+        /*
+         * 低位存矿返回三段速度规划：end_ratio 为该段结束进度 0~1，velocity_rad_s 为该段速度。
+         * 最多 3 段；end_ratio/velocity <=0 表示该段关闭；至少一段有效时禁用上面的梯形规划。
+         */
+        .store_low_return_segments = {
+            {.end_ratio = 0.20f, .velocity_rad_s = 30.0f},
+            {.end_ratio = 0.80f, .velocity_rad_s = 50.0f},
+            {.end_ratio = 1.00f, .velocity_rad_s = 25.0f},
+        },
         /*
          * 融合动作轮转角阈值说明：
          * - *_wheel_delta_rad 使用四轮累计转角变化绝对值的平均值，单位 rad。

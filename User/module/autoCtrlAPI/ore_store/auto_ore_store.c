@@ -235,6 +235,17 @@ static float AutoOre_StoreLowReturnDecelRadS2(const AutoOre_t *ctrl) {
              : AUTO_ORE_DEFAULT_STORE_LOW_RETURN_DECEL_RAD_S2;
 }
 
+static bool AutoOre_StoreLowReturnSegmentsConfigured(const AutoOre_t *ctrl) {
+  for (uint8_t i = 0u; i < AUTO_ORE_STORE_LOW_RETURN_SEGMENT_COUNT; ++i) {
+    const AutoOre_StoreLowReturnSegment_t *segment =
+        &ctrl->param.store_low_return_segments[i];
+    if (segment->end_ratio > 0.0f && segment->velocity_rad_s > 0.0f) {
+      return true;
+    }
+  }
+  return false;
+}
+
 static float AutoOre_MinPositiveFloat(float a, float b) {
   if (a <= 0.0f) {
     return b;
@@ -245,8 +256,60 @@ static float AutoOre_MinPositiveFloat(float a, float b) {
   return (a < b) ? a : b;
 }
 
-static float AutoOre_StoreLowReturnTrapezoidVelocityRadS(
+static float AutoOre_StoreLowReturnSegmentVelocityRadS(const AutoOre_t *ctrl) {
+  const float start_rad =
+      ctrl->param.ore_store_param->preset
+          .transform_position_rad[ORE_STORE_TRANSFORM_LIFT];
+  const float target_rad =
+      ctrl->param.ore_store_param->preset
+          .transform_position_rad[ORE_STORE_TRANSFORM_STANDBY];
+  const float total_rad = AutoOre_AbsFloat(start_rad - target_rad);
+  float progress = 1.0f;
+  if (total_rad > 0.0001f) {
+    const float remaining_rad =
+        AutoOre_AbsFloat(ctrl->feedback.ore_store_platform_position_rad -
+                         target_rad);
+    progress = 1.0f - (remaining_rad / total_rad);
+    if (progress < 0.0f) {
+      progress = 0.0f;
+    } else if (progress > 1.0f) {
+      progress = 1.0f;
+    }
+  }
+
+  float fallback_velocity = AutoOre_StoreLowReturnVelocityRadS(ctrl);
+  for (uint8_t i = 0u; i < AUTO_ORE_STORE_LOW_RETURN_SEGMENT_COUNT; ++i) {
+    const AutoOre_StoreLowReturnSegment_t *segment =
+        &ctrl->param.store_low_return_segments[i];
+    if (segment->velocity_rad_s <= 0.0f) {
+      continue;
+    }
+    fallback_velocity = segment->velocity_rad_s;
+    float end_ratio = segment->end_ratio;
+    if (end_ratio <= 0.0f) {
+      continue;
+    }
+    if (end_ratio > 1.0f) {
+      end_ratio = 1.0f;
+    }
+    if (progress <= end_ratio ||
+        i == AUTO_ORE_STORE_LOW_RETURN_SEGMENT_COUNT - 1u) {
+      return segment->velocity_rad_s;
+    }
+  }
+  return fallback_velocity;
+}
+
+static float AutoOre_StoreLowReturnPlannedVelocityRadS(
     const AutoOre_t *ctrl, uint32_t now_ms) {
+  if (AutoOre_StoreLowReturnSegmentsConfigured(ctrl)) {
+    float velocity = AutoOre_StoreLowReturnSegmentVelocityRadS(ctrl);
+    if (velocity < AUTO_ORE_STORE_LOW_RETURN_MIN_VELOCITY_RAD_S) {
+      velocity = AUTO_ORE_STORE_LOW_RETURN_MIN_VELOCITY_RAD_S;
+    }
+    return velocity;
+  }
+
   const float max_velocity = AutoOre_StoreLowReturnVelocityRadS(ctrl);
   const float accel = AutoOre_StoreLowReturnAccelRadS2(ctrl);
   const float decel = AutoOre_StoreLowReturnDecelRadS2(ctrl);
@@ -1200,7 +1263,7 @@ static void AutoOre_RunStoreLow(AutoOre_t *ctrl, uint32_t now_ms) {
           SUCTION_OFF, &ctrl->param.arm_speed.store_wait) ||
           !AutoOre_CommandOreStoreWithVelocity(
               ctrl, ORE_STORE_TRANSFORM_STANDBY, false,
-              AutoOre_StoreLowReturnTrapezoidVelocityRadS(ctrl, now_ms))) {
+              AutoOre_StoreLowReturnPlannedVelocityRadS(ctrl, now_ms))) {
         AutoOre_FailInvalidParam(ctrl);
         return;
       }
@@ -2169,7 +2232,7 @@ static void AutoOre_RunFusedStoreLow(AutoOre_t *ctrl, uint32_t now_ms) {
                               &ctrl->param.arm_speed.store_wait) ||
           !AutoOre_CommandOreStoreWithVelocity(
               ctrl, ORE_STORE_TRANSFORM_STANDBY, false,
-              AutoOre_StoreLowReturnTrapezoidVelocityRadS(ctrl, now_ms))) {
+              AutoOre_StoreLowReturnPlannedVelocityRadS(ctrl, now_ms))) {
         AutoOre_FailStoreInvalidParam(ctrl);
         return;
       }

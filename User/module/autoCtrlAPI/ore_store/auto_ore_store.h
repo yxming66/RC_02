@@ -191,6 +191,13 @@ typedef struct {
   bool use_arm_photo_confirm;
 } AutoOre_FusedParam_t;
 
+#define AUTO_ORE_STORE_LOW_RETURN_SEGMENT_COUNT (3u)
+
+typedef struct {
+  float end_ratio;
+  float velocity_rad_s;
+} AutoOre_StoreLowReturnSegment_t;
+
 typedef struct {
   const ArmSimple_Params_t *arm_param;
   const OreStore_Params_t *ore_store_param;
@@ -212,6 +219,8 @@ typedef struct {
   float store_low_return_velocity_rad_s;
   float store_low_return_accel_rad_s2;
   float store_low_return_decel_rad_s2;
+  AutoOre_StoreLowReturnSegment_t
+      store_low_return_segments[AUTO_ORE_STORE_LOW_RETURN_SEGMENT_COUNT];
   AutoOre_FusedParam_t fused_step_pick_store_ascend_200_head;
   AutoOre_FusedParam_t fused_step_pick_store_descend_200_head;
   AutoOre_FusedParam_t fused_step_pick_store_ascend_400_head;

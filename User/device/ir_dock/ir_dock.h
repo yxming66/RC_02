@@ -34,8 +34,6 @@ extern "C" {
 #define IR_DOCK_ZONE3_R2_STANDBY (0x02u)
 #define IR_DOCK_ZONE3_R2_UNKNOWN (0x00u)
 #define IR_DOCK_CLEARED_ORE_NONE (0xFFu)
-#define IR_DOCK_STATUS_ACK_HEAD (0xA5u)
-#define IR_DOCK_STATUS_ACK_FRAME_SIZE (2u)
 
 typedef enum {
   IR_DOCK_STATUS_IDLE = 0x00u,
@@ -46,7 +44,6 @@ typedef struct {
   volatile bool inited;
   volatile bool online;
   volatile bool rx_busy;
-  volatile bool tx_busy;
   volatile bool dock_complete_fresh;
   volatile bool r2_leave_zone1_allowed;
   volatile bool claw_open;
@@ -57,28 +54,21 @@ typedef struct {
   volatile uint8_t last_claw_open_cmd;
   volatile uint8_t last_cleared_ore_id;
   volatile uint8_t last_zone3_r2_state;
-  volatile uint8_t last_tx_status;
   volatile uint8_t last_rx_len;
   volatile uint8_t last_rx_raw_len;
-  volatile uint8_t last_tx_len;
   volatile uint8_t last_rx_raw_data[IR_DOCK_RX_BUFFER_SIZE];
-  volatile uint8_t last_ack_frame[IR_DOCK_STATUS_ACK_FRAME_SIZE];
   volatile uint32_t last_rx_start_ms;
   volatile uint32_t last_rx_raw_ms;
   volatile uint32_t last_online_rx_ms;
   volatile uint32_t last_complete_rx_ms;
   volatile uint32_t last_claw_open_rx_ms;
   volatile uint32_t last_rx_ms;
-  volatile uint32_t last_tx_ms;
   volatile uint32_t last_rx_age_ms;
   volatile uint32_t last_online_age_ms;
   volatile uint32_t last_complete_age_ms;
   volatile uint32_t last_claw_open_age_ms;
   volatile uint32_t last_rx_raw_age_ms;
   volatile uint32_t rx_count;
-  volatile uint32_t tx_count;
-  volatile uint32_t ack_tx_count;
-  volatile uint32_t status_ack_tx_count;
   volatile uint32_t online_rx_count;
   volatile uint32_t complete_rx_count;
   volatile uint32_t claw_open_rx_count;
@@ -87,14 +77,12 @@ typedef struct {
   volatile uint32_t invalid_rx_count;
   volatile uint32_t error_count;
   volatile uint32_t rx_interval_block_count;
-  volatile uint32_t tx_interval_block_count;
 } IrDock_Debug_t;
 
 extern volatile IrDock_Debug_t g_ir_dock_debug;
 
 void IrDock_Init(uint32_t now_ms);
 void IrDock_Process(uint32_t now_ms);
-bool IrDock_SendStatus(IrDock_Status_t status, uint32_t now_ms);
 bool IrDock_IsDockCompleteFresh(uint32_t now_ms);
 bool IrDock_IsOnline(uint32_t now_ms);
 IrDock_Status_t IrDock_GetLastRxStatus(void);
