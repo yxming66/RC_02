@@ -85,26 +85,40 @@ static void AutoOre_FinishSuccess(AutoOre_t *ctrl);
 static bool AutoOre_ActionIsReleaseLike(AutoOre_Action_t action) {
   return action == AUTO_ORE_ACTION_RELEASE ||
          action == AUTO_ORE_ACTION_RELEASE_LIFT_DETECT ||
+      action == AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT ||
          action == AUTO_ORE_ACTION_RELEASE_STEP1 ||
          action == AUTO_ORE_ACTION_RELEASE_STEP2 ||
          action == AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP1 ||
-         action == AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP2;
+      action == AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP2 ||
+      action == AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT_STEP1 ||
+      action == AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT_STEP2;
 }
 
 static bool AutoOre_ActionUsesReleaseLiftDetect(AutoOre_Action_t action) {
   return action == AUTO_ORE_ACTION_RELEASE_LIFT_DETECT ||
          action == AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP1 ||
-         action == AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP2;
+      action == AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP2 ||
+      action == AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT ||
+      action == AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT_STEP1 ||
+      action == AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT_STEP2;
 }
+
+  static bool AutoOre_ActionUsesIrReleaseLiftDetect(AutoOre_Action_t action) {
+    return action == AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT ||
+      action == AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT_STEP1 ||
+      action == AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT_STEP2;
+  }
 
 static bool AutoOre_ActionIsReleaseStep1(AutoOre_Action_t action) {
   return action == AUTO_ORE_ACTION_RELEASE_STEP1 ||
-         action == AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP1;
+      action == AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP1 ||
+      action == AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT_STEP1;
 }
 
 static bool AutoOre_ActionIsReleaseStep2(AutoOre_Action_t action) {
   return action == AUTO_ORE_ACTION_RELEASE_STEP2 ||
-         action == AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP2;
+      action == AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP2 ||
+      action == AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT_STEP2;
 }
 
 static bool AutoOre_ActionIsPickStoreFused(AutoOre_Action_t action) {
@@ -307,16 +321,14 @@ static bool AutoOre_UpdateReleaseGridCheck(AutoOre_t *ctrl, uint32_t now_ms) {
   if (!ctrl->release_grid_check_active) {
     ctrl->release_grid_check_active = true;
     ctrl->release_grid_check_done = false;
-    ctrl->release_grid_has_ore = true;
+    ctrl->release_grid_has_ore = false;
     ctrl->release_grid_check_start_ms = now_ms;
     ctrl->release_grid_check_last_ms = now_ms;
   }
 
   ctrl->release_grid_check_last_ms = now_ms;
-  if (!ctrl->feedback.release_grid_has_ore) {
-    ctrl->release_grid_has_ore = false;
-    ctrl->release_grid_check_done = true;
-    return true;
+  if (ctrl->feedback.release_grid_has_ore) {
+    ctrl->release_grid_has_ore = true;
   }
   if ((now_ms - ctrl->release_grid_check_start_ms) >=
       AUTO_ORE_RELEASE_GRID_CHECK_MS) {
@@ -1359,7 +1371,17 @@ static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
         }
         return;
       }
-      const bool lift_ready = AutoOre_UpdateReleaseLiftObserver(ctrl, now_ms);
+      bool lift_ready = false;
+      if (AutoOre_ActionUsesIrReleaseLiftDetect(ctrl->action)) {
+        lift_ready = ctrl->feedback.release_lift_ir_claw_open;
+        if (lift_ready && !ctrl->release_lift_detected) {
+          ctrl->release_lift_observer_active = true;
+          ctrl->release_lift_detected = true;
+          ctrl->release_lift_detect_time_ms = now_ms;
+        }
+      } else {
+        lift_ready = AutoOre_UpdateReleaseLiftObserver(ctrl, now_ms);
+      }
       const bool lift_settled = lift_ready &&
           (now_ms - ctrl->release_lift_detect_time_ms) >=
               AutoOre_ReleaseLiftDetectSettleMs(ctrl);
@@ -3121,6 +3143,10 @@ bool AutoOre_StartReleaseLiftDetect(AutoOre_t *ctrl, uint32_t now_ms) {
   return AutoOre_Start(ctrl, AUTO_ORE_ACTION_RELEASE_LIFT_DETECT, now_ms);
 }
 
+bool AutoOre_StartReleaseIrLiftDetect(AutoOre_t *ctrl, uint32_t now_ms) {
+  return AutoOre_Start(ctrl, AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT, now_ms);
+}
+
 bool AutoOre_StartReleaseStep1(AutoOre_t *ctrl, uint32_t now_ms) {
   return AutoOre_Start(ctrl, AUTO_ORE_ACTION_RELEASE_STEP1, now_ms);
 }
@@ -3136,6 +3162,16 @@ bool AutoOre_StartReleaseLiftDetectStep1(AutoOre_t *ctrl, uint32_t now_ms) {
 
 bool AutoOre_StartReleaseLiftDetectStep2(AutoOre_t *ctrl, uint32_t now_ms) {
   return AutoOre_Start(ctrl, AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP2,
+                       now_ms);
+}
+
+bool AutoOre_StartReleaseIrLiftDetectStep1(AutoOre_t *ctrl, uint32_t now_ms) {
+  return AutoOre_Start(ctrl, AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT_STEP1,
+                       now_ms);
+}
+
+bool AutoOre_StartReleaseIrLiftDetectStep2(AutoOre_t *ctrl, uint32_t now_ms) {
+  return AutoOre_Start(ctrl, AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT_STEP2,
                        now_ms);
 }
 

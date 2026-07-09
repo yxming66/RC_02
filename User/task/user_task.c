@@ -153,7 +153,7 @@ const osThreadAttr_t attr_pole_main = {
 };
 const osThreadAttr_t attr_rc_main = {
     .name = "rc_main",
-    .priority = osPriorityRealtime,
+    .priority = osPriorityHigh,
     .stack_size = 512 * 4,
 };
 const osThreadAttr_t attr_auto_ctrl = {

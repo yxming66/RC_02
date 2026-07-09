@@ -49,7 +49,6 @@ typedef enum {
     PC_CMD_IMU = 0x20,           /* PC 下发姿态数据命令 */
     PC_CMD_IR_ORE_ACK = 0x21,    /* PC 透传红外对接 ACK 帧，payload 为 6 字节原始 ACK */
     PC_CMD_R2_READY_STATE = 0x22,/* PC 下发 R2 准备/重试状态，驱动灯效模式 */
-    PC_CMD_DOCK_COMPLETE = 0x23, /* PC 视觉识别到矛头对接完成，payload 为 1 字节 complete */
 } PC_CMD_t;
 
 typedef enum {
@@ -238,6 +237,9 @@ typedef enum {
     PC_AUTO_ACTION_RELEASE_STEP2 = 35,    /* 放矿 step2：确认目标格后继续释放矿 */
     PC_AUTO_ACTION_RELEASE_LIFT_DETECT_STEP1 = 36, /* 三层放矿 step1：竖直观察目标格并等待抬升检测 */
     PC_AUTO_ACTION_RELEASE_LIFT_DETECT_STEP2 = 37, /* 三层放矿 step2：确认目标格/抬升后继续释放矿 */
+    PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT = 38, /* 三层放矿：使用红外 claw_open 允许信号替代 SICK 检测 */
+    PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT_STEP1 = 39, /* 三层放矿 step1：竖直观察目标格并等待红外 claw_open */
+    PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT_STEP2 = 40, /* 三层放矿 step2：红外允许后继续释放矿 */
 } PC_AutoAction_t;
 
 typedef enum {
@@ -274,10 +276,6 @@ typedef enum {
 typedef struct {
     uint8_t state;    /* 见 PC_R2ReadyState_t */
 } PC_R2ReadyStateCMD_t;
-
-typedef struct {
-    uint8_t complete; /* PC 视觉对接完成信号，0=未完成/清除，1=完成 */
-} PC_DockCompleteCMD_t;
 
 typedef enum {
     PC_STEP_TEMPLATE_NONE = 0,              /* 无自动台阶流程 */
@@ -450,10 +448,13 @@ typedef struct {
     uint8_t fresh;                                           /* 最近一帧是否仍在 IR_DOCK_ONLINE_TIMEOUT_MS 内，0=过期/未收到，1=新鲜 */
     uint8_t dock_complete;                                   /* 对接完成指令，0=未完成，1=完成 */
     uint8_t r2_leave_zone1_allowed;                          /* R2 是否可以出一区，0=不可以，1=可以 */
+    uint8_t claw_open;                                        /* 允许放矿信号，0=等待，1=允许释放三层矿 */
     uint8_t cleared_ore_id;                                  /* 哪个 R1 矿被清掉，合法值 0-12 且不含 5/8；未收到时为 0xFF */
     uint8_t zone3_r2_state;                                  /* 三区 R2 状态，1=工作状态，2=待机状态；未收到时为 0 */
     uint8_t last_dock_complete_cmd;                          /* 最近原始对接完成字段，0/1 */
     uint8_t last_r2_leave_zone1_cmd;                         /* 最近原始 R2 出一区字段，0/1 */
+    uint8_t last_claw_open_cmd;                               /* 最近原始允许放矿字段 claw_open，0/1 */
+    uint8_t reserved[2];                                      /* 保留字段，发送端固定为 0 */
     uint32_t age_ms;                                         /* 距最近成功解析 R1/R2 红外对接帧的时间，单位 ms；未收到过为 0 */
     uint32_t rx_count;                                       /* 成功解析 R1/R2 红外对接帧累计次数 */
     uint32_t crc_error_count;                                /* R1/R2 红外对接帧 CRC 错误累计次数 */
@@ -517,7 +518,6 @@ typedef struct {
     PC_ImuCMD_t imu;                     /* 最近一次 PC 姿态数据 */
     PC_IrOreAckCMD_t ir_ore_ack;             /* 待转发到红外对接 UART 的 ACK 原始帧 */
     PC_R2ReadyStateCMD_t r2_ready_state;     /* 最近一次 PC 下发的 R2 准备/重试状态 */
-    PC_DockCompleteCMD_t dock_complete;      /* 最近一次 PC 视觉对接完成信号 */
 } MrlinkPc_CMD_Data_t;
 
 typedef struct {
@@ -624,9 +624,6 @@ typedef struct {
     PC_R2ReadyStateCMD_t rx_r2_ready_state; /* 调试用：最近一次 R2 准备/重试状态 */
     uint32_t rx_r2_ready_state_count;        /* 收到 PC_CMD_R2_READY_STATE 的次数 */
     uint8_t r2_ready_light_mode;             /* 最近一次 R2 状态映射到的灯效模式 */
-    PC_DockCompleteCMD_t rx_dock_complete;   /* 调试用：最近一次 PC 视觉对接完成信号 */
-    uint32_t rx_dock_complete_count;         /* 收到 PC_CMD_DOCK_COMPLETE 的次数 */
-    uint32_t dock_complete_tick;             /* 最近一次 PC 视觉对接完成 tick，单位 ms */
 
     uint32_t tx_count;                /* 反馈发送尝试次数 */
     uint8_t tx_dma_busy;              /* 发送 DMA 忙标志，0=空闲，1=忙 */
@@ -731,12 +728,6 @@ bool MrlinkPc_IsR2Ready(void);
 
 /* 最近一次 PC_CMD_R2_READY_STATE 接收 tick，单位 ms；未收到过时为 0。 */
 uint32_t MrlinkPc_GetR2ReadyStateTickMs(void);
-
-/* 返回最近一次 PC 视觉对接完成信号是否为 complete=1。 */
-bool MrlinkPc_IsDockComplete(void);
-
-/* 最近一次 PC 视觉对接完成信号接收 tick，单位 ms；未收到过时为 0。 */
-uint32_t MrlinkPc_GetDockCompleteTickMs(void);
 
 /* 发布某个反馈 topic 的最新数据；topic 见 PC_FeedbackCMD_t，feedback 指向对应反馈结构体。 */
 bool MrlinkPc_PublishFeedback(uint8_t topic, const void *feedback);

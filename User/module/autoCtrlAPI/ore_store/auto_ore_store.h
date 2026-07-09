@@ -18,6 +18,7 @@ typedef enum {
   AUTO_ORE_ACTION_STORE,
   AUTO_ORE_ACTION_RELEASE,
   AUTO_ORE_ACTION_RELEASE_LIFT_DETECT,
+  AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT,
   AUTO_ORE_ACTION_CHAMBER,
   AUTO_ORE_ACTION_PICK_POS_400,
   AUTO_ORE_ACTION_PICK_POS_200,
@@ -36,6 +37,8 @@ typedef enum {
   AUTO_ORE_ACTION_RELEASE_STEP2,
   AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP1,
   AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP2,
+  AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT_STEP1,
+  AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT_STEP2,
 } AutoOre_Action_t;
 
 typedef enum {
@@ -114,6 +117,7 @@ typedef struct {
   float imu_accl_z_g;
   uint16_t release_lift_sick_adc_raw;
   bool release_lift_sick_valid;
+  bool release_lift_ir_claw_open;
   float arm_joint1_rad;
   float arm_joint2_rad;
   float pole_front_lift_rad;
@@ -286,10 +290,13 @@ bool AutoOre_StartStoreAtPosition(AutoOre_t *ctrl,
                                   uint32_t now_ms);
 bool AutoOre_StartRelease(AutoOre_t *ctrl, uint32_t now_ms);
 bool AutoOre_StartReleaseLiftDetect(AutoOre_t *ctrl, uint32_t now_ms);
+bool AutoOre_StartReleaseIrLiftDetect(AutoOre_t *ctrl, uint32_t now_ms);
 bool AutoOre_StartReleaseStep1(AutoOre_t *ctrl, uint32_t now_ms);
 bool AutoOre_StartReleaseStep2(AutoOre_t *ctrl, uint32_t now_ms);
 bool AutoOre_StartReleaseLiftDetectStep1(AutoOre_t *ctrl, uint32_t now_ms);
 bool AutoOre_StartReleaseLiftDetectStep2(AutoOre_t *ctrl, uint32_t now_ms);
+bool AutoOre_StartReleaseIrLiftDetectStep1(AutoOre_t *ctrl, uint32_t now_ms);
+bool AutoOre_StartReleaseIrLiftDetectStep2(AutoOre_t *ctrl, uint32_t now_ms);
 bool AutoOre_StartChamber(AutoOre_t *ctrl, uint32_t now_ms);
 bool AutoOre_StartPickPos400(AutoOre_t *ctrl, uint32_t now_ms);
 bool AutoOre_StartPickPos200(AutoOre_t *ctrl, uint32_t now_ms);

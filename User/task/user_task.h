@@ -161,6 +161,9 @@ typedef enum {
     AUTO_ORE_DEBUG_REQUEST_RELEASE_STEP2 = 35,
     AUTO_ORE_DEBUG_REQUEST_RELEASE_LIFT_DETECT_STEP1 = 36,
     AUTO_ORE_DEBUG_REQUEST_RELEASE_LIFT_DETECT_STEP2 = 37,
+    AUTO_ORE_DEBUG_REQUEST_RELEASE_IR_LIFT_DETECT = 38,
+    AUTO_ORE_DEBUG_REQUEST_RELEASE_IR_LIFT_DETECT_STEP1 = 39,
+    AUTO_ORE_DEBUG_REQUEST_RELEASE_IR_LIFT_DETECT_STEP2 = 40,
 } AutoOre_DebugRequest_t;
 
 typedef struct {
@@ -251,6 +254,7 @@ typedef struct {
     volatile uint16_t release_lift_sick_adc_threshold;
     volatile bool release_lift_sick_valid;
     volatile bool release_lift_detected;
+    volatile bool release_lift_ir_claw_open;
     volatile bool release_grid_check_active;
     volatile bool release_grid_check_done;
     volatile bool release_grid_has_ore;
@@ -549,10 +553,13 @@ bool Task_PoleMainGetHoldCommand(Pole_CMD_t *cmd);
 bool Task_AutoOreStartStore(void);
 bool Task_AutoOreStartRelease(void);
 bool Task_AutoOreStartReleaseLiftDetect(void);
+bool Task_AutoOreStartReleaseIrLiftDetect(void);
 bool Task_AutoOreStartReleaseStep1(void);
 bool Task_AutoOreStartReleaseStep2(void);
 bool Task_AutoOreStartReleaseLiftDetectStep1(void);
 bool Task_AutoOreStartReleaseLiftDetectStep2(void);
+bool Task_AutoOreStartReleaseIrLiftDetectStep1(void);
+bool Task_AutoOreStartReleaseIrLiftDetectStep2(void);
 bool Task_AutoOreStartChamber(void);
 bool Task_AutoOreStartPickPos400(void);
 bool Task_AutoOreStartPickPos200(void);
@@ -590,6 +597,7 @@ bool Task_AutoSickCorrectIsBusy(void);
 const Chassis_CMD_t *Task_AutoSickCorrectGetChassisCommand(void);
 const Pole_CMD_t *Task_AutoSickCorrectGetPoleCommand(void);
 bool Task_IrDockIsDockCompleteFresh(void);
+bool Task_IrDockIsClawOpenFresh(void);
 int8_t Task_OreStorePostCommand(const OreStore_CMD_t *cmd);
 void Task_OreStoreRequestRehome(void);
 int8_t Task_OreStoreAssumeAxisHomedAtCurrent(uint8_t axis,

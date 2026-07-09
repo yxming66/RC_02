@@ -334,7 +334,7 @@ void CameraYaw_SetOutput(CameraYaw_t *c) {
 
   CameraYawMotorProtocol *protocol = CameraYaw_GetMotorProtocol(c);
   if (protocol != NULL) {
-    (void)protocol->SetMIT(0.0f, 0.0f, 0.0f, 0.0f, output);
+    (void)protocol->SetMIT( 0.0f, 0.0f, 0.0f, 0.0f, output);
   }
 }
 

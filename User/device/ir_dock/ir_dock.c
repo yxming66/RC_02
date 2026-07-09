@@ -12,6 +12,8 @@ static volatile bool ir_dock_rx_complete_pending = false;
 static volatile bool ir_dock_tx_complete_pending = false;
 static volatile bool ir_dock_error_pending = false;
 
+static bool IrDock_IsClawOpenFreshInternal(uint32_t now_ms);
+
 static void IrDock_RxEventCallback(uint16_t size) {
   if (size > IR_DOCK_RX_BUFFER_SIZE) {
     size = IR_DOCK_RX_BUFFER_SIZE;
@@ -45,6 +47,10 @@ static bool IrDock_StatusIsValid(uint8_t status) {
 static bool IrDock_LeaveZone1CmdIsValid(uint8_t cmd) {
   return cmd == IR_DOCK_LEAVE_ZONE1_FORBID ||
          cmd == IR_DOCK_LEAVE_ZONE1_ALLOW;
+}
+
+static bool IrDock_ClawOpenCmdIsValid(uint8_t cmd) {
+  return cmd == IR_DOCK_CLAW_OPEN_WAIT || cmd == IR_DOCK_CLAW_OPEN_ALLOW;
 }
 
 static bool IrDock_ClearedOreIdIsValid(uint8_t ore_id) {
@@ -109,18 +115,17 @@ static bool IrDock_SendCommandAck(uint8_t cmd, uint32_t now_ms) {
   ir_dock_tx_buf[0] = IR_DOCK_STATUS_ACK_HEAD;
   ir_dock_tx_buf[1] = cmd;
 
-  // if (BSP_UART_Transmit(BSP_UART_IR, ir_dock_tx_buf,
-  //                       IR_DOCK_STATUS_ACK_FRAME_SIZE, true) == HAL_OK) 
-                        {
-    // IrDock_CopyVolatileBytes(g_ir_dock_debug.last_ack_frame, ir_dock_tx_buf,
-    //                          IR_DOCK_STATUS_ACK_FRAME_SIZE);
-    // g_ir_dock_debug.last_tx_status = cmd;
-    // g_ir_dock_debug.last_tx_len = IR_DOCK_STATUS_ACK_FRAME_SIZE;
-    // g_ir_dock_debug.last_tx_ms = now_ms;
-    // g_ir_dock_debug.tx_busy = true;
-    // g_ir_dock_debug.tx_count++;
-    // g_ir_dock_debug.ack_tx_count++;
-    // g_ir_dock_debug.status_ack_tx_count++;
+  if (BSP_UART_Transmit(BSP_UART_IR, ir_dock_tx_buf,
+                        IR_DOCK_STATUS_ACK_FRAME_SIZE, true) == HAL_OK) {
+    IrDock_CopyVolatileBytes(g_ir_dock_debug.last_ack_frame, ir_dock_tx_buf,
+                             IR_DOCK_STATUS_ACK_FRAME_SIZE);
+    g_ir_dock_debug.last_tx_status = cmd;
+    g_ir_dock_debug.last_tx_len = IR_DOCK_STATUS_ACK_FRAME_SIZE;
+    g_ir_dock_debug.last_tx_ms = now_ms;
+    g_ir_dock_debug.tx_busy = true;
+    g_ir_dock_debug.tx_count++;
+    g_ir_dock_debug.ack_tx_count++;
+    g_ir_dock_debug.status_ack_tx_count++;
     return true;
   }
 
@@ -136,10 +141,22 @@ static bool IrDock_FrameCrcIsValid(const uint8_t *frame) {
   return crc_recv == crc_calc;
 }
 
-static void IrDock_ParseProtocolFrame(const uint8_t *frame, uint32_t now_ms) {
+static bool IrDock_LegacyFrameCrcIsValid(const uint8_t *frame) {
+  const uint16_t crc_recv =
+    (uint16_t)frame[IR_DOCK_LEGACY_FRAME_SIZE - 2u] |
+    ((uint16_t)frame[IR_DOCK_LEGACY_FRAME_SIZE - 1u] << 8u);
+  const uint16_t crc_calc = CRC16_Calc(
+    frame, IR_DOCK_LEGACY_FRAME_SIZE - IR_DOCK_CRC_SIZE, CRC16_INIT);
+  return crc_recv == crc_calc;
+}
+
+static void IrDock_ParseProtocolFrame(const uint8_t *frame,
+                    uint8_t frame_size,
+                    uint32_t now_ms) {
   const uint8_t dock_complete_cmd = frame[2];
   const uint8_t r2_leave_zone1_cmd = frame[3];
-  const uint8_t cleared_ore_id = frame[4];
+  const uint8_t claw_open_cmd = frame[4];
+  const uint8_t cleared_ore_id = IR_DOCK_CLEARED_ORE_NONE;
   const uint8_t zone3_r2_state = frame[5];
 
   g_ir_dock_debug.last_rx_raw_byte = zone3_r2_state;
@@ -148,6 +165,7 @@ static void IrDock_ParseProtocolFrame(const uint8_t *frame, uint32_t now_ms) {
 
   if (!IrDock_StatusIsValid(dock_complete_cmd) ||
       !IrDock_LeaveZone1CmdIsValid(r2_leave_zone1_cmd) ||
+      !IrDock_ClawOpenCmdIsValid(claw_open_cmd) ||
       !IrDock_ClearedOreIdIsValid(cleared_ore_id) ||
       !IrDock_Zone3R2StateIsValid(zone3_r2_state)) {
     g_ir_dock_debug.invalid_rx_count++;
@@ -157,10 +175,12 @@ static void IrDock_ParseProtocolFrame(const uint8_t *frame, uint32_t now_ms) {
 
   g_ir_dock_debug.last_dock_complete_cmd = dock_complete_cmd;
   g_ir_dock_debug.last_r2_leave_zone1_cmd = r2_leave_zone1_cmd;
+  g_ir_dock_debug.last_claw_open_cmd = claw_open_cmd;
   g_ir_dock_debug.last_cleared_ore_id = cleared_ore_id;
   g_ir_dock_debug.last_zone3_r2_state = zone3_r2_state;
   g_ir_dock_debug.r2_leave_zone1_allowed =
       (r2_leave_zone1_cmd == IR_DOCK_LEAVE_ZONE1_ALLOW);
+  g_ir_dock_debug.claw_open = (claw_open_cmd == IR_DOCK_CLAW_OPEN_ALLOW);
   g_ir_dock_debug.last_rx_status = dock_complete_cmd;
   g_ir_dock_debug.last_online_rx_ms = now_ms;
   g_ir_dock_debug.online = true;
@@ -169,6 +189,10 @@ static void IrDock_ParseProtocolFrame(const uint8_t *frame, uint32_t now_ms) {
   if (dock_complete_cmd == IR_DOCK_CMD_COMPLETE) {
     g_ir_dock_debug.last_complete_rx_ms = now_ms;
     g_ir_dock_debug.complete_rx_count++;
+  }
+  if (claw_open_cmd == IR_DOCK_CLAW_OPEN_ALLOW) {
+    g_ir_dock_debug.last_claw_open_rx_ms = now_ms;
+    g_ir_dock_debug.claw_open_rx_count++;
   }
 
   (void)IrDock_SendCommandAck(dock_complete_cmd, now_ms);
@@ -189,14 +213,22 @@ static void IrDock_ParseRxBytes(const uint8_t *rx_buf, uint16_t packet_len,
 
   uint16_t parsed_frame_count = 0u;
   uint16_t offset = 0u;
-  while (offset + IR_DOCK_FRAME_SIZE <= packet_len) {
+  while (offset + IR_DOCK_LEGACY_FRAME_SIZE <= packet_len) {
     if (rx_buf[offset] != IR_DOCK_FRAME_HEAD0 ||
         rx_buf[offset + 1u] != IR_DOCK_FRAME_HEAD1) {
       offset++;
       continue;
     }
 
-    if (!IrDock_FrameCrcIsValid(&rx_buf[offset])) {
+    uint8_t frame_size = 0u;
+    if (offset + IR_DOCK_FRAME_SIZE <= packet_len &&
+        IrDock_FrameCrcIsValid(&rx_buf[offset])) {
+      frame_size = IR_DOCK_FRAME_SIZE;
+    } else if (IrDock_LegacyFrameCrcIsValid(&rx_buf[offset])) {
+      frame_size = IR_DOCK_LEGACY_FRAME_SIZE;
+    }
+
+    if (frame_size == 0u) {
       g_ir_dock_debug.crc_error_count++;
       g_ir_dock_debug.invalid_rx_count++;
       g_ir_dock_debug.error_count++;
@@ -204,9 +236,9 @@ static void IrDock_ParseRxBytes(const uint8_t *rx_buf, uint16_t packet_len,
       continue;
     }
 
-    IrDock_ParseProtocolFrame(&rx_buf[offset], now_ms);
+    IrDock_ParseProtocolFrame(&rx_buf[offset], frame_size, now_ms);
     parsed_frame_count++;
-    offset = (uint16_t)(offset + IR_DOCK_FRAME_SIZE);
+    offset = (uint16_t)(offset + frame_size);
   }
 
   if (parsed_frame_count == 0u) {
@@ -270,10 +302,12 @@ void IrDock_Init(uint32_t now_ms) {
   g_ir_dock_debug.tx_busy = false;
   g_ir_dock_debug.dock_complete_fresh = false;
   g_ir_dock_debug.r2_leave_zone1_allowed = false;
+  g_ir_dock_debug.claw_open = false;
   g_ir_dock_debug.last_rx_status = (uint8_t)IR_DOCK_STATUS_IDLE;
   g_ir_dock_debug.last_rx_raw_byte = 0u;
   g_ir_dock_debug.last_dock_complete_cmd = IR_DOCK_CMD_UNFINISHED;
   g_ir_dock_debug.last_r2_leave_zone1_cmd = IR_DOCK_LEAVE_ZONE1_FORBID;
+  g_ir_dock_debug.last_claw_open_cmd = IR_DOCK_CLAW_OPEN_WAIT;
   g_ir_dock_debug.last_cleared_ore_id = IR_DOCK_CLEARED_ORE_NONE;
   g_ir_dock_debug.last_zone3_r2_state = IR_DOCK_ZONE3_R2_UNKNOWN;
   g_ir_dock_debug.last_tx_status = (uint8_t)IR_DOCK_STATUS_IDLE;
@@ -288,11 +322,13 @@ void IrDock_Init(uint32_t now_ms) {
   g_ir_dock_debug.last_rx_raw_ms = 0u;
   g_ir_dock_debug.last_online_rx_ms = 0u;
   g_ir_dock_debug.last_complete_rx_ms = 0u;
+  g_ir_dock_debug.last_claw_open_rx_ms = 0u;
   g_ir_dock_debug.last_rx_ms = 0u;
   g_ir_dock_debug.last_tx_ms = 0u;
   g_ir_dock_debug.last_rx_age_ms = 0u;
   g_ir_dock_debug.last_online_age_ms = 0u;
   g_ir_dock_debug.last_complete_age_ms = 0u;
+  g_ir_dock_debug.last_claw_open_age_ms = 0u;
   g_ir_dock_debug.last_rx_raw_age_ms = 0u;
   (void)IrDock_TryStartReceive(now_ms);
 }
@@ -312,6 +348,7 @@ void IrDock_Process(uint32_t now_ms) {
           ? 0u
           : (now_ms - g_ir_dock_debug.last_rx_ms);
   g_ir_dock_debug.dock_complete_fresh = IrDock_IsDockCompleteFresh(now_ms);
+  g_ir_dock_debug.claw_open = IrDock_IsClawOpenFreshInternal(now_ms);
   g_ir_dock_debug.online = IrDock_IsOnline(now_ms);
   (void)IrDock_TryStartReceive(now_ms);
 }
@@ -334,6 +371,22 @@ bool IrDock_IsDockCompleteFresh(uint32_t now_ms) {
   return g_ir_dock_debug.last_complete_age_ms <= IR_DOCK_COMPLETE_FRESH_MS;
 }
 
+static bool IrDock_IsClawOpenFreshInternal(uint32_t now_ms) {
+  if (g_ir_dock_debug.last_claw_open_cmd != IR_DOCK_CLAW_OPEN_ALLOW) {
+    g_ir_dock_debug.last_claw_open_age_ms = 0u;
+    return false;
+  }
+
+  if (g_ir_dock_debug.last_claw_open_rx_ms == 0u) {
+    g_ir_dock_debug.last_claw_open_age_ms = 0u;
+    return false;
+  }
+
+  g_ir_dock_debug.last_claw_open_age_ms =
+      now_ms - g_ir_dock_debug.last_claw_open_rx_ms;
+  return g_ir_dock_debug.last_claw_open_age_ms <= IR_DOCK_COMPLETE_FRESH_MS;
+}
+
 bool IrDock_IsOnline(uint32_t now_ms) {
   if (g_ir_dock_debug.last_online_rx_ms == 0u) {
     g_ir_dock_debug.last_online_age_ms = 0u;
@@ -351,6 +404,10 @@ IrDock_Status_t IrDock_GetLastRxStatus(void) {
 
 bool IrDock_IsR2LeaveZone1Allowed(void) {
   return g_ir_dock_debug.r2_leave_zone1_allowed;
+}
+
+bool IrDock_IsClawOpenFresh(uint32_t now_ms) {
+  return IrDock_IsClawOpenFreshInternal(now_ms);
 }
 
 uint8_t IrDock_GetLastClearedOreId(void) {
