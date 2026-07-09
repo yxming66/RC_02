@@ -595,11 +595,15 @@ static void PcComm_UpdateIrDockFeedback(uint32_t now_ms) {
     feedback.dock_complete = IrDock_IsDockCompleteFresh(now_ms) ? 1u : 0u;
     feedback.r2_leave_zone1_allowed =
         IrDock_IsR2LeaveZone1Allowed() ? 1u : 0u;
+    feedback.release_lift_step2_ready =
+        IrDock_IsReleaseLiftStep2Ready() ? 1u : 0u;
     feedback.cleared_ore_id = IrDock_GetLastClearedOreId();
     feedback.zone3_r2_state = IrDock_GetLastZone3R2State();
     feedback.last_dock_complete_cmd = g_ir_dock_debug.last_dock_complete_cmd;
     feedback.last_r2_leave_zone1_cmd =
         g_ir_dock_debug.last_r2_leave_zone1_cmd;
+    feedback.last_release_lift_step2_cmd =
+        g_ir_dock_debug.last_release_lift_step2_cmd;
     feedback.age_ms = g_ir_dock_debug.last_rx_age_ms;
     feedback.rx_count = g_ir_dock_debug.protocol_frame_rx_count;
     feedback.crc_error_count = g_ir_dock_debug.crc_error_count;

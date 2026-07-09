@@ -245,7 +245,7 @@ static_assert(sizeof(PC_IrOreFeedback_t) == 24u,
               "PC_FEEDBACK_IR_ORE wire size changed");
 static_assert(sizeof(PC_IrOreBridgeFeedback_t) == 56u,
               "PC_FEEDBACK_IR_ORE_BRIDGE wire size changed");
-static_assert(sizeof(PC_IrDockFeedback_t) == 24u,
+static_assert(sizeof(PC_IrDockFeedback_t) == 28u,
               "PC_FEEDBACK_IR_DOCK wire size changed");
 static_assert(sizeof(PC_CameraYawFeedback_t) == 32u,
               "PC_FEEDBACK_CAMERA_YAW wire size changed");

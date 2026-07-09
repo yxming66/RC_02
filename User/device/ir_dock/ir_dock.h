@@ -21,12 +21,15 @@ extern "C" {
 
 #define IR_DOCK_FRAME_HEAD0 (0x4Du)
 #define IR_DOCK_FRAME_HEAD1 (0x52u)
-#define IR_DOCK_FRAME_SIZE (8u)
+#define IR_DOCK_LEGACY_FRAME_SIZE (8u)
+#define IR_DOCK_FRAME_SIZE (9u)
 #define IR_DOCK_CRC_SIZE (2u)
 #define IR_DOCK_CMD_UNFINISHED (0x00u)
 #define IR_DOCK_CMD_COMPLETE (0x01u)
 #define IR_DOCK_LEAVE_ZONE1_FORBID (0x00u)
 #define IR_DOCK_LEAVE_ZONE1_ALLOW (0x01u)
+#define IR_DOCK_RELEASE_LIFT_STEP2_WAIT (0x00u)
+#define IR_DOCK_RELEASE_LIFT_STEP2_READY (0x01u)
 #define IR_DOCK_ZONE3_R2_WORK (0x01u)
 #define IR_DOCK_ZONE3_R2_STANDBY (0x02u)
 #define IR_DOCK_ZONE3_R2_UNKNOWN (0x00u)
@@ -46,10 +49,12 @@ typedef struct {
   volatile bool tx_busy;
   volatile bool dock_complete_fresh;
   volatile bool r2_leave_zone1_allowed;
+  volatile bool release_lift_step2_ready;
   volatile uint8_t last_rx_status;
   volatile uint8_t last_rx_raw_byte;
   volatile uint8_t last_dock_complete_cmd;
   volatile uint8_t last_r2_leave_zone1_cmd;
+  volatile uint8_t last_release_lift_step2_cmd;
   volatile uint8_t last_cleared_ore_id;
   volatile uint8_t last_zone3_r2_state;
   volatile uint8_t last_tx_status;
@@ -62,11 +67,13 @@ typedef struct {
   volatile uint32_t last_rx_raw_ms;
   volatile uint32_t last_online_rx_ms;
   volatile uint32_t last_complete_rx_ms;
+  volatile uint32_t last_release_lift_step2_rx_ms;
   volatile uint32_t last_rx_ms;
   volatile uint32_t last_tx_ms;
   volatile uint32_t last_rx_age_ms;
   volatile uint32_t last_online_age_ms;
   volatile uint32_t last_complete_age_ms;
+  volatile uint32_t last_release_lift_step2_age_ms;
   volatile uint32_t last_rx_raw_age_ms;
   volatile uint32_t rx_count;
   volatile uint32_t tx_count;
@@ -74,6 +81,7 @@ typedef struct {
   volatile uint32_t status_ack_tx_count;
   volatile uint32_t online_rx_count;
   volatile uint32_t complete_rx_count;
+  volatile uint32_t release_lift_step2_rx_count;
   volatile uint32_t protocol_frame_rx_count;
   volatile uint32_t crc_error_count;
   volatile uint32_t invalid_rx_count;
@@ -91,6 +99,7 @@ bool IrDock_IsDockCompleteFresh(uint32_t now_ms);
 bool IrDock_IsOnline(uint32_t now_ms);
 IrDock_Status_t IrDock_GetLastRxStatus(void);
 bool IrDock_IsR2LeaveZone1Allowed(void);
+bool IrDock_IsReleaseLiftStep2Ready(void);
 uint8_t IrDock_GetLastClearedOreId(void);
 uint8_t IrDock_GetLastZone3R2State(void);
 
