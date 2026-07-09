@@ -237,6 +237,9 @@ typedef enum {
     PC_AUTO_ACTION_RELEASE_STEP2 = 35,    /* 放矿 step2：确认目标格后继续释放矿 */
     PC_AUTO_ACTION_RELEASE_LIFT_DETECT_STEP1 = 36, /* 三层放矿 step1：竖直观察目标格并等待抬升检测 */
     PC_AUTO_ACTION_RELEASE_LIFT_DETECT_STEP2 = 37, /* 三层放矿 step2：确认目标格/抬升后继续释放矿 */
+    PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT = 38, /* 三层放矿：使用红外 claw_open 允许信号替代 SICK 检测 */
+    PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT_STEP1 = 39, /* 三层放矿 step1：竖直观察目标格并等待红外 claw_open */
+    PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT_STEP2 = 40, /* 三层放矿 step2：红外允许后继续释放矿 */
 } PC_AutoAction_t;
 
 typedef enum {
@@ -445,12 +448,12 @@ typedef struct {
     uint8_t fresh;                                           /* 最近一帧是否仍在 IR_DOCK_ONLINE_TIMEOUT_MS 内，0=过期/未收到，1=新鲜 */
     uint8_t dock_complete;                                   /* 对接完成指令，0=未完成，1=完成 */
     uint8_t r2_leave_zone1_allowed;                          /* R2 是否可以出一区，0=不可以，1=可以 */
-    uint8_t release_lift_step2_ready;                         /* 三层放矿 step2 触发，0=等待，1=R2 执行三层矿 step2 */
+    uint8_t claw_open;                                        /* 允许放矿信号，0=等待，1=允许释放三层矿 */
     uint8_t cleared_ore_id;                                  /* 哪个 R1 矿被清掉，合法值 0-12 且不含 5/8；未收到时为 0xFF */
     uint8_t zone3_r2_state;                                  /* 三区 R2 状态，1=工作状态，2=待机状态；未收到时为 0 */
     uint8_t last_dock_complete_cmd;                          /* 最近原始对接完成字段，0/1 */
     uint8_t last_r2_leave_zone1_cmd;                         /* 最近原始 R2 出一区字段，0/1 */
-    uint8_t last_release_lift_step2_cmd;                      /* 最近原始三层放矿 step2 字段，0/1 */
+    uint8_t last_claw_open_cmd;                               /* 最近原始允许放矿字段 claw_open，0/1 */
     uint8_t reserved[2];                                      /* 保留字段，发送端固定为 0 */
     uint32_t age_ms;                                         /* 距最近成功解析 R1/R2 红外对接帧的时间，单位 ms；未收到过为 0 */
     uint32_t rx_count;                                       /* 成功解析 R1/R2 红外对接帧累计次数 */
