@@ -3,17 +3,17 @@
 /*
  * auto_ctrl_api.c
  *
- * 作用：
- * - 实现 AutoCtrl 主状态机（IDLE/PREALIGN/RUN_TEMPLATE/结束态）；
- * - 连接 template 与 primitive 两层；
- * - 接收外部反馈并输出底盘/撑杆命令。
+ * 作用�?
+ * - 实现 AutoCtrl 主状态机（IDLE/PREALIGN/RUN_TEMPLATE/结束态）�?
+ * - 连接 template �?primitive 两层�?
+ * - 接收外部反馈并输出底�?撑杆命令�?
  *
- * 上层典型调用时序：
- * 1) 初始化阶段调用 AutoCtrl_Init；
- * 2) 每个控制周期先写入 AutoCtrl_SetFeedback，再调用 AutoCtrl_Update；
- * 3) 需要执行模板时调用 AutoCtrl_StartTemplate；
+ * 上层典型调用时序�?
+ * 1) 初始化阶段调�?AutoCtrl_Init�?
+ * 2) 每个控制周期先写�?AutoCtrl_SetFeedback，再调用 AutoCtrl_Update�?
+ * 3) 需要执行模板时调用 AutoCtrl_StartTemplate�?
  * 4) 周期读取 ctrl->chassis_cmd / ctrl->pole_cmd 并下发执行机构；
- * 5) 任务结束后通过 GetResult/GetFault 判定成功或故障原因。
+ * 5) 任务结束后通过 GetResult/GetFault 判定成功或故障原因�?
  */
 
 #include <math.h>
@@ -30,7 +30,7 @@
 #define AUTO_CTRL_YAW_ALIGN_STABLE_MS (120u)
 #define AUTO_CTRL_SICK_ACCEPT_MAX_YAW_DIFF_RAD (1.57079632679f)
 
-/* 判断模板是否属于 200 跨越类（上/下都按跨越逻辑处理）。 */
+/* 判断模板是否属于 200 跨越类（�?下都按跨越逻辑处理）�?*/
 static const AutoCtrl_TemplateParam_t *AutoCtrl_GetTemplateParams(
     const Config_RobotParam_t *robot_param, auto_ctrl_template_e template_id) {
   if (robot_param == 0) {
@@ -83,7 +83,7 @@ static bool AutoCtrl_PoleSegmentsConfigured(
   }
 
   for (uint8_t i = 0u; i < AUTO_CTRL_POLE_SPEED_SEGMENT_COUNT; ++i) {
-    if (segments[i].height_rad > 0.0f && segments[i].speed_rad_s > 0.0f) {
+    if (segments[i].end_ratio > 0.0f && segments[i].speed_rad_s > 0.0f) {
       return true;
     }
   }
@@ -92,23 +92,38 @@ static bool AutoCtrl_PoleSegmentsConfigured(
 
 static float AutoCtrl_SelectPoleSegmentSpeed(
     const AutoCtrl_PoleSpeedSegment_t segments[AUTO_CTRL_POLE_SPEED_SEGMENT_COUNT],
-    float fallback_speed, float current_height_rad, float target_height_rad) {
+    float fallback_speed, float start_height_rad, float current_height_rad,
+    float target_height_rad) {
   if (!AutoCtrl_PoleSegmentsConfigured(segments)) {
     return fallback_speed;
   }
 
-  const bool extending = target_height_rad >= current_height_rad;
+  const float total_delta_rad = fabsf(target_height_rad - start_height_rad);
+  float progress = 1.0f;
+  if (total_delta_rad > 0.0001f) {
+    progress = fabsf(current_height_rad - start_height_rad) / total_delta_rad;
+    if (progress < 0.0f) {
+      progress = 0.0f;
+    }
+    if (progress > 1.0f) {
+      progress = 1.0f;
+    }
+  }
+
   float selected_speed = fallback_speed;
   for (uint8_t i = 0u; i < AUTO_CTRL_POLE_SPEED_SEGMENT_COUNT; ++i) {
     if (segments[i].speed_rad_s <= 0.0f) {
       continue;
     }
     selected_speed = segments[i].speed_rad_s;
-    if (segments[i].height_rad <= 0.0f) {
+    float end_ratio = segments[i].end_ratio;
+    if (end_ratio <= 0.0f) {
       continue;
     }
-    if ((extending && current_height_rad <= segments[i].height_rad) ||
-        (!extending && current_height_rad >= segments[i].height_rad) ||
+    if (end_ratio > 1.0f) {
+      end_ratio = 1.0f;
+    }
+    if (progress <= end_ratio ||
         i == AUTO_CTRL_POLE_SPEED_SEGMENT_COUNT - 1u) {
       return segments[i].speed_rad_s;
     }
@@ -152,20 +167,24 @@ static void AutoCtrl_ApplyEntryPoleSpeedProfile(
   if (template_id == AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD ||
       template_id == AUTO_CTRL_TEMPLATE_DESCEND_400_HEAD) {
     speed[0] = AutoCtrl_SelectPoleSegmentSpeed(
-        template_param->pole_front_retract_profile.front, speed[0],
-    ctrl->feedback.pole_front_lift_rad, target[0]);
+        template_param->pole_all_retract_profile.segment, speed[0],
+        ctrl->template_ctx.pole_motion_start_lift_rad[0],
+        ctrl->feedback.pole_front_lift_rad, target[0]);
     speed[1] = AutoCtrl_SelectPoleSegmentSpeed(
-        template_param->pole_rear_retract_profile.rear, speed[1],
-    ctrl->feedback.pole_rear_lift_rad, target[1]);
+        template_param->pole_all_retract_profile.segment, speed[1],
+        ctrl->template_ctx.pole_motion_start_lift_rad[1],
+        ctrl->feedback.pole_rear_lift_rad, target[1]);
     return;
   }
 
-  speed[0] = AutoCtrl_SelectPoleSegmentSpeed(profile->front, speed[0],
-                       ctrl->feedback.pole_front_lift_rad,
-                       target[0]);
-  speed[1] = AutoCtrl_SelectPoleSegmentSpeed(profile->rear, speed[1],
-                       ctrl->feedback.pole_rear_lift_rad,
-                       target[1]);
+  speed[0] = AutoCtrl_SelectPoleSegmentSpeed(profile->segment, speed[0],
+                                             ctrl->template_ctx.pole_motion_start_lift_rad[0],
+                                             ctrl->feedback.pole_front_lift_rad,
+                                             target[0]);
+  speed[1] = AutoCtrl_SelectPoleSegmentSpeed(profile->segment, speed[1],
+                                             ctrl->template_ctx.pole_motion_start_lift_rad[1],
+                                             ctrl->feedback.pole_rear_lift_rad,
+                                             target[1]);
 }
 
 static bool AutoCtrl_GetTemplateEntryPoleCommand(
@@ -222,7 +241,7 @@ static bool AutoCtrl_GetTemplateEntryPoleCommand(
   }
 }
 
-/* SICK 距离值有效性检查。 */
+/* SICK 距离值有效性检查�?*/
 static bool AutoCtrl_IsSickDistanceValid(float distance_cm,
                 float valid_min_cm,
                 float valid_max_cm) {
@@ -268,8 +287,8 @@ static bool AutoCtrl_IsSickYawAcceptable(const auto_ctrl_t *ctrl) {
 }
 
 /*
- * 估计 SICK 侧向差带来的姿态辅助角。
- * 仅在指定传感器模式下生效，返回 true 表示 assist_rad 可用。
+ * 估计 SICK 侧向差带来的姿态辅助角�?
+ * 仅在指定传感器模式下生效，返�?true 表示 assist_rad 可用�?
  */
 static bool AutoCtrl_TryGetSickAssistRad(const auto_ctrl_t *ctrl,
                                          float *assist_rad) {
@@ -364,14 +383,14 @@ static bool AutoCtrl_IsYawAlignedStable(auto_ctrl_t *ctrl, float yaw_error_rad,
          AUTO_CTRL_YAW_ALIGN_STABLE_MS;
 }
 
-/* 进入指定运行状态并刷新状态进入时间戳。 */
+/* 进入指定运行状态并刷新状态进入时间戳�?*/
 static void AutoCtrl_EnterState(auto_ctrl_t *ctrl, auto_ctrl_run_state_e state,
                                 uint32_t now_ms) {
   ctrl->state = state;
   ctrl->state_enter_time_ms = now_ms;
 }
 
-/* 统一收敛结束态：写结果/故障并按结束类型处理输出。 */
+/* 统一收敛结束态：写结�?故障并按结束类型处理输出�?*/
 static void AutoCtrl_Finish(auto_ctrl_t *ctrl, auto_ctrl_result_e result,
                             auto_ctrl_fault_e fault,
                             auto_ctrl_run_state_e state) {
@@ -387,7 +406,7 @@ static void AutoCtrl_Finish(auto_ctrl_t *ctrl, auto_ctrl_result_e result,
   AutoCtrlPrimitive_ResetChassis(ctrl);
 }
 
-/* 初始化控制器到可接收任务的空闲状态。 */
+/* 初始化控制器到可接收任务的空闲状态�?*/
 void AutoCtrl_Init(auto_ctrl_t *ctrl) {
   if (ctrl == 0) return;
   memset(ctrl, 0, sizeof(*ctrl));
@@ -403,7 +422,7 @@ void AutoCtrl_Init(auto_ctrl_t *ctrl) {
   AutoCtrlPrimitive_ResetOutputs(ctrl);
 }
 
-/* 重置控制器但保留 yaw 零点。 */
+/* 重置控制器但保留 yaw 零点�?*/
 void AutoCtrl_Reset(auto_ctrl_t *ctrl) {
   if (ctrl == 0) return;
   float yaw_zero = ctrl->yaw_zero_offset_rad;
@@ -411,13 +430,13 @@ void AutoCtrl_Reset(auto_ctrl_t *ctrl) {
   ctrl->yaw_zero_offset_rad = yaw_zero;
 }
 
-/* 记录当前 raw yaw 为新的零点偏移。 */
+/* 记录当前 raw yaw 为新的零点偏移�?*/
 void AutoCtrl_SetYawZeroOffset(auto_ctrl_t *ctrl, float raw_yaw_rad) {
   if (ctrl == 0) return;
   ctrl->yaw_zero_offset_rad = raw_yaw_rad;
 }
 
-/* 设置 yaw 来源。 */
+/* 设置 yaw 来源�?*/
 void AutoCtrl_SetYawSource(auto_ctrl_t *ctrl, auto_ctrl_yaw_source_e source) {
   if (ctrl == 0) return;
   if (source < AUTO_CTRL_YAW_SOURCE_STM32 ||
@@ -427,24 +446,24 @@ void AutoCtrl_SetYawSource(auto_ctrl_t *ctrl, auto_ctrl_yaw_source_e source) {
   ctrl->yaw_source = source;
 }
 
-/* 查询 yaw 来源。 */
+/* 查询 yaw 来源�?*/
 auto_ctrl_yaw_source_e AutoCtrl_GetYawSource(const auto_ctrl_t *ctrl) {
   return (ctrl == 0) ? AUTO_CTRL_YAW_SOURCE_STM32 : ctrl->yaw_source;
 }
 
-/* 设置外部 yaw rate 命令，非法输入按 0 处理。 */
+/* 设置外部 yaw rate 命令，非法输入按 0 处理�?*/
 void AutoCtrl_SetYawRateCommand(auto_ctrl_t *ctrl, float wz_rad_s) {
   if (ctrl == 0) return;
   ctrl->yaw_rate_cmd_rad_s = isfinite(wz_rad_s) ? wz_rad_s : 0.0f;
 }
 
-/* 设置外部横向速度命令，非法输入按 0 处理。 */
+/* 设置外部横向速度命令，非法输入按 0 处理�?*/
 void AutoCtrl_SetLateralVelocityCommand(auto_ctrl_t *ctrl, float vy_mps) {
   if (ctrl == 0) return;
   ctrl->lateral_velocity_cmd_mps = isfinite(vy_mps) ? vy_mps : 0.0f;
 }
 
-/* 更新反馈并把输入 yaw 转为 auto yaw。 */
+/* 更新反馈并把输入 yaw 转为 auto yaw�?*/
 void AutoCtrl_SetFeedback(auto_ctrl_t *ctrl,
                           const auto_ctrl_feedback_t *feedback) {
   if (ctrl == 0 || feedback == 0) return;
@@ -455,8 +474,8 @@ void AutoCtrl_SetFeedback(auto_ctrl_t *ctrl,
 }
 
 /*
- * 直接启动模板任务。
- * 时序位置：由上层在”空闲或结束态”发起，成功后立即进入 PREALIGN。
+ * 直接启动模板任务�?
+ * 时序位置：由上层在”空闲或结束态”发起，成功后立即进�?PREALIGN�?
  */
 bool AutoCtrl_StartTemplate(auto_ctrl_t *ctrl,
                             auto_ctrl_template_e template_id,
@@ -465,7 +484,7 @@ bool AutoCtrl_StartTemplate(auto_ctrl_t *ctrl,
                             float yaw_tolerance_rad,
                             auto_ctrl_sensor_mode_e sensor_mode,
                             uint32_t now_ms) {
-  (void)travel_dir; /* travel_dir 已内嵌到 template_id 中，不再需要映射。 */
+  (void)travel_dir; /* travel_dir 已内嵌到 template_id 中，不再需要映射�?*/
   if (ctrl == 0) return false;
 
   if (template_id <= AUTO_CTRL_TEMPLATE_NONE ||
@@ -509,7 +528,7 @@ bool AutoCtrl_StartTemplate(auto_ctrl_t *ctrl,
  * 主周期函数：
  * 1) 更新 yaw 误差（必要时融合 SICK 辅助）；
  * 2) 根据 state 执行 PREALIGN 或模板；
- * 3) 在完成/超时/异常时统一进入结束态。
+ * 3) 在完�?超时/异常时统一进入结束态�?
  */
 void AutoCtrl_Update(auto_ctrl_t *ctrl, uint32_t now_ms) {
   const Config_RobotParam_t *robot_param;
@@ -532,7 +551,7 @@ void AutoCtrl_Update(auto_ctrl_t *ctrl, uint32_t now_ms) {
   AutoCtrlPrimitive_ResetOutputs(ctrl);
 
   switch (ctrl->state) {
-    /* 空闲和结束态不再产生命令，等待上层下一次 StartTemplate。 */
+    /* 空闲和结束态不再产生命令，等待上层下一�?StartTemplate�?*/
     case AUTO_CTRL_STATE_IDLE:
     case AUTO_CTRL_STATE_SUCCESS:
     case AUTO_CTRL_STATE_FAIL:
@@ -541,9 +560,9 @@ void AutoCtrl_Update(auto_ctrl_t *ctrl, uint32_t now_ms) {
 
     /*
      * 预对齐阶段：
-     * - 持续做 yaw 收敛（部分模板叠加缓慢前进）；
-     * - 收敛后切换到 RUN_TEMPLATE；
-     * - 超时则直接失败。
+     * - 持续�?yaw 收敛（部分模板叠加缓慢前进）�?
+     * - 收敛后切换到 RUN_TEMPLATE�?
+     * - 超时则直接失败�?
      */
     case AUTO_CTRL_STATE_PREALIGN:
       if (sick_usable) {
@@ -619,10 +638,10 @@ void AutoCtrl_Update(auto_ctrl_t *ctrl, uint32_t now_ms) {
       return;
 
     /*
-     * 模板执行阶段：
-     * - 周期调用模板状态机推进 step；
+     * 模板执行阶段�?
+     * - 周期调用模板状态机推进 step�?
      * - 模板返回 true 表示完成并切成功态；
-     * - 模板写 fault 或总超时则切失败态。
+     * - 模板�?fault 或总超时则切失败态�?
      */
     case AUTO_CTRL_STATE_RUN_TEMPLATE:
       if ((now_ms - ctrl->state_enter_time_ms) > ctrl->template_timeout_ms) {
@@ -648,41 +667,41 @@ void AutoCtrl_Update(auto_ctrl_t *ctrl, uint32_t now_ms) {
   }
 }
 
-/* 外部主动中止任务。 */
+/* 外部主动中止任务�?*/
 void AutoCtrl_Abort(auto_ctrl_t *ctrl) {
   if (ctrl == 0) return;
   AutoCtrl_Finish(ctrl, AUTO_CTRL_RESULT_ABORTED, AUTO_CTRL_FAULT_ABORTED,
                   AUTO_CTRL_STATE_ABORT);
 }
 
-/* 判断是否处于忙状态。 */
+/* 判断是否处于忙状态�?*/
 bool AutoCtrl_IsBusy(const auto_ctrl_t *ctrl) {
   if (ctrl == 0) return false;
   return ctrl->state == AUTO_CTRL_STATE_PREALIGN ||
          ctrl->state == AUTO_CTRL_STATE_RUN_TEMPLATE;
 }
 
-/* 读取当前运行状态。 */
+/* 读取当前运行状态�?*/
 auto_ctrl_run_state_e AutoCtrl_GetState(const auto_ctrl_t *ctrl) {
   return (ctrl == 0) ? AUTO_CTRL_STATE_IDLE : ctrl->state;
 }
 
-/* 读取任务结果。 */
+/* 读取任务结果�?*/
 auto_ctrl_result_e AutoCtrl_GetResult(const auto_ctrl_t *ctrl) {
   return (ctrl == 0) ? AUTO_CTRL_RESULT_NONE : ctrl->result;
 }
 
-/* 读取故障码。 */
+/* 读取故障码�?*/
 auto_ctrl_fault_e AutoCtrl_GetFault(const auto_ctrl_t *ctrl) {
   return (ctrl == 0) ? AUTO_CTRL_FAULT_INVALID_TEMPLATE : ctrl->fault;
 }
 
-/* 读取当前模板 ID。 */
+/* 读取当前模板 ID�?*/
 auto_ctrl_template_e AutoCtrl_GetTemplate(const auto_ctrl_t *ctrl) {
   return (ctrl == 0) ? AUTO_CTRL_TEMPLATE_NONE : ctrl->template_id;
 }
 
-/* 读取模板当前 step 索引。 */
+/* 读取模板当前 step 索引�?*/
 uint8_t AutoCtrl_GetStepIndex(const auto_ctrl_t *ctrl) {
   return (ctrl == 0) ? 0u : ctrl->template_ctx.step_index;
 }

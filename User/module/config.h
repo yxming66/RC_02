@@ -42,13 +42,12 @@ typedef struct {
 #define AUTO_CTRL_POLE_SPEED_SEGMENT_COUNT (3u)
 
 typedef struct {
-  float height_rad;   /* 本段切换高度阈值，单位 rad；<=0 表示该段关闭。 */
+  float end_ratio;    /* 本段结束进度 0~1，按本次动作起点到目标点归一化；<=0 表示该段关闭。 */
   float speed_rad_s;  /* 本段撑杆速度，单位 rad/s；<=0 表示沿用旧单段速度。 */
 } AutoCtrl_PoleSpeedSegment_t;
 
 typedef struct {
-  AutoCtrl_PoleSpeedSegment_t front[AUTO_CTRL_POLE_SPEED_SEGMENT_COUNT];
-  AutoCtrl_PoleSpeedSegment_t rear[AUTO_CTRL_POLE_SPEED_SEGMENT_COUNT];
+  AutoCtrl_PoleSpeedSegment_t segment[AUTO_CTRL_POLE_SPEED_SEGMENT_COUNT];
 } AutoCtrl_PoleSpeedProfile_t;
 
 typedef struct {
@@ -87,6 +86,7 @@ typedef struct {
   float pole_lift_accel;          /* 撑杆加速度限制，单位 rad/s^2；>0 限幅，0 使用 Pole 默认值，<0 禁用。 */
 
   AutoCtrl_PoleSpeedProfile_t pole_all_extend_profile;    /* 四杆全伸三段速度。 */
+  AutoCtrl_PoleSpeedProfile_t pole_all_retract_profile;   /* 四杆全收三段速度。 */
   AutoCtrl_PoleSpeedProfile_t pole_front_extend_profile;  /* 前杆伸出三段速度。 */
   AutoCtrl_PoleSpeedProfile_t pole_front_retract_profile; /* 前杆回收三段速度。 */
   AutoCtrl_PoleSpeedProfile_t pole_rear_extend_profile;   /* 后杆伸出三段速度。 */

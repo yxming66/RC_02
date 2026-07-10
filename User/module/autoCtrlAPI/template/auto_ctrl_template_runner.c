@@ -15,13 +15,14 @@ typedef struct {
 typedef enum {
   AUTO_CTRL_POLE_PROFILE_NONE = 0,
   AUTO_CTRL_POLE_PROFILE_ALL_EXTEND,
+  AUTO_CTRL_POLE_PROFILE_ALL_RETRACT,
   AUTO_CTRL_POLE_PROFILE_FRONT_EXTEND,
   AUTO_CTRL_POLE_PROFILE_FRONT_RETRACT,
   AUTO_CTRL_POLE_PROFILE_REAR_EXTEND,
   AUTO_CTRL_POLE_PROFILE_REAR_RETRACT,
 } auto_ctrl_pole_profile_e;
 
-#define AUTO_CTRL_PHOTO_STABLE_MS (5u) /* 光电稳定触发时间，单位 ms。 */
+#define AUTO_CTRL_PHOTO_STABLE_MS (5u) /* 光电稳定触发时间，单�?ms�?*/
 #define AUTO_CTRL_TIMED_MOVE_YAW_TOLERANCE_DEFAULT_RAD (0.3490329252f)
 
 enum {
@@ -329,6 +330,8 @@ static const AutoCtrl_PoleSpeedProfile_t *AutoCtrlTemplate_GetPoleProfile(
   switch (profile) {
     case AUTO_CTRL_POLE_PROFILE_ALL_EXTEND:
       return &param->pole_all_extend_profile;
+    case AUTO_CTRL_POLE_PROFILE_ALL_RETRACT:
+      return &param->pole_all_retract_profile;
     case AUTO_CTRL_POLE_PROFILE_FRONT_EXTEND:
       return &param->pole_front_extend_profile;
     case AUTO_CTRL_POLE_PROFILE_FRONT_RETRACT:
@@ -350,7 +353,7 @@ static bool AutoCtrlTemplate_PoleProfileConfigured(
   }
 
   for (uint8_t i = 0u; i < AUTO_CTRL_POLE_SPEED_SEGMENT_COUNT; ++i) {
-    if (segments[i].height_rad > 0.0f && segments[i].speed_rad_s > 0.0f) {
+    if (segments[i].end_ratio > 0.0f && segments[i].speed_rad_s > 0.0f) {
       return true;
     }
   }
@@ -359,23 +362,38 @@ static bool AutoCtrlTemplate_PoleProfileConfigured(
 
 static float AutoCtrlTemplate_SelectPoleSegmentSpeed(
     const AutoCtrl_PoleSpeedSegment_t segments[AUTO_CTRL_POLE_SPEED_SEGMENT_COUNT],
-    float fallback_speed, float current_height_rad, float target_height_rad) {
+    float fallback_speed, float start_height_rad, float current_height_rad,
+    float target_height_rad) {
   if (!AutoCtrlTemplate_PoleProfileConfigured(segments)) {
     return fallback_speed;
   }
 
-  const bool extending = target_height_rad >= current_height_rad;
+  const float total_delta_rad = fabsf(target_height_rad - start_height_rad);
+  float progress = 1.0f;
+  if (total_delta_rad > 0.0001f) {
+    progress = fabsf(current_height_rad - start_height_rad) / total_delta_rad;
+    if (progress < 0.0f) {
+      progress = 0.0f;
+    }
+    if (progress > 1.0f) {
+      progress = 1.0f;
+    }
+  }
+
   float selected_speed = fallback_speed;
   for (uint8_t i = 0u; i < AUTO_CTRL_POLE_SPEED_SEGMENT_COUNT; ++i) {
     if (segments[i].speed_rad_s <= 0.0f) {
       continue;
     }
     selected_speed = segments[i].speed_rad_s;
-    if (segments[i].height_rad <= 0.0f) {
+    float end_ratio = segments[i].end_ratio;
+    if (end_ratio <= 0.0f) {
       continue;
     }
-    if ((extending && current_height_rad <= segments[i].height_rad) ||
-        (!extending && current_height_rad >= segments[i].height_rad) ||
+    if (end_ratio > 1.0f) {
+      end_ratio = 1.0f;
+    }
+    if (progress <= end_ratio ||
         i == AUTO_CTRL_POLE_SPEED_SEGMENT_COUNT - 1u) {
       return segments[i].speed_rad_s;
     }
@@ -422,18 +440,20 @@ static void AutoCtrlTemplate_CommandPoleProfile(
 
   if (front_speed_profile != 0) {
     front_speed = AutoCtrlTemplate_SelectPoleSegmentSpeed(
-    front_speed_profile->front, front_speed,
-    ctrl->feedback.pole_front_lift_rad, front_target);
+      front_speed_profile->segment, front_speed,
+        ctrl->template_ctx.pole_motion_start_lift_rad[0],
+        ctrl->feedback.pole_front_lift_rad, front_target);
   }
   if (rear_speed_profile != 0) {
     rear_speed = AutoCtrlTemplate_SelectPoleSegmentSpeed(
-    rear_speed_profile->rear, rear_speed,
-    ctrl->feedback.pole_rear_lift_rad, rear_target);
+      rear_speed_profile->segment, rear_speed,
+        ctrl->template_ctx.pole_motion_start_lift_rad[1],
+        ctrl->feedback.pole_rear_lift_rad, rear_target);
   }
 
   AutoCtrlPrimitive_CommandPoleTargetWithSpeed(ctrl, front_target, rear_target,
                                                front_speed, rear_speed);
-  /* 0 表示让 Pole 使用全局默认值；负值表示禁用加速度限制。 */
+  /* 0 表示�?Pole 使用全局默认值；负值表示禁用加速度限制�?*/
   ctrl->pole_cmd.auto_lift_accel[0] = lift_accel;
   ctrl->pole_cmd.auto_lift_accel[1] = lift_accel;
   ctrl->pole_cmd.disable_lift_accel = lift_accel < 0.0f;
@@ -466,8 +486,8 @@ static bool AutoCtrlTemplate_RunDescendStartSprint(
 
   AutoCtrlTemplate_CommandPoleProfile(
       ctrl, front_target, rear_target, front_speed, rear_speed,
-      AUTO_CTRL_POLE_PROFILE_FRONT_RETRACT,
-      AUTO_CTRL_POLE_PROFILE_REAR_RETRACT);
+      AUTO_CTRL_POLE_PROFILE_ALL_RETRACT,
+      AUTO_CTRL_POLE_PROFILE_ALL_RETRACT);
 
   if (!ctrl->template_ctx.descend_start_lift_ready) {
     ctrl->template_ctx.descend_start_lift_ready =
@@ -815,7 +835,7 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
   AutoCtrlTemplate_SelectPoleTargets(robot_param, use_400mm, false, &pole);
 
   switch (ctrl->template_ctx.step_index) {
-    case 0: /* 四杆全伸并前进，等待四杆到位。 */
+    case 0: /* 四杆全伸并前进，等待四杆到位�?*/
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
       AutoCtrlPrimitive_ApplyPrealignWithMove(
           ctrl, param->pole_extend_move_speed, 0.0f);
@@ -830,7 +850,7 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
       }
       return false;
 
-    case 1: /* 等待前光电连续稳定触发。 */
+    case 1: /* 等待前光电连续稳定触发�?*/
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
       const bool first_photo_ready =
           AutoCtrlTemplate_LatchFrontPhotoStable(ctrl, now_ms);
@@ -854,7 +874,7 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
       AutoCtrlTemplate_NextStep(ctrl);
       return false;
 
-    case 2: /* 停车并收前杆，等待前杆到位。 */
+    case 2: /* 停车并收前杆，等待前杆到位�?*/
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
       if (use_400mm) {
         AutoCtrlTemplate_CommandChassisZeroVector(ctrl);
@@ -879,7 +899,7 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
       }
       return false;
 
-    case 3: /* 前杆收回后的中段定时移动。 */
+    case 3: /* 前杆收回后的中段定时移动�?*/
       if (use_400mm && AutoCtrlTemplate_LatchRearPhotoStable(ctrl, now_ms)) {
         AutoCtrlTemplate_DebugMarkPhotoEvent(
             ctrl, now_ms, AUTO_CTRL_TEMPLATE_DEBUG_PHOTO_ASCEND_REAR);
@@ -887,8 +907,8 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
         AutoCtrlTemplate_CommandPoleProfile(
             ctrl, pole.all_retract[0], pole.all_retract[1],
             param->pole_front_retract_speed, param->pole_rear_retract_speed,
-            AUTO_CTRL_POLE_PROFILE_FRONT_RETRACT,
-            AUTO_CTRL_POLE_PROFILE_REAR_RETRACT);
+            AUTO_CTRL_POLE_PROFILE_ALL_RETRACT,
+            AUTO_CTRL_POLE_PROFILE_ALL_RETRACT);
         AutoCtrlTemplate_DebugMarkPoleCommand(
           ctrl, now_ms, AUTO_CTRL_TEMPLATE_DEBUG_POLE_AFTER_PHOTO);
         AutoCtrlTemplate_SetStep(ctrl, 5u);
@@ -909,7 +929,7 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
       }
       return false;
 
-    case 4: /* 等待后光电连续稳定触发。 */
+    case 4: /* 等待后光电连续稳定触发�?*/
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
       const bool second_photo_ready =
           AutoCtrlTemplate_LatchRearPhotoStable(ctrl, now_ms);
@@ -933,7 +953,7 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
       AutoCtrlTemplate_NextStep(ctrl);
       return false;
 
-    case 5: /* 停车并四杆全收，等待四杆到位。 */
+    case 5: /* 停车并四杆全收，等待四杆到位�?*/
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
       if (use_400mm) {
         AutoCtrlTemplate_CommandChassisZeroVector(ctrl);
@@ -943,9 +963,9 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
       AutoCtrlTemplate_CommandPoleProfile(
           ctrl, pole.all_retract[0], pole.all_retract[1],
           param->pole_front_retract_speed, param->pole_rear_retract_speed,
-          AUTO_CTRL_POLE_PROFILE_FRONT_RETRACT,
-          AUTO_CTRL_POLE_PROFILE_REAR_RETRACT);
-        AutoCtrlTemplate_DebugMarkPoleCommand(
+          AUTO_CTRL_POLE_PROFILE_ALL_RETRACT,
+          AUTO_CTRL_POLE_PROFILE_ALL_RETRACT);
+      AutoCtrlTemplate_DebugMarkPoleCommand(
           ctrl, now_ms, AUTO_CTRL_TEMPLATE_DEBUG_POLE_AFTER_PHOTO);
       if (AutoCtrlTemplate_PoleReadyAfterNewTarget(
               ctrl, ctrl->feedback.pole_all_at_target)) {
@@ -958,7 +978,7 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
       }
       return false;
 
-    case 6: /* 四杆全收后的离开移动。 */
+    case 6: /* 四杆全收后的离开移动�?*/
       if (!ctrl->template_ctx.step_entered) {
         AutoCtrlTemplate_ResetPhoto4RisingAfterLow(ctrl);
       }
@@ -968,8 +988,8 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
       AutoCtrlTemplate_CommandPoleProfile(
           ctrl, pole.all_retract[0], pole.all_retract[1],
           param->pole_front_retract_speed, param->pole_rear_retract_speed,
-          AUTO_CTRL_POLE_PROFILE_FRONT_RETRACT,
-          AUTO_CTRL_POLE_PROFILE_REAR_RETRACT);
+          AUTO_CTRL_POLE_PROFILE_ALL_RETRACT,
+          AUTO_CTRL_POLE_PROFILE_ALL_RETRACT);
       if (AutoCtrlTemplate_FinalPhotoSprintReady(ctrl, now_ms, param)) {
         AutoCtrlTemplate_NextStep(ctrl);
       } else if (!ctrl->template_ctx.final_photo_sprint_started &&
@@ -980,7 +1000,7 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
       }
       return false;
 
-    case 7: /* 模板完成。 */
+    case 7: /* 模板完成�?*/
       return true;
 
     default:
@@ -997,7 +1017,7 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
   AutoCtrlTemplate_SelectPoleTargets(robot_param, use_400mm, true, &pole);
 
   switch (ctrl->template_ctx.step_index) {
-    case 0: /* 头向下台阶起步，杆到起步高度后快速接近。 */
+    case 0: /* 头向下台阶起步，杆到起步高度后快速接近�?*/
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
       if (AutoCtrlTemplate_RunDescendStartSprint(
               ctrl, now_ms, param, param->mid_move_speed,
@@ -1009,7 +1029,7 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
       }
       return false;
 
-    case 1: /* 慢速捕获第一个稳定下降沿，随后伸前杆。 */
+    case 1: /* 慢速捕获第一个稳定下降沿，随后伸前杆�?*/
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
       if (AutoCtrlTemplate_DescendFirstPhotoFallingStable(ctrl, use_400mm,
                           now_ms)) {
@@ -1036,8 +1056,8 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
       AutoCtrlTemplate_CommandPoleProfile(
           ctrl, pole.all_retract[0], pole.all_retract[1],
           param->pole_front_retract_speed, param->pole_rear_retract_speed,
-          AUTO_CTRL_POLE_PROFILE_FRONT_RETRACT,
-          AUTO_CTRL_POLE_PROFILE_REAR_RETRACT);
+          AUTO_CTRL_POLE_PROFILE_ALL_RETRACT,
+          AUTO_CTRL_POLE_PROFILE_ALL_RETRACT);
       if (param->rear_photo_timeout_ms > 0u &&
           AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
               param->rear_photo_timeout_ms) {
@@ -1045,7 +1065,7 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
       }
       return false;
 
-    case 2: /* 低速前进并等待前杆支撑到位。 */
+    case 2: /* 低速前进并等待前杆支撑到位�?*/
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
       if (use_400mm) {
         AutoCtrlTemplate_CommandChassisZeroVector(ctrl);
@@ -1063,7 +1083,7 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
       }
       return false;
 
-    case 3: /* 前杆支撑后的第二段定时接近。 */
+    case 3: /* 前杆支撑后的第二段定时接近�?*/
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
       const uint32_t rear_retract_move_ms =
           AutoCtrlTemplate_DescendRearRetractMoveMs(ctrl, param);
@@ -1087,7 +1107,7 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
       }
       return false;
 
-    case 4: /* 慢速捕获第二个稳定下降沿，随后四杆全伸。 */
+    case 4: /* 慢速捕获第二个稳定下降沿，随后四杆全伸�?*/
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
       if (AutoCtrlTemplate_DescendSecondPhotoFallingStable(ctrl, use_400mm,
                            now_ms)) {
@@ -1123,7 +1143,7 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
       }
       return false;
 
-    case 5: /* 低速前进并等待四杆支撑到位。 */
+    case 5: /* 低速前进并等待四杆支撑到位�?*/
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
       if (use_400mm) {
         AutoCtrlTemplate_CommandChassisZeroVector(ctrl);
@@ -1141,7 +1161,7 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
       }
       return false;
 
-    case 6: /* 四杆全伸支撑通过。 */
+    case 6: /* 四杆全伸支撑通过�?*/
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
       AutoCtrlPrimitive_CommandFlatMoveWithYawRate(
           ctrl, param->pole_extend_move_speed);
@@ -1155,7 +1175,7 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
       }
       return false;
 
-    case 7: /* 四杆保持全伸并离开。 */
+    case 7: /* 四杆保持全伸并离开�?*/
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
       AutoCtrlPrimitive_CommandFlatMoveWithYawRate(
           ctrl,
@@ -1170,7 +1190,7 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
       }
       return false;
 
-    case 8: /* 模板完成。 */
+    case 8: /* 模板完成�?*/
       return true;
 
     default:
