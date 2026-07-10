@@ -1,5 +1,5 @@
 /*
- * Camera yaw module: DM-H3510 yaw motor current loop in chassis body frame.
+ * Camera yaw module: DM-H3510 native MIT control in chassis body frame.
  */
 #pragma once
 
@@ -10,7 +10,6 @@ extern "C" {
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "component/pid.h"
 #include "device/motor_dm.h"
 
 #define CAMERA_YAW_OK (0)
@@ -32,10 +31,14 @@ typedef struct {
   MOTOR_DM_Param_t motor_param;
   float encoder_zero_offset_rad;
   struct {
-    KPID_Params_t yaw_pid;
-  } pid;
+    float kp;
+    float kd;
+    float target_velocity_rad_s;
+    float torque_ff_nm;
+    float max_position_error_rad;
+  } mit;
   struct {
-    float max_output;
+    float max_torque_nm;
     float arrive_threshold_rad;
     uint32_t feedback_timeout_ms;
   } limit;
@@ -89,9 +92,9 @@ typedef struct {
   float nominal_dt;
   const CameraYaw_Params_t *param;
   CameraYaw_Mode_t mode;
-  KPID_t yaw_pid;
   CameraYaw_CMD_t cmd;
   CameraYaw_Feedback_t feedback;
+  float mit_target_motor_angle_rad;
   float output;
 } CameraYaw_t;
 

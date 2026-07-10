@@ -80,8 +80,6 @@ static CameraYawMotorProtocol *CameraYaw_ConstructMotorProtocol(
   return protocol;
 }
 
-#define CAMERA_YAW_PID_EPSILON (1.0e-6f)
-
 static float CameraYaw_ClampSymmetric(float value, float limit) {
   if (!isfinite(value)) {
     return 0.0f;
@@ -125,50 +123,6 @@ static float CameraYaw_BodyYawFromEncoder(const CameraYaw_t *c,
 
 static bool CameraYaw_ModeIsValid(CameraYaw_Mode_t mode) {
   return mode == CAMERA_YAW_MODE_RELAX || mode == CAMERA_YAW_MODE_ACTIVE;
-}
-
-static float CameraYaw_CalcMitCurrentFromError(CameraYaw_t *c,
-                                               float error_yaw_rad) {
-  if (c == NULL || c->yaw_pid.param == NULL || !isfinite(error_yaw_rad)) {
-    return 0.0f;
-  }
-
-  const KPID_Params_t *param = c->yaw_pid.param;
-  const float dt = fmaxf(c->dt, c->yaw_pid.dt_min);
-  const float k_error = error_yaw_rad * param->k;
-  float current = k_error * param->p;
-
-  if (param->d > CAMERA_YAW_PID_EPSILON && isfinite(dt)) {
-    const float d_error = (k_error - c->yaw_pid.last.err) / dt;
-    if (isfinite(d_error)) {
-      current += d_error * param->d;
-    }
-  }
-
-  c->yaw_pid.last.err = k_error;
-
-  if (param->i > CAMERA_YAW_PID_EPSILON && isfinite(dt)) {
-    const float candidate_i = c->yaw_pid.i + k_error * dt;
-    const float candidate_i_out = candidate_i * param->i;
-    const float out_limit = fabsf(param->out_limit);
-    const float i_limit = fabsf(param->i_limit);
-    const bool output_ok = out_limit <= CAMERA_YAW_PID_EPSILON ||
-                           fabsf(current + candidate_i_out) <= out_limit;
-    const bool integral_ok = i_limit <= CAMERA_YAW_PID_EPSILON ||
-                             fabsf(candidate_i) <= i_limit;
-    if (isfinite(candidate_i) && output_ok && integral_ok) {
-      c->yaw_pid.i = candidate_i;
-    }
-    current += c->yaw_pid.i * param->i;
-  }
-
-  if (isfinite(current)) {
-    if (param->out_limit > CAMERA_YAW_PID_EPSILON) {
-      current = CameraYaw_ClampSymmetric(current, param->out_limit);
-    }
-    c->yaw_pid.last.out = current;
-  }
-  return c->yaw_pid.last.out;
 }
 
 static float CameraYaw_CalcDt(CameraYaw_t *c, uint32_t now_ms) {
@@ -231,9 +185,14 @@ int8_t CameraYaw_Init(CameraYaw_t *c, const CameraYaw_Params_t *param,
   c->nominal_dt = 1.0f / target_freq;
   c->dt = c->nominal_dt;
   c->cmd.mode = CAMERA_YAW_MODE_RELAX;
-
-  if (PID_Init(&c->yaw_pid, KPID_MODE_NO_D, target_freq,
-               &param->pid.yaw_pid) != 0) {
+  if (!isfinite(param->mit.kp) || param->mit.kp < 0.0f ||
+      !isfinite(param->mit.kd) || param->mit.kd < 0.0f ||
+      !isfinite(param->mit.target_velocity_rad_s) ||
+      !isfinite(param->mit.torque_ff_nm) ||
+      !isfinite(param->mit.max_position_error_rad) ||
+      param->mit.max_position_error_rad <= 0.0f ||
+      !isfinite(param->limit.max_torque_nm) ||
+      param->limit.max_torque_nm <= 0.0f) {
     return CAMERA_YAW_ERR;
   }
 
@@ -302,17 +261,26 @@ int8_t CameraYaw_Control(CameraYaw_t *c, const CameraYaw_CMD_t *cmd,
   if (c->mode == CAMERA_YAW_MODE_RELAX || !feedback_valid ||
       !c->feedback.motor_online) {
     c->output = 0.0f;
+    c->feedback.output = 0.0f;
     c->feedback.error_yaw_rad = 0.0f;
     c->feedback.at_target = false;
-    PID_Reset(&c->yaw_pid);
+    c->mit_target_motor_angle_rad = c->feedback.motor_angle_rad;
     return CAMERA_YAW_OK;
   }
 
   c->feedback.error_yaw_rad =
       CircleError(target_yaw_rad, feedback_yaw_rad, M_2PI);
-  c->output = CameraYaw_CalcMitCurrentFromError(
-      c, c->feedback.error_yaw_rad);
-  c->output = CameraYaw_ClampSymmetric(c->output, c->param->limit.max_output);
+    const float limited_position_error = CameraYaw_ClampSymmetric(
+      c->feedback.error_yaw_rad, c->param->mit.max_position_error_rad);
+    c->mit_target_motor_angle_rad =
+      c->feedback.motor_angle_rad + limited_position_error;
+    c->output = c->param->mit.kp * limited_position_error +
+          c->param->mit.kd *
+            (c->param->mit.target_velocity_rad_s -
+             c->feedback.motor_velocity_rad_s) +
+          c->param->mit.torque_ff_nm;
+    c->output =
+      CameraYaw_ClampSymmetric(c->output, c->param->limit.max_torque_nm);
   c->feedback.output = c->output;
   c->feedback.at_target =
       fabsf(c->feedback.error_yaw_rad) <=
@@ -325,17 +293,29 @@ void CameraYaw_SetOutput(CameraYaw_t *c) {
     return;
   }
 
-  float output = c->output;
-  if (g_camera_yaw_debug.enable && g_camera_yaw_debug.direct_output_enable) {
-    output = g_camera_yaw_debug.direct_output;
-  }
-  output = CameraYaw_ClampSymmetric(output, c->param->limit.max_output);
-  c->feedback.output = output;
-
   CameraYawMotorProtocol *protocol = CameraYaw_GetMotorProtocol(c);
-  if (protocol != NULL) {
-    (void)protocol->SetMIT( 0.0f, 0.0f, 0.0f, 0.0f, output);
+  if (protocol == NULL) {
+    return;
   }
+
+  if (g_camera_yaw_debug.enable && g_camera_yaw_debug.direct_output_enable) {
+    const float torque_ff = CameraYaw_ClampSymmetric(
+        g_camera_yaw_debug.direct_output, c->param->limit.max_torque_nm);
+    c->feedback.output = torque_ff;
+    (void)protocol->SetMIT(0.0f, 0.0f, 0.0f, 0.0f, torque_ff);
+    return;
+  }
+
+  if (c->mode != CAMERA_YAW_MODE_ACTIVE || !c->feedback.feedback_valid ||
+      !c->feedback.motor_online) {
+    (void)protocol->SetMIT(0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+    return;
+  }
+
+  (void)protocol->SetMIT(c->mit_target_motor_angle_rad,
+                         c->param->mit.target_velocity_rad_s,
+                         c->param->mit.kp, c->param->mit.kd,
+                         c->param->mit.torque_ff_nm);
 }
 
 void CameraYaw_FlushOutput(CameraYaw_t *c) {
@@ -361,7 +341,7 @@ void CameraYaw_ResetOutput(CameraYaw_t *c) {
 
   c->output = 0.0f;
   c->feedback.output = 0.0f;
-  PID_Reset(&c->yaw_pid);
+  c->mit_target_motor_angle_rad = c->feedback.motor_angle_rad;
   CameraYawMotorProtocol *protocol = CameraYaw_GetMotorProtocol(c);
   if (protocol != NULL) {
     (void)protocol->Relax();

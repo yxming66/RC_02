@@ -106,6 +106,8 @@ volatile uint32_t g_rc_ore_store_assume_home_count = 0u;
 typedef enum {
   RC_CONTROL_PAGE_SAFE = 0,
   RC_CONTROL_PAGE_DRIVE,
+  RC_CONTROL_PAGE_POLE_FRONT,
+  RC_CONTROL_PAGE_POLE_REAR,
   RC_CONTROL_PAGE_AUTO_200_UP,
   RC_CONTROL_PAGE_AUTO_200_DOWN,
   RC_CONTROL_PAGE_PC,
@@ -118,6 +120,8 @@ typedef enum {
 typedef enum {
   RC_BEHAVIOR_SAFE = 0,
   RC_BEHAVIOR_DRIVE,
+  RC_BEHAVIOR_POLE_FRONT,
+  RC_BEHAVIOR_POLE_REAR,
   RC_BEHAVIOR_AUTO_200_UP_STANDBY,
   RC_BEHAVIOR_AUTO_200_DOWN_STANDBY,
   RC_BEHAVIOR_PC,
@@ -130,6 +134,8 @@ typedef enum {
 typedef enum {
   RC_CMD_PLAN_SAFE = 0,
   RC_CMD_PLAN_DRIVE,
+  RC_CMD_PLAN_POLE_FRONT,
+  RC_CMD_PLAN_POLE_REAR,
   RC_CMD_PLAN_AUTO_STANDBY,
   RC_CMD_PLAN_PC,
   RC_CMD_PLAN_PC_AUTO_CTRL,
@@ -263,9 +269,9 @@ static const RcSwitchBehaviorMap_t rc_behavior_map_active[] = {
   {DR16_SW_UP, DR16_SW_UP, DR16_SW_ERR, DR16_SW_ERR,
    RC_BEHAVIOR_PC},
   {DR16_SW_MID, DR16_SW_UP, DR16_SW_ERR, DR16_SW_ERR,
-   RC_BEHAVIOR_AUTO_200_UP_STANDBY},
+    RC_BEHAVIOR_POLE_FRONT},
   {DR16_SW_MID, DR16_SW_DOWN, DR16_SW_ERR, DR16_SW_ERR,
-   RC_BEHAVIOR_AUTO_200_DOWN_STANDBY},
+    RC_BEHAVIOR_POLE_REAR},
   {DR16_SW_MID, DR16_SW_MID, DR16_SW_ERR, DR16_SW_ERR,
    RC_BEHAVIOR_DRIVE},
 #if RC_LEFT_DOWN_MAPPING_AUTO_ORE
@@ -289,9 +295,9 @@ static const RcSwitchBehaviorMap_t rc_behavior_map_active[] = {
   {DR16_SW_UP, DR16_SW_UP, DR16_SW_ERR, DR16_SW_ERR,
    RC_BEHAVIOR_PC},
   {DR16_SW_MID, DR16_SW_UP, DR16_SW_ERR, DR16_SW_ERR,
-   RC_BEHAVIOR_AUTO_200_UP_STANDBY},
+    RC_BEHAVIOR_POLE_FRONT},
   {DR16_SW_MID, DR16_SW_DOWN, DR16_SW_ERR, DR16_SW_ERR,
-   RC_BEHAVIOR_AUTO_200_DOWN_STANDBY},
+    RC_BEHAVIOR_POLE_REAR},
   {DR16_SW_MID, DR16_SW_MID, DR16_SW_ERR, DR16_SW_ERR,
    RC_BEHAVIOR_DRIVE},
 #if RC_LEFT_DOWN_MAPPING_AUTO_ORE
@@ -1124,6 +1130,10 @@ static RcControlPage_t Rc_PageForBehavior(RcBehavior_t behavior) {
   switch (behavior) {
     case RC_BEHAVIOR_DRIVE:
       return RC_CONTROL_PAGE_DRIVE;
+    case RC_BEHAVIOR_POLE_FRONT:
+      return RC_CONTROL_PAGE_POLE_FRONT;
+    case RC_BEHAVIOR_POLE_REAR:
+      return RC_CONTROL_PAGE_POLE_REAR;
     case RC_BEHAVIOR_AUTO_200_UP_STANDBY:
       return RC_CONTROL_PAGE_AUTO_200_UP;
     case RC_BEHAVIOR_AUTO_200_DOWN_STANDBY:
@@ -1389,6 +1399,12 @@ static void Rc_TryStartAutoCtrlBySwitch(uint32_t now_ms) {
     return;
   }
 
+  const RcBehavior_t switch_behavior = Rc_SelectMappedBehavior();
+  if (switch_behavior == RC_BEHAVIOR_POLE_FRONT ||
+      switch_behavior == RC_BEHAVIOR_POLE_REAR) {
+    return;
+  }
+
   const RcAutoStepProfile_t auto_step_profile = Rc_SelectAutoStepProfile();
 
   if (last_sw_l == DR16_SW_MID && last_sw_r == DR16_SW_MID &&
@@ -1484,6 +1500,8 @@ struct RcPlanSafe {
 static bool Rc_CommandPlanUsesMappedPoleControl(void) {
   switch (rc_current_plan) {
     case RC_CMD_PLAN_DRIVE:
+    case RC_CMD_PLAN_POLE_FRONT:
+    case RC_CMD_PLAN_POLE_REAR:
     case RC_CMD_PLAN_AUTO_STANDBY:
     case RC_CMD_PLAN_ARM_SIMPLE:
     case RC_CMD_PLAN_ORE_STORE:
@@ -1628,6 +1646,12 @@ static RcCommandPlan_t Rc_SelectCommandPlan(RcBehavior_t behavior) {
     case RC_BEHAVIOR_DRIVE:
       g_rc_control_debug.page = RC_CONTROL_PAGE_DRIVE;
       return RC_CMD_PLAN_DRIVE;
+    case RC_BEHAVIOR_POLE_FRONT:
+      g_rc_control_debug.page = RC_CONTROL_PAGE_POLE_FRONT;
+      return RC_CMD_PLAN_POLE_FRONT;
+    case RC_BEHAVIOR_POLE_REAR:
+      g_rc_control_debug.page = RC_CONTROL_PAGE_POLE_REAR;
+      return RC_CMD_PLAN_POLE_REAR;
     case RC_BEHAVIOR_AUTO_200_UP_STANDBY:
     case RC_BEHAVIOR_AUTO_200_DOWN_STANDBY:
       g_rc_control_debug.page = Rc_PageForBehavior(behavior);
@@ -1781,6 +1805,24 @@ struct RcPoleFallbackKeepRoute {
 struct RcPoleDriveRoute {
   bool operator()(const RcRuntimeInput &, cmd::Context &, Pole_CMD_t &out) const {
     Rc_SetPoleManual(dr16.data.ch_l_y, dr16.data.ch_l_y);
+    Rc_ApplyPoleChResControlForCurrentPlan();
+    out = pole_cmd;
+    return true;
+  }
+};
+
+struct RcPoleFrontRoute {
+  bool operator()(const RcRuntimeInput &, cmd::Context &, Pole_CMD_t &out) const {
+    Rc_SetPoleManual(dr16.data.ch_l_y, 0.0f);
+    Rc_ApplyPoleChResControlForCurrentPlan();
+    out = pole_cmd;
+    return true;
+  }
+};
+
+struct RcPoleRearRoute {
+  bool operator()(const RcRuntimeInput &, cmd::Context &, Pole_CMD_t &out) const {
+    Rc_SetPoleManual(0.0f, dr16.data.ch_l_y);
     Rc_ApplyPoleChResControlForCurrentPlan();
     out = pole_cmd;
     return true;
@@ -2144,7 +2186,9 @@ static void Rc_ConfigureCmdCenter(void) {
               .when<RcPlanIn<RC_CMD_PLAN_AUTO_SICK_CORRECT_OUTPUT> >()
               .priority(cmd::Priority::CriticalAuto),
           cmd::from<RcRuntimeInput, RcChassisSafeRoute>()
-              .when<RcPlanIn<RC_CMD_PLAN_AUTO_STANDBY,
+              .when<RcPlanIn<RC_CMD_PLAN_POLE_FRONT,
+                     RC_CMD_PLAN_POLE_REAR,
+                     RC_CMD_PLAN_AUTO_STANDBY,
                              RC_CMD_PLAN_ARM_SIMPLE,
                              RC_CMD_PLAN_ORE_STORE,
                              RC_CMD_PLAN_ROD_NEW,
@@ -2163,6 +2207,12 @@ static void Rc_ConfigureCmdCenter(void) {
       .routes(
           cmd::from<RcRuntimeInput, RcPoleDriveRoute>()
               .when<RcPlanIn<RC_CMD_PLAN_DRIVE> >()
+              .priority(cmd::Priority::Manual),
+          cmd::from<RcRuntimeInput, RcPoleFrontRoute>()
+              .when<RcPlanIn<RC_CMD_PLAN_POLE_FRONT> >()
+              .priority(cmd::Priority::Manual),
+          cmd::from<RcRuntimeInput, RcPoleRearRoute>()
+              .when<RcPlanIn<RC_CMD_PLAN_POLE_REAR> >()
               .priority(cmd::Priority::Manual),
           cmd::from<RcRuntimeInput, RcPolePcRoute>()
               .when<RcPlanIn<RC_CMD_PLAN_PC,
@@ -2213,6 +2263,8 @@ static void Rc_ConfigureCmdCenter(void) {
               .priority(cmd::Priority::CriticalAuto),
           cmd::from<RcRuntimeInput, RcArmSimpleHoldRoute>()
               .when<RcPlanIn<RC_CMD_PLAN_DRIVE,
+                     RC_CMD_PLAN_POLE_FRONT,
+                     RC_CMD_PLAN_POLE_REAR,
                              RC_CMD_PLAN_AUTO_STANDBY,
                              RC_CMD_PLAN_ORE_STORE,
                              RC_CMD_PLAN_ROD_NEW,
@@ -2252,6 +2304,8 @@ static void Rc_ConfigureCmdCenter(void) {
               .priority(cmd::Priority::CriticalAuto),
           cmd::from<RcRuntimeInput, RcOreStoreHoldRoute>()
               .when<RcPlanIn<RC_CMD_PLAN_DRIVE,
+                     RC_CMD_PLAN_POLE_FRONT,
+                     RC_CMD_PLAN_POLE_REAR,
                              RC_CMD_PLAN_AUTO_STANDBY,
                              RC_CMD_PLAN_ARM_SIMPLE,
                              RC_CMD_PLAN_ROD_NEW,
@@ -2282,6 +2336,8 @@ static void Rc_ConfigureCmdCenter(void) {
               .priority(cmd::Priority::CriticalAuto),
           cmd::from<RcRuntimeInput, RcRodNewHoldRoute>()
               .when<RcPlanIn<RC_CMD_PLAN_DRIVE,
+                     RC_CMD_PLAN_POLE_FRONT,
+                     RC_CMD_PLAN_POLE_REAR,
                              RC_CMD_PLAN_AUTO_STANDBY,
                              RC_CMD_PLAN_ARM_SIMPLE,
                              RC_CMD_PLAN_ORE_STORE,

@@ -802,7 +802,7 @@ Config_RobotParam_t robot_config = {
                .grip_timeout_ms = 2000u,        /* 夹取超时 */
         },
     },
-    /* 模块参数：相机 yaw camera_yaw_param，相机云台电机、PID 和限幅。 */
+    /* 模块参数：相机 yaw camera_yaw_param，相机云台电机、原生 MIT 增益和限幅。 */
     .camera_yaw_param = {
         [CAMERA_YAW_RIGHT] = {
             .motor_param = {
@@ -813,20 +813,15 @@ Config_RobotParam_t robot_config = {
                 .reverse = false,
             },
             .encoder_zero_offset_rad = -2.58882332f,
-            .pid = {
-                .yaw_pid = {
-                    .k = 1.0f,
-                    .p = 3.5f,
-                    .i = 1.5f,
-                    .d = 0.1f,
-                    .i_limit = 0.45f,
-                    .out_limit = 8.0f,
-                    .d_cutoff_freq = -1.0f,
-                    .range = M_2PI,
-                },
+            .mit = {
+                .kp = 1.0f,
+                .kd = 0.08f,
+                .target_velocity_rad_s = 0.0f,
+                .torque_ff_nm = 0.0f,
+                .max_position_error_rad = 0.35f,
             },
             .limit = {
-                .max_output = 5.0f,
+                .max_torque_nm = 0.45f,
                 .arrive_threshold_rad = 0.02f,
                 .feedback_timeout_ms = 200u,
             },
