@@ -42,7 +42,8 @@ static bool IrDock_LeaveZone1CmdIsValid(uint8_t cmd) {
 }
 
 static bool IrDock_ClawOpenCmdIsValid(uint8_t cmd) {
-  return cmd == IR_DOCK_CLAW_OPEN_WAIT || cmd == IR_DOCK_CLAW_OPEN_ALLOW;
+  return cmd == IR_DOCK_CLAW_OPEN_WAIT || cmd == IR_DOCK_CLAW_OPEN_ALLOW ||
+         cmd == IR_DOCK_CLAW_OPEN_ABORT;
 }
 
 static bool IrDock_ClearedOreIdIsValid(uint8_t ore_id) {
@@ -146,6 +147,8 @@ static void IrDock_ParseProtocolFrame(const uint8_t *frame,
   if (claw_open_cmd == IR_DOCK_CLAW_OPEN_ALLOW) {
     g_ir_dock_debug.last_claw_open_rx_ms = now_ms;
     g_ir_dock_debug.claw_open_rx_count++;
+  } else if (claw_open_cmd == IR_DOCK_CLAW_OPEN_ABORT) {
+    g_ir_dock_debug.claw_open_abort_rx_count++;
   }
 }
 
@@ -338,6 +341,14 @@ bool IrDock_IsR2LeaveZone1Allowed(void) {
 
 bool IrDock_IsClawOpenFresh(uint32_t now_ms) {
   return IrDock_IsClawOpenFreshInternal(now_ms);
+}
+
+uint8_t IrDock_GetLastClawOpenCommand(void) {
+  return g_ir_dock_debug.last_claw_open_cmd;
+}
+
+uint32_t IrDock_GetClawOpenAbortCount(void) {
+  return g_ir_dock_debug.claw_open_abort_rx_count;
 }
 
 uint8_t IrDock_GetLastClearedOreId(void) {

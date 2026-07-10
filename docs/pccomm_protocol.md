@@ -602,10 +602,10 @@ AA 55 02 msg_id side ore_type[12] crc8
 该反馈来自 UART8 上的 R1/R2 红外新协议帧：
 
 ```
-4D 52 dock_complete r2_leave_zone1 release_lift_step2 cleared_ore_id zone3_r2_state crc16_lo crc16_hi
+4D 52 dock_complete r2_leave_zone1 claw_open zone3_r2_state crc16_lo crc16_hi
 ```
 
-CRC 使用工程公共 `component/crc16` 的 `CRC16_Calc()`：初值 `CRC16_INIT = 0xFFFF`，低字节在前。固件仍兼容旧 8 字节帧 `4D 52 dock_complete r2_leave_zone1 cleared_ore_id zone3_r2_state crc16_lo crc16_hi`，旧帧会把 `release_lift_step2` 当作 `0`。
+CRC 使用工程公共 `component/crc16` 的 `CRC16_Calc()`：初值 `CRC16_INIT = 0xFFFF`，低字节在前。`claw_open` 定义为 `0=等待`、`1=允许三层放矿`、`2=中止三层放矿`。
 
 payload 为 28 字节，Python unpack 格式为 `<BBBBBBBBBBxxIIII`。
 
@@ -615,12 +615,12 @@ payload 为 28 字节，Python unpack 格式为 `<BBBBBBBBBBxxIIII`。
 | 1 | u8 | `fresh` | 最近一帧是否仍在超时时间内，`0/1` |
 | 2 | u8 | `dock_complete` | 对接完成是否新鲜有效，`0=未完成/过期`，`1=完成` |
 | 3 | u8 | `r2_leave_zone1_allowed` | R2 是否可以出一区，`0=不可以`，`1=可以` |
-| 4 | u8 | `release_lift_step2_ready` | 三层放矿 step2 触发，`0=等待`，`1=R2 执行三层矿 step2` |
-| 5 | u8 | `cleared_ore_id` | 哪个 R1 矿被清掉，合法值 `0-12` 且不含 `5/8`；未收到为 `0xFF` |
+| 4 | u8 | `claw_open` | 当前允许状态，只有新鲜的 `claw_open=1` 时为 `1`，其余为 `0` |
+| 5 | u8 | `cleared_ore_id` | 当前 8 字节协议未携带，固定反馈 `0xFF` |
 | 6 | u8 | `zone3_r2_state` | 三区 R2 状态，`1=工作状态`，`2=待机状态`；未收到为 `0` |
 | 7 | u8 | `last_dock_complete_cmd` | 最近一帧原始对接完成字段，`0/1` |
 | 8 | u8 | `last_r2_leave_zone1_cmd` | 最近一帧原始 R2 出一区字段，`0/1` |
-| 9 | u8 | `last_release_lift_step2_cmd` | 最近一帧原始三层放矿 step2 字段，`0/1` |
+| 9 | u8 | `last_claw_open_cmd` | 最近一帧原始三层放矿字段，`0=等待`、`1=允许`、`2=中止` |
 | 10 | u8[2] | `reserved` | 固定为 `0`，用于 4 字节对齐 |
 | 12 | u32 | `age_ms` | 距最近成功解析新红外帧的时间，未收到为 `0` |
 | 16 | u32 | `rx_count` | 成功解析新红外帧累计次数 |
@@ -684,7 +684,15 @@ payload 为 28 字节，Python unpack 格式为 `<BBBBBBBBBBxxIIII`。
 | 31 | STEP_DROP_STORE_DESCEND_200_HEAD，丢矿版融合头向下 200mm 台阶；仅高位有矿时启动，存矿阶段强制存高位 |
 | 32 | STEP_DROP_STORE_ASCEND_400_HEAD，丢矿版融合头向上 400mm 台阶；仅高位有矿时启动，存矿阶段强制存高位 |
 | 33 | RECOVER_STORE，回收地面矿并存矿；要求机械臂无矿、低/高矿仓有空位、矿仓已回零 |
-| 32 | STEP_DROP_STORE_ASCEND_400_HEAD，丢矿版融合头向上 400mm 台阶；仅高位有矿时启动，存矿阶段强制存高位 |
+| 34 | RELEASE_STEP1，放矿第一段：机械臂到竖直观察位并检测目标格，保持等待 |
+| 35 | RELEASE_STEP2，放矿第二段：从等待位继续完成释放 |
+| 36 | RELEASE_LIFT_DETECT_STEP1，带 SICK 抬升检测的第一段 |
+| 37 | RELEASE_LIFT_DETECT_STEP2，带 SICK 抬升检测的第二段 |
+| 38 | RELEASE_IR_LIFT_DETECT，完整三层放矿：等待红外允许且目标格连续空闲后释放 |
+| 39 | RELEASE_IR_LIFT_DETECT_STEP1，三层放矿第一段：竖直等待红外允许和目标格空闲 |
+| 40 | RELEASE_IR_LIFT_DETECT_STEP2，三层放矿第二段：继续完成释放 |
+
+动作 `38/39/40` 使用 UART8 帧中的 `claw_open`。目标格有矿时不会失败，也不会因 `claw_open=1` 强制放矿，而是持续保持；矿移走并连续空闲 500 ms 后，已收到的允许信号可继续流程。运行任意阶段收到 `claw_open=2` 后，固件按 `RELEASE_ORE -> RELEASE_ORE_ASSIST -> WAIT_RELEASE_ORE -> VERTICAL` 的逆序安全路径回撤；已经释放吸盘的阶段保持吸盘关闭，未释放阶段保持吸附。到达 `VERTICAL` 后动作结束并通过 `PC_FEEDBACK_AUTO_ACTION` 返回 `ABORTED`。
 
 ### 6.3 红外对接
 

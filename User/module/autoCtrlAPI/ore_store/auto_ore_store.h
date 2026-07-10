@@ -118,6 +118,8 @@ typedef struct {
   uint16_t release_lift_sick_adc_raw;
   bool release_lift_sick_valid;
   bool release_lift_ir_claw_open;
+  uint8_t release_lift_ir_cmd;
+  uint32_t release_lift_ir_abort_count;
   float arm_joint1_rad;
   float arm_joint2_rad;
   float pole_front_lift_rad;
@@ -276,6 +278,13 @@ typedef struct {
   bool release_grid_check_active;
   bool release_grid_check_done;
   bool release_grid_has_ore;
+  bool release_ir_allow_latched;
+  bool release_ir_abort_pending;
+  bool release_ir_abort_recovery_active;
+  bool release_ir_abort_suction_on;
+  uint8_t release_ir_abort_source_step;
+  uint8_t release_ir_abort_recovery_phase;
+  uint32_t release_ir_abort_count_at_start;
   uint32_t release_lift_observer_start_ms;
   uint32_t release_lift_observer_last_ms;
   uint32_t release_lift_detect_time_ms;

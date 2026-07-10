@@ -226,10 +226,13 @@ static void AutoCtrlFeed_SendLightEffect(LightEffect_Mode_t mode,
 static bool AutoCtrlFeed_IsReleaseAction(AutoOre_Action_t action) {
   return action == AUTO_ORE_ACTION_RELEASE ||
          action == AUTO_ORE_ACTION_RELEASE_LIFT_DETECT ||
+         action == AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT ||
          action == AUTO_ORE_ACTION_RELEASE_STEP1 ||
          action == AUTO_ORE_ACTION_RELEASE_STEP2 ||
          action == AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP1 ||
-         action == AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP2;
+         action == AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP2 ||
+         action == AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT_STEP1 ||
+         action == AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT_STEP2;
 }
 
 static void AutoCtrlFeed_SendReleaseLevelLight(AutoOre_Position_t position) {
@@ -1517,7 +1520,9 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms, bool update_debug) {
           auto_ctrl_sick_output.adc_raw[release_lift_sick_index],
       .release_lift_sick_valid =
           auto_ctrl_sick_output.valid[release_lift_sick_index],
-        .release_lift_ir_claw_open = Task_IrDockIsClawOpenFresh(),
+      .release_lift_ir_claw_open = Task_IrDockIsClawOpenFresh(),
+      .release_lift_ir_cmd = IrDock_GetLastClawOpenCommand(),
+      .release_lift_ir_abort_count = IrDock_GetClawOpenAbortCount(),
       .arm_joint1_rad = (arm_fb != NULL) ? arm_fb->joint1_angle_rad : 0.0f,
       .arm_joint2_rad = (arm_fb != NULL) ? arm_fb->joint2_angle_rad : 0.0f,
       .pole_front_lift_rad = feedback.pole_front_lift_rad,

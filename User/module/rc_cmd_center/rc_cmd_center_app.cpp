@@ -1534,12 +1534,17 @@ static bool Rc_AutoOreReleaseIsBusy(void) {
            (auto_ore_ctrl.action == AUTO_ORE_ACTION_RELEASE ||
             auto_ore_ctrl.action == AUTO_ORE_ACTION_RELEASE_LIFT_DETECT
             ||
+            auto_ore_ctrl.action == AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT ||
             auto_ore_ctrl.action == AUTO_ORE_ACTION_RELEASE_STEP1 ||
             auto_ore_ctrl.action == AUTO_ORE_ACTION_RELEASE_STEP2 ||
             auto_ore_ctrl.action ==
             AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP1 ||
             auto_ore_ctrl.action ==
-            AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP2);
+            AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP2 ||
+            auto_ore_ctrl.action ==
+            AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT_STEP1 ||
+            auto_ore_ctrl.action ==
+            AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT_STEP2);
 }
 
 static bool Rc_AutoOreLowerFinishedPcChassisReady(RcBehavior_t behavior) {

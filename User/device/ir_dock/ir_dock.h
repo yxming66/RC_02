@@ -30,6 +30,7 @@ extern "C" {
 #define IR_DOCK_LEAVE_ZONE1_ALLOW (0x01u)
 #define IR_DOCK_CLAW_OPEN_WAIT (0x00u)
 #define IR_DOCK_CLAW_OPEN_ALLOW (0x01u)
+#define IR_DOCK_CLAW_OPEN_ABORT (0x02u)
 #define IR_DOCK_ZONE3_R2_WORK (0x01u)
 #define IR_DOCK_ZONE3_R2_STANDBY (0x02u)
 #define IR_DOCK_ZONE3_R2_UNKNOWN (0x00u)
@@ -72,6 +73,7 @@ typedef struct {
   volatile uint32_t online_rx_count;
   volatile uint32_t complete_rx_count;
   volatile uint32_t claw_open_rx_count;
+  volatile uint32_t claw_open_abort_rx_count;
   volatile uint32_t protocol_frame_rx_count;
   volatile uint32_t crc_error_count;
   volatile uint32_t invalid_rx_count;
@@ -88,6 +90,8 @@ bool IrDock_IsOnline(uint32_t now_ms);
 IrDock_Status_t IrDock_GetLastRxStatus(void);
 bool IrDock_IsR2LeaveZone1Allowed(void);
 bool IrDock_IsClawOpenFresh(uint32_t now_ms);
+uint8_t IrDock_GetLastClawOpenCommand(void);
+uint32_t IrDock_GetClawOpenAbortCount(void);
 uint8_t IrDock_GetLastClearedOreId(void);
 uint8_t IrDock_GetLastZone3R2State(void);
 
