@@ -246,6 +246,9 @@ int8_t CameraYaw_UpdateFeedback(CameraYaw_t *c) {
   }
 
   const int8_t update_ret = protocol->Update();
+  if (c->mode != CAMERA_YAW_MODE_RELAX) {
+    (void)protocol->Enable();
+  }
 
   c->feedback.motor_online = state->online;
   c->feedback.motor_angle_rad = state->position_rad;
