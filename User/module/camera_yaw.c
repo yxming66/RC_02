@@ -251,7 +251,7 @@ int8_t CameraYaw_UpdateFeedback(CameraYaw_t *c) {
   }
 
   c->feedback.motor_online = state->online;
-  c->feedback.motor_angle_rad = state->position_rad;
+  c->feedback.motor_angle_rad = state->position_rad;   
   c->feedback.motor_velocity_rad_s = state->velocity_rad_s;
   c->feedback.temperature_c = state->device_temperature_c;
   c->feedback.feedback_yaw_rad =
