@@ -157,13 +157,13 @@ Config_RobotParam_t robot_config = {
         },
         .preset = {
             /* 200mm 上台阶四杆全伸位；一键取矿 PICK_POS_200 也使用该撑杆高度。 */
-            .step_200_all_extend = {5.40230465f, 5.40230465f},
+            .step_200_all_extend = {5.70230465f, 5.70230465f},
             /* 200mm 上台阶前杆收回、后杆保持支撑位。 */
-            .step_200_front_retract = {0.3f, 5.40230465f},
+            .step_200_front_retract = {0.3f, 5.70230465f},
             /* 200mm 上台阶四杆全收位。 */
             .step_200_all_retract = {0.3f, 0.3f},
             /* 200mm 上台阶小抬升位；一键取矿 PICK_NEG_200 使用该撑杆高度。 */
-            .step_200_small = {5.40230465f, 5.40230465f},
+            .step_200_small = {5.70230465f, 5.70230465f},
             /* 400mm 上台阶四杆全伸位；一键取矿 PICK_POS_400 也使用该撑杆高度。 */
             .step_400_all_extend = {10.8f, 10.8f},
             /* 400mm 上台阶前杆收回、后杆保持支撑位。 */
@@ -185,8 +185,8 @@ Config_RobotParam_t robot_config = {
             .step_400_descend_front_retract = {0.06f, 10.8f},
             /* 400mm 下台阶四杆全收位。 */
             .step_400_descend_all_retract = {0.06f, 0.06f},
-            /* 一键放矿前撑杆目标位；先填占位值，实车再标定。 */
-            .ore_release_target = {10.8f, 10.8f},
+            /* 一键放矿撑杆目标位；与 PC 放矿期间持续下发的 10.5 rad 保持一致。 */
+            .ore_release_target = {10.5f, 10.5f},
             .ore_release_speed = 8.0f,
             .ore_release_accel = 0.0f, 
         },
@@ -252,7 +252,7 @@ Config_RobotParam_t robot_config = {
                 /* 平台抬升位/满行程位，用于  低位存矿或低位上膛交接。 */
                 [ORE_STORE_TRANSFORM_LIFT] = 18.4731674f,
                 /* 平台等待矛头对接位置 */ 
-                [ORE_STORE_TRANSFORM_SPEARHEAD_DOCK_WAIT] = 0.313727468f,
+                [ORE_STORE_TRANSFORM_SPEARHEAD_DOCK_WAIT] = 0.183727468f,
                 /* 取矛头平台预设位 */
                 [ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP] = 23.0183613//23.2407284f//22.3003597f,
             },
@@ -633,13 +633,13 @@ Config_RobotParam_t robot_config = {
                                                                     0.75f, 15.0f,
                                                                     1.00f, 15.0f),
 
-            .pole_front_retract_profile = CONFIG_POLE_SPEED_PROFILE(0.25f, 30.0f,
-                                                                    0.75f, 30.0f,
-                                                                    1.00f, 30.0f),
+            .pole_front_retract_profile = CONFIG_POLE_SPEED_PROFILE(0.25f, 0.0f,
+                                                                    0.75f, 0.0f,
+                                                                    1.00f, 0.0f),
 
-            .pole_rear_extend_profile = CONFIG_POLE_SPEED_PROFILE(0.25f, 20.0f,
-                                                                   0.75f, 20.0f,
-                                                                   1.00f, 20.0f),
+            .pole_rear_extend_profile = CONFIG_POLE_SPEED_PROFILE(0.25f, 0.0f,
+                                                                   0.75f, 0.0f,
+                                                                   1.00f, 0.0f),
 
             .pole_rear_retract_profile = CONFIG_POLE_SPEED_PROFILE(0.25f, 0.0f,
                                                                     0.75f, 0.0f,
@@ -683,11 +683,11 @@ Config_RobotParam_t robot_config = {
             .pole_rear_retract_speed = 30.0f,   /* 后杆回收目标跟随速度，单位 rad/s。 */
             .pole_lift_accel = 0.0f,          /* 当前模板撑杆加速度限幅，单位 rad/s^2。 */
             .pole_all_extend_profile = CONFIG_POLE_SPEED_PROFILE(0.1f, 10.0f, 0.9f, 15.0f, 1.00f, 8.0f),
-            .pole_all_retract_profile = CONFIG_POLE_SPEED_PROFILE(0.25f, 10.0f, 0.75f, 10.0f, 1.00f, 10.0f),
+            .pole_all_retract_profile = CONFIG_POLE_SPEED_PROFILE(0.25f, 20.0f, 0.75f, 20.0f, 1.00f, 20.0f),
             .pole_front_extend_profile = CONFIG_POLE_SPEED_PROFILE(0.25f, 15.0f, 0.75f, 15.0f, 1.00f, 15.0f),
             .pole_front_retract_profile = CONFIG_POLE_SPEED_PROFILE(0.1f, 15.0f, 0.75f, 30.0f, 1.00f, 30.0f),
             .pole_rear_extend_profile = CONFIG_POLE_SPEED_PROFILE(0.25f, 20.0f, 0.75f, 20.0f, 1.00f, 20.0f),
-            .pole_rear_retract_profile = CONFIG_POLE_SPEED_PROFILE(0.1f, 15.0f, 0.75f, 30.0f, 1.00f, 30.0f),
+            .pole_rear_retract_profile = CONFIG_POLE_SPEED_PROFILE(0.1f, 30.0f, 0.75f, 30.0f, 1.00f, 30.0f),
             .front_photo_timeout_ms = 5000u,    /* 等待前光电触发/下降沿超时，单位 ms。 */
             .rear_photo_timeout_ms = 10000u,     /* 等待后光电触发/下降沿超时，单位 ms。 */
         },
@@ -727,7 +727,7 @@ Config_RobotParam_t robot_config = {
             .pole_rear_retract_speed = 0.0f,   /* step0-4 后杆保持或回收到全收目标的速度，单位 rad/s。 */
             .pole_lift_accel = 0.0f,          /* 当前模板撑杆加速度限幅，单位 rad/s^2。 */
             .pole_all_extend_profile = CONFIG_POLE_SPEED_PROFILE(0.25f, 30.0f, 0.75f, 30.0f, 1.00f, 30.0f),
-            .pole_all_retract_profile = CONFIG_POLE_SPEED_PROFILE(0.25f, 10.0f, 0.75f, 10.0f, 1.00f, 10.0f),
+            .pole_all_retract_profile = CONFIG_POLE_SPEED_PROFILE(0.25f, 15.0f, 0.75f, 15.0f, 1.00f, 15.0f),
             .pole_front_extend_profile = CONFIG_POLE_SPEED_PROFILE(0.25f, 30.0f, 0.9f, 30.0f, 1.00f, 10.0f),
             .pole_front_retract_profile = CONFIG_POLE_SPEED_PROFILE(0.25f, 0.0f, 0.75f, 0.0f, 1.00f, 0.0f),
             .pole_rear_extend_profile = CONFIG_POLE_SPEED_PROFILE(0.25f, 30.0f, 0.9f, 30.0f, 1.00f, 10.0f),

@@ -610,6 +610,9 @@ static void PcComm_UpdateIrDockFeedback(uint32_t now_ms) {
     feedback.last_r2_leave_zone1_cmd =
         g_ir_dock_debug.last_r2_leave_zone1_cmd;
     feedback.last_claw_open_cmd = g_ir_dock_debug.last_claw_open_cmd;
+    feedback.last_command = g_ir_dock_debug.last_rx_status;
+    feedback.release_abort_count_lsb =
+        (uint8_t)g_ir_dock_debug.claw_open_abort_rx_count;
     feedback.age_ms = g_ir_dock_debug.last_rx_age_ms;
     feedback.rx_count = g_ir_dock_debug.protocol_frame_rx_count;
     feedback.crc_error_count = g_ir_dock_debug.crc_error_count;

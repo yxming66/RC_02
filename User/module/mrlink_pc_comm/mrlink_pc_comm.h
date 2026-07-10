@@ -451,10 +451,11 @@ typedef struct {
     uint8_t claw_open;                                        /* 允许放矿状态，0=未允许，1=当前允许释放三层矿 */
     uint8_t cleared_ore_id;                                  /* 哪个 R1 矿被清掉，合法值 0-12 且不含 5/8；未收到时为 0xFF */
     uint8_t zone3_r2_state;                                  /* 三区 R2 状态，1=工作状态，2=待机状态；未收到时为 0 */
-    uint8_t last_dock_complete_cmd;                          /* 最近原始对接完成字段，0/1 */
-    uint8_t last_r2_leave_zone1_cmd;                         /* 最近原始 R2 出一区字段，0/1 */
-    uint8_t last_claw_open_cmd;                               /* 最近原始放矿字段 claw_open：0=等待，1=允许，2=中止 */
-    uint8_t reserved[2];                                      /* 保留字段，发送端固定为 0 */
+    uint8_t last_dock_complete_cmd;                          /* 是否收到过命令 2 对接完成，0=否，1=是 */
+    uint8_t last_r2_leave_zone1_cmd;                         /* 是否收到过命令 5 允许移动，0=否，1=是 */
+    uint8_t last_claw_open_cmd;                              /* 最近放矿命令：0=等待，1=命令 3 允许，2=命令 4 中止 */
+    uint8_t last_command;                                    /* 最近成功解析的红外数据：1=在线，2=对接完成，3=允许放矿，4=中止放矿，5=允许移动 */
+    uint8_t release_abort_count_lsb;                         /* 命令 4 中止放矿累计接收次数低 8 位，可用于识别重复中止事件 */
     uint32_t age_ms;                                         /* 距最近成功解析 R1/R2 红外对接帧的时间，单位 ms；未收到过为 0 */
     uint32_t rx_count;                                       /* 成功解析 R1/R2 红外对接帧累计次数 */
     uint32_t crc_error_count;                                /* R1/R2 红外对接帧 CRC 错误累计次数 */
