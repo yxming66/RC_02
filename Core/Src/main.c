@@ -102,6 +102,7 @@ int main(void)
   MX_FDCAN2_Init();
   MX_FDCAN3_Init();
   MX_UART5_Init();
+  MX_UART9_Init();
   MX_TIM12_Init();
   MX_SPI2_Init();
   MX_TIM3_Init();

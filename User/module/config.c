@@ -515,10 +515,10 @@ Config_RobotParam_t robot_config = {
     .auto_rod_spearhead_param = {
         /* One-key spearhead action timing; rod_param is filled during init. */
         .open_delay_ms = 20u,
-        .grab_high_delay_ms = 60u,
-        .detect_grip_delay_ms = 100u,
+        .grab_high_delay_ms = 150u,
+        .detect_grip_delay_ms = 150u,
         .detect_pose_delay_ms = 450u,
-        .detect_success_hold_ms = 300u,
+        .detect_success_hold_ms = 50u,
         .dock_wait_delay_ms = 10000u,
         /* 等待对接时 transform 的目标点；实际角度在 ore_store_param.preset.transform_position_rad 中标定。 */
         .dock_wait_transform = ORE_STORE_TRANSFORM_SPEARHEAD_DOCK_WAIT,
@@ -621,12 +621,29 @@ Config_RobotParam_t robot_config = {
             .pole_rear_extend_speed = 20.0f,    /* 后杆伸出目标跟随速度，单位 rad/s。 */
             .pole_rear_retract_speed = 20.0f,   /* 后杆回收目标跟随速度，单位 rad/s。 */
             .pole_lift_accel = 0.0f,        
-            .pole_all_extend_profile = CONFIG_POLE_SPEED_PROFILE(0.25f, 8.0f, 0.75f, 12.0f, 1.00f, 8.0f),
-            .pole_all_retract_profile = CONFIG_POLE_SPEED_PROFILE(0.25f, 8.0f, 0.75f, 12.0f, 1.00f, 8.0f),
-            .pole_front_extend_profile = CONFIG_POLE_SPEED_PROFILE(0.25f, 8.0f, 0.75f, 12.0f, 1.00f, 8.0f),
-            .pole_front_retract_profile = CONFIG_POLE_SPEED_PROFILE(0.25f, 10.0f, 0.75f, 16.0f, 1.00f, 10.0f),
-            .pole_rear_extend_profile = CONFIG_POLE_SPEED_PROFILE(0.25f, 10.0f, 0.75f, 16.0f, 1.00f, 10.0f),
-            .pole_rear_retract_profile = CONFIG_POLE_SPEED_PROFILE(0.25f, 8.0f, 0.75f, 12.0f, 1.00f, 8.0f),
+            .pole_all_extend_profile = CONFIG_POLE_SPEED_PROFILE(0.25f, 8.0f, 
+                                                                  0.75f, 12.0f, 
+                                                                  1.00f, 8.0f),
+
+            .pole_all_retract_profile = CONFIG_POLE_SPEED_PROFILE(0.25f, 8.0f,   
+                                                                  0.75f, 12.0f,
+                                                                   1.00f, 8.0f),
+
+            .pole_front_extend_profile = CONFIG_POLE_SPEED_PROFILE(0.25f, 8.0f,
+                                                                    0.75f, 12.0f,
+                                                                     1.00f, 8.0f),
+
+            .pole_front_retract_profile = CONFIG_POLE_SPEED_PROFILE(0.25f, 10.0f, 
+                                                                    0.75f, 16.0f, 
+                                                                    1.00f, 10.0f),
+
+            .pole_rear_extend_profile = CONFIG_POLE_SPEED_PROFILE(0.25f, 10.0f,
+                                                                    0.75f, 16.0f, 
+                                                                    1.00f, 10.0f),
+                                                                    
+            .pole_rear_retract_profile = CONFIG_POLE_SPEED_PROFILE(0.25f, 8.0f,
+                                                                    0.75f, 12.0f,
+                                                                    1.00f, 8.0f),
             
             /* 当前模板撑杆加速度限幅，单位 rad/s^2。 */
             .front_photo_timeout_ms = 5000u,    /* 等待前光电触发/下降沿超时，单位 ms。 */
