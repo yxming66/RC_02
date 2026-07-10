@@ -1227,8 +1227,7 @@ static void AutoOre_FinishSuccess(AutoOre_t *ctrl) {
              ctrl->action == AUTO_ORE_ACTION_PICK_NEG_200) {
     AutoOre_SetArmHasOre(ctrl, true);
   } else if (AutoOre_ActionIsPickStoreFused(ctrl->action)) {
-    ctrl->fused_step_done = false;
-    ctrl->fused_store_done = false;
+    /* Preserve per-branch completion events until the next action starts. */
   } else if (AutoOre_ActionIsFused(ctrl->action)) {
     ctrl->step_ctrl_active = false;
     ctrl->step_ctrl_started = false;
@@ -1856,6 +1855,120 @@ static bool AutoOre_ActionIsFused(AutoOre_Action_t action) {
          action == AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD ||
          action == AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD ||
          AutoOre_ActionIsDropStoreFused(action);
+}
+
+static void AutoOre_InitBranch(AutoOre_BranchContext_t *branch,
+                               uint8_t segment_mask) {
+  memset(branch, 0, sizeof(*branch));
+  branch->state = AUTO_ORE_BRANCH_PENDING;
+  branch->segment_mask = segment_mask;
+}
+
+static void AutoOre_ResetParallelContext(AutoOre_t *ctrl) {
+  memset(&ctrl->parallel, 0, sizeof(ctrl->parallel));
+  if (!AutoOre_ActionIsFused(ctrl->action) &&
+      !AutoOre_ActionIsPickStoreFused(ctrl->action)) {
+    return;
+  }
+  AutoOre_InitBranch(&ctrl->parallel.handoff, AUTO_ORE_SEGMENT_HANDOFF);
+  AutoOre_InitBranch(&ctrl->parallel.store, AUTO_ORE_SEGMENT_STORE);
+  AutoOre_InitBranch(&ctrl->parallel.step, AUTO_ORE_SEGMENT_STEP);
+}
+
+static void AutoOre_BranchStart(AutoOre_BranchContext_t *branch,
+                                uint8_t resources, uint32_t now_ms) {
+  if (branch->state == AUTO_ORE_BRANCH_PENDING) {
+    branch->state = AUTO_ORE_BRANCH_RUNNING;
+    branch->enter_time_ms = now_ms;
+  }
+  if (branch->state == AUTO_ORE_BRANCH_RUNNING) {
+    branch->resource_mask = resources;
+  }
+}
+
+static void AutoOre_BranchSucceed(AutoOre_BranchContext_t *branch,
+                                  uint32_t now_ms) {
+  if (branch->state == AUTO_ORE_BRANCH_PENDING ||
+      branch->state == AUTO_ORE_BRANCH_RUNNING) {
+    branch->state = AUTO_ORE_BRANCH_SUCCEEDED;
+    branch->resource_mask = AUTO_ORE_RESOURCE_NONE;
+    branch->finish_time_ms = now_ms;
+  }
+}
+
+static void AutoOre_BranchFail(AutoOre_BranchContext_t *branch,
+                               uint16_t failure_mask, uint32_t now_ms) {
+  if (branch->state == AUTO_ORE_BRANCH_SUCCEEDED) {
+    return;
+  }
+  branch->state = AUTO_ORE_BRANCH_FAILED;
+  branch->failure_mask |= failure_mask;
+  branch->resource_mask = AUTO_ORE_RESOURCE_NONE;
+  branch->finish_time_ms = now_ms;
+}
+
+static void AutoOre_BranchCancel(AutoOre_BranchContext_t *branch,
+                                 uint32_t now_ms) {
+  if (branch->state == AUTO_ORE_BRANCH_PENDING ||
+      branch->state == AUTO_ORE_BRANCH_RUNNING) {
+    branch->state = AUTO_ORE_BRANCH_CANCELLED;
+    branch->resource_mask = AUTO_ORE_RESOURCE_NONE;
+    branch->finish_time_ms = now_ms;
+  }
+}
+
+static void AutoOre_SyncParallelContext(AutoOre_t *ctrl, uint32_t now_ms) {
+  if (!AutoOre_ActionIsFused(ctrl->action) &&
+      !AutoOre_ActionIsPickStoreFused(ctrl->action)) {
+    return;
+  }
+
+  const uint8_t parallel_step = AutoOre_ActionIsFused(ctrl->action) ? 5u : 4u;
+  if (ctrl->step_index >= parallel_step &&
+      ctrl->state == AUTO_ORE_STATE_RUNNING) {
+    AutoOre_BranchStart(&ctrl->parallel.handoff,
+                        AUTO_ORE_RESOURCE_ARM |
+                            AUTO_ORE_RESOURCE_SHARED_VALVE,
+                        now_ms);
+    AutoOre_BranchStart(&ctrl->parallel.store,
+                        AUTO_ORE_RESOURCE_ARM | AUTO_ORE_RESOURCE_STORE |
+                            AUTO_ORE_RESOURCE_SHARED_VALVE,
+                        now_ms);
+    AutoOre_BranchStart(&ctrl->parallel.step,
+                        AUTO_ORE_RESOURCE_CHASSIS | AUTO_ORE_RESOURCE_POLE,
+                        now_ms);
+  }
+
+  if (ctrl->fused_pick_done) {
+    AutoOre_BranchSucceed(&ctrl->parallel.handoff, now_ms);
+  }
+  if (ctrl->fused_store_done) {
+    AutoOre_BranchSucceed(&ctrl->parallel.store, now_ms);
+  }
+  if (ctrl->fused_step_done) {
+    AutoOre_BranchSucceed(&ctrl->parallel.step, now_ms);
+  }
+
+  if (ctrl->state == AUTO_ORE_STATE_FAIL) {
+    if ((ctrl->failure_mask & AUTO_ORE_FAILURE_PICK_ORE) != 0u) {
+      AutoOre_BranchFail(&ctrl->parallel.handoff,
+                         AUTO_ORE_FAILURE_PICK_ORE, now_ms);
+    }
+    if ((ctrl->failure_mask & AUTO_ORE_FAILURE_STORE_ORE) != 0u) {
+      AutoOre_BranchFail(&ctrl->parallel.store,
+                         AUTO_ORE_FAILURE_STORE_ORE, now_ms);
+    }
+    if ((ctrl->failure_mask & AUTO_ORE_FAILURE_STEP) != 0u) {
+      AutoOre_BranchFail(&ctrl->parallel.step, AUTO_ORE_FAILURE_STEP, now_ms);
+    }
+    AutoOre_BranchCancel(&ctrl->parallel.handoff, now_ms);
+    AutoOre_BranchCancel(&ctrl->parallel.store, now_ms);
+    AutoOre_BranchCancel(&ctrl->parallel.step, now_ms);
+  }
+
+  ctrl->parallel.acquired_resource_mask =
+      ctrl->parallel.handoff.resource_mask |
+      ctrl->parallel.store.resource_mask | ctrl->parallel.step.resource_mask;
 }
 
 static const AutoOre_FusedParam_t *AutoOre_FusedParam(const AutoOre_t *ctrl) {
@@ -3190,6 +3303,9 @@ static bool AutoOre_StartResolved(AutoOre_t *ctrl, AutoOre_Action_t action,
                                   bool occupancy_suspect,
                                   uint32_t now_ms) {
   if (!AutoOre_IsPositionValid(position)) {
+    if (ctrl->failure_mask == AUTO_ORE_FAILURE_NONE) {
+      AutoOre_AddFailureMask(ctrl, AUTO_ORE_FAILURE_SETUP);
+    }
     AutoOre_FailInvalidOccupancy(ctrl);
     return false;
   }
@@ -3215,6 +3331,7 @@ static bool AutoOre_StartResolved(AutoOre_t *ctrl, AutoOre_Action_t action,
   ctrl->fused_pick_done = false;
   ctrl->fused_step_done = false;
   ctrl->fused_store_done = false;
+  AutoOre_ResetParallelContext(ctrl);
   ctrl->pick_lift_confirmed = false;
   ctrl->prealign_yaw_target_valid = false;
   ctrl->prealign_target_yaw_rad = 0.0f;
@@ -3247,6 +3364,8 @@ static bool AutoOre_Start(AutoOre_t *ctrl, AutoOre_Action_t action,
   if (ctrl == 0 || AutoOre_IsBusy(ctrl)) {
     return false;
   }
+  ctrl->failure_mask = AUTO_ORE_FAILURE_NONE;
+  ctrl->fault = AUTO_ORE_FAULT_NONE;
   AutoOre_ApplyFeedbackOccupancy(ctrl);
   AutoOre_Position_t position = AUTO_ORE_POSITION_NONE;
   if (action == AUTO_ORE_ACTION_STORE) {
@@ -3297,6 +3416,8 @@ bool AutoOre_StartStoreAtPosition(AutoOre_t *ctrl,
   if (ctrl == 0 || AutoOre_IsBusy(ctrl)) {
     return false;
   }
+  ctrl->failure_mask = AUTO_ORE_FAILURE_NONE;
+  ctrl->fault = AUTO_ORE_FAULT_NONE;
   AutoOre_ApplyFeedbackOccupancy(ctrl);
   return AutoOre_StartResolved(ctrl, AUTO_ORE_ACTION_STORE, position, false,
                                now_ms);
@@ -3340,6 +3461,36 @@ bool AutoOre_StartReleaseIrLiftDetectStep1(AutoOre_t *ctrl, uint32_t now_ms) {
 bool AutoOre_StartReleaseIrLiftDetectStep2(AutoOre_t *ctrl, uint32_t now_ms) {
   return AutoOre_Start(ctrl, AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT_STEP2,
                        now_ms);
+}
+
+bool AutoOre_ContinueReleaseStep2(AutoOre_t *ctrl,
+                                  AutoOre_Action_t step2_action,
+                                  uint32_t now_ms) {
+  if (ctrl == 0 || ctrl->state != AUTO_ORE_STATE_RUNNING ||
+      !ctrl->fused_store_done) {
+    return false;
+  }
+
+  const bool action_matches =
+      (ctrl->action == AUTO_ORE_ACTION_RELEASE_STEP1 &&
+       step2_action == AUTO_ORE_ACTION_RELEASE_STEP2) ||
+      (ctrl->action == AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP1 &&
+       step2_action == AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP2) ||
+      (ctrl->action == AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT_STEP1 &&
+       step2_action == AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT_STEP2);
+  if (!action_matches) {
+    return false;
+  }
+
+  ctrl->action = step2_action;
+  ctrl->step_index = 2u;
+  ctrl->step_phase = 0u;
+  ctrl->step_entered = false;
+  ctrl->step_condition_met = false;
+  ctrl->step_condition_time_ms = now_ms;
+  ctrl->step_enter_time_ms = now_ms;
+  ctrl->fused_store_done = false;
+  return true;
 }
 
 bool AutoOre_StartChamber(AutoOre_t *ctrl, uint32_t now_ms) {
@@ -3438,6 +3589,8 @@ void AutoOre_Update(AutoOre_t *ctrl, const AutoOre_Feedback_t *feedback,
     ctrl->state = AUTO_ORE_STATE_FAIL;
     ctrl->result = AUTO_ORE_RESULT_FAIL;
     ctrl->fault = AUTO_ORE_FAULT_NOT_HOMED;
+    AutoOre_AddFailureMask(ctrl, AUTO_ORE_FAILURE_SETUP);
+    AutoOre_SyncParallelContext(ctrl, now_ms);
     return;
   }
 
@@ -3517,6 +3670,7 @@ void AutoOre_Update(AutoOre_t *ctrl, const AutoOre_Feedback_t *feedback,
   } else if (AutoOre_ActionIsFused(ctrl->action)) {
     AutoOre_RunStepPickStoreFused(ctrl, now_ms);
   }
+  AutoOre_SyncParallelContext(ctrl, now_ms);
 }
 
 void AutoOre_Abort(AutoOre_t *ctrl) {
@@ -3527,6 +3681,10 @@ void AutoOre_Abort(AutoOre_t *ctrl) {
   ctrl->result = AUTO_ORE_RESULT_ABORTED;
   ctrl->fault = AUTO_ORE_FAULT_ABORTED;
   ctrl->failure_mask = AUTO_ORE_FAILURE_ABORTED;
+  AutoOre_BranchCancel(&ctrl->parallel.handoff, 0u);
+  AutoOre_BranchCancel(&ctrl->parallel.store, 0u);
+  AutoOre_BranchCancel(&ctrl->parallel.step, 0u);
+  ctrl->parallel.acquired_resource_mask = AUTO_ORE_RESOURCE_NONE;
   if (ctrl->step_ctrl_active || ctrl->step_ctrl_started) {
     AutoCtrl_Abort(&ctrl->step_ctrl);
   }
@@ -3612,6 +3770,67 @@ AutoOre_Fault_t AutoOre_GetFault(const AutoOre_t *ctrl) {
 
 uint16_t AutoOre_GetFailureMask(const AutoOre_t *ctrl) {
   return (ctrl == 0) ? AUTO_ORE_FAILURE_SETUP : ctrl->failure_mask;
+}
+
+uint8_t AutoOre_GetCompletedSegmentMask(const AutoOre_t *ctrl) {
+  if (ctrl == 0) {
+    return AUTO_ORE_SEGMENT_NONE;
+  }
+  return (uint8_t)((ctrl->fused_pick_done ? AUTO_ORE_SEGMENT_HANDOFF : 0u) |
+                   (ctrl->fused_store_done ? AUTO_ORE_SEGMENT_STORE : 0u) |
+                   (ctrl->fused_step_done ? AUTO_ORE_SEGMENT_STEP : 0u));
+}
+
+uint8_t AutoOre_GetRunningSegmentMask(const AutoOre_t *ctrl) {
+  if (ctrl == 0) {
+    return AUTO_ORE_SEGMENT_NONE;
+  }
+  return (uint8_t)(
+      ((ctrl->parallel.handoff.state == AUTO_ORE_BRANCH_RUNNING)
+           ? AUTO_ORE_SEGMENT_HANDOFF
+           : 0u) |
+      ((ctrl->parallel.store.state == AUTO_ORE_BRANCH_RUNNING)
+           ? AUTO_ORE_SEGMENT_STORE
+           : 0u) |
+      ((ctrl->parallel.step.state == AUTO_ORE_BRANCH_RUNNING)
+           ? AUTO_ORE_SEGMENT_STEP
+           : 0u));
+}
+
+uint8_t AutoOre_GetFailedSegmentMask(const AutoOre_t *ctrl) {
+  if (ctrl == 0) {
+    return AUTO_ORE_SEGMENT_NONE;
+  }
+  return (uint8_t)(
+      ((ctrl->parallel.handoff.state == AUTO_ORE_BRANCH_FAILED)
+           ? AUTO_ORE_SEGMENT_HANDOFF
+           : 0u) |
+      ((ctrl->parallel.store.state == AUTO_ORE_BRANCH_FAILED)
+           ? AUTO_ORE_SEGMENT_STORE
+           : 0u) |
+      ((ctrl->parallel.step.state == AUTO_ORE_BRANCH_FAILED)
+           ? AUTO_ORE_SEGMENT_STEP
+           : 0u));
+}
+
+uint8_t AutoOre_GetActiveResourceMask(const AutoOre_t *ctrl) {
+  if (ctrl == 0 || ctrl->state != AUTO_ORE_STATE_RUNNING) {
+    return AUTO_ORE_RESOURCE_NONE;
+  }
+  uint8_t mask = ctrl->parallel.acquired_resource_mask;
+  if (ctrl->chassis_cmd_valid) {
+    mask |= AUTO_ORE_RESOURCE_CHASSIS;
+  }
+  if (ctrl->pole_cmd_valid) {
+    mask |= AUTO_ORE_RESOURCE_POLE;
+  }
+  if (ctrl->arm_cmd_valid) {
+    mask |= AUTO_ORE_RESOURCE_ARM | AUTO_ORE_RESOURCE_SHARED_VALVE;
+  }
+  if (ctrl->ore_store_cmd_valid) {
+    mask |= AUTO_ORE_RESOURCE_STORE | AUTO_ORE_RESOURCE_SHARED_VALVE;
+  }
+  return mask;
 }
 
 AutoOre_Position_t AutoOre_GetActivePosition(const AutoOre_t *ctrl) {

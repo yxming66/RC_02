@@ -38,6 +38,7 @@ inline constexpr Topic kCmdAbstractPosition = PC_CMD_ABSTRACT_POSITION;
 inline constexpr Topic kCmdImu = PC_CMD_IMU;
 inline constexpr Topic kCmdIrOreAck = PC_CMD_IR_ORE_ACK;
 inline constexpr Topic kCmdR2ReadyState = PC_CMD_R2_READY_STATE;
+inline constexpr Topic kCmdAutoActionV2 = PC_CMD_AUTO_ACTION_V2;
 
 inline constexpr Topic kFeedbackHeartbeat = PC_FEEDBACK_HEARTBEAT;
 inline constexpr Topic kFeedbackStartMatch = PC_FEEDBACK_START_MATCH;
@@ -57,6 +58,7 @@ inline constexpr Topic kFeedbackSickCorrect = PC_FEEDBACK_SICK_CORRECT;
 inline constexpr Topic kFeedbackSickFrontOre = PC_FEEDBACK_SICK_FRONT_ORE;
 inline constexpr Topic kFeedbackSickRaw = PC_FEEDBACK_SICK_RAW;
 inline constexpr Topic kFeedbackStatus = PC_FEEDBACK_STATUS;
+inline constexpr Topic kFeedbackAutoActionV2 = PC_FEEDBACK_AUTO_ACTION_V2;
 
 struct __attribute__((packed)) PoleCmd {
   uint8_t mode;    /* 撑杆模式，0=放松，其它=主动控制 */
@@ -201,12 +203,14 @@ static_assert(IsValidWirePayload<ArmSimpleCmd>(), "ArmSimpleCmd payload is inval
 static_assert(IsValidWirePayload<RodNewCmd>(), "RodNewCmd payload is invalid");
 static_assert(IsValidWirePayload<OreStoreCmd>(), "OreStoreCmd payload is invalid");
 static_assert(IsValidWirePayload<AutoActionCmd>(), "AutoActionCmd payload is invalid");
+static_assert(IsValidWirePayload<PC_AutoActionV2CMD_t>(), "AutoActionV2Cmd payload is invalid");
 static_assert(IsValidWirePayload<CameraYawCmd>(), "CameraYawCmd payload is invalid");
 static_assert(IsValidWirePayload<PC_AbstractPositionCMD_t>(), "PC_AbstractPositionCMD_t payload is invalid");
 static_assert(IsValidWirePayload<StepCmd>(), "StepCmd payload is invalid");
 static_assert(IsValidWirePayload<PC_ChassisFeedback_t>(), "PC_ChassisFeedback_t payload is invalid");
 static_assert(IsValidWirePayload<PC_PoleFeedback_t>(), "PC_PoleFeedback_t payload is invalid");
 static_assert(IsValidWirePayload<PC_AutoActionFeedback_t>(), "PC_AutoActionFeedback_t payload is invalid");
+static_assert(IsValidWirePayload<PC_AutoActionV2Feedback_t>(), "PC_AutoActionV2Feedback_t payload is invalid");
 static_assert(IsValidWirePayload<PC_IrOreFeedback_t>(), "PC_IrOreFeedback_t payload is invalid");
 static_assert(IsValidWirePayload<PC_IrOreBridgeFeedback_t>(), "PC_IrOreBridgeFeedback_t payload is invalid");
 static_assert(IsValidWirePayload<PC_IrDockFeedback_t>(), "PC_IrDockFeedback_t payload is invalid");
@@ -231,6 +235,8 @@ static_assert(sizeof(ArmSimpleCmd) == 10u, "PC_CMD_ARM_SIMPLE wire size changed"
 static_assert(sizeof(RodNewCmd) == 6u, "PC_CMD_ROD_NEW wire size changed");
 static_assert(sizeof(OreStoreCmd) == 6u, "PC_CMD_ORE_STORE wire size changed");
 static_assert(sizeof(AutoActionCmd) == 1u, "PC_CMD_AUTO_ACTION wire size changed");
+static_assert(sizeof(PC_AutoActionV2CMD_t) == 8u,
+              "PC_CMD_AUTO_ACTION_V2 wire size changed");
 static_assert(sizeof(CameraYawCmd) == 5u, "PC_CMD_CAMERA_YAW wire size changed");
 static_assert(sizeof(PC_AbstractPositionCMD_t) == 5u,
               "PC_CMD_ABSTRACT_POSITION wire size changed");
@@ -241,6 +247,8 @@ static_assert(sizeof(PC_PoleFeedback_t) == 24u,
               "PC_FEEDBACK_POLE wire size changed");
 static_assert(sizeof(PC_AutoActionFeedback_t) == 8u,
               "PC_FEEDBACK_AUTO_ACTION wire size changed");
+static_assert(sizeof(PC_AutoActionV2Feedback_t) == 14u,
+              "PC_FEEDBACK_AUTO_ACTION_V2 wire size changed");
 static_assert(sizeof(PC_IrOreFeedback_t) == 24u,
               "PC_FEEDBACK_IR_ORE wire size changed");
 static_assert(sizeof(PC_IrOreBridgeFeedback_t) == 56u,
@@ -285,12 +293,14 @@ MRLINK_PC_MESSAGE_TRAIT(pc_comm::wire::ArmSimpleCmd, PC_CMD_ARM_SIMPLE);
 MRLINK_PC_MESSAGE_TRAIT(pc_comm::wire::RodNewCmd, PC_CMD_ROD_NEW);
 MRLINK_PC_MESSAGE_TRAIT(pc_comm::wire::OreStoreCmd, PC_CMD_ORE_STORE);
 MRLINK_PC_MESSAGE_TRAIT(pc_comm::wire::AutoActionCmd, PC_CMD_AUTO_ACTION);
+MRLINK_PC_MESSAGE_TRAIT(PC_AutoActionV2CMD_t, PC_CMD_AUTO_ACTION_V2);
 MRLINK_PC_MESSAGE_TRAIT(pc_comm::wire::CameraYawCmd, PC_CMD_CAMERA_YAW);
 MRLINK_PC_MESSAGE_TRAIT(PC_AbstractPositionCMD_t, PC_CMD_ABSTRACT_POSITION);
 MRLINK_PC_MESSAGE_TRAIT(pc_comm::wire::StepCmd, PC_CMD_STEP);
 MRLINK_PC_MESSAGE_TRAIT(PC_ChassisFeedback_t, PC_FEEDBACK_CHASSIS);
 MRLINK_PC_MESSAGE_TRAIT(PC_PoleFeedback_t, PC_FEEDBACK_POLE);
 MRLINK_PC_MESSAGE_TRAIT(PC_AutoActionFeedback_t, PC_FEEDBACK_AUTO_ACTION);
+MRLINK_PC_MESSAGE_TRAIT(PC_AutoActionV2Feedback_t, PC_FEEDBACK_AUTO_ACTION_V2);
 MRLINK_PC_MESSAGE_TRAIT(PC_IrOreFeedback_t, PC_FEEDBACK_IR_ORE);
 MRLINK_PC_MESSAGE_TRAIT(PC_IrOreBridgeFeedback_t, PC_FEEDBACK_IR_ORE_BRIDGE);
 MRLINK_PC_MESSAGE_TRAIT(PC_IrDockFeedback_t, PC_FEEDBACK_IR_DOCK);

@@ -20,6 +20,7 @@
 #include "module/mrlink_pc_comm/mrlink_pc_comm.h"
 
 #include <math.h>
+#include <string.h>
 
 #ifndef PC_AUTO_ACTION_SEGMENT_PICK
 #define PC_AUTO_ACTION_SEGMENT_PICK (1u << 0)
@@ -73,6 +74,33 @@ static AutoOre_DebugRequest_t pending_release_step2_request =
 static AutoOre_DebugRequest_t pending_auto_action_request =
   AUTO_ORE_DEBUG_REQUEST_NONE;
 
+#define AUTO_ACTION_V2_QUEUE_CAPACITY (5u)
+#define AUTO_ACTION_V2_REJECT_HOLD_MS (200u)
+
+_Static_assert((int)AUTO_ORE_DEBUG_REQUEST_STORE ==
+                   (int)PC_AUTO_ACTION_STORE,
+               "AutoAction V2 request mapping changed");
+_Static_assert((int)AUTO_ORE_DEBUG_REQUEST_RELEASE_IR_LIFT_DETECT_STEP2 ==
+                   (int)PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT_STEP2,
+               "AutoAction V2 request range changed");
+
+typedef struct {
+  PC_AutoActionV2Feedback_t feedback;
+  bool active;
+  bool v2_owned;
+  uint16_t next_job_id;
+  uint32_t start_time_ms;
+} AutoActionJobContext_t;
+
+static AutoActionJobContext_t auto_action_job = {
+    .next_job_id = 1u,
+};
+static PC_AutoActionV2CMD_t auto_action_v2_queue[AUTO_ACTION_V2_QUEUE_CAPACITY];
+static volatile uint8_t auto_action_v2_queue_head = 0u;
+static volatile uint8_t auto_action_v2_queue_tail = 0u;
+static PC_AutoActionV2Feedback_t auto_action_v2_reject = {0};
+static uint32_t auto_action_v2_reject_until_ms = 0u;
+
 #ifndef AUTO_CTRL_POLE_TARGET_THRESHOLD_RAD
 #define AUTO_CTRL_POLE_TARGET_THRESHOLD_RAD (0.30f)
 #endif
@@ -93,9 +121,53 @@ static uint32_t auto_ore_debug_last_update_ms = 0u;
 
 /* Private function --------------------------------------------------------- */
 static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms, bool update_debug);
+static bool AutoCtrlFeed_HandleAutoOreDebugRequest(uint32_t now_ms);
+static void AutoCtrlFeed_ProcessAutoActionV2(uint32_t now_ms);
+static void AutoCtrlFeed_BeginLegacyJob(PC_AutoAction_t action,
+                                        uint32_t now_ms);
+static void AutoCtrlFeed_PublishAutoActionSnapshot(
+    PC_AutoActionFeedback_t *feedback);
 static PC_AutoAction_t AutoCtrlFeed_MapStepRequest(
   AutoOre_DebugRequest_t request);
 static bool AutoCtrlFeed_IsFusedOreAction(AutoOre_Action_t action);
+
+bool Task_AutoActionSubmitV2(uint16_t request_id, uint16_t job_id,
+                             uint8_t operation, uint8_t action,
+                             uint8_t gate_id, uint8_t flags) {
+  const uint8_t head = auto_action_v2_queue_head;
+  const uint8_t next = (uint8_t)((head + 1u) % AUTO_ACTION_V2_QUEUE_CAPACITY);
+  if (next == auto_action_v2_queue_tail) {
+    return false;
+  }
+
+  PC_AutoActionV2CMD_t command = {
+      .request_id = request_id,
+      .job_id = job_id,
+      .operation = operation,
+      .action = action,
+      .gate_id = gate_id,
+      .flags = flags,
+  };
+  auto_action_v2_queue[head] = command;
+  __DMB();
+  auto_action_v2_queue_head = next;
+  return true;
+}
+
+static bool AutoCtrlFeed_PopAutoActionV2(PC_AutoActionV2CMD_t *command) {
+  if (command == NULL) {
+    return false;
+  }
+  const uint8_t tail = auto_action_v2_queue_tail;
+  if (tail == auto_action_v2_queue_head) {
+    return false;
+  }
+  *command = auto_action_v2_queue[tail];
+  __DMB();
+  auto_action_v2_queue_tail =
+      (uint8_t)((tail + 1u) % AUTO_ACTION_V2_QUEUE_CAPACITY);
+  return true;
+}
 
 static bool AutoCtrlFeed_RequestIsReleaseStep2(
     AutoOre_DebugRequest_t request) {
@@ -169,19 +241,13 @@ static bool AutoCtrlFeed_ContinueReleaseStep2(
     return false;
   }
 
-  auto_ore_ctrl.action =
+  const AutoOre_Action_t step2_action =
       (request == AUTO_ORE_DEBUG_REQUEST_RELEASE_STEP2)
           ? AUTO_ORE_ACTION_RELEASE_STEP2
-        : ((request == AUTO_ORE_DEBUG_REQUEST_RELEASE_LIFT_DETECT_STEP2)
-           ? AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP2
-           : AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT_STEP2);
-  auto_ore_ctrl.step_index = 2u;
-  auto_ore_ctrl.step_entered = false;
-  auto_ore_ctrl.step_condition_met = false;
-  auto_ore_ctrl.step_condition_time_ms = now_ms;
-  auto_ore_ctrl.step_enter_time_ms = now_ms;
-  auto_ore_ctrl.fused_store_done = false;
-  return true;
+          : ((request == AUTO_ORE_DEBUG_REQUEST_RELEASE_LIFT_DETECT_STEP2)
+                 ? AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP2
+                 : AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT_STEP2);
+  return AutoOre_ContinueReleaseStep2(&auto_ore_ctrl, step2_action, now_ms);
 }
 
 static void AutoCtrlFeed_TryPendingReleaseStep2(uint32_t now_ms) {
@@ -788,18 +854,8 @@ static void AutoCtrlFeed_SetSplitFeedback(PC_AutoActionFeedback_t *feedback) {
       !AutoCtrlFeed_IsFusedPcOreAction((PC_AutoAction_t)feedback->action)) {
     return;
   }
-  if (AutoOre_HasSplitResult(&auto_ore_ctrl) ||
-      AutoOre_GetResult(&auto_ore_ctrl) == AUTO_ORE_RESULT_SUCCESS) {
-    if (AutoOre_IsPickFinished(&auto_ore_ctrl)) {
-      feedback->segment_finished_mask |= PC_AUTO_ACTION_SEGMENT_PICK;
-    }
-    if (AutoOre_IsStoreFinished(&auto_ore_ctrl)) {
-      feedback->segment_finished_mask |= PC_AUTO_ACTION_SEGMENT_STORE;
-    }
-    if (AutoOre_IsStepFinished(&auto_ore_ctrl)) {
-      feedback->segment_finished_mask |= PC_AUTO_ACTION_SEGMENT_STEP;
-    }
-  }
+  feedback->segment_finished_mask |=
+      AutoOre_GetCompletedSegmentMask(&auto_ore_ctrl);
 }
 
 static void AutoCtrlFeed_SetStepCompleteFeedback(
@@ -1009,10 +1065,9 @@ static void AutoCtrlFeed_SetFeedbackSuccess(
 
 static void AutoCtrlFeed_SetFeedbackFail(PC_AutoActionFeedback_t *feedback,
                                          uint16_t failure_mask) {
-  (void)failure_mask;
   feedback->finished = 1u;
-  feedback->result = (uint8_t)PC_AUTO_ACTION_RESULT_SUCCESS;
-  feedback->failure_mask = 0u;
+  feedback->result = (uint8_t)PC_AUTO_ACTION_RESULT_FAIL;
+  feedback->failure_mask = failure_mask;
 }
 
 static void AutoCtrlFeed_SetFeedbackRealFail(
@@ -1241,8 +1296,7 @@ static void AutoCtrlFeed_PublishAutoActionFeedback(void) {
       AutoCtrlFeed_IsStepAction(auto_action_last_action)) {
     pc_feedback.busy = 1u;
     pc_feedback.action = (uint8_t)auto_action_last_action;
-    AutoCtrlFeed_UpdateLightEffectFromAutoActionFeedback(&pc_feedback);
-    (void)MrlinkPc_PublishFeedback(PC_FEEDBACK_AUTO_ACTION, &pc_feedback);
+    AutoCtrlFeed_PublishAutoActionSnapshot(&pc_feedback);
     return;
   }
 
@@ -1251,8 +1305,7 @@ static void AutoCtrlFeed_PublishAutoActionFeedback(void) {
   AutoCtrlFeed_SetSplitFeedback(&pc_feedback);
 
   if (pc_feedback.busy != 0u || auto_action_last_action == PC_AUTO_ACTION_NONE) {
-    AutoCtrlFeed_UpdateLightEffectFromAutoActionFeedback(&pc_feedback);
-    (void)MrlinkPc_PublishFeedback(PC_FEEDBACK_AUTO_ACTION, &pc_feedback);
+    AutoCtrlFeed_PublishAutoActionSnapshot(&pc_feedback);
     return;
   }
 
@@ -1294,7 +1347,6 @@ static void AutoCtrlFeed_PublishAutoActionFeedback(void) {
     } else if (result == AUTO_CTRL_RESULT_FAIL) {
       AutoCtrlFeed_SetFeedbackFail(&pc_feedback,
                                    PC_AUTO_ACTION_FAILURE_STEP);
-      AutoCtrlFeed_SetStepCompleteFeedback(&pc_feedback);
     } else if (result == AUTO_CTRL_RESULT_ABORTED) {
       AutoCtrlFeed_SetFeedbackFail(&pc_feedback,
                                    PC_AUTO_ACTION_FAILURE_ABORTED);
@@ -1344,8 +1396,7 @@ static void AutoCtrlFeed_PublishAutoActionFeedback(void) {
     }
   }
 
-  AutoCtrlFeed_UpdateLightEffectFromAutoActionFeedback(&pc_feedback);
-  (void)MrlinkPc_PublishFeedback(PC_FEEDBACK_AUTO_ACTION, &pc_feedback);
+  AutoCtrlFeed_PublishAutoActionSnapshot(&pc_feedback);
 }
 
 static void AutoCtrlFeed_PublishSickCorrectFeedback(void) {
@@ -2033,24 +2084,28 @@ void Task_AutoOreAbort(void) {
   }
 }
 
-static void AutoCtrlFeed_HandleAutoOreDebugRequest(uint32_t now_ms) {
+static bool AutoCtrlFeed_HandleAutoOreDebugRequest(uint32_t now_ms) {
   const AutoOre_DebugRequest_t request = g_auto_ore_debug.request;
   bool result = false;
 
   if (request == AUTO_ORE_DEBUG_REQUEST_NONE) {
-    return;
+    return false;
   }
 
   g_auto_ore_debug.request = AUTO_ORE_DEBUG_REQUEST_NONE;
   g_auto_ore_debug.last_request = request;
   g_auto_ore_debug.request_count++;
+  if (request != AUTO_ORE_DEBUG_REQUEST_ABORT &&
+      request <= AUTO_ORE_DEBUG_REQUEST_RELEASE_IR_LIFT_DETECT_STEP2) {
+    AutoCtrlFeed_BeginLegacyJob((PC_AutoAction_t)request, now_ms);
+  }
 
   if (AutoCtrlFeed_RequestMatchesRunningOreAction(request)) {
     AutoCtrlFeed_RememberOreAction(auto_ore_ctrl.action);
     g_auto_ore_debug.last_result = true;
     g_auto_ore_debug.accept_count++;
     g_auto_ore_debug.force_output_enable = true;
-    return;
+    return true;
   }
 
   if (AutoCtrlFeed_CanQueueAfterFusedStepDone()) {
@@ -2060,13 +2115,13 @@ static void AutoCtrlFeed_HandleAutoOreDebugRequest(uint32_t now_ms) {
       if (result) {
         g_auto_ore_debug.accept_count++;
       }
-      return;
+      return result;
     }
     if (AutoCtrlFeed_RequestCanQueueAfterFusedStepDone(request)) {
       pending_auto_action_request = request;
       g_auto_ore_debug.last_result = true;
       g_auto_ore_debug.accept_count++;
-      return;
+      return true;
     }
   }
 
@@ -2242,6 +2297,380 @@ static void AutoCtrlFeed_HandleAutoOreDebugRequest(uint32_t now_ms) {
   if (request == AUTO_ORE_DEBUG_REQUEST_ABORT) {
     g_auto_ore_debug.force_output_enable = false;
   }
+  return result;
+}
+
+static bool AutoCtrlFeed_JobStateIsTerminal(uint8_t state) {
+  return state == PC_AUTO_ACTION_JOB_SUCCEEDED ||
+         state == PC_AUTO_ACTION_JOB_FAILED ||
+         state == PC_AUTO_ACTION_JOB_ABORTED ||
+         state == PC_AUTO_ACTION_JOB_REJECTED;
+}
+
+static uint8_t AutoCtrlFeed_ActionRequiredMask(PC_AutoAction_t action) {
+  switch (action) {
+    case PC_AUTO_ACTION_PICK_POS_400:
+    case PC_AUTO_ACTION_PICK_POS_200:
+    case PC_AUTO_ACTION_PICK_NEG_200:
+    case PC_AUTO_ACTION_ROD_SPEARHEAD:
+    case PC_AUTO_ACTION_ROD_SPEARHEAD_STEP2:
+      return PC_AUTO_ACTION_SEGMENT_PICK;
+    case PC_AUTO_ACTION_STORE:
+    case PC_AUTO_ACTION_RELEASE_STEP1:
+    case PC_AUTO_ACTION_RELEASE_LIFT_DETECT_STEP1:
+    case PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT_STEP1:
+    case PC_AUTO_ACTION_ROD_SPEARHEAD_STEP1:
+    case PC_AUTO_ACTION_ROD_DOCK_WAIT:
+      return PC_AUTO_ACTION_SEGMENT_STORE;
+    case PC_AUTO_ACTION_RECOVER_STORE:
+    case PC_AUTO_ACTION_PICK_STORE_POS_400:
+    case PC_AUTO_ACTION_PICK_STORE_POS_200:
+    case PC_AUTO_ACTION_PICK_STORE_NEG_200:
+      return PC_AUTO_ACTION_SEGMENT_PICK | PC_AUTO_ACTION_SEGMENT_STORE;
+    case PC_AUTO_ACTION_STEP_ASCEND_200_HEAD:
+    case PC_AUTO_ACTION_STEP_DESCEND_200_HEAD:
+    case PC_AUTO_ACTION_STEP_ASCEND_400_HEAD:
+    case PC_AUTO_ACTION_STEP_DESCEND_400_HEAD:
+      return PC_AUTO_ACTION_SEGMENT_STEP;
+    case PC_AUTO_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD:
+    case PC_AUTO_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD:
+    case PC_AUTO_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD:
+    case PC_AUTO_ACTION_STEP_DROP_STORE_ASCEND_200_HEAD:
+    case PC_AUTO_ACTION_STEP_DROP_STORE_DESCEND_200_HEAD:
+    case PC_AUTO_ACTION_STEP_DROP_STORE_ASCEND_400_HEAD:
+      return PC_AUTO_ACTION_SEGMENT_PICK | PC_AUTO_ACTION_SEGMENT_STORE |
+             PC_AUTO_ACTION_SEGMENT_STEP;
+    default:
+      return 0u;
+  }
+}
+
+static uint8_t AutoCtrlFeed_FailureSegmentMask(uint16_t failure_mask) {
+  uint8_t result = 0u;
+  if ((failure_mask & PC_AUTO_ACTION_FAILURE_PICK_ORE) != 0u) {
+    result |= PC_AUTO_ACTION_SEGMENT_PICK;
+  }
+  if ((failure_mask & PC_AUTO_ACTION_FAILURE_STORE_ORE) != 0u) {
+    result |= PC_AUTO_ACTION_SEGMENT_STORE;
+  }
+  if ((failure_mask & PC_AUTO_ACTION_FAILURE_STEP) != 0u) {
+    result |= PC_AUTO_ACTION_SEGMENT_STEP;
+  }
+  return result;
+}
+
+static uint16_t AutoCtrlFeed_NextJobId(void) {
+  uint16_t job_id = auto_action_job.next_job_id++;
+  if (job_id == 0u) {
+    job_id = auto_action_job.next_job_id++;
+  }
+  if (auto_action_job.next_job_id == 0u) {
+    auto_action_job.next_job_id = 1u;
+  }
+  return job_id;
+}
+
+static void AutoCtrlFeed_BeginJob(uint16_t request_id, PC_AutoAction_t action,
+                                  bool v2_owned, uint32_t now_ms) {
+  const uint16_t next_job_id = AutoCtrlFeed_NextJobId();
+  memset(&auto_action_job.feedback, 0, sizeof(auto_action_job.feedback));
+  auto_action_job.feedback.request_id = request_id;
+  auto_action_job.feedback.job_id = next_job_id;
+  auto_action_job.feedback.action = (uint8_t)action;
+  auto_action_job.feedback.state = PC_AUTO_ACTION_JOB_ACCEPTED;
+  auto_action_job.feedback.required_mask =
+      AutoCtrlFeed_ActionRequiredMask(action);
+  auto_action_job.active = true;
+  auto_action_job.v2_owned = v2_owned;
+  auto_action_job.start_time_ms = now_ms;
+}
+
+static void AutoCtrlFeed_BeginLegacyJob(PC_AutoAction_t action,
+                                        uint32_t now_ms) {
+  if (action == PC_AUTO_ACTION_NONE || action == PC_AUTO_ACTION_ABORT) {
+    return;
+  }
+  if (auto_action_job.active &&
+      !AutoCtrlFeed_JobStateIsTerminal(auto_action_job.feedback.state)) {
+    return;
+  }
+  AutoCtrlFeed_BeginJob(0u, action, false, now_ms);
+}
+
+static void AutoCtrlFeed_SetV2Reject(const PC_AutoActionV2CMD_t *command,
+                                     uint8_t reason, uint32_t now_ms) {
+  memset(&auto_action_v2_reject, 0, sizeof(auto_action_v2_reject));
+  auto_action_v2_reject.request_id = command->request_id;
+  auto_action_v2_reject.job_id = command->job_id;
+  auto_action_v2_reject.action = command->action;
+  auto_action_v2_reject.state = PC_AUTO_ACTION_JOB_REJECTED;
+  auto_action_v2_reject.reject_reason = reason;
+  auto_action_v2_reject_until_ms = now_ms + AUTO_ACTION_V2_REJECT_HOLD_MS;
+}
+
+static AutoOre_Action_t AutoCtrlFeed_CurrentReleaseStep2Action(void) {
+  switch (auto_ore_ctrl.action) {
+    case AUTO_ORE_ACTION_RELEASE_STEP1:
+      return AUTO_ORE_ACTION_RELEASE_STEP2;
+    case AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP1:
+      return AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP2;
+    case AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT_STEP1:
+      return AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT_STEP2;
+    default:
+      return AUTO_ORE_ACTION_NONE;
+  }
+}
+
+static void AutoCtrlFeed_ProcessAutoActionV2(uint32_t now_ms) {
+  PC_AutoActionV2CMD_t command = {0};
+  if (!AutoCtrlFeed_PopAutoActionV2(&command)) {
+    return;
+  }
+
+  switch ((PC_AutoActionV2Operation_t)command.operation) {
+    case PC_AUTO_ACTION_V2_OP_START: {
+      if (command.request_id == 0u ||
+          command.action <= PC_AUTO_ACTION_ABORT ||
+          command.action > PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT_STEP2) {
+        AutoCtrlFeed_SetV2Reject(&command,
+                                 PC_AUTO_ACTION_REJECT_INVALID_ACTION, now_ms);
+        return;
+      }
+      if (auto_action_job.active &&
+          auto_action_job.feedback.request_id == command.request_id) {
+        if (auto_action_job.feedback.action != command.action) {
+          AutoCtrlFeed_SetV2Reject(&command,
+                                   PC_AUTO_ACTION_REJECT_INVALID_ACTION,
+                                   now_ms);
+        }
+        return;
+      }
+      if (auto_action_job.active &&
+          !AutoCtrlFeed_JobStateIsTerminal(auto_action_job.feedback.state)) {
+        AutoCtrlFeed_SetV2Reject(&command, PC_AUTO_ACTION_REJECT_BUSY, now_ms);
+        return;
+      }
+
+      AutoCtrlFeed_BeginJob(command.request_id,
+                            (PC_AutoAction_t)command.action, true, now_ms);
+      g_auto_ore_debug.request = (AutoOre_DebugRequest_t)command.action;
+      if (AutoCtrlFeed_HandleAutoOreDebugRequest(now_ms)) {
+        auto_action_job.feedback.state = PC_AUTO_ACTION_JOB_RUNNING;
+      } else if (auto_ore_inited &&
+                 AutoOre_GetState(&auto_ore_ctrl) == AUTO_ORE_STATE_FAIL) {
+        auto_action_job.feedback.state = PC_AUTO_ACTION_JOB_FAILED;
+        auto_action_job.feedback.failure_mask =
+            AutoOre_GetFailureMask(&auto_ore_ctrl);
+        auto_action_job.feedback.failed_mask = AutoCtrlFeed_FailureSegmentMask(
+            auto_action_job.feedback.failure_mask);
+      } else {
+        auto_action_job.feedback.state = PC_AUTO_ACTION_JOB_REJECTED;
+        auto_action_job.feedback.reject_reason =
+            PC_AUTO_ACTION_REJECT_START_FAILED;
+      }
+      return;
+    }
+
+    case PC_AUTO_ACTION_V2_OP_CONTINUE: {
+      if (!auto_action_job.active ||
+          command.job_id != auto_action_job.feedback.job_id) {
+        AutoCtrlFeed_SetV2Reject(&command,
+                                 PC_AUTO_ACTION_REJECT_JOB_MISMATCH, now_ms);
+        return;
+      }
+      if (command.gate_id != PC_AUTO_ACTION_GATE_RELEASE_STEP2) {
+        AutoCtrlFeed_SetV2Reject(&command,
+                                 PC_AUTO_ACTION_REJECT_INVALID_OPERATION,
+                                 now_ms);
+        return;
+      }
+      const AutoOre_Action_t step2_action =
+          AutoCtrlFeed_CurrentReleaseStep2Action();
+      if (step2_action == AUTO_ORE_ACTION_NONE) {
+        if (auto_ore_ctrl.action == AUTO_ORE_ACTION_RELEASE_STEP2 ||
+            auto_ore_ctrl.action == AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP2 ||
+            auto_ore_ctrl.action ==
+                AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT_STEP2) {
+          return;
+        }
+        AutoCtrlFeed_SetV2Reject(&command,
+                                 PC_AUTO_ACTION_REJECT_NOT_WAITING_GATE,
+                                 now_ms);
+        return;
+      }
+      if (!AutoOre_ContinueReleaseStep2(&auto_ore_ctrl, step2_action, now_ms)) {
+        AutoCtrlFeed_SetV2Reject(&command,
+                                 PC_AUTO_ACTION_REJECT_NOT_WAITING_GATE,
+                                 now_ms);
+        return;
+      }
+      auto_action_job.feedback.state = PC_AUTO_ACTION_JOB_RUNNING;
+      return;
+    }
+
+    case PC_AUTO_ACTION_V2_OP_ABORT:
+      if (!auto_action_job.active ||
+          command.job_id != auto_action_job.feedback.job_id) {
+        AutoCtrlFeed_SetV2Reject(&command,
+                                 PC_AUTO_ACTION_REJECT_JOB_MISMATCH, now_ms);
+        return;
+      }
+      if (AutoCtrlFeed_JobStateIsTerminal(auto_action_job.feedback.state)) {
+        return;
+      }
+      auto_action_job.feedback.state = PC_AUTO_ACTION_JOB_ABORTING;
+      g_auto_ore_debug.request = AUTO_ORE_DEBUG_REQUEST_ABORT;
+      (void)AutoCtrlFeed_HandleAutoOreDebugRequest(now_ms);
+      return;
+
+    case PC_AUTO_ACTION_V2_OP_ACK:
+      if (auto_action_job.active &&
+          command.job_id == auto_action_job.feedback.job_id &&
+          AutoCtrlFeed_JobStateIsTerminal(auto_action_job.feedback.state)) {
+        memset(&auto_action_job.feedback, 0,
+               sizeof(auto_action_job.feedback));
+        auto_action_job.active = false;
+        auto_action_job.v2_owned = false;
+      } else {
+        AutoCtrlFeed_SetV2Reject(&command,
+                                 PC_AUTO_ACTION_REJECT_JOB_MISMATCH, now_ms);
+      }
+      return;
+
+    case PC_AUTO_ACTION_V2_OP_NONE:
+    default:
+      AutoCtrlFeed_SetV2Reject(&command,
+                               PC_AUTO_ACTION_REJECT_INVALID_OPERATION,
+                               now_ms);
+      return;
+  }
+}
+
+static bool AutoCtrlFeed_AutoOreWaitingReleaseGate(void) {
+  if (!auto_ore_inited || !AutoOre_IsBusy(&auto_ore_ctrl) ||
+      !AutoOre_IsUpperFinished(&auto_ore_ctrl)) {
+    return false;
+  }
+  return auto_ore_ctrl.action == AUTO_ORE_ACTION_RELEASE_STEP1 ||
+         auto_ore_ctrl.action == AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP1 ||
+         auto_ore_ctrl.action == AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT_STEP1;
+}
+
+static void AutoCtrlFeed_SyncJobFromFeedback(
+    const PC_AutoActionFeedback_t *feedback, uint32_t now_ms) {
+  if (feedback == NULL) {
+    return;
+  }
+  if (!auto_action_job.active && feedback->busy != 0u &&
+      feedback->action != PC_AUTO_ACTION_NONE) {
+    AutoCtrlFeed_BeginLegacyJob((PC_AutoAction_t)feedback->action, now_ms);
+  }
+  if (!auto_action_job.active ||
+      AutoCtrlFeed_JobStateIsTerminal(auto_action_job.feedback.state)) {
+    return;
+  }
+
+  auto_action_job.feedback.completed_mask |= feedback->segment_finished_mask;
+  if (auto_ore_inited &&
+      AutoCtrlFeed_IsOreAction(
+          (PC_AutoAction_t)auto_action_job.feedback.action)) {
+    auto_action_job.feedback.completed_mask |=
+        AutoOre_GetCompletedSegmentMask(&auto_ore_ctrl);
+    auto_action_job.feedback.failed_mask |=
+        AutoOre_GetFailedSegmentMask(&auto_ore_ctrl);
+    auto_action_job.feedback.failure_mask |=
+        AutoOre_GetFailureMask(&auto_ore_ctrl);
+    auto_action_job.feedback.failed_mask &=
+        (uint8_t)~auto_action_job.feedback.completed_mask;
+    auto_action_job.feedback.active_node = AutoOre_GetStepIndex(&auto_ore_ctrl);
+  } else if (AutoCtrlFeed_IsStepAction(
+                 (PC_AutoAction_t)auto_action_job.feedback.action)) {
+    auto_action_job.feedback.active_node = AutoCtrl_GetStepIndex(&auto_ctrl);
+  }
+
+  if (feedback->busy != 0u) {
+    if (auto_action_job.feedback.state != PC_AUTO_ACTION_JOB_ABORTING) {
+      auto_action_job.feedback.state = AutoCtrlFeed_AutoOreWaitingReleaseGate()
+                                           ? PC_AUTO_ACTION_JOB_WAIT_GATE
+                                           : PC_AUTO_ACTION_JOB_RUNNING;
+    }
+    if (auto_action_job.feedback.state == PC_AUTO_ACTION_JOB_WAIT_GATE) {
+      auto_action_job.feedback.running_mask = 0u;
+    } else {
+      uint8_t running_mask = 0u;
+      if (auto_ore_inited) {
+        running_mask = AutoOre_GetRunningSegmentMask(&auto_ore_ctrl);
+      }
+      if (running_mask == 0u) {
+        running_mask = (uint8_t)(auto_action_job.feedback.required_mask &
+                                 ~auto_action_job.feedback.completed_mask &
+                                 ~auto_action_job.feedback.failed_mask);
+      }
+      auto_action_job.feedback.running_mask = running_mask;
+    }
+    return;
+  }
+
+  if (feedback->finished == 0u) {
+    return;
+  }
+
+  auto_action_job.feedback.running_mask = 0u;
+  auto_action_job.feedback.failure_mask |= feedback->failure_mask;
+  auto_action_job.feedback.failed_mask |=
+      AutoCtrlFeed_FailureSegmentMask(feedback->failure_mask);
+  auto_action_job.feedback.failed_mask &=
+      (uint8_t)~auto_action_job.feedback.completed_mask;
+  if ((feedback->failure_mask & PC_AUTO_ACTION_FAILURE_ABORTED) != 0u ||
+      auto_action_job.feedback.state == PC_AUTO_ACTION_JOB_ABORTING) {
+    auto_action_job.feedback.state = PC_AUTO_ACTION_JOB_ABORTED;
+  } else if (feedback->result == PC_AUTO_ACTION_RESULT_SUCCESS) {
+    const uint8_t missing_mask =
+        (uint8_t)(auto_action_job.feedback.required_mask &
+                  ~auto_action_job.feedback.completed_mask);
+    if (missing_mask == 0u) {
+      auto_action_job.feedback.state = PC_AUTO_ACTION_JOB_SUCCEEDED;
+    } else {
+      auto_action_job.feedback.failed_mask |= missing_mask;
+      auto_action_job.feedback.failure_mask |=
+          PC_AUTO_ACTION_FAILURE_SETUP;
+      auto_action_job.feedback.state = PC_AUTO_ACTION_JOB_FAILED;
+    }
+  } else {
+    auto_action_job.feedback.state = PC_AUTO_ACTION_JOB_FAILED;
+  }
+}
+
+static void AutoCtrlFeed_PublishAutoActionSnapshot(
+    PC_AutoActionFeedback_t *feedback) {
+  if (feedback == NULL) {
+    return;
+  }
+  const uint32_t now_ms = BSP_TIME_Get_ms();
+  AutoCtrlFeed_SyncJobFromFeedback(feedback, now_ms);
+  if (auto_action_job.active) {
+    feedback->segment_finished_mask =
+        auto_action_job.feedback.completed_mask;
+    if (feedback->finished != 0u &&
+        (auto_action_job.feedback.state == PC_AUTO_ACTION_JOB_FAILED ||
+         auto_action_job.feedback.state == PC_AUTO_ACTION_JOB_ABORTED)) {
+      feedback->result = PC_AUTO_ACTION_RESULT_FAIL;
+      feedback->failure_mask = auto_action_job.feedback.failure_mask;
+    }
+  }
+
+  AutoCtrlFeed_UpdateLightEffectFromAutoActionFeedback(feedback);
+  (void)MrlinkPc_PublishFeedback(PC_FEEDBACK_AUTO_ACTION, feedback);
+
+  const PC_AutoActionV2Feedback_t *v2_feedback =
+      auto_action_job.active ? &auto_action_job.feedback : NULL;
+  if ((int32_t)(auto_action_v2_reject_until_ms - now_ms) > 0) {
+    v2_feedback = &auto_action_v2_reject;
+  }
+  PC_AutoActionV2Feedback_t idle_feedback = {0};
+  (void)MrlinkPc_PublishFeedback(
+      PC_FEEDBACK_AUTO_ACTION_V2,
+      (v2_feedback != NULL) ? v2_feedback : &idle_feedback);
 }
 
 static bool AutoCtrlFeed_StartRodSpearheadAction(
@@ -2503,7 +2932,8 @@ void Task_auto_ctrl(void *argument) {
       AutoCtrlFeed_UpdateYawRateCommand();
 
       AutoCtrl_Update(&auto_ctrl, now_ms);
-      AutoCtrlFeed_HandleAutoOreDebugRequest(now_ms);
+      AutoCtrlFeed_ProcessAutoActionV2(now_ms);
+      (void)AutoCtrlFeed_HandleAutoOreDebugRequest(now_ms);
       const bool update_auto_ore_debug = AutoCtrlFeed_DebugPeriodicDue(now_ms);
       AutoCtrlFeed_UpdateAutoOre(now_ms, update_auto_ore_debug);
       AutoCtrlFeed_TryPendingReleaseStep2(now_ms);

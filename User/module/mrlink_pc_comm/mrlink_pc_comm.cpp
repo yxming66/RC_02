@@ -24,7 +24,6 @@ constexpr uint8_t kRxDmaSlotCount = MRLINK_PC_RX_DMA_SLOT_COUNT;
 constexpr uint16_t kRxDmaBufSize = MRLINK_PC_RX_DMA_BUF_SIZE;
 constexpr uint16_t kMrlinkRxBufSize = MRLINK_PC_RX_STREAM_BUF_SIZE;
 constexpr uint16_t kMrlinkTxBufSize = MRLINK_PC_MAX_FRAME_SIZE;
-constexpr uint32_t kAutoActionRepeatReleaseMs = 300u;
 constexpr uint32_t kModuleCommandTimeoutMs = 10000u;
 
 static_assert(kRxDmaSlotCount >= 2u, "MRLINK_PC_RX_DMA_SLOT_COUNT must be >= 2");
@@ -53,8 +52,10 @@ static uint8_t s_rx_parse_buf[kRxDmaBufSize];
 static osThreadId_t s_thread_id = nullptr;
 static PC_AutoStepParams_t s_auto_step_params{};
 static PC_AutoActionFeedback_t s_auto_action_feedback{};
+static PC_AutoActionV2Feedback_t s_auto_action_v2_feedback{};
+static PC_AutoActionV2CMD_t s_auto_action_v2_cmd{};
+static bool s_auto_action_v2_pending = false;
 static uint8_t s_auto_action_rx_latch = PC_AUTO_ACTION_NONE;
-static uint32_t s_auto_action_rx_latch_tick = 0u;
 static PC_IrOreFeedback_t s_ir_ore_feedback{};
 static PC_IrOreBridgeFeedback_t s_ir_ore_bridge_feedback{};
 static PC_IrDockFeedback_t s_ir_dock_feedback{};
@@ -167,6 +168,7 @@ void TouchOnline(uint8_t cmd) {
       g_pc_comm_debug.rx_ore_store_count++;
       break;
     case PC_CMD_AUTO_ACTION:
+    case PC_CMD_AUTO_ACTION_V2:
       g_pc_comm_debug.rx_auto_action_count++;
       break;
     case PC_CMD_CAMERA_YAW:
@@ -262,34 +264,31 @@ void OnOreStore(const wire::OreStoreCmd &cmd) {
 }
 
 void OnAutoAction(const wire::AutoActionCmd &cmd) {
-  const uint32_t now_ms = BSP_TIME_Get_ms();
-  const bool latch_expired =
-      s_auto_action_rx_latch != PC_AUTO_ACTION_NONE &&
-      (now_ms - s_auto_action_rx_latch_tick) >= kAutoActionRepeatReleaseMs;
-
   s_state.cmd.abstract_position.enable_mask &=
       static_cast<uint8_t>(~(PC_ABSTRACT_MODULE_POLE |
                             PC_ABSTRACT_MODULE_ARM_SIMPLE));
 
-  /* Auto action is edge/latch based rather than a continuous setpoint:
-   * - action=NONE clears the latch.
-   * - a different non-zero action is accepted immediately.
-   * - the same non-zero action is accepted again only after 300 ms, which
-   *   prevents a 50 Hz host stream from repeatedly restarting one-shot flows. */
+  /* Legacy command is strictly edge/latch based. The same action cannot be
+   * armed again until the host sends NONE; V2 uses request_id instead. */
   if (cmd.action == PC_AUTO_ACTION_NONE) {
     s_auto_action_rx_latch = PC_AUTO_ACTION_NONE;
-    s_auto_action_rx_latch_tick = now_ms;
     s_state.cmd.auto_action.action = PC_AUTO_ACTION_NONE;
   } else if (cmd.action != s_auto_action_rx_latch) {
     s_state.cmd.auto_action.action = cmd.action;
     s_auto_action_rx_latch = cmd.action;
-    s_auto_action_rx_latch_tick = now_ms;
-  } else if (latch_expired) {
-    s_state.cmd.auto_action.action = cmd.action;
-    s_auto_action_rx_latch_tick = now_ms;
   }
   MarkRxFrame(PC_CMD_AUTO_ACTION, sizeof(cmd), MRLINK_OK);
   TouchOnline(PC_CMD_AUTO_ACTION);
+}
+
+void OnAutoActionV2(const PC_AutoActionV2CMD_t &cmd) {
+  s_auto_action_v2_cmd = cmd;
+  s_auto_action_v2_pending = true;
+  s_state.cmd.abstract_position.enable_mask &=
+      static_cast<uint8_t>(~(PC_ABSTRACT_MODULE_POLE |
+                             PC_ABSTRACT_MODULE_ARM_SIMPLE));
+  MarkRxFrame(PC_CMD_AUTO_ACTION_V2, sizeof(cmd), MRLINK_OK);
+  TouchOnline(PC_CMD_AUTO_ACTION_V2);
 }
 
 void OnCameraYaw(const wire::CameraYawCmd &cmd) {
@@ -387,6 +386,7 @@ bool RegisterHandlers() {
          s_bus.SubscribeLatest<wire::OreStoreCmd>(OnOreStore) ==
              MRLINK_OK &&
          s_bus.Subscribe<wire::AutoActionCmd>(OnAutoAction) == MRLINK_OK &&
+         s_bus.Subscribe<PC_AutoActionV2CMD_t>(OnAutoActionV2) == MRLINK_OK &&
          s_bus.SubscribeLatest<wire::CameraYawCmd>(OnCameraYaw) == MRLINK_OK &&
          s_bus.SubscribeLatest<PC_AbstractPositionCMD_t>(OnAbstractPosition) ==
              MRLINK_OK &&
@@ -817,6 +817,10 @@ extern "C" const PC_AutoActionCMD_t *MrlinkPc_GetAutoActionCMD(void) {
              : nullptr;
 }
 
+extern "C" const PC_AutoActionV2CMD_t *MrlinkPc_GetAutoActionV2CMD(void) {
+  return s_auto_action_v2_pending ? &s_auto_action_v2_cmd : nullptr;
+}
+
 extern "C" const PC_StepCMD_t *MrlinkPc_GetStepCMD(void) {
   return &s_state.cmd.step;
 }
@@ -882,6 +886,12 @@ extern "C" bool MrlinkPc_PublishFeedback(uint8_t topic,
       const auto *typed =
           static_cast<const PC_AutoActionFeedback_t *>(feedback);
       s_auto_action_feedback = *typed;
+      return s_bus.StoreLatest(*typed);
+    }
+    case PC_FEEDBACK_AUTO_ACTION_V2: {
+      const auto *typed =
+          static_cast<const PC_AutoActionV2Feedback_t *>(feedback);
+      s_auto_action_v2_feedback = *typed;
       return s_bus.StoreLatest(*typed);
     }
     case PC_FEEDBACK_CAMERA_YAW: {
@@ -1022,6 +1032,10 @@ extern "C" void MrlinkPc_ClearAutoActionCommand(void) {
   s_state.cmd.auto_action.action = PC_AUTO_ACTION_NONE;
 }
 
+extern "C" void MrlinkPc_ClearAutoActionV2Command(void) {
+  s_auto_action_v2_pending = false;
+}
+
 extern "C" void MrlinkPc_ClearIrOreAckCommand(void) {
   s_ir_ore_ack_pending = false;
 }
@@ -1058,6 +1072,9 @@ extern "C" uint16_t MrlinkPc_BuildFeedbackFrame(uint8_t cmd, uint8_t *tx_buf,
     }
     case PC_FEEDBACK_AUTO_ACTION: {
       return BuildLatestOrFallback(s_auto_action_feedback, tx_buf, buf_size);
+    }
+    case PC_FEEDBACK_AUTO_ACTION_V2: {
+      return BuildLatestOrFallback(s_auto_action_v2_feedback, tx_buf, buf_size);
     }
     case PC_FEEDBACK_CAMERA_YAW: {
       return BuildLatestOrFallback(s_state.feedback.camera_yaw, tx_buf,

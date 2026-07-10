@@ -79,6 +79,48 @@ typedef enum {
 } AutoOre_FailureMask_t;
 
 typedef enum {
+  AUTO_ORE_SEGMENT_NONE = 0u,
+  AUTO_ORE_SEGMENT_HANDOFF = (1u << 0),
+  AUTO_ORE_SEGMENT_STORE = (1u << 1),
+  AUTO_ORE_SEGMENT_STEP = (1u << 2),
+} AutoOre_SegmentMask_t;
+
+typedef enum {
+  AUTO_ORE_RESOURCE_NONE = 0u,
+  AUTO_ORE_RESOURCE_CHASSIS = (1u << 0),
+  AUTO_ORE_RESOURCE_POLE = (1u << 1),
+  AUTO_ORE_RESOURCE_ARM = (1u << 2),
+  AUTO_ORE_RESOURCE_STORE = (1u << 3),
+  AUTO_ORE_RESOURCE_ROD = (1u << 4),
+  AUTO_ORE_RESOURCE_SHARED_VALVE = (1u << 5),
+} AutoOre_ResourceMask_t;
+
+typedef enum {
+  AUTO_ORE_BRANCH_IDLE = 0,
+  AUTO_ORE_BRANCH_PENDING,
+  AUTO_ORE_BRANCH_RUNNING,
+  AUTO_ORE_BRANCH_SUCCEEDED,
+  AUTO_ORE_BRANCH_FAILED,
+  AUTO_ORE_BRANCH_CANCELLED,
+} AutoOre_BranchState_t;
+
+typedef struct {
+  AutoOre_BranchState_t state;
+  uint8_t segment_mask;
+  uint8_t resource_mask;
+  uint16_t failure_mask;
+  uint32_t enter_time_ms;
+  uint32_t finish_time_ms;
+} AutoOre_BranchContext_t;
+
+typedef struct {
+  AutoOre_BranchContext_t handoff;
+  AutoOre_BranchContext_t store;
+  AutoOre_BranchContext_t step;
+  uint8_t acquired_resource_mask;
+} AutoOre_ParallelContext_t;
+
+typedef enum {
   AUTO_ORE_POSITION_NONE = 0,
   AUTO_ORE_POSITION_TRANSFORM_LOW,
   AUTO_ORE_POSITION_TRANSFORM_HIGH,
@@ -256,6 +298,7 @@ typedef struct {
   bool fused_pick_done;
   bool fused_step_done;
   bool fused_store_done;
+  AutoOre_ParallelContext_t parallel;
   bool pick_lift_confirmed;
   bool prealign_yaw_target_valid;
   bool distance_latch_valid;
@@ -315,6 +358,9 @@ bool AutoOre_StartReleaseLiftDetectStep1(AutoOre_t *ctrl, uint32_t now_ms);
 bool AutoOre_StartReleaseLiftDetectStep2(AutoOre_t *ctrl, uint32_t now_ms);
 bool AutoOre_StartReleaseIrLiftDetectStep1(AutoOre_t *ctrl, uint32_t now_ms);
 bool AutoOre_StartReleaseIrLiftDetectStep2(AutoOre_t *ctrl, uint32_t now_ms);
+bool AutoOre_ContinueReleaseStep2(AutoOre_t *ctrl,
+                                  AutoOre_Action_t step2_action,
+                                  uint32_t now_ms);
 bool AutoOre_StartChamber(AutoOre_t *ctrl, uint32_t now_ms);
 bool AutoOre_StartPickPos400(AutoOre_t *ctrl, uint32_t now_ms);
 bool AutoOre_StartPickPos200(AutoOre_t *ctrl, uint32_t now_ms);
@@ -343,6 +389,10 @@ AutoOre_State_t AutoOre_GetState(const AutoOre_t *ctrl);
 AutoOre_Result_t AutoOre_GetResult(const AutoOre_t *ctrl);
 AutoOre_Fault_t AutoOre_GetFault(const AutoOre_t *ctrl);
 uint16_t AutoOre_GetFailureMask(const AutoOre_t *ctrl);
+uint8_t AutoOre_GetCompletedSegmentMask(const AutoOre_t *ctrl);
+uint8_t AutoOre_GetRunningSegmentMask(const AutoOre_t *ctrl);
+uint8_t AutoOre_GetFailedSegmentMask(const AutoOre_t *ctrl);
+uint8_t AutoOre_GetActiveResourceMask(const AutoOre_t *ctrl);
 AutoOre_Position_t AutoOre_GetActivePosition(const AutoOre_t *ctrl);
 uint8_t AutoOre_GetStepIndex(const AutoOre_t *ctrl);
 const ArmSimple_CMD_t *AutoOre_GetArmCommand(const AutoOre_t *ctrl);

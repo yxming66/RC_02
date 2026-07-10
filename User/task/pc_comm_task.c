@@ -42,6 +42,7 @@ static uint32_t s_sick_front_ore_stable_since_ms = 0u;
 static const uint8_t s_feedback_cmds[] = {
     PC_FEEDBACK_HEARTBEAT,
     PC_FEEDBACK_AUTO_ACTION,
+    PC_FEEDBACK_AUTO_ACTION_V2,
     PC_FEEDBACK_CHASSIS,
     PC_FEEDBACK_POLE,
     PC_FEEDBACK_ARM_SIMPLE,
@@ -205,6 +206,21 @@ static bool PcComm_ProcessAutoActionCommand(void) {
     }
     g_auto_ore_debug.request = request;
     MrlinkPc_ClearAutoActionCommand();
+    return true;
+}
+
+static bool PcComm_ProcessAutoActionV2Command(void) {
+    const PC_AutoActionV2CMD_t *cmd = MrlinkPc_GetAutoActionV2CMD();
+    if (cmd == NULL) {
+        return false;
+    }
+
+    const bool submitted = Task_AutoActionSubmitV2(
+        cmd->request_id, cmd->job_id, cmd->operation, cmd->action,
+        cmd->gate_id, cmd->flags);
+    if (submitted) {
+        MrlinkPc_ClearAutoActionV2Command();
+    }
     return true;
 }
 
@@ -747,6 +763,7 @@ void Task_PcCommStep(void) {
     uint32_t now = BSP_TIME_Get_ms();
 
     MrlinkPc_CommProcess(now);
+    (void)PcComm_ProcessAutoActionV2Command();
     PcComm_ProcessIrOreAckCommand(now);
     PcComm_UpdateCameraYawCommand(now);
 

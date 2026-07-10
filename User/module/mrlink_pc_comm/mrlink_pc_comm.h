@@ -49,6 +49,7 @@ typedef enum {
     PC_CMD_IMU = 0x20,           /* PC 下发姿态数据命令 */
     PC_CMD_IR_ORE_ACK = 0x21,    /* PC 透传红外对接 ACK 帧，payload 为 6 字节原始 ACK */
     PC_CMD_R2_READY_STATE = 0x22,/* PC 下发 R2 准备/重试状态，驱动灯效模式 */
+    PC_CMD_AUTO_ACTION_V2 = 0x23, /* 带 request/job 标识的一键动作事务命令 */
 } PC_CMD_t;
 
 typedef enum {
@@ -70,6 +71,7 @@ typedef enum {
     PC_FEEDBACK_SICK_CORRECT = 0x9B, /* 取矛头 SICK 校正标准值/实时值反馈 */
     PC_FEEDBACK_SICK_FRONT_ORE = 0x9C, /* 前 SICK 区域正方形矿检测反馈。 */
     PC_FEEDBACK_SICK_RAW = 0x9D,      /* 4 路 SICK 原始 ADC/距离/有效位反馈 */
+    PC_FEEDBACK_AUTO_ACTION_V2 = 0x9E, /* 一键动作事务、分支和失败状态 */
 } PC_FeedbackCMD_t;
 
 
@@ -265,6 +267,67 @@ typedef enum {
 typedef struct {
     uint8_t action;    /* 一键动作类型，见 PC_AutoAction_t */
 } PC_AutoActionCMD_t;
+
+typedef enum {
+    PC_AUTO_ACTION_V2_OP_NONE = 0,
+    PC_AUTO_ACTION_V2_OP_START = 1,
+    PC_AUTO_ACTION_V2_OP_CONTINUE = 2,
+    PC_AUTO_ACTION_V2_OP_ABORT = 3,
+    PC_AUTO_ACTION_V2_OP_ACK = 4,
+} PC_AutoActionV2Operation_t;
+
+typedef enum {
+    PC_AUTO_ACTION_JOB_IDLE = 0,
+    PC_AUTO_ACTION_JOB_ACCEPTED = 1,
+    PC_AUTO_ACTION_JOB_RUNNING = 2,
+    PC_AUTO_ACTION_JOB_WAIT_GATE = 3,
+    PC_AUTO_ACTION_JOB_ABORTING = 4,
+    PC_AUTO_ACTION_JOB_SUCCEEDED = 5,
+    PC_AUTO_ACTION_JOB_FAILED = 6,
+    PC_AUTO_ACTION_JOB_ABORTED = 7,
+    PC_AUTO_ACTION_JOB_REJECTED = 8,
+} PC_AutoActionJobState_t;
+
+typedef enum {
+    PC_AUTO_ACTION_REJECT_NONE = 0,
+    PC_AUTO_ACTION_REJECT_INVALID_OPERATION = 1,
+    PC_AUTO_ACTION_REJECT_INVALID_ACTION = 2,
+    PC_AUTO_ACTION_REJECT_BUSY = 3,
+    PC_AUTO_ACTION_REJECT_JOB_MISMATCH = 4,
+    PC_AUTO_ACTION_REJECT_NOT_WAITING_GATE = 5,
+    PC_AUTO_ACTION_REJECT_START_FAILED = 6,
+    PC_AUTO_ACTION_REJECT_QUEUE_FULL = 7,
+} PC_AutoActionRejectReason_t;
+
+typedef enum {
+    PC_AUTO_ACTION_GATE_NONE = 0,
+    PC_AUTO_ACTION_GATE_RELEASE_STEP2 = 1,
+} PC_AutoActionGate_t;
+
+/* 精确线格式为 <HHBBBB：8 字节，小端。 */
+typedef struct __attribute__((packed)) {
+    uint16_t request_id;
+    uint16_t job_id;
+    uint8_t operation; /* PC_AutoActionV2Operation_t */
+    uint8_t action;    /* START 时为 PC_AutoAction_t */
+    uint8_t gate_id;   /* CONTINUE 时为 PC_AutoActionGate_t */
+    uint8_t flags;
+} PC_AutoActionV2CMD_t;
+
+/* 精确线格式为 <HHBBBBBBHBB：14 字节，小端。 */
+typedef struct __attribute__((packed)) {
+    uint16_t request_id;
+    uint16_t job_id;
+    uint8_t action;
+    uint8_t state; /* PC_AutoActionJobState_t */
+    uint8_t required_mask;
+    uint8_t running_mask;
+    uint8_t completed_mask;
+    uint8_t failed_mask;
+    uint16_t failure_mask;
+    uint8_t reject_reason; /* PC_AutoActionRejectReason_t */
+    uint8_t active_node;
+} PC_AutoActionV2Feedback_t;
 
 typedef enum {
     PC_R2_READY_STATE_NOT_READY = 0,  /* 上位机未准备完毕，对应灯效 0 号模式 */
@@ -712,6 +775,9 @@ const PC_AbstractPositionCMD_t *MrlinkPc_GetAbstractPositionCMD(void);
 /* 获取待消费的一键动作命令；无待消费命令时返回 NULL。 */
 const PC_AutoActionCMD_t *MrlinkPc_GetAutoActionCMD(void);
 
+/* 获取待消费的 V2 事务命令；无待消费命令时返回 NULL。 */
+const PC_AutoActionV2CMD_t *MrlinkPc_GetAutoActionV2CMD(void);
+
 /* 获取最近一次 PC 自动台阶命令。 */
 const PC_StepCMD_t *MrlinkPc_GetStepCMD(void);
 
@@ -741,6 +807,8 @@ void MrlinkPc_ClearStepCommand(void);
 
 /* 清除待消费一键动作命令，通常在 pc_comm_task 分发后调用。 */
 void MrlinkPc_ClearAutoActionCommand(void);
+
+void MrlinkPc_ClearAutoActionV2Command(void);
 
 /* 清除待转发红外对接 ACK 命令，通常在 ACK 成功提交或不可恢复失败后调用。 */
 void MrlinkPc_ClearIrOreAckCommand(void);

@@ -1488,6 +1488,17 @@ struct RcPlanIn {
   }
 };
 
+template <uint8_t ResourceMask, RcCommandPlan_t... Plans>
+struct RcAutoOreOwnsResourceOrPlanIn {
+  bool operator()(const cmd::Context &) const {
+    const bool plan_enabled = ((rc_current_plan == Plans) || ...);
+    const bool resource_owned =
+        auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl) &&
+        (AutoOre_GetActiveResourceMask(&auto_ore_ctrl) & ResourceMask) != 0u;
+    return plan_enabled || resource_owned;
+  }
+};
+
 struct RcPlanSafe {
   bool operator()(const cmd::Context &) const {
     return rc_current_plan == RC_CMD_PLAN_SAFE;
@@ -2183,7 +2194,9 @@ static void Rc_ConfigureCmdCenter(void) {
                              RC_CMD_PLAN_PC_AUTO_CTRL> >()
               .priority(cmd::Priority::Auto),
           cmd::from<RcRuntimeInput, RcChassisAutoOreRoute>()
-              .when<RcPlanIn<RC_CMD_PLAN_AUTO_ORE_OUTPUT> >()
+              .when<RcAutoOreOwnsResourceOrPlanIn<
+                  AUTO_ORE_RESOURCE_CHASSIS,
+                  RC_CMD_PLAN_AUTO_ORE_OUTPUT> >()
               .priority(cmd::Priority::CriticalAuto),
           cmd::from<RcRuntimeInput, RcChassisAutoSickCorrectRoute>()
               .when<RcPlanIn<RC_CMD_PLAN_AUTO_SICK_CORRECT_OUTPUT> >()
@@ -2229,8 +2242,10 @@ static void Rc_ConfigureCmdCenter(void) {
                              RC_CMD_PLAN_PC_AUTO_CTRL> >()
               .priority(cmd::Priority::Auto),
           cmd::from<RcRuntimeInput, RcPoleAutoOreRoute>()
-              .when<RcPlanIn<RC_CMD_PLAN_AUTO_ORE_OUTPUT,
-                     RC_CMD_PLAN_AUTO_ORE_PC_CHASSIS_OUTPUT> >()
+              .when<RcAutoOreOwnsResourceOrPlanIn<
+                  AUTO_ORE_RESOURCE_POLE,
+                  RC_CMD_PLAN_AUTO_ORE_OUTPUT,
+                  RC_CMD_PLAN_AUTO_ORE_PC_CHASSIS_OUTPUT> >()
               .priority(cmd::Priority::CriticalAuto),
           cmd::from<RcRuntimeInput, RcPoleAutoSickCorrectRoute>()
               .when<RcPlanIn<RC_CMD_PLAN_AUTO_SICK_CORRECT_OUTPUT> >()
@@ -2260,9 +2275,11 @@ static void Rc_ConfigureCmdCenter(void) {
               .when<RcPlanIn<RC_CMD_PLAN_PC> >()
               .priority(cmd::Priority::Remote),
           cmd::from<RcRuntimeInput, RcArmSimpleAutoOreRoute>()
-              .when<RcPlanIn<RC_CMD_PLAN_AUTO_ORE_OUTPUT,
-              RC_CMD_PLAN_AUTO_CTRL_WITH_AUTO_ORE_UPPER_OUTPUT,
-                     RC_CMD_PLAN_AUTO_ORE_PC_CHASSIS_OUTPUT> >()
+              .when<RcAutoOreOwnsResourceOrPlanIn<
+                  AUTO_ORE_RESOURCE_ARM,
+                  RC_CMD_PLAN_AUTO_ORE_OUTPUT,
+                  RC_CMD_PLAN_AUTO_CTRL_WITH_AUTO_ORE_UPPER_OUTPUT,
+                  RC_CMD_PLAN_AUTO_ORE_PC_CHASSIS_OUTPUT> >()
               .priority(cmd::Priority::CriticalAuto),
           cmd::from<RcRuntimeInput, RcArmSimpleHoldRoute>()
               .when<RcPlanIn<RC_CMD_PLAN_DRIVE,
@@ -2295,9 +2312,11 @@ static void Rc_ConfigureCmdCenter(void) {
               .when<RcPlanIn<RC_CMD_PLAN_PC> >()
               .priority(cmd::Priority::Remote),
           cmd::from<RcRuntimeInput, RcOreStoreAutoOreRoute>()
-              .when<RcPlanIn<RC_CMD_PLAN_AUTO_ORE_OUTPUT,
-              RC_CMD_PLAN_AUTO_CTRL_WITH_AUTO_ORE_UPPER_OUTPUT,
-                     RC_CMD_PLAN_AUTO_ORE_PC_CHASSIS_OUTPUT> >()
+              .when<RcAutoOreOwnsResourceOrPlanIn<
+                  AUTO_ORE_RESOURCE_STORE,
+                  RC_CMD_PLAN_AUTO_ORE_OUTPUT,
+                  RC_CMD_PLAN_AUTO_CTRL_WITH_AUTO_ORE_UPPER_OUTPUT,
+                  RC_CMD_PLAN_AUTO_ORE_PC_CHASSIS_OUTPUT> >()
               .priority(cmd::Priority::CriticalAuto),
           cmd::from<RcRuntimeInput, RcOreStoreAutoRodRoute>()
               .when<RcPlanIn<RC_CMD_PLAN_AUTO_ROD_OUTPUT,

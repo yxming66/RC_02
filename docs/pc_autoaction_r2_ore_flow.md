@@ -62,7 +62,7 @@ action, busy, finished, result, failure_mask, segment_mask, reserved = struct.un
 | `segment_mask bit1` | store 存矿侧完成 | 存矿机构侧完成 |
 | `segment_mask bit2` | step/底盘侧完成 | 台阶/底盘侧完成，可继续导航 |
 
-当前固件对大部分动作的 `result/failure_mask` 面向 PC 简化为成功结束；PC 应主要依赖：
+当前固件按真实结果填写 `result/failure_mask`；PC 应同时依赖：
 
 1. `busy` 判断是否正在跑。
 2. `finished` 判断总动作是否结束。
@@ -113,7 +113,7 @@ send_mrlink_frame(0x16, payload)
 一键动作是“触发型命令”，不是连续 setpoint：
 
 1. 新的非零 `action_id` 会触发动作。
-2. 同一个非零动作 300 ms 内重复发送不会重复启动。
+2. 旧协议中，同一个非零动作只有在先发送 `action=0` 后才能再次启动；V2 使用 `request_id` 幂等去重。
 3. 如需重新触发同一个动作，建议先发 `action=0` 清 latch，再发目标动作。
 4. 中止动作使用 `action=1`。
 
