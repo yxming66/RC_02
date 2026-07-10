@@ -126,11 +126,10 @@ static float CameraYaw_WrapMitPositionRad(float angle_rad) {
 }
 
 static float CameraYaw_EncoderZeroOffsetRad(const CameraYaw_t *c) {
-  if (c == NULL || c->param == NULL ||
-      !isfinite(c->param->encoder_zero_offset_rad)) {
+  if (c == NULL || !isfinite(c->encoder_zero_offset_rad)) {
     return 0.0f;
   }
-  return c->param->encoder_zero_offset_rad;
+  return c->encoder_zero_offset_rad;
 }
 
 static float CameraYaw_BodyYawFromEncoder(const CameraYaw_t *c,
@@ -199,6 +198,10 @@ int8_t CameraYaw_Init(CameraYaw_t *c, const CameraYaw_Params_t *param,
   BSP_CAN_Init();
 
   c->param = param;
+  c->encoder_zero_offset_rad =
+      isfinite(param->encoder_zero_offset_rad)
+          ? param->encoder_zero_offset_rad
+          : 0.0f;
   c->mode = CAMERA_YAW_MODE_RELAX;
   c->nominal_dt = 1.0f / target_freq;
   c->dt = c->nominal_dt;
@@ -384,6 +387,33 @@ void CameraYaw_ResetOutput(CameraYaw_t *c) {
   if (protocol != NULL) {
     (void)protocol->Relax();
   }
+}
+
+int8_t CameraYaw_SetZero(CameraYaw_t *c) {
+  if (c == NULL || c->param == NULL) {
+    return CAMERA_YAW_ERR_NULL;
+  }
+
+  CameraYawMotorProtocol *protocol = CameraYaw_GetMotorProtocol(c);
+  if (protocol == NULL) {
+    return CAMERA_YAW_ERR;
+  }
+
+  const int8_t ret = protocol->SetZero();
+  if (ret != DEVICE_OK) {
+    return CAMERA_YAW_ERR;
+  }
+
+  c->encoder_zero_offset_rad = 0.0f;
+  c->output = 0.0f;
+  c->feedback.output = 0.0f;
+  c->feedback.motor_angle_rad = 0.0f;
+  c->feedback.feedback_yaw_rad = 0.0f;
+  c->feedback.error_yaw_rad = 0.0f;
+  c->feedback.at_target = false;
+  c->mit_target_motor_angle_rad = 0.0f;
+  c->mit_kd_cmd = 0.0f;
+  return CAMERA_YAW_OK;
 }
 
 bool CameraYaw_IsAtTarget(const CameraYaw_t *c) {

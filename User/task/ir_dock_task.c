@@ -1,6 +1,6 @@
 /*
     ir_dock Task
-  Dedicated low-rate task for UART8 infrared docking communication.
+  Dedicated task for UART8 infrared docking communication.
 */
 
 #include "task/user_task.h"

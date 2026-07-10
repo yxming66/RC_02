@@ -1172,12 +1172,16 @@ static RcBehavior_t Rc_SelectMappedBehavior(void) {
 }
 
 static bool Rc_BehaviorAllowsAutoCtrlOutput(RcBehavior_t behavior) {
-  return behavior == RC_BEHAVIOR_AUTO_200_UP_STANDBY ||
+  return behavior == RC_BEHAVIOR_POLE_FRONT ||
+    behavior == RC_BEHAVIOR_POLE_REAR ||
+    behavior == RC_BEHAVIOR_AUTO_200_UP_STANDBY ||
          behavior == RC_BEHAVIOR_AUTO_200_DOWN_STANDBY;
 }
 
 static bool Rc_BehaviorAllowsAutoActionOutput(RcBehavior_t behavior) {
-  return behavior == RC_BEHAVIOR_AUTO_200_UP_STANDBY ||
+  return behavior == RC_BEHAVIOR_POLE_FRONT ||
+    behavior == RC_BEHAVIOR_POLE_REAR ||
+    behavior == RC_BEHAVIOR_AUTO_200_UP_STANDBY ||
          behavior == RC_BEHAVIOR_AUTO_200_DOWN_STANDBY ||
          behavior == RC_BEHAVIOR_AUTO_ORE;
 }
@@ -1396,12 +1400,6 @@ static void Rc_TryStartAutoCtrlBySwitch(uint32_t now_ms) {
   if (!dr16.header.online || !auto_ctrl_inited || AutoCtrl_IsBusy(&auto_ctrl) ||
       (auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl)) ||
       Task_AutoRodSpearheadIsBusy() || Task_AutoSickCorrectIsBusy()) {
-    return;
-  }
-
-  const RcBehavior_t switch_behavior = Rc_SelectMappedBehavior();
-  if (switch_behavior == RC_BEHAVIOR_POLE_FRONT ||
-      switch_behavior == RC_BEHAVIOR_POLE_REAR) {
     return;
   }
 

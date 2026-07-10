@@ -78,6 +78,8 @@ typedef struct {
 typedef struct {
   volatile bool enable;
   volatile bool direct_output_enable;
+  volatile bool setzero;
+  volatile int8_t setzero_ret;
   volatile CameraYaw_Mode_t mode;
   volatile float target_yaw_rad;
   volatile float feedback_yaw_rad;
@@ -91,6 +93,7 @@ typedef struct {
   float dt;
   float nominal_dt;
   const CameraYaw_Params_t *param;
+  float encoder_zero_offset_rad;
   CameraYaw_Mode_t mode;
   CameraYaw_CMD_t cmd;
   CameraYaw_Feedback_t feedback;
@@ -108,6 +111,7 @@ void CameraYaw_SetOutput(CameraYaw_t *c);
 void CameraYaw_FlushOutput(CameraYaw_t *c);
 void CameraYaw_Output(CameraYaw_t *c);
 void CameraYaw_ResetOutput(CameraYaw_t *c);
+int8_t CameraYaw_SetZero(CameraYaw_t *c);
 bool CameraYaw_IsAtTarget(const CameraYaw_t *c);
 
 extern volatile CameraYaw_DebugControl_t g_camera_yaw_debug;

@@ -74,6 +74,8 @@ volatile OreStore_DebugCommand_t g_ore_store_debug_command = {
 volatile CameraYaw_DebugControl_t g_camera_yaw_debug = {
     .enable = false,
     .direct_output_enable = false,
+    .setzero = false,
+    .setzero_ret = CAMERA_YAW_ERR_NULL,
     .mode = CAMERA_YAW_MODE_RELAX,
     .target_yaw_rad = 0.0f,
     .feedback_yaw_rad = 0.0f,
@@ -566,12 +568,20 @@ void Task_CameraYawStep(void) {
 
   g_camera_yaw_update_ret_by_channel[yaw] =
       CameraYaw_UpdateFeedback(&camera_yaw[yaw]);
-  g_camera_yaw_control_ret_by_channel[yaw] =
-      CameraYaw_Control(&camera_yaw[yaw], &camera_yaw_cmd.yaw[yaw],
-                        now_tick);
-  CameraYaw_SetOutput(&camera_yaw[yaw]);
+  const bool setzero_requested = g_camera_yaw_debug.setzero;
+  if (setzero_requested) {
+    g_camera_yaw_debug.setzero = false;
+    g_camera_yaw_debug.setzero_ret = CameraYaw_SetZero(&camera_yaw[yaw]);
+    g_camera_yaw_control_ret_by_channel[yaw] =
+        g_camera_yaw_debug.setzero_ret;
+  } else {
+    g_camera_yaw_control_ret_by_channel[yaw] =
+        CameraYaw_Control(&camera_yaw[yaw], &camera_yaw_cmd.yaw[yaw],
+                          now_tick);
+    CameraYaw_SetOutput(&camera_yaw[yaw]);
+    CameraYaw_FlushOutput(&camera_yaw[yaw]);
+  }
   camera_yaw_feedback.yaw[yaw] = camera_yaw[yaw].feedback;
-  CameraYaw_FlushOutput(&camera_yaw[yaw]);
 
   g_camera_yaw_update_ret =
       g_camera_yaw_update_ret_by_channel[CAMERA_YAW_ACTIVE_CHANNEL];
