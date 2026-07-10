@@ -20,6 +20,11 @@ using CameraYawMotorProtocol =
     mr::motor::MotorProtocol<mr::motor::MotorKind::DM,
                              mr::motor::MotorModel::H3510>;
 
+static constexpr float kCameraYawMitKpMax = 500.0f;
+static constexpr float kCameraYawMitKdMax = 5.0f;
+static constexpr float kCameraYawMitPositionMinRad = -12.56637f;
+static constexpr float kCameraYawMitPositionMaxRad = 12.56637f;
+
 struct CameraYawMotorSlot {
   bool used;
   CameraYaw_t *owner;
@@ -107,6 +112,19 @@ static float CameraYaw_WrapAngleRad(float angle_rad) {
   return angle_rad;
 }
 
+static float CameraYaw_WrapMitPositionRad(float angle_rad) {
+  if (!isfinite(angle_rad)) {
+    return 0.0f;
+  }
+  const float range =
+      kCameraYawMitPositionMaxRad - kCameraYawMitPositionMinRad;
+  angle_rad = fmodf(angle_rad - kCameraYawMitPositionMinRad, range);
+  if (angle_rad < 0.0f) {
+    angle_rad += range;
+  }
+  return angle_rad + kCameraYawMitPositionMinRad;
+}
+
 static float CameraYaw_EncoderZeroOffsetRad(const CameraYaw_t *c) {
   if (c == NULL || c->param == NULL ||
       !isfinite(c->param->encoder_zero_offset_rad)) {
@@ -185,14 +203,17 @@ int8_t CameraYaw_Init(CameraYaw_t *c, const CameraYaw_Params_t *param,
   c->nominal_dt = 1.0f / target_freq;
   c->dt = c->nominal_dt;
   c->cmd.mode = CAMERA_YAW_MODE_RELAX;
-  if (!isfinite(param->mit.kp) || param->mit.kp < 0.0f ||
+    if (!isfinite(param->mit.kp) || param->mit.kp < 0.0f ||
+      param->mit.kp > kCameraYawMitKpMax ||
       !isfinite(param->mit.kd) || param->mit.kd < 0.0f ||
+      param->mit.kd > kCameraYawMitKdMax ||
       !isfinite(param->mit.target_velocity_rad_s) ||
       !isfinite(param->mit.torque_ff_nm) ||
       !isfinite(param->mit.max_position_error_rad) ||
       param->mit.max_position_error_rad <= 0.0f ||
       !isfinite(param->limit.max_torque_nm) ||
-      param->limit.max_torque_nm <= 0.0f) {
+      param->limit.max_torque_nm <= 0.0f ||
+      fabsf(param->mit.torque_ff_nm) > param->limit.max_torque_nm) {
     return CAMERA_YAW_ERR;
   }
 
@@ -265,22 +286,38 @@ int8_t CameraYaw_Control(CameraYaw_t *c, const CameraYaw_CMD_t *cmd,
     c->feedback.error_yaw_rad = 0.0f;
     c->feedback.at_target = false;
     c->mit_target_motor_angle_rad = c->feedback.motor_angle_rad;
+    c->mit_kd_cmd = 0.0f;
     return CAMERA_YAW_OK;
   }
 
   c->feedback.error_yaw_rad =
       CircleError(target_yaw_rad, feedback_yaw_rad, M_2PI);
-    const float limited_position_error = CameraYaw_ClampSymmetric(
+  float limited_position_error = CameraYaw_ClampSymmetric(
       c->feedback.error_yaw_rad, c->param->mit.max_position_error_rad);
-    c->mit_target_motor_angle_rad =
-      c->feedback.motor_angle_rad + limited_position_error;
-    c->output = c->param->mit.kp * limited_position_error +
-          c->param->mit.kd *
-            (c->param->mit.target_velocity_rad_s -
-             c->feedback.motor_velocity_rad_s) +
-          c->param->mit.torque_ff_nm;
-    c->output =
-      CameraYaw_ClampSymmetric(c->output, c->param->limit.max_torque_nm);
+  const float requested_position_torque =
+      c->param->mit.kp * limited_position_error +
+      c->param->mit.torque_ff_nm;
+  const float limited_position_torque = CameraYaw_ClampSymmetric(
+      requested_position_torque, c->param->limit.max_torque_nm);
+  if (c->param->mit.kp > 0.0f) {
+    limited_position_error =
+        (limited_position_torque - c->param->mit.torque_ff_nm) /
+        c->param->mit.kp;
+  }
+
+  const float velocity_error = c->param->mit.target_velocity_rad_s -
+                               c->feedback.motor_velocity_rad_s;
+  const float damping_budget =
+      fmaxf(c->param->limit.max_torque_nm - fabsf(limited_position_torque),
+            0.0f);
+  c->mit_kd_cmd = c->param->mit.kd;
+  if (fabsf(velocity_error) * c->mit_kd_cmd > damping_budget) {
+    c->mit_kd_cmd = damping_budget / fabsf(velocity_error);
+  }
+
+  c->mit_target_motor_angle_rad = CameraYaw_WrapMitPositionRad(
+      c->feedback.motor_angle_rad + limited_position_error);
+  c->output = limited_position_torque + c->mit_kd_cmd * velocity_error;
   c->feedback.output = c->output;
   c->feedback.at_target =
       fabsf(c->feedback.error_yaw_rad) <=
@@ -314,7 +351,7 @@ void CameraYaw_SetOutput(CameraYaw_t *c) {
 
   (void)protocol->SetMIT(c->mit_target_motor_angle_rad,
                          c->param->mit.target_velocity_rad_s,
-                         c->param->mit.kp, c->param->mit.kd,
+                         c->param->mit.kp, c->mit_kd_cmd,
                          c->param->mit.torque_ff_nm);
 }
 
@@ -342,6 +379,7 @@ void CameraYaw_ResetOutput(CameraYaw_t *c) {
   c->output = 0.0f;
   c->feedback.output = 0.0f;
   c->mit_target_motor_angle_rad = c->feedback.motor_angle_rad;
+  c->mit_kd_cmd = 0.0f;
   CameraYawMotorProtocol *protocol = CameraYaw_GetMotorProtocol(c);
   if (protocol != NULL) {
     (void)protocol->Relax();

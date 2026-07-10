@@ -22,6 +22,7 @@
 volatile RF_Remote_Debug_t rf_remote_debug;
 
 static osThreadId_t thread_alert;
+
 static bool inited = false;
 static uint8_t rx_buf[RF_REMOTE_RX_BUF_SIZE];
 static uint8_t staging_buf[RF_REMOTE_STAGING_SIZE];

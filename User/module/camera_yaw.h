@@ -95,6 +95,7 @@ typedef struct {
   CameraYaw_CMD_t cmd;
   CameraYaw_Feedback_t feedback;
   float mit_target_motor_angle_rad;
+  float mit_kd_cmd;
   float output;
 } CameraYaw_t;
 

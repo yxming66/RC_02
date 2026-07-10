@@ -512,6 +512,8 @@ struct MotorTraits<MotorKind::DM, MotorModel::H3510> : MotorTraitsBase<MotorKind
     static constexpr bool kHasMasterId = true;
     static constexpr float kDefaultKp = 0.0f;
     static constexpr float kDefaultKd = 0.0f;
+    static constexpr float kMinPosition = -12.56637f;
+    static constexpr float kMaxPosition = 12.56637f;
     static constexpr float kMaxTorque = 0.45f;  // 峰值扭矩 0.45 Nm
     static constexpr float kMaxVelocity = 188.5f;  // 空载最大 1800 rpm
     static constexpr float kRecommendedCurrent = 1.1f;  // 额定电流 1.1A
