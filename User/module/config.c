@@ -92,7 +92,7 @@ Config_RobotParam_t robot_config = {
             .motor_pos_pid_param = {
                 .k = 3.1f,
                 .p = 5.0f,
-                .i = 0.5f,
+                .i = 0.0f,
                 .d = 0.2f,
                 .i_limit = 1.0f,
                 .out_limit = 6.0f,
@@ -136,7 +136,7 @@ Config_RobotParam_t robot_config = {
         .pid = {
             .support_pos_pid = {
                 .k = 40.0f,
-                .p = 20.0f,
+                .p = 25.0f,
                 .i = 0.0f,
                 .d = 0.0f,
                 .i_limit = 0.0f,
@@ -146,9 +146,9 @@ Config_RobotParam_t robot_config = {
             },
             .support_vel_pid = {
                 .k = 0.15f,
-                .p = 0.18f,
+                .p = 0.20f,
                 .i = 0.0f,
-                .d = 0.005f,
+                .d = 0.008f,
                 .i_limit = 0.0f,
                 .out_limit = 0.95f,
                 .d_cutoff_freq = -1.0f,
@@ -157,13 +157,13 @@ Config_RobotParam_t robot_config = {
         },
         .preset = {
             /* 200mm 上台阶四杆全伸位；一键取矿 PICK_POS_200 也使用该撑杆高度。 */
-            .step_200_all_extend = {5.70230465f, 5.70230465f},
+            .step_200_all_extend = {5.40490055f, 5.40490055f},
             /* 200mm 上台阶前杆收回、后杆保持支撑位。 */
-            .step_200_front_retract = {0.3f, 5.70230465f},
+            .step_200_front_retract = {0.3f, 5.40490055f},
             /* 200mm 上台阶四杆全收位。 */
             .step_200_all_retract = {0.3f, 0.3f},
             /* 200mm 上台阶小抬升位；一键取矿 PICK_NEG_200 使用该撑杆高度。 */
-            .step_200_small = {5.70230465f, 5.70230465f},
+            .step_200_small = {5.40490055f, 5.40490055f},
             /* 400mm 上台阶四杆全伸位；一键取矿 PICK_POS_400 也使用该撑杆高度。 */
             .step_400_all_extend = {10.8f, 10.8f},
             /* 400mm 上台阶前杆收回、后杆保持支撑位。 */
@@ -172,9 +172,9 @@ Config_RobotParam_t robot_config = {
             .step_400_all_retract = {0.05f, 0.05f},
 
             /* 200mm 下台阶四杆全伸位。 */
-            .step_200_descend_all_extend = {5.13230465f, 5.13230465f},
+            .step_200_descend_all_extend = {5.0929637f, 5.0929637f},
             /* 200mm 下台阶前杆收回、后杆保持支撑位。 */
-            .step_200_descend_front_retract = {0.1f, 5.13230465f},
+            .step_200_descend_front_retract = {0.1f, 5.0929637f},
             /* 200mm 下台阶四杆全收位。 */
             .step_200_descend_all_retract = {0.1f, 0.1f},
             /* 200mm 下台阶起步/小抬升位。 */
@@ -188,7 +188,7 @@ Config_RobotParam_t robot_config = {
             /* 一键放矿撑杆目标位；与 PC 放矿期间持续下发的 10.5 rad 保持一致。 */
             .ore_release_target = {10.5f, 10.5f},
             .ore_release_speed = 8.0f,
-            .ore_release_accel = 0.0f, 
+            .ore_release_accel = 0.0f,
         },
         .limit = {
             .max_current = 1.0f,
@@ -448,6 +448,8 @@ Config_RobotParam_t robot_config = {
         .release_lift_detect_sick_index = SICK_BOTTOM_PHOTO_INDEX,
         .release_lift_detect_sick_adc_threshold = 3200u,
         .release_lift_detect_sick_greater_than_threshold = true,
+        /* 动作 33 专用：向地面矿靠近时，前 SICK ADC <= 此值即触发。 */
+        .recover_front_sick_adc_threshold = 2800u,
         /* 取矿流程中正向 200/400 取矿的底盘前进速度，单位 m/s；与融合上台阶取矿靠近速度保持一致。 */
         .fetch_chassis_vx_mps = 0.20f,
         /* 取 -200 矿时底盘前进速度，单位 m/s；可设为 0 禁止底盘前进。 */
@@ -621,8 +623,8 @@ Config_RobotParam_t robot_config = {
             .pole_front_retract_speed = 30.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
             .pole_rear_extend_speed = 20.0f,    /* 后杆伸出目标跟随速度，单位 rad/s。 */
             .pole_rear_retract_speed = 0.0f,    /* 后杆回收目标跟随速度，单位 rad/s。 */
-            .pole_lift_accel = 0.0f,
-            .pole_all_extend_profile = CONFIG_POLE_SPEED_PROFILE(0.2f, 10.0f,
+            .pole_lift_accel = 30.0f,          /* 缓启动/减速斜坡，单位 rad/s^2。 */
+            .pole_all_extend_profile = CONFIG_POLE_SPEED_PROFILE(0.1f, 5.0f,
                                                                   0.8f, 15.0f,
                                                                   1.00f, 10.0f),
 

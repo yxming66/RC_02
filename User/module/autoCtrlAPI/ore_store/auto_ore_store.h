@@ -157,7 +157,8 @@ typedef struct {
   float lateral_velocity_cmd_mps;
   float yaw_rate_cmd_rad_s;
   float imu_accl_z_g;
-  bool front_sick_ore_threshold_reached;
+  uint16_t recover_front_sick_adc_raw;
+  bool recover_front_sick_valid;
   uint16_t release_lift_sick_adc_raw;
   bool release_lift_sick_valid;
   bool release_lift_ir_claw_open;
@@ -258,6 +259,7 @@ typedef struct {
   uint8_t release_lift_detect_sick_index;
   uint16_t release_lift_detect_sick_adc_threshold;
   bool release_lift_detect_sick_greater_than_threshold;
+  uint16_t recover_front_sick_adc_threshold;
   float fetch_chassis_vx_mps;
   float fetch_neg_200_chassis_vx_mps;
   float recover_chassis_forward_vx_mps;

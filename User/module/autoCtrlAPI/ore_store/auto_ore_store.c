@@ -27,6 +27,7 @@
 #define AUTO_ORE_DEFAULT_CHAMBER_CYLINDER_OPEN_MS (50u)
 #define AUTO_ORE_DEFAULT_FETCH_CHASSIS_MOVE_MS (300u)
 #define AUTO_ORE_DEFAULT_RECOVER_FRONT_SICK_DELAY_MS (50u)
+#define AUTO_ORE_DEFAULT_RECOVER_FRONT_SICK_ADC_THRESHOLD (2800u)
 #define AUTO_ORE_DEFAULT_RECOVER_SUCTION_SETTLE_MS (200u)
 #define AUTO_ORE_DEFAULT_RECOVER_CHASSIS_RETREAT_MS (500u)
 #define AUTO_ORE_DEFAULT_STEP_TIMEOUT_MS (5000u)
@@ -609,6 +610,19 @@ static uint32_t AutoOre_RecoverFrontSickDelayMs(const AutoOre_t *ctrl) {
   return AutoOre_TimingValue(
       ctrl->param.timing.recover_front_sick_delay_ms,
       AUTO_ORE_DEFAULT_RECOVER_FRONT_SICK_DELAY_MS);
+}
+
+static uint16_t AutoOre_RecoverFrontSickAdcThreshold(
+    const AutoOre_t *ctrl) {
+  return (ctrl->param.recover_front_sick_adc_threshold > 0u)
+             ? ctrl->param.recover_front_sick_adc_threshold
+             : AUTO_ORE_DEFAULT_RECOVER_FRONT_SICK_ADC_THRESHOLD;
+}
+
+static bool AutoOre_RecoverFrontSickReached(const AutoOre_t *ctrl) {
+  return ctrl != 0 && ctrl->feedback.recover_front_sick_valid &&
+         ctrl->feedback.recover_front_sick_adc_raw <=
+             AutoOre_RecoverFrontSickAdcThreshold(ctrl);
 }
 
 static uint32_t AutoOre_RecoverSuctionSettleMs(const AutoOre_t *ctrl) {
@@ -3200,7 +3214,7 @@ static void AutoOre_RunRecoverStore(AutoOre_t *ctrl, uint32_t now_ms) {
       AutoOre_CommandChassisMove(ctrl, AutoOre_RecoverForwardVxMps(ctrl));
       if (AutoOre_WaitLatchedConditionThenDelay(
               ctrl, now_ms,
-              ctrl->feedback.front_sick_ore_threshold_reached,
+               AutoOre_RecoverFrontSickReached(ctrl),
               AutoOre_RecoverFrontSickDelayMs(ctrl))) {
         AutoOre_NextStep(ctrl);
       } else if (!ctrl->step_condition_met &&

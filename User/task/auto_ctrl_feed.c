@@ -1478,24 +1478,6 @@ static bool AutoCtrlFeed_OreStoreAtCommandTarget(
                cmd->platform_target_rad) <= threshold;
 }
 
-static bool AutoCtrlFeed_FrontSickOreThresholdReached(void) {
-  Config_RobotParam_t *cfg = Config_GetRobotParam();
-  if (cfg == NULL || SICK_FRONT_PHOTO_INDEX >= SICK_OUTPUT_CHANNEL_COUNT ||
-      !auto_ctrl_sick_output.valid[SICK_FRONT_PHOTO_INDEX]) {
-    return false;
-  }
-
-  const AutoCtrl_CommonParam_t *common = &cfg->auto_ctrl_param.common;
-  if (common->sick_front_ore_adc_min > common->sick_front_ore_adc_max) {
-    return false;
-  }
-
-  const uint16_t adc =
-      auto_ctrl_sick_output.adc_raw[SICK_FRONT_PHOTO_INDEX];
-  return adc >= common->sick_front_ore_adc_min &&
-         adc <= common->sick_front_ore_adc_max;
-}
-
 static void AutoCtrlFeed_InitAutoOre(void) {
   Config_RobotParam_t *cfg = Config_GetRobotParam();
   if (cfg == NULL) {
@@ -1585,8 +1567,10 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms, bool update_debug) {
       .lateral_velocity_cmd_mps = auto_ctrl.lateral_velocity_cmd_mps,
       .yaw_rate_cmd_rad_s = auto_ctrl.yaw_rate_cmd_rad_s,
       .imu_accl_z_g = chassis_imu.accl.z,
-      .front_sick_ore_threshold_reached =
-          AutoCtrlFeed_FrontSickOreThresholdReached(),
+      .recover_front_sick_adc_raw =
+          auto_ctrl_sick_output.adc_raw[SICK_FRONT_PHOTO_INDEX],
+      .recover_front_sick_valid =
+          auto_ctrl_sick_output.valid[SICK_FRONT_PHOTO_INDEX],
       .release_lift_sick_adc_raw =
           auto_ctrl_sick_output.adc_raw[release_lift_sick_index],
       .release_lift_sick_valid =
