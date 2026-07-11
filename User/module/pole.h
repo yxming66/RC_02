@@ -138,6 +138,12 @@ typedef struct {
   float tracked_target_velocity[2];              /* 每侧两根规划速度的平均值, rad/s */
   float tracked_motor_target_lift[POLE_SUPPORT_MOTOR_NUM];     /* 每根 Pole 的独立规划位置, rad */
   float tracked_motor_target_velocity[POLE_SUPPORT_MOTOR_NUM]; /* 每根 Pole 的独立规划速度, rad/s */
+  float position_velocity_raw_rpm[POLE_SUPPORT_MOTOR_NUM];     /* 位置环原始速度目标, RPM */
+  float brake_velocity_limit_rpm[POLE_SUPPORT_MOTOR_NUM];      /* 由真实剩余距离计算的制动速度上限, RPM */
+  float position_velocity_target_rpm[POLE_SUPPORT_MOTOR_NUM];  /* 制动限速后的速度目标, RPM */
+  uint8_t brake_velocity_limit_active[POLE_SUPPORT_MOTOR_NUM]; /* 当前是否为auto动作并启用制动限速 */
+  uint32_t final_target_stable_ms[2];                         /* 最终目标位置与速度连续稳定时间, ms */
+  uint8_t final_target_position_speed_ready[2];               /* 位置和真实速度当前是否同时满足 */
 } Pole_Debug_t;
 
 typedef struct {
@@ -165,6 +171,9 @@ typedef struct {
     bool auto_target_was_enabled[2];
     bool manual_target_was_moving[2];
     bool lower_hold_latched[POLE_SUPPORT_MOTOR_NUM];
+    bool final_target_stable_active[2];
+    uint32_t final_target_stable_since_ms[2];
+    float final_target_stable_lift[2];
   } support_angle;
 
   struct {
@@ -213,9 +222,9 @@ int8_t Pole_UpdateFeedback(Pole_t *c);
 int8_t Pole_Control(Pole_t *c, const Pole_CMD_t *c_cmd, uint32_t now);
 bool Pole_IsGroupAtTarget(const Pole_t *c, uint8_t group, float threshold_rad);
 bool Pole_IsAllAtTarget(const Pole_t *c, float threshold_rad);
-bool Pole_IsGroupAtFinalTarget(const Pole_t *c, uint8_t group,
+bool Pole_IsGroupAtFinalTarget(Pole_t *c, uint8_t group,
                                float threshold_rad);
-bool Pole_IsAllAtFinalTarget(const Pole_t *c, float threshold_rad);
+bool Pole_IsAllAtFinalTarget(Pole_t *c, float threshold_rad);
 bool Pole_IsSideOffGround(const Pole_t *c, uint8_t side);
 bool Pole_IsAnyOffGround(const Pole_t *c);
 bool Pole_HasTemperatureWarning(const Pole_t *c);

@@ -17,6 +17,10 @@ namespace {
 constexpr float kPoleManualLiftDeadband = 1.0e-4f;
 constexpr float kPoleLiftLimitEpsilon = 1.0e-4f;
 constexpr float kPoleManualOffsetRecoverySpeedRadS = 0.5f;
+constexpr float kPoleBrakeAccelerationRadS2 = 20.0f;
+constexpr float kPoleRadPerSecToRpm = 60.0f / (2.0f * M_PI);
+constexpr float kPoleFinalTargetSpeedThresholdRpm = 5.0f;
+constexpr uint32_t kPoleFinalTargetStableTimeMs = 50u;
 
 float Pole_PositiveOrZero(float value) {
   return mr::component::math::is_finite_scalar(value) && value > 0.0f
@@ -113,6 +117,28 @@ static float Pole_GetSupportAngle(const Pole_t *c, uint8_t idx) {
   if (motor == NULL) return 0.0f;
 
   return motor->feedback.rotor_total_angle;
+}
+
+static float Pole_GetMotorFinalTargetAngle(const Pole_t *c, uint8_t motor) {
+  if (c == NULL || c->param == NULL || motor >= POLE_SUPPORT_MOTOR_NUM) {
+    return 0.0f;
+  }
+
+  const uint8_t side = (motor < 2u) ? 0u : 1u;
+  const float final_lift = mr::component::math::clamp_scalar(
+      c->support_angle.final_target_lift[side] +
+          c->support_angle.target_offset[motor],
+      0.0f, c->param->limit.support_total_travel);
+  return c->support_angle.lower[motor] + final_lift;
+}
+
+static float Pole_GetBrakeVelocityLimitRpm(const Pole_t *c, uint8_t motor,
+                                           float feedback_angle) {
+  const float remaining =
+      fabsf(Pole_GetMotorFinalTargetAngle(c, motor) - feedback_angle);
+  const float safe_speed_rad_s =
+      sqrtf(fmaxf(0.0f, 2.0f * kPoleBrakeAccelerationRadS2 * remaining));
+  return safe_speed_rad_s * kPoleRadPerSecToRpm;
 }
 
 static void Pole_ResetControllers(Pole_t *c) {
@@ -486,9 +512,18 @@ int8_t Pole_Control(Pole_t *c, const Pole_CMD_t *c_cmd, uint32_t now) {
   float out[4];
   for (uint8_t i = 0; i < POLE_SUPPORT_MOTOR_NUM; i++) {
     float fb_angle = Pole_GetSupportAngle(c, i);
-    vel[i] = PID_Calc(&c->pid.support_pos[i],
-                      c->setpoint.support_target_angle[i], fb_angle, 0.0f,
-                      c->dt);
+    const float position_velocity_raw_rpm = PID_Calc(
+        &c->pid.support_pos[i], c->setpoint.support_target_angle[i], fb_angle,
+        0.0f, c->dt);
+    const float brake_velocity_limit_rpm =
+        Pole_GetBrakeVelocityLimitRpm(c, i, fb_angle);
+    const uint8_t side = (i < 2u) ? 0u : 1u;
+    const bool brake_velocity_limit_active =
+        c_cmd->auto_target_enable[side];
+    vel[i] = brake_velocity_limit_active
+                 ? mr::component::math::abs_clip_scalar(
+                       position_velocity_raw_rpm, brake_velocity_limit_rpm)
+                 : position_velocity_raw_rpm;
     out[i] = PID_Calc(&c->pid.support_vel[i], vel[i],
                         c->feedback.motor[i].rotor_speed, 0.0f, c->dt);
     c->out.motor[i] = mr::component::math::clamp_scalar(out[i], -c->param->limit.max_current,
@@ -503,6 +538,11 @@ int8_t Pole_Control(Pole_t *c, const Pole_CMD_t *c_cmd, uint32_t now) {
     c->debug.target_angle_rad[i] = c->setpoint.support_target_angle[i];
     c->debug.feedback_angle_rad[i] = fb_angle;
     c->debug.feedback_speed_rad_s[i] = c->feedback.motor[i].rotor_speed;
+    c->debug.position_velocity_raw_rpm[i] = position_velocity_raw_rpm;
+    c->debug.brake_velocity_limit_rpm[i] = brake_velocity_limit_rpm;
+    c->debug.position_velocity_target_rpm[i] = vel[i];
+    c->debug.brake_velocity_limit_active[i] =
+        brake_velocity_limit_active ? 1u : 0u;
     c->debug.torque_cmd_nm[i] = c->out.motor[i];
   }
 
@@ -530,29 +570,61 @@ bool Pole_IsAllAtTarget(const Pole_t *c, float threshold_rad) {
          Pole_IsGroupAtTarget(c, 1u, threshold_rad);
 }
 
-bool Pole_IsGroupAtFinalTarget(const Pole_t *c, uint8_t group,
+bool Pole_IsGroupAtFinalTarget(Pole_t *c, uint8_t group,
                                float threshold_rad) {
   if (c == NULL || c->param == NULL) return false;
   if (group >= 2u) return false;
   if (!c->support_angle.calibrated) return false;
 
-  float threshold = fabsf(threshold_rad);
+  const float threshold = fabsf(threshold_rad);
+  const float final_target_lift = mr::component::math::clamp_scalar(
+      c->support_angle.final_target_lift[group], 0.0f,
+      c->param->limit.support_total_travel);
+  if (!c->support_angle.final_target_stable_active[group] ||
+      fabsf(c->support_angle.final_target_stable_lift[group] -
+            final_target_lift) > kPoleLiftLimitEpsilon) {
+    c->support_angle.final_target_stable_active[group] = false;
+    c->support_angle.final_target_stable_lift[group] = final_target_lift;
+    c->debug.final_target_stable_ms[group] = 0u;
+  }
+
+  bool position_speed_ready = true;
   uint8_t start = (group == 0u) ? 0u : 2u;
   uint8_t end = start + 2u;
   for (uint8_t i = start; i < end; i++) {
-    const uint8_t side = (i < 2u) ? 0u : 1u;
-    const float target_lift = mr::component::math::clamp_scalar(
-        c->support_angle.final_target_lift[side], 0.0f,
-        c->param->limit.support_total_travel);
-    const float target = c->support_angle.lower[i] + target_lift +
-                         c->support_angle.target_offset[i];
+    const float target = Pole_GetMotorFinalTargetAngle(c, i);
     const float fb_angle = Pole_GetSupportAngle(c, i);
-    if (fabsf(target - fb_angle) > threshold) return false;
+    const float feedback_speed_rpm = c->feedback.motor[i].rotor_speed;
+    if (fabsf(target - fb_angle) > threshold ||
+        fabsf(feedback_speed_rpm) > kPoleFinalTargetSpeedThresholdRpm) {
+      position_speed_ready = false;
+      break;
+    }
   }
-  return true;
+
+  c->debug.final_target_position_speed_ready[group] =
+      position_speed_ready ? 1u : 0u;
+  if (!position_speed_ready) {
+    c->support_angle.final_target_stable_active[group] = false;
+    c->debug.final_target_stable_ms[group] = 0u;
+    return false;
+  }
+
+  const uint32_t now_ms = c->last_wakeup;
+  if (!c->support_angle.final_target_stable_active[group]) {
+    c->support_angle.final_target_stable_active[group] = true;
+    c->support_angle.final_target_stable_since_ms[group] = now_ms;
+    c->debug.final_target_stable_ms[group] = 0u;
+    return false;
+  }
+
+  const uint32_t stable_ms =
+      now_ms - c->support_angle.final_target_stable_since_ms[group];
+  c->debug.final_target_stable_ms[group] = stable_ms;
+  return stable_ms >= kPoleFinalTargetStableTimeMs;
 }
 
-bool Pole_IsAllAtFinalTarget(const Pole_t *c, float threshold_rad) {
+bool Pole_IsAllAtFinalTarget(Pole_t *c, float threshold_rad) {
   return Pole_IsGroupAtFinalTarget(c, 0u, threshold_rad) &&
          Pole_IsGroupAtFinalTarget(c, 1u, threshold_rad);
 }
