@@ -134,10 +134,16 @@ static float Pole_GetMotorFinalTargetAngle(const Pole_t *c, uint8_t motor) {
 
 static float Pole_GetBrakeVelocityLimitRpm(const Pole_t *c, uint8_t motor,
                                            float feedback_angle) {
+  const uint8_t side = (motor < 2u) ? 0u : 1u;
+  const float configured_acceleration =
+      Pole_PositiveOrZero(c->setpoint.lift_accel[side]);
+  const float brake_acceleration =
+      configured_acceleration > 0.0f ? configured_acceleration
+                                     : kPoleBrakeAccelerationRadS2;
   const float remaining =
       fabsf(Pole_GetMotorFinalTargetAngle(c, motor) - feedback_angle);
   const float safe_speed_rad_s =
-      sqrtf(fmaxf(0.0f, 2.0f * kPoleBrakeAccelerationRadS2 * remaining));
+      sqrtf(fmaxf(0.0f, 2.0f * brake_acceleration * remaining));
   return safe_speed_rad_s * kPoleRadPerSecToRpm;
 }
 

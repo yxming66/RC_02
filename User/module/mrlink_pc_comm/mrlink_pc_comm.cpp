@@ -20,6 +20,7 @@ namespace wire = pc_comm::wire;
 
 constexpr uint32_t kRxCompleteFlag = (1u << 0);
 constexpr uint32_t kHeartbeatTimeoutMs = 500u;
+constexpr uint32_t kChassisCommandTimeoutMs = 200u;
 constexpr uint8_t kRxDmaSlotCount = MRLINK_PC_RX_DMA_SLOT_COUNT;
 constexpr uint16_t kRxDmaBufSize = MRLINK_PC_RX_DMA_BUF_SIZE;
 constexpr uint16_t kMrlinkRxBufSize = MRLINK_PC_RX_STREAM_BUF_SIZE;
@@ -68,10 +69,12 @@ static MrlinkPc_TxCallback_t s_tx_error_callback = nullptr;
 static BSP_UART_t s_channel_uart = BSP_UART_PC;
 static bool s_comm_initialized = false;
 static bool s_pole_cmd_received = false;
+static bool s_chassis_cmd_received = false;
 static bool s_arm_simple_cmd_received = false;
 static bool s_rod_new_cmd_received = false;
 static bool s_ore_store_cmd_received = false;
 static uint32_t s_pole_cmd_tick = 0u;
+static uint32_t s_chassis_cmd_tick = 0u;
 static uint32_t s_arm_simple_cmd_tick = 0u;
 static uint32_t s_rod_new_cmd_tick = 0u;
 static uint32_t s_ore_store_cmd_tick = 0u;
@@ -84,10 +87,12 @@ bool IsRecentCommand(bool received, uint32_t tick, uint32_t now_ms) {
 }
 
 void ClearModuleCommands() {
+  s_chassis_cmd_received = false;
   s_pole_cmd_received = false;
   s_arm_simple_cmd_received = false;
   s_rod_new_cmd_received = false;
   s_ore_store_cmd_received = false;
+  s_chassis_cmd_tick = 0u;
   s_pole_cmd_tick = 0u;
   s_arm_simple_cmd_tick = 0u;
   s_rod_new_cmd_tick = 0u;
@@ -201,6 +206,8 @@ void OnHeartbeat() {
 
 void OnChassis(const PC_ChassisCMD_t &cmd) {
   s_state.cmd.chassis = cmd;
+  s_chassis_cmd_received = true;
+  s_chassis_cmd_tick = BSP_TIME_Get_ms();
   s_state.cmd.abstract_position.enable_mask &=
       static_cast<uint8_t>(~(PC_ABSTRACT_MODULE_POLE |
                             PC_ABSTRACT_MODULE_ARM_SIMPLE));
@@ -760,6 +767,12 @@ extern "C" bool MrlinkPc_IsHeartbeatValid(void) {
 
 extern "C" const PC_ChassisCMD_t *MrlinkPc_GetChassisCMD(void) {
   return &s_state.cmd.chassis;
+}
+
+extern "C" bool MrlinkPc_HasChassisCMD(void) {
+  return s_chassis_cmd_received && s_chassis_cmd_tick > 0u &&
+         (BSP_TIME_Get_ms() - s_chassis_cmd_tick) <=
+             kChassisCommandTimeoutMs;
 }
 
 extern "C" const PC_PoleCMD_t *MrlinkPc_GetPoleCMD(void) {

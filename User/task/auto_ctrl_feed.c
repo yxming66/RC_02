@@ -194,10 +194,14 @@ static bool AutoCtrlFeed_RequestMatchesReleaseStep1(
 }
 
 static bool AutoCtrlFeed_CanQueueAfterFusedStepDone(void) {
+  const uint8_t step_resources =
+      AUTO_ORE_RESOURCE_CHASSIS | AUTO_ORE_RESOURCE_POLE;
   return auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl) &&
          AutoCtrlFeed_IsFusedOreAction(auto_ore_ctrl.action) &&
          AutoOre_HasSplitResult(&auto_ore_ctrl) &&
          AutoOre_IsStepFinished(&auto_ore_ctrl) &&
+         (AutoOre_GetOwnedResourceMask(&auto_ore_ctrl) & step_resources) ==
+             0u &&
          (!AutoOre_IsPickFinished(&auto_ore_ctrl) ||
           !AutoOre_IsStoreFinished(&auto_ore_ctrl));
 }
@@ -326,7 +330,7 @@ static void AutoCtrlFeed_UpdateYawRateCommand(void) {
   float vy_mps = 0.0f;
 
   if (AutoCtrl_GetYawSource(&auto_ctrl) == AUTO_CTRL_YAW_SOURCE_PC &&
-      MrlinkPc_IsHeartbeatValid()) {
+      MrlinkPc_IsHeartbeatValid() && MrlinkPc_HasChassisCMD()) {
     const PC_ChassisCMD_t *pc_chassis_cmd = MrlinkPc_GetChassisCMD();
     if (pc_chassis_cmd != NULL) {
       vy_mps = pc_chassis_cmd->vy;

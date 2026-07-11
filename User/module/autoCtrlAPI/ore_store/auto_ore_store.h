@@ -120,6 +120,23 @@ typedef struct {
   uint8_t acquired_resource_mask;
 } AutoOre_ParallelContext_t;
 
+/*
+ * AutoOre publishes one coherent output frame after every update.  Consumers
+ * must arbitrate from owned_resource_mask instead of inferring ownership from
+ * the global action/command plan.  generation changes whenever a new frame is
+ * published and is useful when diagnosing hand-off latency.
+ */
+typedef struct {
+  uint32_t generation;
+  uint8_t owned_resource_mask;
+  uint8_t valid_resource_mask;
+  uint16_t reserved;
+  ArmSimple_CMD_t arm_cmd;
+  OreStore_CMD_t ore_store_cmd;
+  Pole_CMD_t pole_cmd;
+  Chassis_CMD_t chassis_cmd;
+} AutoOre_OutputSnapshot_t;
+
 typedef enum {
   AUTO_ORE_POSITION_NONE = 0,
   AUTO_ORE_POSITION_TRANSFORM_LOW,
@@ -296,12 +313,16 @@ typedef struct {
   OreStore_CMD_t ore_store_cmd;
   Pole_CMD_t pole_cmd;
   Chassis_CMD_t chassis_cmd;
+  volatile uint8_t output_snapshot_index;
+  uint8_t output_snapshot_reserved[3];
+  AutoOre_OutputSnapshot_t output_snapshot[2];
   auto_ctrl_t step_ctrl;
   bool step_ctrl_active;
   bool step_ctrl_started;
   bool fused_pick_done;
   bool fused_step_done;
   bool fused_store_done;
+  bool fused_step_start_pole_seen_not_ready;
   AutoOre_ParallelContext_t parallel;
   bool pick_lift_confirmed;
   bool prealign_yaw_target_valid;
@@ -396,6 +417,10 @@ uint16_t AutoOre_GetFailureMask(const AutoOre_t *ctrl);
 uint8_t AutoOre_GetCompletedSegmentMask(const AutoOre_t *ctrl);
 uint8_t AutoOre_GetRunningSegmentMask(const AutoOre_t *ctrl);
 uint8_t AutoOre_GetFailedSegmentMask(const AutoOre_t *ctrl);
+uint8_t AutoOre_GetOwnedResourceMask(const AutoOre_t *ctrl);
+bool AutoOre_ReadOutputSnapshot(const AutoOre_t *ctrl,
+                                AutoOre_OutputSnapshot_t *snapshot);
+/* Compatibility alias. New code must use AutoOre_GetOwnedResourceMask(). */
 uint8_t AutoOre_GetActiveResourceMask(const AutoOre_t *ctrl);
 AutoOre_Position_t AutoOre_GetActivePosition(const AutoOre_t *ctrl);
 uint8_t AutoOre_GetStepIndex(const AutoOre_t *ctrl);

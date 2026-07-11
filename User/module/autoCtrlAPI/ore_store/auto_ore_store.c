@@ -847,6 +847,59 @@ static void AutoOre_ClearOutputs(AutoOre_t *ctrl) {
   ctrl->chassis_cmd_valid = false;
 }
 
+static uint8_t AutoOre_BuildOwnedResourceMask(const AutoOre_t *ctrl) {
+  if (ctrl == 0 || ctrl->state != AUTO_ORE_STATE_RUNNING) {
+    return AUTO_ORE_RESOURCE_NONE;
+  }
+
+  uint8_t mask = AUTO_ORE_RESOURCE_NONE;
+  if (ctrl->chassis_cmd_valid) {
+    mask |= AUTO_ORE_RESOURCE_CHASSIS;
+  }
+  if (ctrl->pole_cmd_valid) {
+    mask |= AUTO_ORE_RESOURCE_POLE;
+  }
+  if (ctrl->arm_cmd_valid) {
+    mask |= AUTO_ORE_RESOURCE_ARM | AUTO_ORE_RESOURCE_SHARED_VALVE;
+  }
+  if (ctrl->ore_store_cmd_valid) {
+    mask |= AUTO_ORE_RESOURCE_STORE | AUTO_ORE_RESOURCE_SHARED_VALVE;
+  }
+  return mask;
+}
+
+static void AutoOre_PublishOutputSnapshot(AutoOre_t *ctrl) {
+  if (ctrl == 0) {
+    return;
+  }
+
+  const uint8_t current = (uint8_t)(ctrl->output_snapshot_index & 1u);
+  const uint8_t next = (uint8_t)(current ^ 1u);
+  AutoOre_OutputSnapshot_t *snapshot = &ctrl->output_snapshot[next];
+  const uint32_t generation =
+      ctrl->output_snapshot[current].generation + 1u;
+
+  memset(snapshot, 0, sizeof(*snapshot));
+  snapshot->generation = generation;
+  snapshot->owned_resource_mask = AutoOre_BuildOwnedResourceMask(ctrl);
+  snapshot->valid_resource_mask = snapshot->owned_resource_mask;
+  if (ctrl->arm_cmd_valid) {
+    snapshot->arm_cmd = ctrl->arm_cmd;
+  }
+  if (ctrl->ore_store_cmd_valid) {
+    snapshot->ore_store_cmd = ctrl->ore_store_cmd;
+  }
+  if (ctrl->pole_cmd_valid) {
+    snapshot->pole_cmd = ctrl->pole_cmd;
+  }
+  if (ctrl->chassis_cmd_valid) {
+    snapshot->chassis_cmd = ctrl->chassis_cmd;
+  }
+
+  __atomic_thread_fence(__ATOMIC_RELEASE);
+  ctrl->output_snapshot_index = next;
+}
+
 static bool AutoOre_CommandArm(AutoOre_t *ctrl, ArmSimple_BehaviorPoint_t point,
                  Suction_State_t suction,
                  const AutoOre_ArmSpeedLimit_t *speed) {
@@ -988,6 +1041,12 @@ static void AutoOre_ReleaseChassisCommand(AutoOre_t *ctrl) {
   memset(&ctrl->chassis_cmd, 0, sizeof(ctrl->chassis_cmd));
   ctrl->chassis_cmd.mode = CHASSIS_MODE_RELAX;
   ctrl->chassis_cmd_valid = false;
+}
+
+static void AutoOre_ReleasePoleCommand(AutoOre_t *ctrl) {
+  memset(&ctrl->pole_cmd, 0, sizeof(ctrl->pole_cmd));
+  ctrl->pole_cmd.mode = POLE_MODE_RELAX;
+  ctrl->pole_cmd_valid = false;
 }
 
 static float AutoOre_PrealignYawToleranceRad(const AutoOre_t *ctrl) {
@@ -2137,7 +2196,7 @@ static bool AutoOre_FusedTemplateStartsAtHeldPoleTarget(
 }
 
 static bool AutoOre_FusedStepStartFrontPhotoReached(AutoOre_t *ctrl,
-                                                    uint32_t now_ms) {
+                                                     uint32_t now_ms) {
   if (ctrl == 0) {
     return false;
   }
@@ -2747,6 +2806,18 @@ static void AutoOre_FinishFusedStepSide(AutoOre_t *ctrl) {
   ctrl->step_ctrl_active = false;
   ctrl->fused_step_template_start_step_index = 0u;
   AutoOre_ReleaseChassisCommand(ctrl);
+  AutoOre_ReleasePoleCommand(ctrl);
+}
+
+static bool AutoOre_FusedStepStartPoleReady(AutoOre_t *ctrl) {
+  if (ctrl == 0) {
+    return false;
+  }
+  if (!ctrl->feedback.pole_all_at_target) {
+    ctrl->fused_step_start_pole_seen_not_ready = true;
+    return false;
+  }
+  return ctrl->fused_step_start_pole_seen_not_ready;
 }
 
 static void AutoOre_RunFusedStepSide(AutoOre_t *ctrl, uint32_t now_ms,
@@ -2762,7 +2833,9 @@ static void AutoOre_RunFusedStepSide(AutoOre_t *ctrl, uint32_t now_ms,
         return;
       }
 
-      if (AutoOre_FusedStepStartFrontPhotoReached(ctrl, now_ms)) {
+      const bool start_pole_ready = AutoOre_FusedStepStartPoleReady(ctrl);
+      if (start_pole_ready &&
+          AutoOre_FusedStepStartFrontPhotoReached(ctrl, now_ms)) {
         AutoOre_CommandChassisHold(ctrl);
         ctrl->fused_step_template_start_step_index =
             AutoOre_FusedFastPickTemplateStartStepIndex(ctrl);
@@ -2849,10 +2922,10 @@ static void AutoOre_RunPickStoreFusedParallel(AutoOre_t *ctrl,
       AutoOre_CommandChassisMove(ctrl, -AutoOre_FetchChassisVxMps(ctrl));
     } else {
       ctrl->fused_step_done = true;
-      AutoOre_CommandChassisHold(ctrl);
+      AutoOre_ReleaseChassisCommand(ctrl);
     }
   } else {
-    AutoOre_CommandChassisHold(ctrl);
+    AutoOre_ReleaseChassisCommand(ctrl);
   }
 
   if (ctrl->fused_store_done && ctrl->fused_step_done) {
@@ -3021,7 +3094,9 @@ static void AutoOre_RunStepPickStoreFused(AutoOre_t *ctrl, uint32_t now_ms) {
       AutoOre_CommandChassisMoveYawRate(ctrl, fused->precontact_vx_mps,
                                         ctrl->feedback.yaw_rate_cmd_rad_s);
       if (AutoOre_FusedFastPickOnFrontPhotoEnabled(ctrl, fused)) {
-        if (AutoOre_FusedStepStartFrontPhotoReached(ctrl, now_ms)) {
+        const bool start_pole_ready = AutoOre_FusedStepStartPoleReady(ctrl);
+        if (start_pole_ready &&
+            AutoOre_FusedStepStartFrontPhotoReached(ctrl, now_ms)) {
           if (!AutoOre_WaitConditionThenDelay(
                   ctrl, now_ms, true,
               AutoOre_FusedPhoto1LiftDelayMs(ctrl))) {
@@ -3146,7 +3221,9 @@ static void AutoOre_RunPickOre(AutoOre_t *ctrl, uint32_t now_ms) {
       return;
     case 3:
       AutoOre_EnterStep(ctrl, now_ms);
-      AutoOre_CommandChassisHold(ctrl);
+      /* The short fetch motion has ended. Keep the arm/pole lease, but return
+       * the idle chassis to PC while lift detection finishes. */
+      AutoOre_ReleaseChassisCommand(ctrl);
       if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_PICK_LIFT_DETECT,
                               SUCTION_ON,
                               &ctrl->param.arm_speed.pick_lift_detect) ||
@@ -3255,7 +3332,7 @@ static void AutoOre_RunRecoverStore(AutoOre_t *ctrl, uint32_t now_ms) {
       return;
     case 5:
       AutoOre_EnterStep(ctrl, now_ms);
-      AutoOre_CommandChassisHold(ctrl);
+      AutoOre_ReleaseChassisCommand(ctrl);
       if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_PICK_LIFT_DETECT,
                               SUCTION_ON,
                               &ctrl->param.arm_speed.pick_lift_detect)) {
@@ -3275,7 +3352,7 @@ static void AutoOre_RunRecoverStore(AutoOre_t *ctrl, uint32_t now_ms) {
       return;
     case 6:
       AutoOre_EnterStep(ctrl, now_ms);
-      AutoOre_CommandChassisHold(ctrl);
+      AutoOre_ReleaseChassisCommand(ctrl);
       if (!ctrl->fused_store_done) {
         AutoOre_RunFusedStore(ctrl, now_ms);
       }
@@ -3315,6 +3392,7 @@ void AutoOre_Init(AutoOre_t *ctrl, const AutoOre_Params_t *param,
   ctrl->fault = AUTO_ORE_FAULT_NONE;
   ctrl->failure_mask = AUTO_ORE_FAILURE_NONE;
   ctrl->active_position = AUTO_ORE_POSITION_NONE;
+  AutoOre_PublishOutputSnapshot(ctrl);
 }
 
 AutoOre_Occupancy_t AutoOre_GetOccupancy(const AutoOre_t *ctrl) {
@@ -3364,6 +3442,7 @@ static bool AutoOre_StartResolved(AutoOre_t *ctrl, AutoOre_Action_t action,
   ctrl->fused_pick_done = false;
   ctrl->fused_step_done = false;
   ctrl->fused_store_done = false;
+  ctrl->fused_step_start_pole_seen_not_ready = false;
   AutoOre_ResetParallelContext(ctrl);
   ctrl->pick_lift_confirmed = false;
   ctrl->prealign_yaw_target_valid = false;
@@ -3389,6 +3468,7 @@ static bool AutoOre_StartResolved(AutoOre_t *ctrl, AutoOre_Action_t action,
   AutoOre_ResetReleaseLiftObserver(ctrl);
   AutoOre_ResetDistanceGate(ctrl);
   AutoOre_ClearOutputs(ctrl);
+  AutoOre_PublishOutputSnapshot(ctrl);
   return true;
 }
 
@@ -3605,6 +3685,7 @@ void AutoOre_Update(AutoOre_t *ctrl, const AutoOre_Feedback_t *feedback,
   AutoOre_ApplyFeedbackOccupancy(ctrl);
   if (ctrl->state != AUTO_ORE_STATE_RUNNING) {
     AutoOre_ClearOutputs(ctrl);
+    AutoOre_PublishOutputSnapshot(ctrl);
     return;
   }
   if (AutoOre_ActionUsesIrReleaseLiftDetect(ctrl->action) &&
@@ -3624,6 +3705,8 @@ void AutoOre_Update(AutoOre_t *ctrl, const AutoOre_Feedback_t *feedback,
     ctrl->fault = AUTO_ORE_FAULT_NOT_HOMED;
     AutoOre_AddFailureMask(ctrl, AUTO_ORE_FAILURE_SETUP);
     AutoOre_SyncParallelContext(ctrl, now_ms);
+    AutoOre_ClearOutputs(ctrl);
+    AutoOre_PublishOutputSnapshot(ctrl);
     return;
   }
 
@@ -3704,6 +3787,7 @@ void AutoOre_Update(AutoOre_t *ctrl, const AutoOre_Feedback_t *feedback,
     AutoOre_RunStepPickStoreFused(ctrl, now_ms);
   }
   AutoOre_SyncParallelContext(ctrl, now_ms);
+  AutoOre_PublishOutputSnapshot(ctrl);
 }
 
 void AutoOre_Abort(AutoOre_t *ctrl) {
@@ -3726,6 +3810,7 @@ void AutoOre_Abort(AutoOre_t *ctrl) {
   ctrl->step_ctrl_active = false;
   ctrl->step_ctrl_started = false;
   AutoOre_ClearOutputs(ctrl);
+  AutoOre_PublishOutputSnapshot(ctrl);
 }
 
 bool AutoOre_IsBusy(const AutoOre_t *ctrl) {
@@ -3846,24 +3931,29 @@ uint8_t AutoOre_GetFailedSegmentMask(const AutoOre_t *ctrl) {
            : 0u));
 }
 
-uint8_t AutoOre_GetActiveResourceMask(const AutoOre_t *ctrl) {
-  if (ctrl == 0 || ctrl->state != AUTO_ORE_STATE_RUNNING) {
+bool AutoOre_ReadOutputSnapshot(const AutoOre_t *ctrl,
+                                AutoOre_OutputSnapshot_t *snapshot) {
+  if (ctrl == 0 || snapshot == 0) {
+    return false;
+  }
+
+  const uint8_t index = (uint8_t)(ctrl->output_snapshot_index & 1u);
+  __atomic_thread_fence(__ATOMIC_ACQUIRE);
+  *snapshot = ctrl->output_snapshot[index];
+  __atomic_thread_fence(__ATOMIC_ACQUIRE);
+  return index == (uint8_t)(ctrl->output_snapshot_index & 1u);
+}
+
+uint8_t AutoOre_GetOwnedResourceMask(const AutoOre_t *ctrl) {
+  AutoOre_OutputSnapshot_t snapshot;
+  if (!AutoOre_ReadOutputSnapshot(ctrl, &snapshot)) {
     return AUTO_ORE_RESOURCE_NONE;
   }
-  uint8_t mask = ctrl->parallel.acquired_resource_mask;
-  if (ctrl->chassis_cmd_valid) {
-    mask |= AUTO_ORE_RESOURCE_CHASSIS;
-  }
-  if (ctrl->pole_cmd_valid) {
-    mask |= AUTO_ORE_RESOURCE_POLE;
-  }
-  if (ctrl->arm_cmd_valid) {
-    mask |= AUTO_ORE_RESOURCE_ARM | AUTO_ORE_RESOURCE_SHARED_VALVE;
-  }
-  if (ctrl->ore_store_cmd_valid) {
-    mask |= AUTO_ORE_RESOURCE_STORE | AUTO_ORE_RESOURCE_SHARED_VALVE;
-  }
-  return mask;
+  return snapshot.owned_resource_mask;
+}
+
+uint8_t AutoOre_GetActiveResourceMask(const AutoOre_t *ctrl) {
+  return AutoOre_GetOwnedResourceMask(ctrl);
 }
 
 AutoOre_Position_t AutoOre_GetActivePosition(const AutoOre_t *ctrl) {

@@ -742,6 +742,8 @@ bool MrlinkPc_IsHeartbeatValid(void);
 
 /* 获取最近一次 PC 底盘命令。 */
 const PC_ChassisCMD_t *MrlinkPc_GetChassisCMD(void);
+/* true only when a chassis frame was received within the last 200 ms. */
+bool MrlinkPc_HasChassisCMD(void);
 
 /* 获取最近一次 PC 撑杆命令。 */
 const PC_PoleCMD_t *MrlinkPc_GetPoleCMD(void);
