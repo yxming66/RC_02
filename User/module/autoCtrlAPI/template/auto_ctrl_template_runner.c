@@ -952,12 +952,20 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
   switch (ctrl->template_ctx.step_index) {
     case 0: /* 头向下台阶起步，杆到起步高度后快速接近�?*/
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      if (AutoCtrlTemplate_RunDescendStartSprint(
+      /* Down-200: latch a complete first-photo falling edge during the
+       * preceding sprint so a pulse cannot disappear across the step change. */
+      const bool first_photo_captured_during_sprint =
+          !use_400mm && AutoCtrlTemplate_DescendFirstPhotoFallingStable(
+                            ctrl, use_400mm, now_ms);
+      const bool descend_start_sprint_ready =
+          AutoCtrlTemplate_RunDescendStartSprint(
               ctrl, now_ms, param, param->mid_move_speed,
               use_400mm ? pole.all_retract[0] : pole.small[0],
               use_400mm ? pole.all_retract[1] : pole.small[1],
               param->pole_front_retract_speed,
-              param->pole_rear_retract_speed)) {
+              param->pole_rear_retract_speed);
+      if (first_photo_captured_during_sprint ||
+          descend_start_sprint_ready) {
         AutoCtrlTemplate_NextStep(ctrl);
       }
       return false;
@@ -1018,6 +1026,13 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
 
     case 3: /* 前杆支撑后的第二段定时接近�?*/
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
+      /* Down-200: pre-latch the second-photo falling edge for the same
+       * cross-step race as the first photo. */
+      if (!use_400mm && AutoCtrlTemplate_DescendSecondPhotoFallingStable(
+                            ctrl, use_400mm, now_ms)) {
+        AutoCtrlTemplate_NextStep(ctrl);
+        return false;
+      }
       const uint32_t rear_retract_move_ms =
           AutoCtrlTemplate_DescendRearRetractMoveMs(ctrl, param);
       const float rear_retract_wheel_delta_rad =

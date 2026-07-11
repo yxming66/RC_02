@@ -50,6 +50,7 @@ typedef enum {
     PC_CMD_IR_ORE_ACK = 0x21,    /* PC 透传红外对接 ACK 帧，payload 为 6 字节原始 ACK */
     PC_CMD_R2_READY_STATE = 0x22,/* PC 下发 R2 准备/重试状态，驱动灯效模式 */
     PC_CMD_AUTO_ACTION_V2 = 0x23, /* 带 request/job 标识的一键动作事务命令 */
+    PC_CMD_AUTO_ACTION_V3 = 0x24, /* 多 Job 资源调度命令 */
 } PC_CMD_t;
 
 typedef enum {
@@ -72,6 +73,8 @@ typedef enum {
     PC_FEEDBACK_SICK_FRONT_ORE = 0x9C, /* 前 SICK 区域正方形矿检测反馈。 */
     PC_FEEDBACK_SICK_RAW = 0x9D,      /* 4 路 SICK 原始 ADC/距离/有效位反馈 */
     PC_FEEDBACK_AUTO_ACTION_V2 = 0x9E, /* 一键动作事务、分支和失败状态 */
+    PC_FEEDBACK_AUTO_ACTION_V3 = 0x9F, /* 全部 AutoAction Job 快照 */
+    PC_FEEDBACK_AUTO_ACTION_V3_REJECT = 0xA1, /* V3 命令拒绝结果 */
 } PC_FeedbackCMD_t;
 
 
@@ -328,6 +331,92 @@ typedef struct __attribute__((packed)) {
     uint8_t reject_reason; /* PC_AutoActionRejectReason_t */
     uint8_t active_node;
 } PC_AutoActionV2Feedback_t;
+
+typedef enum {
+    PC_AUTO_ACTION_V3_OP_NONE = 0,
+    PC_AUTO_ACTION_V3_OP_SUBMIT = 1,
+    PC_AUTO_ACTION_V3_OP_CANCEL = 2,
+    PC_AUTO_ACTION_V3_OP_CONTINUE = 3,
+    PC_AUTO_ACTION_V3_OP_ACK = 4,
+    PC_AUTO_ACTION_V3_OP_QUERY = 5,
+} PC_AutoActionV3Operation_t;
+
+typedef enum {
+    PC_AUTO_ACTION_V3_JOB_FREE = 0,
+    PC_AUTO_ACTION_V3_JOB_QUEUED = 1,
+    PC_AUTO_ACTION_V3_JOB_WAIT_RESOURCE = 2,
+    PC_AUTO_ACTION_V3_JOB_STARTING = 3,
+    PC_AUTO_ACTION_V3_JOB_RUNNING = 4,
+    PC_AUTO_ACTION_V3_JOB_WAIT_GATE = 5,
+    PC_AUTO_ACTION_V3_JOB_CANCEL_REQUESTED = 6,
+    PC_AUTO_ACTION_V3_JOB_SUCCEEDED = 7,
+    PC_AUTO_ACTION_V3_JOB_FAILED = 8,
+    PC_AUTO_ACTION_V3_JOB_CANCELLED = 9,
+    PC_AUTO_ACTION_V3_JOB_REJECTED = 10,
+} PC_AutoActionV3JobState_t;
+
+typedef enum {
+    PC_AUTO_ACTION_V3_BLOCK_NONE = 0,
+    PC_AUTO_ACTION_V3_BLOCK_RESOURCE = 1,
+    PC_AUTO_ACTION_V3_BLOCK_EXECUTOR = 2,
+    PC_AUTO_ACTION_V3_BLOCK_DEPENDENCY = 3,
+    PC_AUTO_ACTION_V3_BLOCK_MOTION_CONSTRAINT = 4,
+    PC_AUTO_ACTION_V3_BLOCK_SENSOR = 5,
+    PC_AUTO_ACTION_V3_BLOCK_EXTERNAL_GATE = 6,
+} PC_AutoActionV3BlockedReason_t;
+
+typedef enum {
+    PC_AUTO_ACTION_V3_REJECT_NONE = 0,
+    PC_AUTO_ACTION_V3_REJECT_INVALID_REQUEST = 1,
+    PC_AUTO_ACTION_V3_REJECT_INVALID_ACTION = 2,
+    PC_AUTO_ACTION_V3_REJECT_QUEUE_FULL = 3,
+    PC_AUTO_ACTION_V3_REJECT_REQUEST_CONFLICT = 4,
+    PC_AUTO_ACTION_V3_REJECT_JOB_NOT_FOUND = 5,
+    PC_AUTO_ACTION_V3_REJECT_INVALID_STATE = 6,
+    PC_AUTO_ACTION_V3_REJECT_START_FAILED = 7,
+} PC_AutoActionV3RejectReason_t;
+
+typedef struct __attribute__((packed)) {
+    uint16_t request_id;
+    uint16_t job_id;
+    uint8_t operation; /* PC_AutoActionV3Operation_t */
+    uint8_t action;    /* SUBMIT 时为 PC_AutoAction_t */
+    uint8_t gate_id;
+    uint8_t flags;
+} PC_AutoActionV3CMD_t;
+
+typedef struct __attribute__((packed)) {
+    uint16_t request_id;
+    uint16_t job_id;
+    uint16_t failure_mask;
+    uint8_t action;
+    uint8_t state;
+    uint8_t owned_resource_mask;
+    uint8_t waiting_resource_mask;
+    uint8_t running_segment_mask;
+    uint8_t completed_segment_mask;
+    uint8_t failed_segment_mask;
+    uint8_t blocked_reason;
+    uint8_t reject_reason;
+} PC_AutoActionV3JobFeedback_t;
+
+#define PC_AUTO_ACTION_V3_JOB_CAPACITY (4u)
+
+typedef struct __attribute__((packed)) {
+    uint16_t generation;
+    uint8_t count;
+    uint8_t capacity;
+    PC_AutoActionV3JobFeedback_t jobs[PC_AUTO_ACTION_V3_JOB_CAPACITY];
+} PC_AutoActionV3Feedback_t;
+
+typedef struct __attribute__((packed)) {
+    uint16_t request_id;
+    uint16_t job_id;
+    uint8_t operation;
+    uint8_t action;
+    uint8_t reject_reason;
+    uint8_t reserved;
+} PC_AutoActionV3RejectFeedback_t;
 
 typedef enum {
     PC_R2_READY_STATE_NOT_READY = 0,  /* 上位机未准备完毕，对应灯效 0 号模式 */
@@ -779,6 +868,7 @@ const PC_AutoActionCMD_t *MrlinkPc_GetAutoActionCMD(void);
 
 /* 获取待消费的 V2 事务命令；无待消费命令时返回 NULL。 */
 const PC_AutoActionV2CMD_t *MrlinkPc_GetAutoActionV2CMD(void);
+const PC_AutoActionV3CMD_t *MrlinkPc_GetAutoActionV3CMD(void);
 
 /* 获取最近一次 PC 自动台阶命令。 */
 const PC_StepCMD_t *MrlinkPc_GetStepCMD(void);
@@ -811,6 +901,7 @@ void MrlinkPc_ClearStepCommand(void);
 void MrlinkPc_ClearAutoActionCommand(void);
 
 void MrlinkPc_ClearAutoActionV2Command(void);
+void MrlinkPc_ClearAutoActionV3Command(void);
 
 /* 清除待转发红外对接 ACK 命令，通常在 ACK 成功提交或不可恢复失败后调用。 */
 void MrlinkPc_ClearIrOreAckCommand(void);

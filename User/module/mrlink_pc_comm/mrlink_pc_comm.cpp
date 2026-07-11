@@ -56,6 +56,10 @@ static PC_AutoActionFeedback_t s_auto_action_feedback{};
 static PC_AutoActionV2Feedback_t s_auto_action_v2_feedback{};
 static PC_AutoActionV2CMD_t s_auto_action_v2_cmd{};
 static bool s_auto_action_v2_pending = false;
+static PC_AutoActionV3Feedback_t s_auto_action_v3_feedback{};
+static PC_AutoActionV3RejectFeedback_t s_auto_action_v3_reject_feedback{};
+static PC_AutoActionV3CMD_t s_auto_action_v3_cmd{};
+static bool s_auto_action_v3_pending = false;
 static uint8_t s_auto_action_rx_latch = PC_AUTO_ACTION_NONE;
 static PC_IrOreFeedback_t s_ir_ore_feedback{};
 static PC_IrOreBridgeFeedback_t s_ir_ore_bridge_feedback{};
@@ -174,6 +178,7 @@ void TouchOnline(uint8_t cmd) {
       break;
     case PC_CMD_AUTO_ACTION:
     case PC_CMD_AUTO_ACTION_V2:
+    case PC_CMD_AUTO_ACTION_V3:
       g_pc_comm_debug.rx_auto_action_count++;
       break;
     case PC_CMD_CAMERA_YAW:

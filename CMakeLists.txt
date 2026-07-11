@@ -136,6 +136,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     User/module/ore_store.cpp
     User/module/pole.cpp
     User/module/autoCtrlAPI/api/auto_ctrl_api.c
+    User/module/autoCtrlAPI/core/auto_action_scheduler.c
     User/module/autoCtrlAPI/core/auto_ctrl_math.cpp
     User/module/autoCtrlAPI/primitive/auto_ctrl_primitive.cpp
     User/module/autoCtrlAPI/ore_store/auto_ore_store.c

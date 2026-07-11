@@ -618,9 +618,9 @@ Config_RobotParam_t robot_config = {
             .pole_all_retract_speed = 30.0f,
             .pole_all_retract_accel = 600.0f,
             .pole_front_extend_accel = 120.0f,
-            .pole_front_retract_accel = 500.0f,
+            .pole_front_retract_accel = 700.0f,
             .pole_rear_extend_accel = 120.0f,
-            .pole_rear_retract_accel = 500.0f,
+            .pole_rear_retract_accel = 700.0f,
             
             /* 当前模板撑杆加速度限幅，单位 rad/s^2。 */
             .front_photo_timeout_ms = 5000u,    /* 等待前光电触发/下降沿超时，单位 ms。 */
