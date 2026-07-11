@@ -910,9 +910,10 @@ static void AutoOre_ApplyPoleCommandLimitsFromTemplate(
 
   ctrl->pole_cmd.auto_lift_speed[0] = template_param->pole_all_extend_speed;
   ctrl->pole_cmd.auto_lift_speed[1] = template_param->pole_all_extend_speed;
-  ctrl->pole_cmd.auto_lift_accel[0] = template_param->pole_lift_accel;
-  ctrl->pole_cmd.auto_lift_accel[1] = template_param->pole_lift_accel;
-  ctrl->pole_cmd.disable_lift_accel = template_param->pole_lift_accel < 0.0f;
+  ctrl->pole_cmd.auto_lift_accel[0] = template_param->pole_all_extend_accel;
+  ctrl->pole_cmd.auto_lift_accel[1] = template_param->pole_all_extend_accel;
+  ctrl->pole_cmd.disable_lift_accel =
+      template_param->pole_all_extend_accel < 0.0f;
 }
 
 static bool AutoOre_CommandReleasePoleTarget(AutoOre_t *ctrl) {

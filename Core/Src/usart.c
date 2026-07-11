@@ -140,7 +140,7 @@ void MX_UART9_Init(void)
   huart9.Init.WordLength = UART_WORDLENGTH_8B;
   huart9.Init.StopBits = UART_STOPBITS_1;
   huart9.Init.Parity = UART_PARITY_NONE;
-  huart9.Init.Mode = UART_MODE_RX;
+  huart9.Init.Mode = UART_MODE_TX_RX;
   huart9.Init.HwFlowCtl = UART_HWCONTROL_NONE;
   huart9.Init.OverSampling = UART_OVERSAMPLING_16;
   huart9.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
@@ -420,8 +420,9 @@ void HAL_UART_MspInit(UART_HandleTypeDef* uartHandle)
     __HAL_RCC_GPIOD_CLK_ENABLE();
     /**UART9 GPIO Configuration
     PD14     ------> UART9_RX
+    PD15     ------> UART9_TX
     */
-    GPIO_InitStruct.Pin = GPIO_PIN_14;
+    GPIO_InitStruct.Pin = GPIO_PIN_14|GPIO_PIN_15;
     GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
     GPIO_InitStruct.Pull = GPIO_NOPULL;
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
@@ -673,8 +674,9 @@ void HAL_UART_MspDeInit(UART_HandleTypeDef* uartHandle)
 
     /**UART9 GPIO Configuration
     PD14     ------> UART9_RX
+    PD15     ------> UART9_TX
     */
-    HAL_GPIO_DeInit(GPIOD, GPIO_PIN_14);
+    HAL_GPIO_DeInit(GPIOD, GPIO_PIN_14|GPIO_PIN_15);
 
     /* UART9 DMA DeInit */
     HAL_DMA_DeInit(uartHandle->hdmarx);

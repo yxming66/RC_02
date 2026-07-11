@@ -134,8 +134,10 @@ typedef struct {
   float feedback_angle_rad[POLE_SUPPORT_MOTOR_NUM];  /* 每根撑杆反馈角度 */
   float feedback_speed_rad_s[POLE_SUPPORT_MOTOR_NUM];/* 每根撑杆反馈角速度 */
   float final_target_lift[2];                    /* 每侧最终目标 lift, rad */
-  float tracked_target_lift[2];                  /* 每侧规划后目标 lift, rad */
-  float tracked_target_velocity[2];              /* 每侧规划后目标速度, rad/s */
+  float tracked_target_lift[2];                  /* 每侧两根规划目标的平均值, rad */
+  float tracked_target_velocity[2];              /* 每侧两根规划速度的平均值, rad/s */
+  float tracked_motor_target_lift[POLE_SUPPORT_MOTOR_NUM];     /* 每根 Pole 的独立规划位置, rad */
+  float tracked_motor_target_velocity[POLE_SUPPORT_MOTOR_NUM]; /* 每根 Pole 的独立规划速度, rad/s */
 } Pole_Debug_t;
 
 typedef struct {
@@ -158,8 +160,8 @@ typedef struct {
     float upper[POLE_SUPPORT_MOTOR_NUM];
     float target_offset[POLE_SUPPORT_MOTOR_NUM];
     float final_target_lift[2];
-    float tracked_target_lift[2];
-    float tracked_target_velocity[2];
+    float tracked_target_lift[POLE_SUPPORT_MOTOR_NUM];
+    float tracked_target_velocity[POLE_SUPPORT_MOTOR_NUM];
     bool auto_target_was_enabled[2];
     bool manual_target_was_moving[2];
     bool lower_hold_latched[POLE_SUPPORT_MOTOR_NUM];

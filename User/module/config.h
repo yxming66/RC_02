@@ -39,17 +39,6 @@ typedef struct {
   uint32_t sick_front_ore_stable_ms; /* 前 SICK 矿检测稳定确认时间，单位 ms。 */
 } AutoCtrl_CommonParam_t;
 
-#define AUTO_CTRL_POLE_SPEED_SEGMENT_COUNT (3u)
-
-typedef struct {
-  float end_ratio;    /* 本段结束进度 0~1，按本次动作起点到目标点归一化；<=0 表示该段关闭。 */
-  float speed_rad_s;  /* 本段撑杆速度，单位 rad/s；<=0 表示沿用旧单段速度。 */
-} AutoCtrl_PoleSpeedSegment_t;
-
-typedef struct {
-  AutoCtrl_PoleSpeedSegment_t segment[AUTO_CTRL_POLE_SPEED_SEGMENT_COUNT];
-} AutoCtrl_PoleSpeedProfile_t;
-
 typedef struct {
   float prealign_move_speed;     /* PREALIGN 阶段叠加 vx，单位 m/s。 */
   float align_move_speed;        /* 上台阶/模板对正阶段 vx，单位 m/s。 */
@@ -78,19 +67,22 @@ typedef struct {
   uint32_t final_photo_sprint_ms; /* 上台阶末尾光电稳定触发后的额外冲刺时间，单位 ms；0 表示触发即结束。 */
   float final_move_wheel_delta_rad; /* 收尾离开轮转角阈值，单位 rad；>0 优先按角度切步，<=0 使用 final_move_ms 定时切步。 */
 
-  float pole_all_extend_speed;    /* 四杆全伸速度，单位 rad/s。 */
-  float pole_front_extend_speed;  /* 前杆伸出速度，单位 rad/s。 */
-  float pole_front_retract_speed; /* 前杆回收速度，单位 rad/s。 */
-  float pole_rear_extend_speed;   /* 后杆伸出速度，单位 rad/s。 */
-  float pole_rear_retract_speed;  /* 后杆回收速度，单位 rad/s。 */
-  float pole_lift_accel;          /* 撑杆加速度限制，单位 rad/s^2；>0 限幅，0 使用 Pole 默认值，<0 禁用。 */
-
-  AutoCtrl_PoleSpeedProfile_t pole_all_extend_profile;    /* 四杆全伸三段速度。 */
-  AutoCtrl_PoleSpeedProfile_t pole_all_retract_profile;   /* 四杆全收三段速度。 */
-  AutoCtrl_PoleSpeedProfile_t pole_front_extend_profile;  /* 前杆伸出三段速度。 */
-  AutoCtrl_PoleSpeedProfile_t pole_front_retract_profile; /* 前杆回收三段速度。 */
-  AutoCtrl_PoleSpeedProfile_t pole_rear_extend_profile;   /* 后杆伸出三段速度。 */
-  AutoCtrl_PoleSpeedProfile_t pole_rear_retract_profile;  /* 后杆回收三段速度。 */
+  /*
+   * 每类 Pole 动作使用固定速度上限，再由在线梯形规划完成加减速。
+   * accel > 0 使用动作自定义值，accel == 0 使用 Pole 默认值，accel < 0 禁用加速度限制。
+   */
+  float pole_all_extend_speed;     /* 四杆全伸速度，单位 rad/s。 */
+  float pole_all_extend_accel;     /* 四杆全伸加速度，单位 rad/s^2。 */
+  float pole_all_retract_speed;    /* 四杆全收速度；<=0 时分别使用前/后杆回收速度。 */
+  float pole_all_retract_accel;    /* 四杆全收加速度，单位 rad/s^2。 */
+  float pole_front_extend_speed;   /* 前杆伸出速度，单位 rad/s。 */
+  float pole_front_extend_accel;   /* 前杆伸出加速度，单位 rad/s^2。 */
+  float pole_front_retract_speed;  /* 前杆回收速度，单位 rad/s。 */
+  float pole_front_retract_accel;  /* 前杆回收加速度，单位 rad/s^2。 */
+  float pole_rear_extend_speed;    /* 后杆伸出速度，单位 rad/s。 */
+  float pole_rear_extend_accel;    /* 后杆伸出加速度，单位 rad/s^2。 */
+  float pole_rear_retract_speed;   /* 后杆回收速度，单位 rad/s。 */
+  float pole_rear_retract_accel;   /* 后杆回收加速度，单位 rad/s^2。 */
 
   uint32_t front_photo_timeout_ms; /* 当前前侧光电等待超时，单位 ms。 */
   uint32_t rear_photo_timeout_ms;  /* 当前后侧光电等待超时，单位 ms。 */
