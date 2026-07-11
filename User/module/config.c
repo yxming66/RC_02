@@ -136,7 +136,7 @@ Config_RobotParam_t robot_config = {
             },
             .support_vel_pid = {
                 .k = 0.15f,
-                .p = 0.18f,
+                .p = 0.14f,
                 .i = 0.0f,
                 .d = 0.008f,
                 .i_limit = 0.0f,
