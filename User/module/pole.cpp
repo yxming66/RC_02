@@ -16,7 +16,6 @@ namespace {
 
 constexpr float kPoleManualLiftDeadband = 1.0e-4f;
 constexpr float kPoleLiftLimitEpsilon = 1.0e-4f;
-constexpr float kPoleRadPerSecToRpm = 60.0f / (2.0f * M_PI);
 
 float Pole_PositiveOrZero(float value) {
   return mr::component::math::is_finite_scalar(value) && value > 0.0f
@@ -84,14 +83,10 @@ float Pole_UpdateTrackedLift(Pole_t *c, uint8_t motor, float speed_limit) {
   }
 
   if (max_acceleration <= 0.0f) {
-    const float current_lift = c->support_angle.tracked_target_lift[motor];
+    c->support_angle.tracked_target_velocity[motor] = 0.0f;
     const float next_lift = mr::component::math::move_towards(
-        current_lift, final_lift, max_velocity * c->dt);
-    c->support_angle.tracked_target_velocity[motor] =
-        (c->dt > 0.0f) ? (next_lift - current_lift) / c->dt : 0.0f;
-    if (fabsf(final_lift - next_lift) <= kPoleLiftLimitEpsilon) {
-      c->support_angle.tracked_target_velocity[motor] = 0.0f;
-    }
+        c->support_angle.tracked_target_lift[motor], final_lift,
+        max_velocity * c->dt);
     return Pole_ClampTrackedLiftAtLimit(c, motor, next_lift);
   }
 
@@ -123,8 +118,6 @@ static void Pole_ResetControllers(Pole_t *c) {
   for (uint8_t i = 0; i < POLE_SUPPORT_MOTOR_NUM; i++) {
     PID_Reset(&c->pid.support_pos[i]);
     PID_Reset(&c->pid.support_vel[i]);
-    c->feedback.support_vel_filtered[i] = LowPassFilter2p_Reset(
-        &c->filter.support_vel_in[i], c->feedback.motor[i].rotor_speed);
   }
 }
 
@@ -265,8 +258,6 @@ int8_t Pole_Init(Pole_t *c, const Pole_Params_t *param, float target_freq) {
              &param->pid.support_pos_pid);
     PID_Init(&c->pid.support_vel[i], KPID_MODE_NO_D, target_freq,
              &param->pid.support_vel_pid);
-    LowPassFilter2p_Init(&c->filter.support_vel_in[i], target_freq,
-                         param->filter.support_vel_feedback_cutoff_hz);
   }
 
   for (uint8_t i = 0; i < POLE_MOTOR_NUM; i++) {
@@ -287,10 +278,6 @@ int8_t Pole_UpdateFeedback(Pole_t *c) {
     if (motor == NULL) return POLE_ERR;
 
     c->feedback.motor[i] = motor->feedback;
-    if (i < POLE_SUPPORT_MOTOR_NUM) {
-      c->feedback.support_vel_filtered[i] = LowPassFilter2p_Apply(
-          &c->filter.support_vel_in[i], c->feedback.motor[i].rotor_speed);
-    }
     Pole_UpdateMotorTemperatureFlags(c, i);
     if (i < POLE_SUPPORT_MOTOR_NUM) {
       sum += Pole_GetSupportAngle(c, i);
@@ -448,20 +435,11 @@ int8_t Pole_Control(Pole_t *c, const Pole_CMD_t *c_cmd, uint32_t now) {
   float out[4];
   for (uint8_t i = 0; i < POLE_SUPPORT_MOTOR_NUM; i++) {
     float fb_angle = Pole_GetSupportAngle(c, i);
-    const float position_correction_rpm = PID_Calc(
-        &c->pid.support_pos[i], c->setpoint.support_target_angle[i], fb_angle,
-        0.0f, c->dt);
-    const float velocity_feedforward_rpm =
-        c->support_angle.tracked_target_velocity[i] * kPoleRadPerSecToRpm;
-    vel[i] = position_correction_rpm + velocity_feedforward_rpm;
-    const float velocity_target_limit_rpm =
-        Pole_PositiveOrZero(c->param->limit.support_velocity_target_limit_rpm);
-    if (velocity_target_limit_rpm > 0.0f) {
-      vel[i] = mr::component::math::abs_clip_scalar(
-          vel[i], velocity_target_limit_rpm);
-    }
+    vel[i] = PID_Calc(&c->pid.support_pos[i],
+                      c->setpoint.support_target_angle[i], fb_angle, 0.0f,
+                      c->dt);
     out[i] = PID_Calc(&c->pid.support_vel[i], vel[i],
-                      c->feedback.support_vel_filtered[i], 0.0f, c->dt);
+                        c->feedback.motor[i].rotor_speed, 0.0f, c->dt);
     c->out.motor[i] = mr::component::math::clamp_scalar(out[i], -c->param->limit.max_current,
                                  c->param->limit.max_current);
     if ((fb_angle <= c->support_angle.lower[i] + kPoleLiftLimitEpsilon &&
@@ -474,13 +452,6 @@ int8_t Pole_Control(Pole_t *c, const Pole_CMD_t *c_cmd, uint32_t now) {
     c->debug.target_angle_rad[i] = c->setpoint.support_target_angle[i];
     c->debug.feedback_angle_rad[i] = fb_angle;
     c->debug.feedback_speed_rad_s[i] = c->feedback.motor[i].rotor_speed;
-    c->debug.velocity_feedforward_rpm[i] = velocity_feedforward_rpm;
-    c->debug.position_correction_rpm[i] = position_correction_rpm;
-    c->debug.velocity_target_rpm[i] = vel[i];
-    c->debug.feedback_speed_rpm[i] = c->feedback.motor[i].rotor_speed;
-    c->debug.feedback_speed_filtered_rpm[i] =
-        c->feedback.support_vel_filtered[i];
-    c->debug.output_normalized[i] = c->out.motor[i];
     c->debug.torque_cmd_nm[i] = c->out.motor[i];
   }
 

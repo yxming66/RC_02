@@ -109,7 +109,6 @@ typedef struct {
     float support_hold_speed_threshold; /* rad/s, low-speed condition for hold */
     float support_hold_release_zone; /* rad, release hold only after moving away from lower limit */
     float support_output_slew_rate; /* output unit/s, <=0 disable */
-    float support_velocity_target_limit_rpm; /* 输出轴速度目标限幅，RPM；<=0 禁用 */
   } limit;
   MOTOR_TemperatureProtectionConfig_t motor_temperature_protection;
 } Pole_Params_t;
@@ -139,12 +138,6 @@ typedef struct {
   float tracked_target_velocity[2];              /* 每侧两根规划速度的平均值, rad/s */
   float tracked_motor_target_lift[POLE_SUPPORT_MOTOR_NUM];     /* 每根 Pole 的独立规划位置, rad */
   float tracked_motor_target_velocity[POLE_SUPPORT_MOTOR_NUM]; /* 每根 Pole 的独立规划速度, rad/s */
-  float velocity_feedforward_rpm[POLE_SUPPORT_MOTOR_NUM];      /* 规划速度换算的输出轴 RPM 前馈 */
-  float position_correction_rpm[POLE_SUPPORT_MOTOR_NUM];       /* 位置环输出的 RPM 修正 */
-  float velocity_target_rpm[POLE_SUPPORT_MOTOR_NUM];           /* 送入速度环的最终 RPM 目标 */
-  float feedback_speed_rpm[POLE_SUPPORT_MOTOR_NUM];            /* 输出轴原始 RPM 反馈 */
-  float feedback_speed_filtered_rpm[POLE_SUPPORT_MOTOR_NUM];   /* 输出轴滤波后 RPM 反馈 */
-  float output_normalized[POLE_SUPPORT_MOTOR_NUM];             /* 归一化电流输出 [-1,1] */
 } Pole_Debug_t;
 
 typedef struct {

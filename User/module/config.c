@@ -126,17 +126,17 @@ Config_RobotParam_t robot_config = {
         .pid = {
             .support_pos_pid = {
                 .k = 40.0f,
-                .p = 10.0f,
+                .p = 20.0f,
                 .i = 0.0f,
                 .d = 0.0f,
                 .i_limit = 0.0f,
-                .out_limit = 80.0f,
+                .out_limit = 800.0f,
                 .d_cutoff_freq = -1.0f, 
                 .range = 0.0f,
             },
             .support_vel_pid = {
                 .k = 0.15f,
-                .p = 0.14f,
+                .p = 0.18f,
                 .i = 0.0f,
                 .d = 0.008f,
                 .i_limit = 0.0f,
@@ -144,11 +144,6 @@ Config_RobotParam_t robot_config = {
                 .d_cutoff_freq = -1.0f,
                 .range = 0.0f,
             },
-        },
-        .filter = {
-            .support_vel_feedback_cutoff_hz = 50.0f,
-            .support_output_cutoff_hz = 0.0f,
-            .support_vel_feedback_spike_rad_s = 0.0f,
         },
         .preset = {
             /* 200mm 上台阶四杆全伸位；一键取矿 PICK_POS_200 也使用该撑杆高度。 */
@@ -186,15 +181,11 @@ Config_RobotParam_t robot_config = {
             .ore_release_accel = 0.0f,
         },
         .limit = {
-            /* 启动扭矩测试 B2：保持低速规划，仅将输出提高到 60%。 */
-            .max_current = 0.60f,
+            .max_current = 1.0f,
             .support_total_travel = 10.8f,//26.7//27.3
             .support_min_target_lift = 0.1f,
-            /* M1 手动遥控也经过独立梯形规划，避免位置目标直接跳变。 */
-            .support_lift_speed = 1.0f,
-            .support_lift_accel = 2.0f,
-            /* 首轮空载测试限制输出轴转速目标，避免参数或方向异常时高速运动。 */
-            .support_velocity_target_limit_rpm = 50.0f,
+            .support_lift_speed = 0.0f,
+            .support_lift_accel = 0.0f,
         },
     },
     /* 模块参数：矿仓 ore_store_param，矿仓平台电机、回零、预设位置和气缸。 */
@@ -617,12 +608,12 @@ Config_RobotParam_t robot_config = {
             .final_move_ms = 1200u,              /* 收尾离开台阶角度门控兜底超时，单位 ms。 */
             .final_photo_sprint_ms = 50u,       /* 末尾光电触发后继续冲刺时间，单位 ms。 */
             .final_move_wheel_delta_rad = 0.0f, /* 编码器门控的收尾离开轮转角阈值，单位 rad；>0 优先按角度切步，<=0 使用 final_move_ms。 */
-            .pole_all_extend_speed = 1.0f,      /* 首轮方向验证速度，单位 rad/s。 */
+            .pole_all_extend_speed = 10.0f,     /* 四杆全伸目标跟随速度，单位 rad/s。 */
             .pole_front_extend_speed = 15.0f,   /* 前杆伸出目标跟随速度，单位 rad/s。 */
             .pole_front_retract_speed = 30.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
             .pole_rear_extend_speed = 20.0f,    /* 后杆伸出目标跟随速度，单位 rad/s。 */
             .pole_rear_retract_speed = 0.0f,    /* 后杆回收目标跟随速度，单位 rad/s。 */
-            .pole_all_extend_accel = 2.0f,      /* 首轮方向验证加速度，单位 rad/s^2。 */
+            .pole_all_extend_accel = 20.0f,
             .pole_all_retract_speed = 0.0f,
             .pole_all_retract_accel = 0.0f,
             .pole_front_extend_accel = 30.0f,
