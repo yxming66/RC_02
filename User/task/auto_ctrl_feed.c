@@ -1845,6 +1845,16 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms, bool update_debug) {
       auto_ore_ctrl.fused_photo1_triggered_since_ms;
   g_auto_ore_debug.fused_photo1_released_since_ms =
       auto_ore_ctrl.fused_photo1_released_since_ms;
+  g_auto_ore_debug.fused_photo2_trigger_seen =
+      auto_ore_ctrl.fused_photo2_stable_trigger_seen;
+  g_auto_ore_debug.fused_photo2_release_latched =
+      auto_ore_ctrl.fused_photo2_stable_release_latched;
+  g_auto_ore_debug.fused_photo2_handoff_applied =
+      auto_ore_ctrl.fused_photo2_handoff_applied;
+  g_auto_ore_debug.fused_photo2_triggered_since_ms =
+      auto_ore_ctrl.fused_photo2_triggered_since_ms;
+  g_auto_ore_debug.fused_photo2_released_since_ms =
+      auto_ore_ctrl.fused_photo2_released_since_ms;
   if (arm_fb != NULL) {
     g_auto_ore_debug.arm_feedback_joint1_rad = arm_fb->joint1_angle_rad;
     g_auto_ore_debug.arm_feedback_joint2_rad = arm_fb->joint2_angle_rad;

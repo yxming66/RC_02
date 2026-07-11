@@ -251,13 +251,13 @@ typedef struct {
 
 typedef enum {
   RC_AUTO_STEP_PROFILE_NONE,
-  RC_AUTO_STEP_PROFILE_FUSED_200,
+  RC_AUTO_STEP_PROFILE_FUSED_UP_200_NORMAL_DOWN_200,
   RC_AUTO_STEP_PROFILE_FUSED_UP_400_NORMAL_DOWN_400,
 } RcAutoStepProfile_t;
 
 static RcAutoStepProfile_t Rc_SelectAutoStepProfile(void) {
   if (dr16.data.ch_res <= -RC_AUTO_STEP_CH_RES_THRESHOLD) {
-    return RC_AUTO_STEP_PROFILE_FUSED_200;
+    return RC_AUTO_STEP_PROFILE_FUSED_UP_200_NORMAL_DOWN_200;
   }
   if (dr16.data.ch_res >= RC_AUTO_STEP_CH_RES_THRESHOLD) {
     return RC_AUTO_STEP_PROFILE_FUSED_UP_400_NORMAL_DOWN_400;
@@ -479,13 +479,14 @@ static RcAutoCtrlStartConfig_t Rc_SelectAutoCtrlStartConfig(void) {
     return config;
   }
 
-  if (Rc_SelectAutoStepProfile() !=
-      RC_AUTO_STEP_PROFILE_FUSED_UP_400_NORMAL_DOWN_400) {
-    return config;
-  }
-
   if (dr16.data.sw_r == DR16_SW_DOWN) {
-    config.template_id = AUTO_CTRL_TEMPLATE_DESCEND_400_HEAD;
+    const RcAutoStepProfile_t profile = Rc_SelectAutoStepProfile();
+    if (profile == RC_AUTO_STEP_PROFILE_FUSED_UP_200_NORMAL_DOWN_200) {
+      config.template_id = AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD;
+    } else if (profile ==
+               RC_AUTO_STEP_PROFILE_FUSED_UP_400_NORMAL_DOWN_400) {
+      config.template_id = AUTO_CTRL_TEMPLATE_DESCEND_400_HEAD;
+    }
   } 
 
   return config;
@@ -1386,7 +1387,7 @@ static bool Rc_AutoCtrlTemplateIsAscend(auto_ctrl_template_e template_id) {
 
 static bool Rc_StartAutoUpStepPickStore(void) {
   const RcAutoStepProfile_t profile = Rc_SelectAutoStepProfile();
-  if (profile == RC_AUTO_STEP_PROFILE_FUSED_200) {
+  if (profile == RC_AUTO_STEP_PROFILE_FUSED_UP_200_NORMAL_DOWN_200) {
     // return Task_AutoStepStartAscend200Head();
     return Task_AutoOreStartStepPickStoreAscend200Head();
   }
@@ -1395,10 +1396,6 @@ static bool Rc_StartAutoUpStepPickStore(void) {
     return Task_AutoOreStartStepPickStoreAscend400Head();
   }
   return false;
-}
-
-static bool Rc_StartAutoDownStepPickStore(void) {
-  return Task_AutoOreStartStepPickStoreDescend200Head();
 }
 
 static void Rc_TryStartAutoCtrlBySwitch(uint32_t now_ms) {
@@ -1423,22 +1420,6 @@ static void Rc_TryStartAutoCtrlBySwitch(uint32_t now_ms) {
       return;
     }
     g_rc_control_debug.auto_200_start_ok = Rc_StartAutoUpStepPickStore();
-    if (g_rc_control_debug.auto_200_start_ok) {
-      g_auto_ore_debug.force_output_enable = true;
-    }
-    return;
-  }
-
-  if (last_sw_l == DR16_SW_MID && last_sw_r == DR16_SW_MID &&
-      dr16.data.sw_l == DR16_SW_MID && dr16.data.sw_r == DR16_SW_DOWN &&
-      auto_step_profile == RC_AUTO_STEP_PROFILE_FUSED_200) {
-    g_rc_control_debug.auto_200_start_event = true;
-    g_rc_control_debug.auto_200_template = AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD;
-    if (!Rc_PrepareLocalAutoYawFeedback()) {
-      g_rc_control_debug.auto_200_start_ok = false;
-      return;
-    }
-    g_rc_control_debug.auto_200_start_ok = Rc_StartAutoDownStepPickStore();
     if (g_rc_control_debug.auto_200_start_ok) {
       g_auto_ore_debug.force_output_enable = true;
     }

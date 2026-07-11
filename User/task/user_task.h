@@ -214,6 +214,11 @@ typedef struct {
     volatile bool fused_photo1_release_latched;
     volatile uint32_t fused_photo1_triggered_since_ms;
     volatile uint32_t fused_photo1_released_since_ms;
+    volatile bool fused_photo2_trigger_seen;
+    volatile bool fused_photo2_release_latched;
+    volatile bool fused_photo2_handoff_applied;
+    volatile uint32_t fused_photo2_triggered_since_ms;
+    volatile uint32_t fused_photo2_released_since_ms;
     volatile bool arm_at_target;
     volatile bool ore_store_all_at_target;
     volatile bool pole_all_at_target;

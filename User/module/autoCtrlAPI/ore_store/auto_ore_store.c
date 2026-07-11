@@ -190,6 +190,30 @@ static void AutoOre_PausePhoto1Latch(AutoOre_t *ctrl, uint32_t now_ms) {
   }
 }
 
+static void AutoOre_ResetPhoto2Latch(AutoOre_t *ctrl) {
+  ctrl->fused_photo2_stable_trigger_seen = false;
+  ctrl->fused_photo2_stable_release_latched = false;
+  ctrl->fused_photo2_handoff_applied = false;
+  ctrl->fused_photo2_triggered_since_ms = 0u;
+  ctrl->fused_photo2_released_since_ms = 0u;
+}
+
+static void AutoOre_PausePhoto2Latch(AutoOre_t *ctrl, uint32_t now_ms) {
+  if (ctrl == 0) {
+    return;
+  }
+  if (!ctrl->fused_photo2_stable_trigger_seen) {
+    if (ctrl->fused_photo2_triggered_since_ms != 0u) {
+      ctrl->fused_photo2_triggered_since_ms = now_ms;
+    }
+    return;
+  }
+  if (!ctrl->fused_photo2_stable_release_latched &&
+      ctrl->fused_photo2_released_since_ms != 0u) {
+    ctrl->fused_photo2_released_since_ms = now_ms;
+  }
+}
+
 static void AutoOre_EnterStep(AutoOre_t *ctrl, uint32_t now_ms) {
   if (!ctrl->step_entered) {
     ctrl->step_entered = true;
@@ -2305,6 +2329,65 @@ static bool AutoOre_FusedStepStartShortcutReached(const AutoOre_t *ctrl) {
   }
 }
 
+static bool AutoOre_UsesFusedDescendTemplate(const AutoOre_t *ctrl) {
+  const auto_ctrl_template_e template_id = AutoOre_FusedStepTemplateId(ctrl);
+  return ctrl != 0 && AutoOre_ActionIsFused(ctrl->action) &&
+         (template_id == AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD ||
+          template_id == AUTO_CTRL_TEMPLATE_DESCEND_400_HEAD);
+}
+
+/* A fused descend can spend time waiting for the photo1/Arm handoff before
+ * its embedded stair template exists.  Sample photo2 during that wait so a
+ * complete stair-edge falling pulse cannot disappear before the template is
+ * allowed to start. */
+static void AutoOre_UpdateFusedDescendPhoto2Latch(AutoOre_t *ctrl,
+                                                  uint32_t now_ms) {
+  if (!AutoOre_UsesFusedDescendTemplate(ctrl) ||
+      ctrl->fused_photo2_handoff_applied) {
+    return;
+  }
+  if (!ctrl->feedback.photo_transfer_valid) {
+    AutoOre_PausePhoto2Latch(ctrl, now_ms);
+    return;
+  }
+  (void)AutoOre_LatchPhotoStableFalling(
+      ctrl->feedback.pe9_photo2_triggered,
+      &ctrl->fused_photo2_stable_trigger_seen,
+      &ctrl->fused_photo2_stable_release_latched,
+      &ctrl->fused_photo2_triggered_since_ms,
+      &ctrl->fused_photo2_released_since_ms, now_ms);
+}
+
+/* AutoCtrl resets its photo detector on the first RUN_TEMPLATE update.  Merge
+ * the early photo2 state only after that reset has happened, then let the
+ * normal descend template consume it on the next update. */
+static void AutoOre_ApplyFusedDescendPhoto2Handoff(AutoOre_t *ctrl) {
+  auto_ctrl_template_ctx_t *step_ctx;
+
+  if (!AutoOre_UsesFusedDescendTemplate(ctrl) ||
+      ctrl->fused_photo2_handoff_applied || !ctrl->step_ctrl_started ||
+      AutoCtrl_GetState(&ctrl->step_ctrl) != AUTO_CTRL_STATE_RUN_TEMPLATE) {
+    return;
+  }
+
+  step_ctx = &ctrl->step_ctrl.template_ctx;
+  if (!step_ctx->step_entered) {
+    return;
+  }
+
+  if (ctrl->fused_photo2_stable_trigger_seen) {
+    step_ctx->pe9_photo2_stable_trigger_seen = true;
+    step_ctx->pe9_photo2_triggered_since_ms =
+        ctrl->fused_photo2_triggered_since_ms;
+  }
+  if (ctrl->fused_photo2_stable_release_latched) {
+    step_ctx->pe9_photo2_stable_release_latched = true;
+    step_ctx->pe9_photo2_released_since_ms =
+        ctrl->fused_photo2_released_since_ms;
+  }
+  ctrl->fused_photo2_handoff_applied = true;
+}
+
 static bool AutoOre_PickPhoto1LiftReached(AutoOre_t *ctrl, uint32_t now_ms) {
   if (ctrl == 0) {
     return false;
@@ -2864,6 +2947,7 @@ static void AutoOre_RunFusedStepTemplate(AutoOre_t *ctrl, uint32_t now_ms) {
     ctrl->fused_step_template_start_step_index = 0u;
     template_skip_applied = true;
   }
+  AutoOre_ApplyFusedDescendPhoto2Handoff(ctrl);
   AutoOre_ApplyFusedStepTemplateOverrides(ctrl, param);
   if (state_before_update == AUTO_CTRL_STATE_PREALIGN &&
       state_after_update == AUTO_CTRL_STATE_RUN_TEMPLATE &&
@@ -3163,7 +3247,11 @@ static void AutoOre_RunStepPickStoreFused(AutoOre_t *ctrl, uint32_t now_ms) {
       return;
     case 2:
       AutoOre_EnterStep(ctrl, now_ms);
-      AutoOre_CommandChassisHold(ctrl);
+      /* Start the configured low-speed approach while Arm moves from standby
+       * to the fused pick point.  Case 3 keeps the same command, so chassis
+       * motion no longer pauses for the entire initial Arm move. */
+      AutoOre_CommandChassisMoveYawRate(ctrl, fused->precontact_vx_mps,
+                                        ctrl->feedback.yaw_rate_cmd_rad_s);
       if (!AutoOre_CommandArm(ctrl, AutoOre_FusedPickArmPoint(ctrl),
                               SUCTION_ON,
                               &ctrl->param.arm_speed.pick_place) ||
@@ -3554,6 +3642,7 @@ static bool AutoOre_StartResolved(AutoOre_t *ctrl, AutoOre_Action_t action,
   ctrl->fused_photo1_stable_release_latched = false;
   ctrl->fused_photo1_triggered_since_ms = 0u;
   ctrl->fused_photo1_released_since_ms = 0u;
+  AutoOre_ResetPhoto2Latch(ctrl);
   ctrl->fused_store_step_index = 0u;
   ctrl->fused_store_step_phase = 0u;
   ctrl->fused_step_template_start_step_index = 0u;
@@ -3796,6 +3885,7 @@ void AutoOre_Update(AutoOre_t *ctrl, const AutoOre_Feedback_t *feedback,
     ctrl->release_ir_abort_count_at_start =
         ctrl->feedback.release_lift_ir_abort_count;
   }
+  AutoOre_UpdateFusedDescendPhoto2Latch(ctrl, now_ms);
   if ((!AutoOre_ActionIsPick(ctrl->action) ||
       AutoOre_ActionIsFused(ctrl->action) ||
       AutoOre_ActionIsPickStoreFused(ctrl->action) ||

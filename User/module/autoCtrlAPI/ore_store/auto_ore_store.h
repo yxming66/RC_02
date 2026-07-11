@@ -345,6 +345,11 @@ typedef struct {
   bool fused_photo1_stable_release_latched;
   uint32_t fused_photo1_triggered_since_ms;
   uint32_t fused_photo1_released_since_ms;
+  bool fused_photo2_stable_trigger_seen;
+  bool fused_photo2_stable_release_latched;
+  bool fused_photo2_handoff_applied;
+  uint32_t fused_photo2_triggered_since_ms;
+  uint32_t fused_photo2_released_since_ms;
   uint8_t fused_store_step_index;
   uint8_t fused_store_step_phase;
   uint8_t fused_step_template_start_step_index;
