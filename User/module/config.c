@@ -790,7 +790,7 @@ Config_RobotParam_t robot_config = {
                 .module = MOTOR_DM_H3510,
                 .reverse = false,
             },
-            .encoder_zero_offset_rad = 0.649075508f,
+            .encoder_zero_offset_rad = 0.0f,
             .mit = {
                 .kp = 1.0f,
                 .kd = 0.08f,
