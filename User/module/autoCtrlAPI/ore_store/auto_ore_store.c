@@ -26,6 +26,7 @@
 #define AUTO_ORE_DEFAULT_CHAMBER_ARM_SETTLE_MS (100u)
 #define AUTO_ORE_DEFAULT_CHAMBER_CYLINDER_OPEN_MS (50u)
 #define AUTO_ORE_DEFAULT_FETCH_CHASSIS_MOVE_MS (300u)
+#define AUTO_ORE_DEFAULT_RECOVER_FRONT_SICK_DELAY_MS (50u)
 #define AUTO_ORE_DEFAULT_RECOVER_SUCTION_SETTLE_MS (200u)
 #define AUTO_ORE_DEFAULT_RECOVER_CHASSIS_RETREAT_MS (500u)
 #define AUTO_ORE_DEFAULT_STEP_TIMEOUT_MS (5000u)
@@ -602,6 +603,12 @@ static uint32_t AutoOre_RecoverForwardMs(const AutoOre_t *ctrl) {
                              AutoOre_TimingValue(
                                  ctrl->param.timing.fetch_chassis_move_ms,
                                  AUTO_ORE_DEFAULT_FETCH_CHASSIS_MOVE_MS));
+}
+
+static uint32_t AutoOre_RecoverFrontSickDelayMs(const AutoOre_t *ctrl) {
+  return AutoOre_TimingValue(
+      ctrl->param.timing.recover_front_sick_delay_ms,
+      AUTO_ORE_DEFAULT_RECOVER_FRONT_SICK_DELAY_MS);
 }
 
 static uint32_t AutoOre_RecoverSuctionSettleMs(const AutoOre_t *ctrl) {
@@ -3191,8 +3198,19 @@ static void AutoOre_RunRecoverStore(AutoOre_t *ctrl, uint32_t now_ms) {
         return;
       }
       AutoOre_CommandChassisMove(ctrl, AutoOre_RecoverForwardVxMps(ctrl));
-      if (AutoOre_StepElapsed(ctrl, now_ms) >= AutoOre_RecoverForwardMs(ctrl)) {
+      if (AutoOre_WaitLatchedConditionThenDelay(
+              ctrl, now_ms,
+              ctrl->feedback.front_sick_ore_threshold_reached,
+              AutoOre_RecoverFrontSickDelayMs(ctrl))) {
         AutoOre_NextStep(ctrl);
+      } else if (!ctrl->step_condition_met &&
+                 AutoOre_StepElapsed(ctrl, now_ms) >=
+                 AutoOre_RecoverForwardMs(ctrl)) {
+        AutoOre_CommandChassisHold(ctrl);
+        AutoOre_AddFailureMask(ctrl, AUTO_ORE_FAILURE_PICK_ORE);
+        ctrl->state = AUTO_ORE_STATE_FAIL;
+        ctrl->result = AUTO_ORE_RESULT_FAIL;
+        ctrl->fault = AUTO_ORE_FAULT_TIMEOUT;
       }
       return;
     case 3:

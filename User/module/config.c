@@ -425,8 +425,9 @@ Config_RobotParam_t robot_config = {
             .fetch_chassis_move_ms = 1000u,
             /* 取 -200 矿：底盘向矿位前进的独立持续时间；可设为 0 禁止底盘前进，避免走太多掉下去。 */
             .fetch_neg_200_chassis_move_ms = 1000u,
-            /* 回收地面矿：0mm 取矿位吸附后，前进、静止吸附、后退避障的时间参数。 */
-            .recover_chassis_forward_ms = 1200u,
+            /* 回收地面矿：前进最长等待、前 SICK 触发后续行、静止吸附和后退时间。 */
+            .recover_chassis_forward_ms = 1200u, /* 前 SICK 未触发时的安全超时。 */
+            .recover_front_sick_delay_ms = 50u,  /* 前 SICK 达阈值后继续前进时间。 */
             .recover_suction_settle_ms = 200u,
             .recover_chassis_retreat_ms = 700u,
             /* 融合取矿/存矿/上台阶动作延时；0 使用代码默认值。 */
