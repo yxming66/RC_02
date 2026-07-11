@@ -781,6 +781,8 @@ static void Rc_LatchArmSimpleCurrentTarget(void) {
   arm_simple_cmd.joint1_vel = 0.0f;
   arm_simple_cmd.joint1_max_vel_rad_s = 0.0f;
   arm_simple_cmd.joint2_max_vel_rad_s = 0.0f;
+  arm_simple_cmd.joint1_max_accel_rad_s2 = 0.0f;
+  arm_simple_cmd.joint2_max_accel_rad_s2 = 0.0f;
   arm_simple_suction_latched = arm_simple_cmd.suction;
   arm_simple_target_initialized = true;
 }
@@ -934,6 +936,8 @@ static void Rc_SetArmSimplePoint(ArmSimple_PointMode_t point,
   arm_simple_cmd.point_mode = point;
   arm_simple_cmd.target_joint.joint1 = Rc_ClampArmSimpleJoint1(joint1_rad);
   arm_simple_cmd.target_joint.joint2 = Rc_ClampArmSimpleJoint2(joint2_rad);
+  arm_simple_cmd.joint1_max_accel_rad_s2 = 0.0f;
+  arm_simple_cmd.joint2_max_accel_rad_s2 = 0.0f;
   arm_simple_target_initialized = true;
 }
 
@@ -1582,6 +1586,9 @@ static RcCommandPlan_t Rc_SelectCommandPlan(RcBehavior_t behavior) {
       g_rc_control_debug.ore_store_active = true;
       g_rc_control_debug.arm_simple_active = true;
       g_auto_ore_debug.force_output_count++;
+      if (auto_ctrl_inited && AutoCtrl_IsBusy(&auto_ctrl)) {
+        return RC_CMD_PLAN_AUTO_CTRL_WITH_AUTO_ORE_UPPER_OUTPUT;
+      }
       if (Rc_AutoOrePcCompositeReady(behavior)) {
         return RC_CMD_PLAN_AUTO_ORE_PC_CHASSIS_OUTPUT;
       }
@@ -1772,7 +1779,7 @@ struct RcChassisAutoOreRoute {
          AUTO_ORE_RESOURCE_CHASSIS) != 0u) {
       out = auto_ore_output_snapshot.chassis_cmd;
     } else {
-      Rc_SetChassisRelax();
+      Rc_SetChassisHold();
       out = chassis_cmd;
     }
     return true;
@@ -1952,6 +1959,10 @@ struct RcArmSimplePcRoute {
       arm_simple_cmd.target_joint.joint2 =
           pc_arm_simple_cmd->target_joint2_rad;
       arm_simple_cmd.joint1_vel = 0.0f;
+      arm_simple_cmd.joint1_max_vel_rad_s = 0.0f;
+      arm_simple_cmd.joint2_max_vel_rad_s = 0.0f;
+      arm_simple_cmd.joint1_max_accel_rad_s2 = 0.0f;
+      arm_simple_cmd.joint2_max_accel_rad_s2 = 0.0f;
       arm_simple_target_initialized = true;
     } else {
       Rc_SetArmSimpleStandby();

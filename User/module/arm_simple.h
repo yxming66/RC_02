@@ -83,6 +83,8 @@ typedef struct {
     float joint1_vel;                     /* 兼容旧字段，角度控制链路不使用 */
     float joint1_max_vel_rad_s;           /* <=0时使用参数默认速度上限 */
     float joint2_max_vel_rad_s;           /* <=0时使用参数默认速度上限 */
+    float joint1_max_accel_rad_s2;        /* <=0时使用参数默认加速度上限 */
+    float joint2_max_accel_rad_s2;        /* <=0时使用参数默认加速度上限 */
 } ArmSimple_CMD_t;
 
 typedef struct {
@@ -236,6 +238,8 @@ bool ArmSimple_MakeBehaviorCommandWithSpeed(const ArmSimple_Params_t *param,
                                             Suction_State_t suction,
                                             float joint1_max_vel_rad_s,
                                             float joint2_max_vel_rad_s,
+                                            float joint1_max_accel_rad_s2,
+                                            float joint2_max_accel_rad_s2,
                                             ArmSimple_CMD_t *cmd);
 
 extern volatile ArmSimple_DebugControl_t g_arm_simple_debug;

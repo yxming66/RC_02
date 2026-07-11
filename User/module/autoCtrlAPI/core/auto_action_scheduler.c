@@ -181,10 +181,17 @@ AutoActionJob_t *AutoActionScheduler_NextStartable(
          job->state != AUTO_ACTION_JOB_WAIT_RESOURCE)) {
       continue;
     }
+    const uint8_t old_state = job->state;
+    const uint8_t old_waiting = job->waiting_resource_mask;
+    const uint8_t old_blocked = job->blocked_reason;
     if ((unavailable_executor_mask & (uint8_t)(1u << job->executor)) != 0u) {
       job->waiting_resource_mask = 0u;
       job->blocked_reason = AUTO_ACTION_BLOCK_EXECUTOR;
       job->state = AUTO_ACTION_JOB_WAIT_RESOURCE;
+      if (old_state != job->state || old_waiting != job->waiting_resource_mask ||
+          old_blocked != job->blocked_reason) {
+        AutoActionScheduler_Touch(scheduler, job);
+      }
       continue;
     }
     const uint8_t conflicts = AutoActionScheduler_Conflicts(
@@ -195,6 +202,10 @@ AutoActionJob_t *AutoActionScheduler_NextStartable(
                                             : AUTO_ACTION_BLOCK_NONE;
     job->state = (conflicts != 0u) ? AUTO_ACTION_JOB_WAIT_RESOURCE
                                    : AUTO_ACTION_JOB_QUEUED;
+    if (old_state != job->state || old_waiting != job->waiting_resource_mask ||
+        old_blocked != job->blocked_reason) {
+      AutoActionScheduler_Touch(scheduler, job);
+    }
     if (conflicts == 0u &&
         (best == 0 || job->submit_order < best->submit_order)) {
       best = job;
@@ -222,6 +233,7 @@ void AutoActionScheduler_MarkStarted(AutoActionScheduler_t *scheduler,
     return;
   }
   job->state = AUTO_ACTION_JOB_RUNNING;
+  job->executor_started = true;
   job->start_time_ms = now_ms;
   AutoActionScheduler_Touch(scheduler, job);
 }
@@ -325,6 +337,10 @@ bool AutoActionScheduler_Acknowledge(AutoActionScheduler_t *scheduler,
   }
   AutoActionScheduler_ReleaseAll(scheduler, job);
   memset(job, 0, sizeof(*job));
+  scheduler->generation++;
+  if (scheduler->generation == 0u) {
+    scheduler->generation = 1u;
+  }
   return true;
 }
 

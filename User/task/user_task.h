@@ -210,6 +210,10 @@ typedef struct {
     volatile bool fused_pick_done;
     volatile bool fused_step_done;
     volatile bool fused_store_done;
+    volatile bool fused_photo1_trigger_seen;
+    volatile bool fused_photo1_release_latched;
+    volatile uint32_t fused_photo1_triggered_since_ms;
+    volatile uint32_t fused_photo1_released_since_ms;
     volatile bool arm_at_target;
     volatile bool ore_store_all_at_target;
     volatile bool pole_all_at_target;
@@ -245,6 +249,11 @@ typedef struct {
     volatile uint32_t step_photo_to_pole_cmd_ms;
     volatile uint32_t step_pole_cmd_to_publish_ms;
     volatile uint32_t step_photo_high_duration_ms;
+    volatile uint32_t step_photo2_triggered_since_ms;
+    volatile uint32_t step_photo2_released_since_ms;
+    volatile bool step_photo2_trigger_seen;
+    volatile bool step_photo2_release_latched;
+    volatile uint8_t step_template_step_index;
     volatile uint8_t step_photo_event_step_index;
     volatile uint8_t step_pole_cmd_step_index;
     volatile uint8_t step_photo_event_id;

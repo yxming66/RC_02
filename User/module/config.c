@@ -170,15 +170,15 @@ Config_RobotParam_t robot_config = {
             /* 200mm 下台阶起步/小抬升位。 */
             .step_200_descend_small = {0.1f, 0.1f},
             /* 400mm 下台阶四杆全伸位。 */
-            .step_400_descend_all_extend = {10.8f, 10.8f},
+            .step_400_descend_all_extend = {10.5f, 10.5f},
             /* 400mm 下台阶前杆收回、后杆保持支撑位。         */
-            .step_400_descend_front_retract = {0.06f, 10.8f},
+            .step_400_descend_front_retract = {0.06f, 10.5f},
             /* 400mm 下台阶四杆全收位。 */
             .step_400_descend_all_retract = {0.06f, 0.06f},
             /* 一键放矿撑杆目标位；与 PC 放矿期间持续下发的 10.5 rad 保持一致。 */
             .ore_release_target = {10.5f, 10.5f},
-            .ore_release_speed = 12.0f,
-            .ore_release_accel = 0.0f,
+            .ore_release_speed = 30.0f,
+            .ore_release_accel = 250.0f,
         },
         .limit = {
             .max_current = 1.0f,
@@ -431,6 +431,8 @@ Config_RobotParam_t robot_config = {
         .default_step_timeout_ms = 5000u,
         /* 到位判定阈值：arm/ore_store/pole 分别使用的误差阈值，单位 rad。 */
         .arm_arrive_threshold_rad = 0.1f,
+        .arm_arrive_velocity_threshold_rad_s = 0.25f,
+        .pick_arm_arrive_stable_ms = 50u,
         .ore_store_arrive_threshold_rad = 0.05f,
         .pole_arrive_threshold_rad = 0.30f,
         .prealign_yaw_tolerance_rad =
@@ -611,9 +613,9 @@ Config_RobotParam_t robot_config = {
             /* 200mm全伸：快速建立速度，并在目标前按120rad/s^2主动制动。 */
             .pole_all_extend_speed = 22.0f,
             .pole_front_extend_speed = 22.0f,   /* 前杆伸出目标跟随速度，单位 rad/s。 */
-            .pole_front_retract_speed = 35.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
+            .pole_front_retract_speed = 45.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
             .pole_rear_extend_speed = 22.0f,    /* 后杆伸出目标跟随速度，单位 rad/s。 */
-            .pole_rear_retract_speed = 35.0f,   /* 后杆回收目标跟随速度，单位 rad/s。 */
+            .pole_rear_retract_speed = 45.0f,   /* 后杆回收目标跟随速度，单位 rad/s。 */
             .pole_all_extend_accel = 120.0f,
             .pole_all_retract_speed = 30.0f,
             .pole_all_retract_accel = 600.0f,
@@ -738,7 +740,7 @@ Config_RobotParam_t robot_config = {
             .mid_move_speed = 0.8f,            /* 中段平移 vx，单位 m/s。 */
             .mid_move_ms = 200u,                /* 中段平移持续时间，单位 ms。 */
             .timed_move_yaw_tolerance_rad = 0.35f, /* 中段定时移动切步 yaw 容差，约 10 deg。 */
-            .rear_retract_move_speed = 0.1f,   /* 后杆动作阶段 vx，单位 m/s。 */ 
+            .rear_retract_move_speed = 0.2f,   /* 后杆动作阶段 vx，单位 m/s。 */ 
             .rear_retract_move_ms = 250u,       /* 后杆动作后继续移动时间，单位 ms。 */
             .rear_retract_move_wheel_delta_rad = 8.66f, /* 后杆动作后继续移动轮转角阈值，单位 rad；0 表示按时间切步。 */
             .second_photo_retract_move_speed = 0.50f, /* step7 第二个下降沿后保持全伸离开 vx，单位 m/s。 */

@@ -81,6 +81,38 @@ int main(void) {
   assert(AutoActionScheduler_Acknowledge(&scheduler, step));
   assert(AutoActionScheduler_Acknowledge(&scheduler, rod));
 
+  AutoActionJob_t *store = 0;
+  AutoActionJob_t *step2 = 0;
+  assert(AutoActionScheduler_Submit(
+      &scheduler, 20u, 2u, AUTO_ACTION_EXECUTOR_ORE,
+      RES_ARM | RES_STORE | RES_VALVE, 0x02u, 0u, 200u, &store, &reject));
+  assert(AutoActionScheduler_Submit(
+      &scheduler, 21u, 23u, AUTO_ACTION_EXECUTOR_STEP,
+      RES_CHASSIS | RES_POLE, 0x04u, 0u, 201u, &step2, &reject));
+
+  start = AutoActionScheduler_NextStartable(
+      &scheduler, 0u, (uint8_t)(1u << AUTO_ACTION_EXECUTOR_ORE), 202u);
+  assert(start == step2);
+  assert(store->state == AUTO_ACTION_JOB_WAIT_RESOURCE);
+  assert(store->blocked_reason == AUTO_ACTION_BLOCK_EXECUTOR);
+  AutoActionScheduler_MarkStarted(&scheduler, step2, 202u);
+  AutoActionScheduler_Finish(&scheduler, step2, AUTO_ACTION_JOB_SUCCEEDED, 0u,
+                             203u);
+
+  start = AutoActionScheduler_NextStartable(
+      &scheduler, RES_STORE, 0u, 204u);
+  assert(start == 0);
+  assert(store->owned_resource_mask == 0u);
+  assert(store->waiting_resource_mask == RES_STORE);
+
+  start = AutoActionScheduler_NextStartable(&scheduler, 0u, 0u, 205u);
+  assert(start == store);
+  AutoActionScheduler_MarkStarted(&scheduler, store, 205u);
+  AutoActionScheduler_Finish(&scheduler, store, AUTO_ACTION_JOB_SUCCEEDED, 0u,
+                             206u);
+  assert(AutoActionScheduler_Acknowledge(&scheduler, step2));
+  assert(AutoActionScheduler_Acknowledge(&scheduler, store));
+
   puts("auto_action_scheduler_test: PASS");
   return 0;
 }

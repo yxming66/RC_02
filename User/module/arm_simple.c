@@ -52,12 +52,15 @@ static float ArmSimple_ResolveMaxVel(float command_max_vel,
                : -1.0f;
 }
 
-static float ArmSimple_ResolveMaxAccel(float default_max_accel)
+static float ArmSimple_ResolveMaxAccel(float command_max_accel,
+                                       float default_max_accel)
 {
-    if (default_max_accel > 0.0f && isfinite(default_max_accel)) {
-        return default_max_accel;
+    if (command_max_accel > 0.0f && isfinite(command_max_accel)) {
+        return command_max_accel;
     }
-    return -1.0f;
+    return (default_max_accel > 0.0f && isfinite(default_max_accel))
+               ? default_max_accel
+               : -1.0f;
 }
 
 static float ArmSimple_MoveToward(float current, float target,
@@ -109,28 +112,83 @@ static float ArmSimple_TrapezoidStep(float current_position,
 
     const float error = target_position - current_position;
     const float distance = fabsf(error);
-    if (distance <= 1.0e-5f && fabsf(*current_velocity) <= max_acceleration * dt) {
+    const float velocity_epsilon = max_acceleration * dt;
+    if (distance <= 1.0e-5f && fabsf(*current_velocity) <= velocity_epsilon) {
         *current_velocity = 0.0f;
         return target_position;
     }
 
-    const float direction = (distance > 1.0e-6f) ? ArmSimple_Sign(error)
-                                                 : -ArmSimple_Sign(*current_velocity);
-    const float distance_limited_speed = sqrtf(2.0f * max_acceleration * distance);
-    const float desired_speed = fminf(max_velocity, distance_limited_speed);
-    const float desired_velocity = direction * desired_speed;
-    const float max_velocity_delta = max_acceleration * dt;
+    /* Rebuild the minimum-time trapezoid from the current planned state on
+     * every cycle.  Unlike following sqrt(2*a*distance) with another
+     * acceleration limiter, this analytical sample reaches the target with a
+     * continuous velocity even when the behavior target changes mid-motion. */
+    const float direction = (error >= 0.0f) ? 1.0f : -1.0f;
+    const float directed_current_position = direction * current_position;
+    const float directed_target_position = direction * target_position;
+    float directed_current_velocity = direction * (*current_velocity);
+    directed_current_velocity = ClampFloat(directed_current_velocity,
+                                            -max_velocity, max_velocity);
 
-    *current_velocity = ArmSimple_MoveToward(
-        *current_velocity, desired_velocity, max_velocity_delta);
-    *current_velocity = ClampFloat(*current_velocity, -max_velocity, max_velocity);
+    const float cutoff_begin = directed_current_velocity / max_acceleration;
+    const float cutoff_begin_distance =
+        0.5f * max_acceleration * cutoff_begin * cutoff_begin;
+    float full_distance = cutoff_begin_distance +
+                          (directed_target_position - directed_current_position);
+    if (full_distance <= 0.0f || !isfinite(full_distance)) {
+        const float next_velocity = ArmSimple_MoveToward(
+            *current_velocity, 0.0f, max_acceleration * dt);
+        const float next_position = current_position +
+                                    0.5f * (*current_velocity + next_velocity) * dt;
+        *current_velocity = next_velocity;
+        return next_position;
+    }
 
-    const float next_position = current_position + (*current_velocity * dt);
+    float acceleration_time = max_velocity / max_acceleration;
+    float full_speed_distance =
+        full_distance - max_acceleration * acceleration_time * acceleration_time;
+    if (full_speed_distance < 0.0f) {
+        acceleration_time = sqrtf(full_distance / max_acceleration);
+        full_speed_distance = 0.0f;
+    }
+
+    float end_acceleration = acceleration_time - cutoff_begin;
+    if (end_acceleration < 0.0f) {
+        end_acceleration = 0.0f;
+    }
+    const float peak_velocity = max_acceleration * acceleration_time;
+    const float end_full_speed = end_acceleration +
+        ((peak_velocity > 1.0e-6f) ? full_speed_distance / peak_velocity : 0.0f);
+    const float end_deceleration = end_full_speed + acceleration_time;
+
+    float directed_next_position = directed_target_position;
+    float directed_next_velocity = 0.0f;
+    if (dt < end_acceleration) {
+        directed_next_velocity = directed_current_velocity + max_acceleration * dt;
+        directed_next_position = directed_current_position +
+            (directed_current_velocity + 0.5f * max_acceleration * dt) * dt;
+    } else if (dt < end_full_speed) {
+        const float acceleration_distance =
+            (directed_current_velocity +
+             0.5f * max_acceleration * end_acceleration) * end_acceleration;
+        directed_next_velocity = peak_velocity;
+        directed_next_position = directed_current_position + acceleration_distance +
+                                 peak_velocity * (dt - end_acceleration);
+    } else if (dt < end_deceleration) {
+        const float time_left = end_deceleration - dt;
+        directed_next_velocity = max_acceleration * time_left;
+        directed_next_position = directed_target_position -
+                                 0.5f * max_acceleration * time_left * time_left;
+    }
+
+    const float next_position = direction * directed_next_position;
+    const float next_velocity = direction * directed_next_velocity;
     const float next_error = target_position - next_position;
-    if (ArmSimple_Sign(error) != 0.0f && ArmSimple_Sign(next_error) != ArmSimple_Sign(error)) {
+    if (ArmSimple_Sign(error) != 0.0f &&
+        ArmSimple_Sign(next_error) != ArmSimple_Sign(error)) {
         *current_velocity = 0.0f;
         return target_position;
     }
+    *current_velocity = next_velocity;
     return next_position;
 }
 
@@ -263,9 +321,9 @@ int8_t ArmSimple_Init(ArmSimple_t *a, ArmSimple_Params_t *param, float target_fr
     a->target.joint2_max_vel_rad_s = ArmSimple_ResolveMaxVel(
         0.0f, param->vel_limit.joint2_max_vel);
     a->target.joint1_max_accel_rad_s2 = ArmSimple_ResolveMaxAccel(
-        param->vel_limit.joint1_max_accel);
+        0.0f, param->vel_limit.joint1_max_accel);
     a->target.joint2_max_accel_rad_s2 = ArmSimple_ResolveMaxAccel(
-        param->vel_limit.joint2_max_accel);
+        0.0f, param->vel_limit.joint2_max_accel);
     a->target.output_target_initialized = false;
 
     const auto dm_config =
@@ -391,8 +449,10 @@ int8_t ArmSimple_Control(ArmSimple_t *a, const ArmSimple_CMD_t *cmd)
     a->target.joint2_max_vel_rad_s = ArmSimple_ResolveMaxVel(
         cmd->joint2_max_vel_rad_s, a->param->vel_limit.joint2_max_vel);
     a->target.joint1_max_accel_rad_s2 = ArmSimple_ResolveMaxAccel(
+        cmd->joint1_max_accel_rad_s2,
         a->param->vel_limit.joint1_max_accel);
     a->target.joint2_max_accel_rad_s2 = ArmSimple_ResolveMaxAccel(
+        cmd->joint2_max_accel_rad_s2,
         a->param->vel_limit.joint2_max_accel);
 
     /* 吸盘控制 */
@@ -525,6 +585,7 @@ bool ArmSimple_MakeBehaviorCommand(const ArmSimple_Params_t *param,
                                    ArmSimple_CMD_t *cmd)
 {
     return ArmSimple_MakeBehaviorCommandWithSpeed(param, point, suction,
+                                                  0.0f, 0.0f,
                                                   0.0f, 0.0f, cmd);
 }
 
@@ -533,6 +594,8 @@ bool ArmSimple_MakeBehaviorCommandWithSpeed(const ArmSimple_Params_t *param,
                                             Suction_State_t suction,
                                             float joint1_max_vel_rad_s,
                                             float joint2_max_vel_rad_s,
+                                            float joint1_max_accel_rad_s2,
+                                            float joint2_max_accel_rad_s2,
                                             ArmSimple_CMD_t *cmd)
 {
     if (param == NULL || cmd == NULL || point >= ARM_SIMPLE_BEHAVIOR_NUM) {
@@ -548,5 +611,7 @@ bool ArmSimple_MakeBehaviorCommandWithSpeed(const ArmSimple_Params_t *param,
     cmd->joint1_vel = 0.0f;
     cmd->joint1_max_vel_rad_s = joint1_max_vel_rad_s;
     cmd->joint2_max_vel_rad_s = joint2_max_vel_rad_s;
+    cmd->joint1_max_accel_rad_s2 = joint1_max_accel_rad_s2;
+    cmd->joint2_max_accel_rad_s2 = joint2_max_accel_rad_s2;
     return true;
 }

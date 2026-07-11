@@ -524,6 +524,14 @@ static void AutoCtrlTemplate_ResetPhotoDetection(auto_ctrl_t *ctrl) {
   ctrl->template_ctx.debug_photo_high_duration_ms = 0u;
 }
 
+static void AutoCtrlTemplate_PauseStableTimer(bool phase_complete,
+                                              uint32_t *since_ms,
+                                              uint32_t now_ms) {
+  if (!phase_complete && since_ms != 0 && *since_ms != 0u) {
+    *since_ms = now_ms;
+  }
+}
+
 static bool AutoCtrlTemplate_LatchPhotoStable(bool triggered, bool *latched,
                                               uint32_t *triggered_since_ms,
                                               uint32_t now_ms) {
@@ -647,6 +655,12 @@ static bool AutoCtrlTemplate_LatchPhotoStableRisingAfterLow(
 
 static bool AutoCtrlTemplate_LatchFrontPhotoStable(auto_ctrl_t *ctrl,
                                                    uint32_t now_ms) {
+  if (!ctrl->feedback.photo_transfer_valid) {
+    AutoCtrlTemplate_PauseStableTimer(
+        ctrl->template_ctx.pe13_photo1_triggered_latched,
+        &ctrl->template_ctx.pe13_photo1_triggered_since_ms, now_ms);
+    return false;
+  }
   return AutoCtrlTemplate_LatchPhotoStable(
       ctrl->feedback.pe13_photo1_triggered,
       &ctrl->template_ctx.pe13_photo1_triggered_latched,
@@ -655,6 +669,12 @@ static bool AutoCtrlTemplate_LatchFrontPhotoStable(auto_ctrl_t *ctrl,
 
 static bool AutoCtrlTemplate_LatchRearPhotoStable(auto_ctrl_t *ctrl,
                                                   uint32_t now_ms) {
+  if (!ctrl->feedback.photo_transfer_valid) {
+    AutoCtrlTemplate_PauseStableTimer(
+        ctrl->template_ctx.pa2_photo3_triggered_latched,
+        &ctrl->template_ctx.pa2_photo3_triggered_since_ms, now_ms);
+    return false;
+  }
   return AutoCtrlTemplate_LatchPhotoStable(
       ctrl->feedback.pa2_photo3_triggered,
       &ctrl->template_ctx.pa2_photo3_triggered_latched,
@@ -665,6 +685,15 @@ static bool AutoCtrlTemplate_DescendFirstPhotoFallingStable(auto_ctrl_t *ctrl,
                                                             bool use_400mm,
                                                             uint32_t now_ms) {
   (void)use_400mm;
+  if (!ctrl->feedback.photo_transfer_valid) {
+    AutoCtrlTemplate_PauseStableTimer(
+        ctrl->template_ctx.pe9_photo2_stable_trigger_seen,
+        &ctrl->template_ctx.pe9_photo2_triggered_since_ms, now_ms);
+    AutoCtrlTemplate_PauseStableTimer(
+        ctrl->template_ctx.pe9_photo2_stable_release_latched,
+        &ctrl->template_ctx.pe9_photo2_released_since_ms, now_ms);
+    return false;
+  }
   return AutoCtrlTemplate_LatchPhotoStableFalling(
       ctrl->feedback.pe9_photo2_triggered,
       &ctrl->template_ctx.pe9_photo2_stable_trigger_seen,
@@ -677,6 +706,15 @@ static bool AutoCtrlTemplate_DescendSecondPhotoFallingStable(auto_ctrl_t *ctrl,
                                                              bool use_400mm,
                                                              uint32_t now_ms) {
   (void)use_400mm;
+  if (!ctrl->feedback.photo_transfer_valid) {
+    AutoCtrlTemplate_PauseStableTimer(
+        ctrl->template_ctx.pa0_photo4_stable_trigger_seen,
+        &ctrl->template_ctx.pa0_photo4_triggered_since_ms, now_ms);
+    AutoCtrlTemplate_PauseStableTimer(
+        ctrl->template_ctx.pa0_photo4_stable_release_latched,
+        &ctrl->template_ctx.pa0_photo4_released_since_ms, now_ms);
+    return false;
+  }
   return AutoCtrlTemplate_LatchPhotoStableFalling(
       ctrl->feedback.pa0_photo4_triggered,
       &ctrl->template_ctx.pa0_photo4_stable_trigger_seen,
@@ -687,6 +725,15 @@ static bool AutoCtrlTemplate_DescendSecondPhotoFallingStable(auto_ctrl_t *ctrl,
 
 static bool AutoCtrlTemplate_Photo4RisingAfterLowStable(auto_ctrl_t *ctrl,
                                                         uint32_t now_ms) {
+  if (!ctrl->feedback.photo_transfer_valid) {
+    AutoCtrlTemplate_PauseStableTimer(
+        ctrl->template_ctx.pa0_photo4_stable_low_seen,
+        &ctrl->template_ctx.pa0_photo4_released_since_ms, now_ms);
+    AutoCtrlTemplate_PauseStableTimer(
+        ctrl->template_ctx.pa0_photo4_triggered_latched,
+        &ctrl->template_ctx.pa0_photo4_triggered_since_ms, now_ms);
+    return false;
+  }
   return AutoCtrlTemplate_LatchPhotoStableRisingAfterLow(
       ctrl->feedback.pa0_photo4_triggered,
       &ctrl->template_ctx.pa0_photo4_stable_low_seen,

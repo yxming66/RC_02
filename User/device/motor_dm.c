@@ -47,6 +47,14 @@ static MOTOR_DM_CANManager_t *can_managers[BSP_CAN_NUM] = {NULL};
 static int float_to_uint(float x_float, float x_min, float x_max, int bits)
 {
 	/* Converts a float to an unsigned int, given range and number of bits */
+	if (!isfinite(x_float)) {
+		x_float = 0.0f;
+	}
+	if (x_float < x_min) {
+		x_float = x_min;
+	} else if (x_float > x_max) {
+		x_float = x_max;
+	}
 	float span = x_max - x_min;
 	float offset = x_min;
 	return (int) ((x_float-offset)*((float)((1<<bits)-1))/span);

@@ -58,8 +58,11 @@ static PC_AutoActionV2CMD_t s_auto_action_v2_cmd{};
 static bool s_auto_action_v2_pending = false;
 static PC_AutoActionV3Feedback_t s_auto_action_v3_feedback{};
 static PC_AutoActionV3RejectFeedback_t s_auto_action_v3_reject_feedback{};
-static PC_AutoActionV3CMD_t s_auto_action_v3_cmd{};
-static bool s_auto_action_v3_pending = false;
+constexpr uint8_t kAutoActionV3RxQueueCapacity = 8u;
+static PC_AutoActionV3CMD_t
+    s_auto_action_v3_queue[kAutoActionV3RxQueueCapacity]{};
+static volatile uint8_t s_auto_action_v3_queue_head = 0u;
+static volatile uint8_t s_auto_action_v3_queue_tail = 0u;
 static uint8_t s_auto_action_rx_latch = PC_AUTO_ACTION_NONE;
 static PC_IrOreFeedback_t s_ir_ore_feedback{};
 static PC_IrOreBridgeFeedback_t s_ir_ore_bridge_feedback{};
@@ -304,8 +307,16 @@ void OnAutoActionV2(const PC_AutoActionV2CMD_t &cmd) {
 }
 
 void OnAutoActionV3(const PC_AutoActionV3CMD_t &cmd) {
-  s_auto_action_v3_cmd = cmd;
-  s_auto_action_v3_pending = true;
+  const uint8_t head = s_auto_action_v3_queue_head;
+  const uint8_t next =
+      static_cast<uint8_t>((head + 1u) % kAutoActionV3RxQueueCapacity);
+  if (next == s_auto_action_v3_queue_tail) {
+    s_state.error_count++;
+    return;
+  }
+  s_auto_action_v3_queue[head] = cmd;
+  __DMB();
+  s_auto_action_v3_queue_head = next;
   s_state.cmd.abstract_position.enable_mask &=
       static_cast<uint8_t>(~(PC_ABSTRACT_MODULE_POLE |
                              PC_ABSTRACT_MODULE_ARM_SIMPLE));
@@ -851,7 +862,10 @@ extern "C" const PC_AutoActionV2CMD_t *MrlinkPc_GetAutoActionV2CMD(void) {
 }
 
 extern "C" const PC_AutoActionV3CMD_t *MrlinkPc_GetAutoActionV3CMD(void) {
-  return s_auto_action_v3_pending ? &s_auto_action_v3_cmd : nullptr;
+  const uint8_t tail = s_auto_action_v3_queue_tail;
+  return (tail != s_auto_action_v3_queue_head)
+             ? &s_auto_action_v3_queue[tail]
+             : nullptr;
 }
 
 extern "C" const PC_StepCMD_t *MrlinkPc_GetStepCMD(void) {
@@ -1082,7 +1096,12 @@ extern "C" void MrlinkPc_ClearAutoActionV2Command(void) {
 }
 
 extern "C" void MrlinkPc_ClearAutoActionV3Command(void) {
-  s_auto_action_v3_pending = false;
+  const uint8_t tail = s_auto_action_v3_queue_tail;
+  if (tail != s_auto_action_v3_queue_head) {
+    __DMB();
+    s_auto_action_v3_queue_tail = static_cast<uint8_t>(
+        (tail + 1u) % kAutoActionV3RxQueueCapacity);
+  }
 }
 
 extern "C" void MrlinkPc_ClearIrOreAckCommand(void) {

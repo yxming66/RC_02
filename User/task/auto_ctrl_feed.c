@@ -86,6 +86,15 @@ _Static_assert((int)AUTO_ORE_DEBUG_REQUEST_STORE ==
 _Static_assert((int)AUTO_ORE_DEBUG_REQUEST_RELEASE_IR_LIFT_DETECT_STEP2 ==
                    (int)PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT_STEP2,
                "AutoAction V2 request range changed");
+_Static_assert(AUTO_ACTION_SCHEDULER_CAPACITY ==
+                   PC_AUTO_ACTION_V3_JOB_CAPACITY,
+               "AutoAction V3 scheduler/wire capacity mismatch");
+_Static_assert((int)AUTO_ACTION_JOB_CANCELLED ==
+                   (int)PC_AUTO_ACTION_V3_JOB_CANCELLED,
+               "AutoAction V3 scheduler/wire state mismatch");
+_Static_assert((int)AUTO_ACTION_BLOCK_EXTERNAL_GATE ==
+                   (int)PC_AUTO_ACTION_V3_BLOCK_EXTERNAL_GATE,
+               "AutoAction V3 scheduler/wire block reason mismatch");
 
 typedef struct {
   PC_AutoActionV2Feedback_t feedback;
@@ -137,6 +146,7 @@ static void AutoCtrlFeed_ProcessAutoActionV3(uint32_t now_ms);
 static void AutoCtrlFeed_UpdateAutoActionV3(uint32_t now_ms);
 static void AutoCtrlFeed_PublishAutoActionV3(uint32_t now_ms);
 static bool AutoCtrlFeed_AutoOreWaitingReleaseGate(void);
+static bool AutoCtrlFeed_V3HasNonterminalJobs(void);
 static void AutoCtrlFeed_BeginLegacyJob(PC_AutoAction_t action,
                                         uint32_t now_ms);
 static void AutoCtrlFeed_PublishAutoActionSnapshot(
@@ -1176,6 +1186,10 @@ static bool AutoCtrlFeed_StartOreAction(AutoOre_Action_t action) {
 
   bool result = false;
   const uint32_t now_ms = BSP_TIME_Get_ms();
+  if (!auto_action_v3_dispatching) {
+    AutoOre_SetReservedResourceMask(&auto_ore_ctrl,
+                                    AUTO_ORE_RESOURCE_NONE);
+  }
   AutoCtrlFeed_UpdateAutoOre(now_ms, true);
   switch (action) {
     case AUTO_ORE_ACTION_STORE:
@@ -1265,6 +1279,11 @@ static bool AutoCtrlFeed_StartOreAction(AutoOre_Action_t action) {
   if (result || AutoOre_GetState(&auto_ore_ctrl) == AUTO_ORE_STATE_FAIL) {
     AutoCtrlFeed_RememberOreAction(action);
   }
+  if (result) {
+    /* Publish the first lease/command frame in the same scheduler cycle so PC
+     * cannot slip through the submit-to-first-update gap. */
+    AutoCtrlFeed_UpdateAutoOre(now_ms, false);
+  }
   if (AutoCtrlFeed_IsReleaseAction(action)) {
     if (result) {
       auto_ore_release_light_position =
@@ -1303,6 +1322,7 @@ static bool AutoCtrlFeed_StartStepAction(PC_AutoAction_t action) {
       now_ms);
   if (result) {
     auto_action_last_action = action;
+    AutoCtrl_Update(&auto_ctrl, now_ms);
   }
   return result;
 }
@@ -1645,6 +1665,7 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms, bool update_debug) {
       .pole_front_at_target = feedback.pole_front_at_target,
       .pole_rear_at_target = feedback.pole_rear_at_target,
       .arm_photo_has_ore = arm_ore_photo_triggered,
+      .photo_transfer_valid = feedback.photo_transfer_valid,
       .pe13_photo1_triggered = feedback.pe13_photo1_triggered,
       .pe9_photo2_triggered = feedback.pe9_photo2_triggered,
       .pa2_photo3_triggered = feedback.pa2_photo3_triggered,
@@ -1667,6 +1688,8 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms, bool update_debug) {
       .release_lift_ir_cmd = IrDock_GetLastClawOpenCommand(),
       .release_lift_ir_abort_count = IrDock_GetClawOpenAbortCount(),
       .arm_joint1_rad = (arm_fb != NULL) ? arm_fb->joint1_angle_rad : 0.0f,
+      .arm_joint1_velocity_rad_s =
+          (arm_fb != NULL) ? arm_fb->joint1_velocity_rad_s : 0.0f,
       .arm_joint2_rad = (arm_fb != NULL) ? arm_fb->joint2_angle_rad : 0.0f,
       .pole_front_lift_rad = feedback.pole_front_lift_rad,
       .pole_rear_lift_rad = feedback.pole_rear_lift_rad,
@@ -1740,6 +1763,15 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms, bool update_debug) {
     step_ctx = &auto_ctrl.template_ctx;
   }
   if (step_ctx != NULL) {
+    g_auto_ore_debug.step_template_step_index = step_ctx->step_index;
+    g_auto_ore_debug.step_photo2_trigger_seen =
+        step_ctx->pe9_photo2_stable_trigger_seen;
+    g_auto_ore_debug.step_photo2_release_latched =
+        step_ctx->pe9_photo2_stable_release_latched;
+    g_auto_ore_debug.step_photo2_triggered_since_ms =
+        step_ctx->pe9_photo2_triggered_since_ms;
+    g_auto_ore_debug.step_photo2_released_since_ms =
+        step_ctx->pe9_photo2_released_since_ms;
     g_auto_ore_debug.step_photo_raw_time_ms =
         step_ctx->debug_photo_raw_time_ms;
     g_auto_ore_debug.step_photo_event_time_ms =
@@ -1805,6 +1837,14 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms, bool update_debug) {
   g_auto_ore_debug.fused_pick_done = auto_ore_ctrl.fused_pick_done;
   g_auto_ore_debug.fused_step_done = auto_ore_ctrl.fused_step_done;
   g_auto_ore_debug.fused_store_done = auto_ore_ctrl.fused_store_done;
+  g_auto_ore_debug.fused_photo1_trigger_seen =
+      auto_ore_ctrl.fused_photo1_stable_trigger_seen;
+  g_auto_ore_debug.fused_photo1_release_latched =
+      auto_ore_ctrl.fused_photo1_stable_release_latched;
+  g_auto_ore_debug.fused_photo1_triggered_since_ms =
+      auto_ore_ctrl.fused_photo1_triggered_since_ms;
+  g_auto_ore_debug.fused_photo1_released_since_ms =
+      auto_ore_ctrl.fused_photo1_released_since_ms;
   if (arm_fb != NULL) {
     g_auto_ore_debug.arm_feedback_joint1_rad = arm_fb->joint1_angle_rad;
     g_auto_ore_debug.arm_feedback_joint2_rad = arm_fb->joint2_angle_rad;
@@ -2169,6 +2209,8 @@ void Task_AutoOreAbort(void) {
   pending_release_step2_request = AUTO_ORE_DEBUG_REQUEST_NONE;
   pending_auto_action_request = AUTO_ORE_DEBUG_REQUEST_NONE;
   if (auto_ore_inited) {
+    AutoOre_SetReservedResourceMask(&auto_ore_ctrl,
+                                    AUTO_ORE_RESOURCE_NONE);
     if (AutoOre_IsBusy(&auto_ore_ctrl)) {
       AutoCtrlFeed_RememberOreAction(auto_ore_ctrl.action);
     }
@@ -2187,6 +2229,19 @@ static bool AutoCtrlFeed_HandleAutoOreDebugRequest(uint32_t now_ms) {
   g_auto_ore_debug.request = AUTO_ORE_DEBUG_REQUEST_NONE;
   g_auto_ore_debug.last_request = request;
   g_auto_ore_debug.request_count++;
+  if (!auto_action_v3_dispatching && AutoCtrlFeed_V3HasNonterminalJobs()) {
+    if (request != AUTO_ORE_DEBUG_REQUEST_ABORT) {
+      g_auto_ore_debug.last_result = false;
+      return false;
+    }
+    for (uint8_t i = 0u; i < AUTO_ACTION_SCHEDULER_CAPACITY; ++i) {
+      AutoActionJob_t *job = &auto_action_scheduler.jobs[i];
+      if (job->allocated &&
+          !AutoActionScheduler_IsTerminal((AutoActionJobState_t)job->state)) {
+        (void)AutoActionScheduler_RequestCancel(&auto_action_scheduler, job);
+      }
+    }
+  }
   if (!auto_action_v3_dispatching &&
       request != AUTO_ORE_DEBUG_REQUEST_ABORT &&
       request <= AUTO_ORE_DEBUG_REQUEST_RELEASE_IR_LIFT_DETECT_STEP2) {
@@ -2768,6 +2823,12 @@ static AutoActionJob_t *AutoCtrlFeed_FindV3CommandJob(
   return job;
 }
 
+static bool AutoCtrlFeed_V3ControlAllowed(void) {
+  return dr16.header.online && dr16.data.sw_l == DR16_SW_UP &&
+         dr16.data.sw_r == DR16_SW_UP && MrlinkPc_IsPCControlMode() &&
+         MrlinkPc_IsHeartbeatValid();
+}
+
 static void AutoCtrlFeed_ProcessAutoActionV3(uint32_t now_ms) {
   PC_AutoActionV3CMD_t command = {0};
   uint8_t processed = 0u;
@@ -2783,6 +2844,11 @@ static void AutoCtrlFeed_ProcessAutoActionV3(uint32_t now_ms) {
             executor == AUTO_ACTION_EXECUTOR_NONE) {
           AutoCtrlFeed_SetV3Reject(
               &command, PC_AUTO_ACTION_V3_REJECT_INVALID_ACTION, now_ms);
+          break;
+        }
+        if (!AutoCtrlFeed_V3ControlAllowed()) {
+          AutoCtrlFeed_SetV3Reject(
+              &command, PC_AUTO_ACTION_V3_REJECT_INVALID_STATE, now_ms);
           break;
         }
         if (auto_action_job.active &&
@@ -2880,12 +2946,16 @@ static uint8_t AutoCtrlFeed_V3UnavailableExecutorMask(void) {
   }
   if (auto_ctrl_inited && AutoCtrl_IsBusy(&auto_ctrl)) {
     result |= (uint8_t)(1u << AUTO_ACTION_EXECUTOR_STEP);
+    result |= (uint8_t)(1u << AUTO_ACTION_EXECUTOR_ROD);
   }
   if (Task_AutoRodSpearheadIsBusy()) {
     result |= (uint8_t)(1u << AUTO_ACTION_EXECUTOR_ROD);
+    result |= (uint8_t)(1u << AUTO_ACTION_EXECUTOR_STEP);
+    result |= (uint8_t)(1u << AUTO_ACTION_EXECUTOR_SICK);
   }
   if (Task_AutoSickCorrectIsBusy()) {
     result |= (uint8_t)(1u << AUTO_ACTION_EXECUTOR_SICK);
+    result |= (uint8_t)(1u << AUTO_ACTION_EXECUTOR_ROD);
   }
   return result;
 }
@@ -2915,6 +2985,10 @@ static bool AutoCtrlFeed_StartV3Job(AutoActionJob_t *job,
   if (job == NULL || job->state != AUTO_ACTION_JOB_STARTING) {
     return false;
   }
+  if (job->executor == AUTO_ACTION_EXECUTOR_ORE) {
+    AutoOre_SetReservedResourceMask(&auto_ore_ctrl,
+                                    job->owned_resource_mask);
+  }
   g_auto_ore_debug.request = (AutoOre_DebugRequest_t)job->action;
   auto_action_v3_dispatching = true;
   const bool started = AutoCtrlFeed_HandleAutoOreDebugRequest(now_ms);
@@ -2922,6 +2996,10 @@ static bool AutoCtrlFeed_StartV3Job(AutoActionJob_t *job,
   if (started) {
     AutoActionScheduler_MarkStarted(&auto_action_scheduler, job, now_ms);
     return true;
+  }
+  if (job->executor == AUTO_ACTION_EXECUTOR_ORE) {
+    AutoOre_SetReservedResourceMask(&auto_ore_ctrl,
+                                    AUTO_ORE_RESOURCE_NONE);
   }
   AutoActionScheduler_Finish(&auto_action_scheduler, job,
                              AUTO_ACTION_JOB_FAILED,
@@ -2934,7 +3012,7 @@ static void AutoCtrlFeed_CancelV3Job(AutoActionJob_t *job,
   if (job == NULL || job->state != AUTO_ACTION_JOB_CANCEL_REQUESTED) {
     return;
   }
-  if (job->start_time_ms == 0u) {
+  if (!job->executor_started) {
     AutoActionScheduler_Finish(&auto_action_scheduler, job,
                                AUTO_ACTION_JOB_CANCELLED,
                                PC_AUTO_ACTION_FAILURE_ABORTED, now_ms);
@@ -2942,6 +3020,8 @@ static void AutoCtrlFeed_CancelV3Job(AutoActionJob_t *job,
   }
   switch ((AutoActionExecutor_t)job->executor) {
     case AUTO_ACTION_EXECUTOR_ORE:
+      AutoOre_SetReservedResourceMask(&auto_ore_ctrl,
+                                      AUTO_ORE_RESOURCE_NONE);
       Task_AutoOreAbort();
       break;
     case AUTO_ACTION_EXECUTOR_STEP:
@@ -2991,6 +3071,7 @@ static void AutoCtrlFeed_SyncV3OreJob(AutoActionJob_t *job,
   (void)AutoActionScheduler_SetOwnedResources(
       &auto_action_scheduler, job, desired_resources,
       AutoCtrlFeed_V3ExternallyOwnedResources());
+  AutoOre_SetReservedResourceMask(&auto_ore_ctrl, desired_resources);
 
   if (AutoCtrlFeed_AutoOreWaitingReleaseGate()) {
     AutoActionScheduler_SetWaitGate(&auto_action_scheduler, job, true);
@@ -2998,13 +3079,19 @@ static void AutoCtrlFeed_SyncV3OreJob(AutoActionJob_t *job,
   }
   const AutoOre_Result_t result = AutoOre_GetResult(&auto_ore_ctrl);
   if (result == AUTO_ORE_RESULT_SUCCESS) {
+    AutoOre_SetReservedResourceMask(&auto_ore_ctrl,
+                                    AUTO_ORE_RESOURCE_NONE);
     AutoActionScheduler_Finish(&auto_action_scheduler, job,
                                AUTO_ACTION_JOB_SUCCEEDED, 0u, now_ms);
   } else if (result == AUTO_ORE_RESULT_FAIL) {
+    AutoOre_SetReservedResourceMask(&auto_ore_ctrl,
+                                    AUTO_ORE_RESOURCE_NONE);
     AutoActionScheduler_Finish(&auto_action_scheduler, job,
                                AUTO_ACTION_JOB_FAILED,
                                AutoOre_GetFailureMask(&auto_ore_ctrl), now_ms);
   } else if (result == AUTO_ORE_RESULT_ABORTED) {
+    AutoOre_SetReservedResourceMask(&auto_ore_ctrl,
+                                    AUTO_ORE_RESOURCE_NONE);
     AutoActionScheduler_Finish(&auto_action_scheduler, job,
                                AUTO_ACTION_JOB_CANCELLED,
                                PC_AUTO_ACTION_FAILURE_ABORTED, now_ms);
@@ -3097,6 +3184,16 @@ static void AutoCtrlFeed_SyncV3SickJob(AutoActionJob_t *job,
 }
 
 static void AutoCtrlFeed_UpdateAutoActionV3(uint32_t now_ms) {
+  if (!AutoCtrlFeed_V3ControlAllowed()) {
+    for (uint8_t i = 0u; i < AUTO_ACTION_SCHEDULER_CAPACITY; ++i) {
+      AutoActionJob_t *job = &auto_action_scheduler.jobs[i];
+      if (job->allocated &&
+          !AutoActionScheduler_IsTerminal((AutoActionJobState_t)job->state) &&
+          job->state != AUTO_ACTION_JOB_CANCEL_REQUESTED) {
+        (void)AutoActionScheduler_RequestCancel(&auto_action_scheduler, job);
+      }
+    }
+  }
   for (uint8_t i = 0u; i < AUTO_ACTION_SCHEDULER_CAPACITY; ++i) {
     AutoActionJob_t *job = &auto_action_scheduler.jobs[i];
     if (!job->allocated ||
@@ -3186,6 +3283,11 @@ static bool AutoCtrlFeed_AutoOreWaitingReleaseGate(void) {
 static void AutoCtrlFeed_SyncJobFromFeedback(
     const PC_AutoActionFeedback_t *feedback, uint32_t now_ms) {
   if (feedback == NULL) {
+    return;
+  }
+  /* V3 owns multi-job bookkeeping. Do not synthesize a legacy/V2 foreground
+   * job from aggregate controller busy flags while V3 jobs are active. */
+  if (AutoCtrlFeed_V3HasNonterminalJobs()) {
     return;
   }
   if (!auto_action_job.active && feedback->busy != 0u &&
@@ -3303,6 +3405,7 @@ static void AutoCtrlFeed_PublishAutoActionSnapshot(
 static bool AutoCtrlFeed_StartRodSpearheadAction(
     AutoRodSpearhead_Action_t action) {
   if (Task_AutoSickCorrectIsBusy() ||
+      (auto_ctrl_inited && AutoCtrl_IsBusy(&auto_ctrl)) ||
       (auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl))) {
     return false;
   }
@@ -3516,16 +3619,19 @@ void Task_auto_ctrl(void *argument) {
           : -1.0f;
       feedback.sick_front_right_cm = -1.0f;
 
-      feedback.pe13_photo1_triggered =
-          AutoCtrlFeed_ReadPhotoTransferBit(PHOTO_TRANSFER_BIT_PHOTO1_FRONT);
-      feedback.pe9_photo2_triggered =
-          AutoCtrlFeed_ReadPhotoTransferBit(
-              PHOTO_TRANSFER_BIT_PHOTO2_THIRD_LAST);
-      feedback.pa2_photo3_triggered =
-          AutoCtrlFeed_ReadPhotoTransferBit(
-              PHOTO_TRANSFER_BIT_PHOTO3_SECOND_LAST);
-      feedback.pa0_photo4_triggered =
-          AutoCtrlFeed_ReadPhotoTransferBit(PHOTO_TRANSFER_BIT_PHOTO4_LAST);
+      feedback.photo_transfer_valid = photo_transfer_snapshot.valid;
+      if (feedback.photo_transfer_valid) {
+        feedback.pe13_photo1_triggered =
+            AutoCtrlFeed_ReadPhotoTransferBit(PHOTO_TRANSFER_BIT_PHOTO1_FRONT);
+        feedback.pe9_photo2_triggered =
+            AutoCtrlFeed_ReadPhotoTransferBit(
+                PHOTO_TRANSFER_BIT_PHOTO2_THIRD_LAST);
+        feedback.pa2_photo3_triggered =
+            AutoCtrlFeed_ReadPhotoTransferBit(
+                PHOTO_TRANSFER_BIT_PHOTO3_SECOND_LAST);
+        feedback.pa0_photo4_triggered =
+            AutoCtrlFeed_ReadPhotoTransferBit(PHOTO_TRANSFER_BIT_PHOTO4_LAST);
+      }
         AutoCtrlFeed_UpdatePhotoTransferDebugFast(&feedback);
       float pole_front_lift_rad = 0.0f;
       float pole_rear_lift_rad = 0.0f;

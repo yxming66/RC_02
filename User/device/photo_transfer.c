@@ -69,8 +69,10 @@ void PhotoTransfer_Update(uint32_t now_ms) {
       const uint16_t raw_mask = PhotoTransfer_ParseMask(msg.data);
       if (!photo_transfer_received ||
           msg.timestamp != photo_transfer_snapshot.last_update_ms ||
-          raw_mask != photo_transfer_snapshot.raw_mask ||
-          !photo_transfer_snapshot.valid) {
+          raw_mask != photo_transfer_snapshot.raw_mask) {
+        /* BSP_CAN_GetLatestMessage may keep returning the cached last frame.
+         * Do not treat that stale frame as a reconnect after timeout; doing
+         * so makes rx_count/timeout_count increase on every task cycle. */
         photo_transfer_snapshot.raw_mask = raw_mask;
         photo_transfer_snapshot.valid = true;
         photo_transfer_snapshot.last_update_ms = msg.timestamp;

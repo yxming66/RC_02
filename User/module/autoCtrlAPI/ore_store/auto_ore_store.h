@@ -163,6 +163,7 @@ typedef struct {
   bool pole_front_at_target;
   bool pole_rear_at_target;
   bool arm_photo_has_ore;
+  bool photo_transfer_valid;
   bool pe13_photo1_triggered;
   bool pe9_photo2_triggered;
   bool pa2_photo3_triggered;
@@ -182,6 +183,7 @@ typedef struct {
   uint8_t release_lift_ir_cmd;
   uint32_t release_lift_ir_abort_count;
   float arm_joint1_rad;
+  float arm_joint1_velocity_rad_s;
   float arm_joint2_rad;
   float pole_front_lift_rad;
   float pole_rear_lift_rad;
@@ -220,6 +222,8 @@ typedef struct {
 typedef struct {
   float joint1_max_vel_rad_s;
   float joint2_max_vel_rad_s;
+  float joint1_max_accel_rad_s2;
+  float joint2_max_accel_rad_s2;
 } AutoOre_ArmSpeedLimit_t;
 
 typedef struct {
@@ -270,6 +274,8 @@ typedef struct {
   AutoOre_TimingParam_t timing;
   uint32_t default_step_timeout_ms;
   float arm_arrive_threshold_rad;
+  float arm_arrive_velocity_threshold_rad_s;
+  uint32_t pick_arm_arrive_stable_ms;
   float ore_store_arrive_threshold_rad;
   float pole_arrive_threshold_rad;
   float prealign_yaw_tolerance_rad;
@@ -303,12 +309,14 @@ typedef struct {
   uint8_t step_phase;
   uint32_t step_enter_time_ms;
   uint32_t step_condition_time_ms;
+  uint32_t arm_target_stable_since_ms;
   bool step_entered;
   bool step_condition_met;
   bool arm_cmd_valid;
   bool ore_store_cmd_valid;
   bool pole_cmd_valid;
   bool chassis_cmd_valid;
+  uint8_t reserved_resource_mask;
   ArmSimple_CMD_t arm_cmd;
   OreStore_CMD_t ore_store_cmd;
   Pole_CMD_t pole_cmd;
@@ -420,6 +428,7 @@ uint8_t AutoOre_GetFailedSegmentMask(const AutoOre_t *ctrl);
 uint8_t AutoOre_GetOwnedResourceMask(const AutoOre_t *ctrl);
 bool AutoOre_ReadOutputSnapshot(const AutoOre_t *ctrl,
                                 AutoOre_OutputSnapshot_t *snapshot);
+void AutoOre_SetReservedResourceMask(AutoOre_t *ctrl, uint8_t resource_mask);
 /* Compatibility alias. New code must use AutoOre_GetOwnedResourceMask(). */
 uint8_t AutoOre_GetActiveResourceMask(const AutoOre_t *ctrl);
 AutoOre_Position_t AutoOre_GetActivePosition(const AutoOre_t *ctrl);

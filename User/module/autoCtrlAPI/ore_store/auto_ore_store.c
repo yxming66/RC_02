@@ -92,6 +92,8 @@ static bool AutoOre_CommandReleaseOreStoreHold(
   AutoOre_t *ctrl, OreStore_TransformPoint_t transform,
   bool cylinder_closed);
 static bool AutoOre_WaitArmCommandTarget(AutoOre_t *ctrl, uint32_t now_ms);
+static bool AutoOre_WaitPickArmCommandTargetStable(AutoOre_t *ctrl,
+                                                    uint32_t now_ms);
 static bool AutoOre_CheckTimeout(AutoOre_t *ctrl, uint32_t now_ms);
 static void AutoOre_FailInvalidParam(AutoOre_t *ctrl);
 
@@ -172,6 +174,22 @@ static void AutoOre_ResetPhoto1Latch(AutoOre_t *ctrl) {
   ctrl->fused_photo1_released_since_ms = 0u;
 }
 
+static void AutoOre_PausePhoto1Latch(AutoOre_t *ctrl, uint32_t now_ms) {
+  if (ctrl == 0) {
+    return;
+  }
+  if (!ctrl->fused_photo1_stable_trigger_seen) {
+    if (ctrl->fused_photo1_triggered_since_ms != 0u) {
+      ctrl->fused_photo1_triggered_since_ms = now_ms;
+    }
+    return;
+  }
+  if (!ctrl->fused_photo1_stable_release_latched &&
+      ctrl->fused_photo1_released_since_ms != 0u) {
+    ctrl->fused_photo1_released_since_ms = now_ms;
+  }
+}
+
 static void AutoOre_EnterStep(AutoOre_t *ctrl, uint32_t now_ms) {
   if (!ctrl->step_entered) {
     ctrl->step_entered = true;
@@ -184,6 +202,7 @@ static void AutoOre_NextStep(AutoOre_t *ctrl) {
   ctrl->step_phase = 0u;
   ctrl->step_entered = false;
   ctrl->step_condition_met = false;
+  ctrl->arm_target_stable_since_ms = 0u;
   ctrl->distance_latch_valid = false;
   ctrl->wheel_delta_rad = 0.0f;
   ctrl->target_wheel_delta_rad = 0.0f;
@@ -194,6 +213,7 @@ static void AutoOre_JumpToStep(AutoOre_t *ctrl, uint8_t step_index) {
   ctrl->step_phase = 0u;
   ctrl->step_entered = false;
   ctrl->step_condition_met = false;
+  ctrl->arm_target_stable_since_ms = 0u;
   ctrl->distance_latch_valid = false;
   ctrl->wheel_delta_rad = 0.0f;
   ctrl->target_wheel_delta_rad = 0.0f;
@@ -797,6 +817,35 @@ static bool AutoOre_WaitArmCommandTarget(AutoOre_t *ctrl, uint32_t now_ms) {
   return AutoOre_ArmCommandAtTarget(ctrl);
 }
 
+static bool AutoOre_WaitPickArmCommandTargetStable(AutoOre_t *ctrl,
+                                                    uint32_t now_ms) {
+  if (!AutoOre_WaitArmCommandTarget(ctrl, now_ms)) {
+    ctrl->arm_target_stable_since_ms = 0u;
+    return false;
+  }
+
+  const float velocity_threshold =
+      (ctrl->param.arm_arrive_velocity_threshold_rad_s > 0.0f)
+          ? ctrl->param.arm_arrive_velocity_threshold_rad_s
+          : 0.25f;
+  if (!isfinite(ctrl->feedback.arm_joint1_velocity_rad_s) ||
+      AutoOre_AbsFloat(ctrl->feedback.arm_joint1_velocity_rad_s) >
+      velocity_threshold) {
+    ctrl->arm_target_stable_since_ms = 0u;
+    return false;
+  }
+
+  const uint32_t stable_ms =
+      (ctrl->param.pick_arm_arrive_stable_ms > 0u)
+          ? ctrl->param.pick_arm_arrive_stable_ms
+          : 100u;
+  if (ctrl->arm_target_stable_since_ms == 0u) {
+    ctrl->arm_target_stable_since_ms = now_ms;
+    return stable_ms == 0u;
+  }
+  return (now_ms - ctrl->arm_target_stable_since_ms) >= stable_ms;
+}
+
 static bool AutoOre_WaitOreStoreCommandTarget(AutoOre_t *ctrl,
                                               uint32_t now_ms) {
   if (!ctrl->step_condition_met) {
@@ -852,7 +901,7 @@ static uint8_t AutoOre_BuildOwnedResourceMask(const AutoOre_t *ctrl) {
     return AUTO_ORE_RESOURCE_NONE;
   }
 
-  uint8_t mask = AUTO_ORE_RESOURCE_NONE;
+  uint8_t mask = ctrl->reserved_resource_mask;
   if (ctrl->chassis_cmd_valid) {
     mask |= AUTO_ORE_RESOURCE_CHASSIS;
   }
@@ -882,17 +931,23 @@ static void AutoOre_PublishOutputSnapshot(AutoOre_t *ctrl) {
   memset(snapshot, 0, sizeof(*snapshot));
   snapshot->generation = generation;
   snapshot->owned_resource_mask = AutoOre_BuildOwnedResourceMask(ctrl);
-  snapshot->valid_resource_mask = snapshot->owned_resource_mask;
+  snapshot->valid_resource_mask = AUTO_ORE_RESOURCE_NONE;
   if (ctrl->arm_cmd_valid) {
+    snapshot->valid_resource_mask |=
+        AUTO_ORE_RESOURCE_ARM | AUTO_ORE_RESOURCE_SHARED_VALVE;
     snapshot->arm_cmd = ctrl->arm_cmd;
   }
   if (ctrl->ore_store_cmd_valid) {
+    snapshot->valid_resource_mask |=
+        AUTO_ORE_RESOURCE_STORE | AUTO_ORE_RESOURCE_SHARED_VALVE;
     snapshot->ore_store_cmd = ctrl->ore_store_cmd;
   }
   if (ctrl->pole_cmd_valid) {
+    snapshot->valid_resource_mask |= AUTO_ORE_RESOURCE_POLE;
     snapshot->pole_cmd = ctrl->pole_cmd;
   }
   if (ctrl->chassis_cmd_valid) {
+    snapshot->valid_resource_mask |= AUTO_ORE_RESOURCE_CHASSIS;
     snapshot->chassis_cmd = ctrl->chassis_cmd;
   }
 
@@ -907,9 +962,14 @@ static bool AutoOre_CommandArm(AutoOre_t *ctrl, ArmSimple_BehaviorPoint_t point,
     (speed != 0) ? speed->joint1_max_vel_rad_s : 0.0f;
   const float joint2_max_vel_rad_s =
     (speed != 0) ? speed->joint2_max_vel_rad_s : 0.0f;
+  const float joint1_max_accel_rad_s2 =
+    (speed != 0) ? speed->joint1_max_accel_rad_s2 : 0.0f;
+  const float joint2_max_accel_rad_s2 =
+    (speed != 0) ? speed->joint2_max_accel_rad_s2 : 0.0f;
   ctrl->arm_cmd_valid = ArmSimple_MakeBehaviorCommandWithSpeed(
     ctrl->param.arm_param, point, suction, joint1_max_vel_rad_s,
-    joint2_max_vel_rad_s, &ctrl->arm_cmd);
+    joint2_max_vel_rad_s, joint1_max_accel_rad_s2,
+    joint2_max_accel_rad_s2, &ctrl->arm_cmd);
   return ctrl->arm_cmd_valid;
 }
 
@@ -2195,9 +2255,16 @@ static bool AutoOre_FusedTemplateStartsAtHeldPoleTarget(
          template_id == AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD;
 }
 
-static bool AutoOre_FusedStepStartFrontPhotoReached(AutoOre_t *ctrl,
-                                                     uint32_t now_ms) {
+/* photo1 belongs to the fused pick handoff: it confirms that the ore has
+ * cleared the arm-side sensor and the arm may lift.  It is not a descend
+ * stair-edge input. */
+static bool AutoOre_FusedArmLiftPhotoReached(AutoOre_t *ctrl,
+                                             uint32_t now_ms) {
   if (ctrl == 0) {
+    return false;
+  }
+  if (!ctrl->feedback.photo_transfer_valid) {
+    AutoOre_PausePhoto1Latch(ctrl, now_ms);
     return false;
   }
 
@@ -2218,8 +2285,32 @@ static bool AutoOre_FusedStepStartFrontPhotoReached(AutoOre_t *ctrl,
   }
 }
 
+/* The optional pre-template shortcut is only valid for head-ascend.  A head-
+ * descend template must enter its normal flow and detect the first stair edge
+ * from photo2 (pe9) inside AutoCtrlTemplate_DescendFirstPhotoFallingStable(). */
+static bool AutoOre_FusedStepStartShortcutReached(const AutoOre_t *ctrl) {
+  if (ctrl == 0 || !ctrl->feedback.photo_transfer_valid) {
+    return false;
+  }
+
+  switch (AutoOre_FusedStepTemplateId(ctrl)) {
+    case AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD:
+    case AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD:
+      return ctrl->feedback.pe13_photo1_triggered;
+    case AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD:
+    case AUTO_CTRL_TEMPLATE_DESCEND_400_HEAD:
+    case AUTO_CTRL_TEMPLATE_NONE:
+    default:
+      return false;
+  }
+}
+
 static bool AutoOre_PickPhoto1LiftReached(AutoOre_t *ctrl, uint32_t now_ms) {
   if (ctrl == 0) {
+    return false;
+  }
+  if (!ctrl->feedback.photo_transfer_valid) {
+    AutoOre_PausePhoto1Latch(ctrl, now_ms);
     return false;
   }
   if (!AutoOre_PickActionUsesPhoto1Falling(ctrl->action)) {
@@ -2236,6 +2327,10 @@ static bool AutoOre_PickPhoto1LiftReached(AutoOre_t *ctrl, uint32_t now_ms) {
 static bool AutoOre_PickStoreRetreatPhotoReached(AutoOre_t *ctrl,
                                                  uint32_t now_ms) {
   if (ctrl == 0) {
+    return false;
+  }
+  if (!ctrl->feedback.photo_transfer_valid) {
+    AutoOre_PausePhoto1Latch(ctrl, now_ms);
     return false;
   }
   if (AutoOre_PickActionUsesPhoto1Falling(ctrl->action)) {
@@ -2634,6 +2729,7 @@ static void AutoOre_RunFusedStore(AutoOre_t *ctrl, uint32_t now_ms) {
 static void AutoOre_CopyFeedbackToStepCtrl(AutoOre_t *ctrl) {
   auto_ctrl_feedback_t step_feedback = {0};
   step_feedback.yaw_auto_rad = ctrl->feedback.yaw_auto_rad;
+  step_feedback.photo_transfer_valid = ctrl->feedback.photo_transfer_valid;
   step_feedback.pe13_photo1_triggered = ctrl->feedback.pe13_photo1_triggered;
   step_feedback.pe9_photo2_triggered = ctrl->feedback.pe9_photo2_triggered;
   step_feedback.pa2_photo3_triggered = ctrl->feedback.pa2_photo3_triggered;
@@ -2835,7 +2931,7 @@ static void AutoOre_RunFusedStepSide(AutoOre_t *ctrl, uint32_t now_ms,
 
       const bool start_pole_ready = AutoOre_FusedStepStartPoleReady(ctrl);
       if (start_pole_ready &&
-          AutoOre_FusedStepStartFrontPhotoReached(ctrl, now_ms)) {
+          AutoOre_FusedStepStartShortcutReached(ctrl)) {
         AutoOre_CommandChassisHold(ctrl);
         ctrl->fused_step_template_start_step_index =
             AutoOre_FusedFastPickTemplateStartStepIndex(ctrl);
@@ -2967,7 +3063,7 @@ static void AutoOre_RunPickStoreFused(AutoOre_t *ctrl, uint32_t now_ms) {
         AutoOre_FailPickInvalidParam(ctrl);
         return;
       }
-      if (AutoOre_WaitArmCommandTarget(ctrl, now_ms)) {
+      if (AutoOre_WaitPickArmCommandTargetStable(ctrl, now_ms)) {
         AutoOre_NextStep(ctrl);
       } else {
         (void)AutoOre_CheckTimeoutWithFailure(
@@ -3075,7 +3171,7 @@ static void AutoOre_RunStepPickStoreFused(AutoOre_t *ctrl, uint32_t now_ms) {
         AutoOre_FailPickInvalidParam(ctrl);
         return;
       }
-      if (AutoOre_WaitArmCommandTarget(ctrl, now_ms)) {
+      if (AutoOre_WaitPickArmCommandTargetStable(ctrl, now_ms)) {
         AutoOre_NextStep(ctrl);
       } else {
         (void)AutoOre_CheckTimeoutWithFailure(
@@ -3095,8 +3191,12 @@ static void AutoOre_RunStepPickStoreFused(AutoOre_t *ctrl, uint32_t now_ms) {
                                         ctrl->feedback.yaw_rate_cmd_rad_s);
       if (AutoOre_FusedFastPickOnFrontPhotoEnabled(ctrl, fused)) {
         const bool start_pole_ready = AutoOre_FusedStepStartPoleReady(ctrl);
-        if (start_pole_ready &&
-            AutoOre_FusedStepStartFrontPhotoReached(ctrl, now_ms)) {
+        /* Latch the falling edge even before Pole reports ready.  The old
+         * short-circuit expression skipped sampling during that interval and
+         * made a short photo1 pulse intermittently disappear. */
+        const bool arm_lift_photo_reached =
+            AutoOre_FusedArmLiftPhotoReached(ctrl, now_ms);
+        if (start_pole_ready && arm_lift_photo_reached) {
           if (!AutoOre_WaitConditionThenDelay(
                   ctrl, now_ms, true,
               AutoOre_FusedPhoto1LiftDelayMs(ctrl))) {
@@ -3197,7 +3297,7 @@ static void AutoOre_RunPickOre(AutoOre_t *ctrl, uint32_t now_ms) {
         AutoOre_FailInvalidParam(ctrl);
         return;
       }
-      if (AutoOre_WaitArmCommandTarget(ctrl, now_ms)) {
+      if (AutoOre_WaitPickArmCommandTargetStable(ctrl, now_ms)) {
         AutoOre_NextStep(ctrl);
       } else {
         (void)AutoOre_CheckTimeout(ctrl, now_ms);
@@ -3275,7 +3375,7 @@ static void AutoOre_RunRecoverStore(AutoOre_t *ctrl, uint32_t now_ms) {
         AutoOre_FailPickInvalidParam(ctrl);
         return;
       }
-      if (AutoOre_WaitArmCommandTarget(ctrl, now_ms)) {
+      if (AutoOre_WaitPickArmCommandTargetStable(ctrl, now_ms)) {
         AutoOre_NextStep(ctrl);
       } else {
         (void)AutoOre_CheckTimeoutWithFailure(
@@ -3433,6 +3533,7 @@ static bool AutoOre_StartResolved(AutoOre_t *ctrl, AutoOre_Action_t action,
   ctrl->step_entered = false;
   ctrl->step_condition_met = false;
   ctrl->step_condition_time_ms = now_ms;
+  ctrl->arm_target_stable_since_ms = 0u;
   ctrl->step_enter_time_ms = now_ms;
   if (AutoOre_ActionIsReleaseStep2(action)) {
     ctrl->step_index = 2u;
@@ -3950,6 +4051,14 @@ uint8_t AutoOre_GetOwnedResourceMask(const AutoOre_t *ctrl) {
     return AUTO_ORE_RESOURCE_NONE;
   }
   return snapshot.owned_resource_mask;
+}
+
+void AutoOre_SetReservedResourceMask(AutoOre_t *ctrl, uint8_t resource_mask) {
+  if (ctrl == 0) {
+    return;
+  }
+  ctrl->reserved_resource_mask = resource_mask;
+  AutoOre_PublishOutputSnapshot(ctrl);
 }
 
 uint8_t AutoOre_GetActiveResourceMask(const AutoOre_t *ctrl) {
