@@ -79,7 +79,8 @@
 #define RC_CHASSIS_WZ_SCALE (6.0f)
 #endif
 
-#define RC_POLE_MANUAL_INPUT_SCALE (1.5f)
+#define RC_POLE_MANUAL_INPUT_SCALE (1.0f)
+#define RC_POLE_MANUAL_INPUT_DEADBAND (0.05f)
 #define RC_POLE_CH_RES_DEADBAND (1.0e-4f)
 #undef RC_POLE_CH_RES_ENABLE
 #define RC_POLE_CH_RES_ENABLE (0u)
@@ -629,8 +630,12 @@ static void Rc_SetOreStoreActiveManual(void) {
 
 static void Rc_SetPoleManual(float left, float right) {
   pole_cmd.mode = POLE_MODE_ACTIVE;
-  pole_cmd.lift[0] = left * RC_POLE_MANUAL_INPUT_SCALE;
-  pole_cmd.lift[1] = right * RC_POLE_MANUAL_INPUT_SCALE;
+  pole_cmd.lift[0] =
+      Rc_ApplyDeadband(left, RC_POLE_MANUAL_INPUT_DEADBAND) *
+      RC_POLE_MANUAL_INPUT_SCALE;
+  pole_cmd.lift[1] =
+      Rc_ApplyDeadband(right, RC_POLE_MANUAL_INPUT_DEADBAND) *
+      RC_POLE_MANUAL_INPUT_SCALE;
   pole_cmd.auto_target_enable[0] = false;
   pole_cmd.auto_target_enable[1] = false;
   pole_cmd.auto_target_lift[0] = 0.0f;

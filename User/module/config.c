@@ -190,8 +190,9 @@ Config_RobotParam_t robot_config = {
             .max_current = 0.60f,
             .support_total_travel = 10.8f,//26.7//27.3
             .support_min_target_lift = 0.1f,
-            .support_lift_speed = 0.0f,
-            .support_lift_accel = 0.0f,
+            /* M1 手动遥控也经过独立梯形规划，避免位置目标直接跳变。 */
+            .support_lift_speed = 1.0f,
+            .support_lift_accel = 2.0f,
             /* 首轮空载测试限制输出轴转速目标，避免参数或方向异常时高速运动。 */
             .support_velocity_target_limit_rpm = 50.0f,
         },
