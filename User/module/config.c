@@ -126,11 +126,11 @@ Config_RobotParam_t robot_config = {
         .pid = {
             .support_pos_pid = {
                 .k = 40.0f,
-                .p = 20.0f,
+                .p = 10.0f,
                 .i = 0.0f,
                 .d = 0.0f,
                 .i_limit = 0.0f,
-                .out_limit = 800.0f,
+                .out_limit = 80.0f,
                 .d_cutoff_freq = -1.0f, 
                 .range = 0.0f,
             },
@@ -144,6 +144,11 @@ Config_RobotParam_t robot_config = {
                 .d_cutoff_freq = -1.0f,
                 .range = 0.0f,
             },
+        },
+        .filter = {
+            .support_vel_feedback_cutoff_hz = 50.0f,
+            .support_output_cutoff_hz = 0.0f,
+            .support_vel_feedback_spike_rad_s = 0.0f,
         },
         .preset = {
             /* 200mm 上台阶四杆全伸位；一键取矿 PICK_POS_200 也使用该撑杆高度。 */
@@ -177,15 +182,18 @@ Config_RobotParam_t robot_config = {
             .step_400_descend_all_retract = {0.06f, 0.06f},
             /* 一键放矿撑杆目标位；与 PC 放矿期间持续下发的 10.5 rad 保持一致。 */
             .ore_release_target = {10.5f, 10.5f},
-            .ore_release_speed = 8.0f,
+            .ore_release_speed = 12.0f,
             .ore_release_accel = 0.0f,
         },
         .limit = {
-            .max_current = 1.0f,
+            /* 首轮方向验证限制为 25% 输出；确认四杆方向与反馈正常后再逐步增大。 */
+            .max_current = 0.25f,
             .support_total_travel = 10.8f,//26.7//27.3
             .support_min_target_lift = 0.1f,
             .support_lift_speed = 0.0f,
             .support_lift_accel = 0.0f,
+            /* 首轮空载测试限制输出轴转速目标，避免参数或方向异常时高速运动。 */
+            .support_velocity_target_limit_rpm = 50.0f,
         },
     },
     /* 模块参数：矿仓 ore_store_param，矿仓平台电机、回零、预设位置和气缸。 */
@@ -380,10 +388,10 @@ Config_RobotParam_t robot_config = {
             .store_place = {.joint1_max_vel_rad_s = 2.5f, .joint2_max_vel_rad_s = 4.5f},
             .store_standby = {.joint1_max_vel_rad_s = 2.5f, .joint2_max_vel_rad_s = 4.5f},
             /* release_*：一键放矿流程，wait=放矿前等待位，assist=放矿辅助进位，place=放矿位，standby=放矿后回待机位。 */
-            .release_wait = {.joint1_max_vel_rad_s = 3.0f, .joint2_max_vel_rad_s = 2.0f},
-            .release_assist = {.joint1_max_vel_rad_s = 3.0f, .joint2_max_vel_rad_s = 2.0f},
-            .release_place = {.joint1_max_vel_rad_s = 3.0f, .joint2_max_vel_rad_s = 2.0f},
-            .release_standby = {.joint1_max_vel_rad_s = 3.0f, .joint2_max_vel_rad_s = 2.0f},
+            .release_wait = {.joint1_max_vel_rad_s = 4.5f, .joint2_max_vel_rad_s = 4.0f},
+            .release_assist = {.joint1_max_vel_rad_s = 4.5f, .joint2_max_vel_rad_s = 4.0f},
+            .release_place = {.joint1_max_vel_rad_s = 4.5f, .joint2_max_vel_rad_s = 4.0f},
+            .release_standby = {.joint1_max_vel_rad_s = 4.5f, .joint2_max_vel_rad_s = 4.0f},
             /* chamber_*：一键上膛流程，wait=对接等待位，place=取/交接位，standby=上膛后回待机位。 */
             .chamber_wait = {.joint1_max_vel_rad_s = 8.0f, .joint2_max_vel_rad_s = 4.0f},
             .chamber_place = {.joint1_max_vel_rad_s = 8.0f, .joint2_max_vel_rad_s = 6.0f},
@@ -402,11 +410,11 @@ Config_RobotParam_t robot_config = {
             .store_arm_suction_off_ms = 1200u,
             .store_cylinder_open_ms = 120u, 
             /* 放矿：放矿前等待、Pole 到位后抬升观测超时、抬升确认后稳定等待、到放矿位后短暂停稳、吸盘关闭后矿石脱离等待。 */
-            .release_wait_ms = 400u,
+            .release_wait_ms = 150u,
             .release_lift_detect_timeout_ms = 20000u,
             .release_lift_detect_settle_ms = 500u,//三层矿触发观测阈值延时放矿
             .release_arm_settle_ms = 10u,
-            .release_suction_off_ms = 400u,
+            .release_suction_off_ms = 200u,
             /* 上膛：低位矿夹紧等待、arm 到交接位稳定等待、气缸打开释放等待。 */
             .chamber_low_clamp_ms = 400u,
             .chamber_arm_settle_ms = 400u,
@@ -608,12 +616,12 @@ Config_RobotParam_t robot_config = {
             .final_move_ms = 1200u,              /* 收尾离开台阶角度门控兜底超时，单位 ms。 */
             .final_photo_sprint_ms = 50u,       /* 末尾光电触发后继续冲刺时间，单位 ms。 */
             .final_move_wheel_delta_rad = 0.0f, /* 编码器门控的收尾离开轮转角阈值，单位 rad；>0 优先按角度切步，<=0 使用 final_move_ms。 */
-            .pole_all_extend_speed = 10.0f,     /* 四杆全伸目标跟随速度，单位 rad/s。 */
+            .pole_all_extend_speed = 1.0f,      /* 首轮方向验证速度，单位 rad/s。 */
             .pole_front_extend_speed = 15.0f,   /* 前杆伸出目标跟随速度，单位 rad/s。 */
             .pole_front_retract_speed = 30.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
             .pole_rear_extend_speed = 20.0f,    /* 后杆伸出目标跟随速度，单位 rad/s。 */
             .pole_rear_retract_speed = 0.0f,    /* 后杆回收目标跟随速度，单位 rad/s。 */
-            .pole_all_extend_accel = 20.0f,
+            .pole_all_extend_accel = 2.0f,      /* 首轮方向验证加速度，单位 rad/s^2。 */
             .pole_all_retract_speed = 0.0f,
             .pole_all_retract_accel = 0.0f,
             .pole_front_extend_accel = 30.0f,
