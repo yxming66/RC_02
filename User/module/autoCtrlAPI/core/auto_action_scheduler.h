@@ -55,6 +55,7 @@ typedef enum {
 
 typedef struct {
   bool allocated;
+  bool executor_started;
   uint16_t request_id;
   uint16_t job_id;
   uint8_t action;
@@ -102,7 +103,7 @@ AutoActionJob_t *AutoActionScheduler_FindByRequestId(
     AutoActionScheduler_t *scheduler, uint16_t request_id);
 AutoActionJob_t *AutoActionScheduler_NextStartable(
     AutoActionScheduler_t *scheduler, uint8_t externally_owned_resources,
-    uint32_t now_ms);
+    uint8_t unavailable_executor_mask, uint32_t now_ms);
 void AutoActionScheduler_MarkStarted(AutoActionScheduler_t *scheduler,
                                      AutoActionJob_t *job,
                                      uint32_t now_ms);

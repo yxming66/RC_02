@@ -303,6 +303,16 @@ void OnAutoActionV2(const PC_AutoActionV2CMD_t &cmd) {
   TouchOnline(PC_CMD_AUTO_ACTION_V2);
 }
 
+void OnAutoActionV3(const PC_AutoActionV3CMD_t &cmd) {
+  s_auto_action_v3_cmd = cmd;
+  s_auto_action_v3_pending = true;
+  s_state.cmd.abstract_position.enable_mask &=
+      static_cast<uint8_t>(~(PC_ABSTRACT_MODULE_POLE |
+                             PC_ABSTRACT_MODULE_ARM_SIMPLE));
+  MarkRxFrame(PC_CMD_AUTO_ACTION_V3, sizeof(cmd), MRLINK_OK);
+  TouchOnline(PC_CMD_AUTO_ACTION_V3);
+}
+
 void OnCameraYaw(const wire::CameraYawCmd &cmd) {
   s_state.cmd.camera_yaw.mode = cmd.mode;
   s_state.cmd.camera_yaw.target_yaw_rad = cmd.target_yaw_rad;
@@ -399,6 +409,7 @@ bool RegisterHandlers() {
              MRLINK_OK &&
          s_bus.Subscribe<wire::AutoActionCmd>(OnAutoAction) == MRLINK_OK &&
          s_bus.Subscribe<PC_AutoActionV2CMD_t>(OnAutoActionV2) == MRLINK_OK &&
+         s_bus.Subscribe<PC_AutoActionV3CMD_t>(OnAutoActionV3) == MRLINK_OK &&
          s_bus.SubscribeLatest<wire::CameraYawCmd>(OnCameraYaw) == MRLINK_OK &&
          s_bus.SubscribeLatest<PC_AbstractPositionCMD_t>(OnAbstractPosition) ==
              MRLINK_OK &&
@@ -839,6 +850,10 @@ extern "C" const PC_AutoActionV2CMD_t *MrlinkPc_GetAutoActionV2CMD(void) {
   return s_auto_action_v2_pending ? &s_auto_action_v2_cmd : nullptr;
 }
 
+extern "C" const PC_AutoActionV3CMD_t *MrlinkPc_GetAutoActionV3CMD(void) {
+  return s_auto_action_v3_pending ? &s_auto_action_v3_cmd : nullptr;
+}
+
 extern "C" const PC_StepCMD_t *MrlinkPc_GetStepCMD(void) {
   return &s_state.cmd.step;
 }
@@ -910,6 +925,18 @@ extern "C" bool MrlinkPc_PublishFeedback(uint8_t topic,
       const auto *typed =
           static_cast<const PC_AutoActionV2Feedback_t *>(feedback);
       s_auto_action_v2_feedback = *typed;
+      return s_bus.StoreLatest(*typed);
+    }
+    case PC_FEEDBACK_AUTO_ACTION_V3: {
+      const auto *typed =
+          static_cast<const PC_AutoActionV3Feedback_t *>(feedback);
+      s_auto_action_v3_feedback = *typed;
+      return s_bus.StoreLatest(*typed);
+    }
+    case PC_FEEDBACK_AUTO_ACTION_V3_REJECT: {
+      const auto *typed =
+          static_cast<const PC_AutoActionV3RejectFeedback_t *>(feedback);
+      s_auto_action_v3_reject_feedback = *typed;
       return s_bus.StoreLatest(*typed);
     }
     case PC_FEEDBACK_CAMERA_YAW: {
@@ -1054,6 +1081,10 @@ extern "C" void MrlinkPc_ClearAutoActionV2Command(void) {
   s_auto_action_v2_pending = false;
 }
 
+extern "C" void MrlinkPc_ClearAutoActionV3Command(void) {
+  s_auto_action_v3_pending = false;
+}
+
 extern "C" void MrlinkPc_ClearIrOreAckCommand(void) {
   s_ir_ore_ack_pending = false;
 }
@@ -1093,6 +1124,13 @@ extern "C" uint16_t MrlinkPc_BuildFeedbackFrame(uint8_t cmd, uint8_t *tx_buf,
     }
     case PC_FEEDBACK_AUTO_ACTION_V2: {
       return BuildLatestOrFallback(s_auto_action_v2_feedback, tx_buf, buf_size);
+    }
+    case PC_FEEDBACK_AUTO_ACTION_V3: {
+      return BuildLatestOrFallback(s_auto_action_v3_feedback, tx_buf, buf_size);
+    }
+    case PC_FEEDBACK_AUTO_ACTION_V3_REJECT: {
+      return BuildLatestOrFallback(s_auto_action_v3_reject_feedback, tx_buf,
+                                   buf_size);
     }
     case PC_FEEDBACK_CAMERA_YAW: {
       return BuildLatestOrFallback(s_state.feedback.camera_yaw, tx_buf,

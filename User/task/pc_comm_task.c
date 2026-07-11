@@ -43,6 +43,8 @@ static const uint8_t s_feedback_cmds[] = {
     PC_FEEDBACK_HEARTBEAT,
     PC_FEEDBACK_AUTO_ACTION,
     PC_FEEDBACK_AUTO_ACTION_V2,
+    PC_FEEDBACK_AUTO_ACTION_V3,
+    PC_FEEDBACK_AUTO_ACTION_V3_REJECT,
     PC_FEEDBACK_CHASSIS,
     PC_FEEDBACK_POLE,
     PC_FEEDBACK_ARM_SIMPLE,
@@ -220,6 +222,21 @@ static bool PcComm_ProcessAutoActionV2Command(void) {
         cmd->gate_id, cmd->flags);
     if (submitted) {
         MrlinkPc_ClearAutoActionV2Command();
+    }
+    return true;
+}
+
+static bool PcComm_ProcessAutoActionV3Command(void) {
+    const PC_AutoActionV3CMD_t *cmd = MrlinkPc_GetAutoActionV3CMD();
+    if (cmd == NULL) {
+        return false;
+    }
+
+    const bool submitted = Task_AutoActionSubmitV3(
+        cmd->request_id, cmd->job_id, cmd->operation, cmd->action,
+        cmd->gate_id, cmd->flags);
+    if (submitted) {
+        MrlinkPc_ClearAutoActionV3Command();
     }
     return true;
 }
@@ -764,6 +781,7 @@ void Task_PcCommStep(void) {
 
     MrlinkPc_CommProcess(now);
     (void)PcComm_ProcessAutoActionV2Command();
+    (void)PcComm_ProcessAutoActionV3Command();
     PcComm_ProcessIrOreAckCommand(now);
     PcComm_UpdateCameraYawCommand(now);
 

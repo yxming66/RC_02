@@ -167,7 +167,7 @@ bool AutoActionScheduler_Submit(AutoActionScheduler_t *scheduler,
 
 AutoActionJob_t *AutoActionScheduler_NextStartable(
     AutoActionScheduler_t *scheduler, uint8_t externally_owned_resources,
-    uint32_t now_ms) {
+    uint8_t unavailable_executor_mask, uint32_t now_ms) {
   (void)now_ms;
   if (scheduler == 0) {
     return 0;
@@ -179,6 +179,12 @@ AutoActionJob_t *AutoActionScheduler_NextStartable(
     if (!job->allocated ||
         (job->state != AUTO_ACTION_JOB_QUEUED &&
          job->state != AUTO_ACTION_JOB_WAIT_RESOURCE)) {
+      continue;
+    }
+    if ((unavailable_executor_mask & (uint8_t)(1u << job->executor)) != 0u) {
+      job->waiting_resource_mask = 0u;
+      job->blocked_reason = AUTO_ACTION_BLOCK_EXECUTOR;
+      job->state = AUTO_ACTION_JOB_WAIT_RESOURCE;
       continue;
     }
     const uint8_t conflicts = AutoActionScheduler_Conflicts(

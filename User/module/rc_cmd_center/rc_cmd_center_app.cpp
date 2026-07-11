@@ -1625,9 +1625,7 @@ static RcCommandPlan_t Rc_SelectCommandPlan(RcBehavior_t behavior) {
   if (auto_ctrl_inited && AutoCtrl_IsBusy(&auto_ctrl) &&
       Rc_BehaviorAllowsAutoCtrlOutput(behavior)) {
     g_rc_control_debug.page = Rc_GetAutoCtrlPage(AutoCtrl_GetTemplate(&auto_ctrl));
-    if (auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl) &&
-        AutoOre_HasSplitResult(&auto_ore_ctrl) &&
-        AutoOre_IsStepFinished(&auto_ore_ctrl)) {
+    if (auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl)) {
       g_rc_control_debug.ore_store_active = true;
       g_rc_control_debug.arm_simple_active = true;
       return RC_CMD_PLAN_AUTO_CTRL_WITH_AUTO_ORE_UPPER_OUTPUT;
