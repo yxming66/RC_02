@@ -16,6 +16,7 @@ namespace {
 
 constexpr float kPoleManualLiftDeadband = 1.0e-4f;
 constexpr float kPoleLiftLimitEpsilon = 1.0e-4f;
+constexpr float kPoleManualOffsetRecoverySpeedRadS = 0.5f;
 
 float Pole_PositiveOrZero(float value) {
   return mr::component::math::is_finite_scalar(value) && value > 0.0f
@@ -121,6 +122,24 @@ static void Pole_ResetControllers(Pole_t *c) {
   }
 }
 
+static void Pole_RecoverSideTargetOffset(Pole_t *c, uint8_t side,
+                                         float manual_target_delta) {
+  if (c == NULL || side >= 2u || c->dt <= 0.0f) return;
+
+  /* 校平修正不超过本周期手动目标移动量，避免任一 Pole 目标反向。 */
+  const float recovery_step = fminf(
+      kPoleManualOffsetRecoverySpeedRadS * c->dt,
+      fabsf(manual_target_delta));
+  if (recovery_step <= 0.0f) return;
+
+  const uint8_t start = (side == 0u) ? 0u : 2u;
+  for (uint8_t i = start; i < start + 2u; i++) {
+    c->support_angle.target_offset[i] =
+        mr::component::math::move_towards(
+            c->support_angle.target_offset[i], 0.0f, recovery_step);
+  }
+}
+
 static bool Pole_TemperatureThresholdEnabled(float threshold_c) {
   return isfinite(threshold_c) && threshold_c > 0.0f;
 }
@@ -222,8 +241,30 @@ static void Pole_SyncSideTargetToFeedback(Pole_t *c, uint8_t side) {
 }
 
 static void Pole_SyncTargetsToFeedback(Pole_t *c) {
-  Pole_SyncSideTargetToFeedback(c, 0u);
-  Pole_SyncSideTargetToFeedback(c, 1u);
+  if (c == NULL || c->param == NULL || !c->support_angle.calibrated) {
+    return;
+  }
+
+  float motor_lift[POLE_SUPPORT_MOTOR_NUM] = {0.0f};
+  float lift_sum = 0.0f;
+  for (uint8_t i = 0; i < POLE_SUPPORT_MOTOR_NUM; i++) {
+    motor_lift[i] = mr::component::math::clamp_scalar(
+        Pole_GetSupportAngle(c, i) - c->support_angle.lower[i], 0.0f,
+        c->param->limit.support_total_travel);
+    lift_sum += motor_lift[i];
+  }
+
+  const float common_lift = mr::component::math::clamp_scalar(
+      lift_sum / (float)POLE_SUPPORT_MOTOR_NUM, 0.0f,
+      c->param->limit.support_total_travel);
+  c->support_angle.final_target_lift[0] = common_lift;
+  c->support_angle.final_target_lift[1] = common_lift;
+
+  for (uint8_t i = 0; i < POLE_SUPPORT_MOTOR_NUM; i++) {
+    c->support_angle.tracked_target_lift[i] = motor_lift[i];
+    c->support_angle.target_offset[i] = motor_lift[i] - common_lift;
+    c->support_angle.tracked_target_velocity[i] = 0.0f;
+  }
 }
 
 static int8_t Pole_SetMode(Pole_t *c, Pole_Mode_t mode) {
@@ -335,6 +376,13 @@ int8_t Pole_Control(Pole_t *c, const Pole_CMD_t *c_cmd, uint32_t now) {
   const bool synchronized_manual_cmd =
       !c_cmd->auto_target_enable[0] && !c_cmd->auto_target_enable[1] &&
       fabsf(c_cmd->lift[0] - c_cmd->lift[1]) <= kPoleManualLiftDeadband;
+  const bool synchronized_manual_moving =
+      synchronized_manual_cmd &&
+      fabsf(c_cmd->lift[0]) > kPoleManualLiftDeadband;
+  const bool synchronized_manual_start =
+      synchronized_manual_moving &&
+      !(c->support_angle.manual_target_was_moving[0] &&
+        c->support_angle.manual_target_was_moving[1]);
   const bool synchronized_manual_stop =
       synchronized_manual_cmd &&
       fabsf(c_cmd->lift[0]) <= kPoleManualLiftDeadband &&
@@ -344,7 +392,8 @@ int8_t Pole_Control(Pole_t *c, const Pole_CMD_t *c_cmd, uint32_t now) {
       synchronized_manual_cmd &&
       (c->support_angle.auto_target_was_enabled[0] ||
        c->support_angle.auto_target_was_enabled[1]);
-  if (synchronized_manual_stop || synchronized_manual_from_auto) {
+  if (synchronized_manual_start || synchronized_manual_stop ||
+      synchronized_manual_from_auto) {
     Pole_SyncTargetsToFeedback(c);
     c->support_angle.auto_target_was_enabled[0] = false;
     c->support_angle.auto_target_was_enabled[1] = false;
@@ -359,6 +408,7 @@ int8_t Pole_Control(Pole_t *c, const Pole_CMD_t *c_cmd, uint32_t now) {
     float default_accel = c->param->limit.support_lift_accel;
     float auto_accel = c_cmd->auto_lift_accel[side];
     const bool auto_target_enabled = c_cmd->auto_target_enable[side];
+    float manual_target_delta = 0.0f;
     const bool bypass_target_limit =
         auto_target_enabled && auto_speed == 0.0f && auto_accel == 0.0f;
     float speed_limit =
@@ -389,12 +439,13 @@ int8_t Pole_Control(Pole_t *c, const Pole_CMD_t *c_cmd, uint32_t now) {
         const float manual_speed =
             (auto_speed > 0.0f) ? auto_speed : default_speed;
         if (manual_speed > 0.0f) {
-          c->support_angle.final_target_lift[side] +=
-              c_cmd->lift[side] * manual_speed * c->dt;
+          manual_target_delta = c_cmd->lift[side] * manual_speed * c->dt;
         } else {
-          c->support_angle.final_target_lift[side] +=
-              c_cmd->lift[side] * c->param->limit.support_total_travel * c->dt;
+          manual_target_delta = c_cmd->lift[side] *
+                                c->param->limit.support_total_travel * c->dt;
         }
+        c->support_angle.final_target_lift[side] += manual_target_delta;
+        Pole_RecoverSideTargetOffset(c, side, manual_target_delta);
       }
       c->support_angle.manual_target_was_moving[side] = manual_target_moving;
     }
