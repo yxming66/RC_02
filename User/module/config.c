@@ -186,8 +186,8 @@ Config_RobotParam_t robot_config = {
             .ore_release_accel = 0.0f,
         },
         .limit = {
-            /* 启动扭矩测试 B1：保持低速规划，仅将输出提高到 40%。 */
-            .max_current = 0.40f,
+            /* 启动扭矩测试 B2：保持低速规划，仅将输出提高到 60%。 */
+            .max_current = 0.60f,
             .support_total_travel = 10.8f,//26.7//27.3
             .support_min_target_lift = 0.1f,
             .support_lift_speed = 0.0f,
