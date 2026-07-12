@@ -728,7 +728,7 @@ Config_RobotParam_t robot_config = {
             .rear_retract_move_speed = 0.4f,   /* step1 等待 PA2/photo3 下降沿的慢速 vx，单位 m/s。 */
             .rear_retract_move_ms = 150u,      /* step3 第二次固定快跑持续时间，单位 ms。 */
             .rear_retract_move_wheel_delta_rad = 8.66f, /* step3 第二次固定快跑轮转角阈值，单位 rad；0 表示按时间切步。 */
-            .second_photo_retract_move_speed = 0.5f, /* step7 第二个下降沿后保持全伸离开 vx，单位 m/s。 */
+            .second_photo_retract_move_speed = 0.6f, /* step7 第二个下降沿后保持全伸离开 vx，单位 m/s。 */
             .final_move_speed = 0.0f,          /* step7 离开 vx 的备用值；second_photo_retract_move_speed <= 0 时使用。 */
             .final_move_ms = 100u,              /* step7 保持全伸离开持续时间，单位 ms。 */
 
