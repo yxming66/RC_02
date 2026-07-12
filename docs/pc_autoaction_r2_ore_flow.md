@@ -71,37 +71,13 @@ action, busy, finished, result, failure_mask, segment_mask, reserved = struct.un
 
 ### 1.3 R1/R2 红外对接反馈 `PC_FEEDBACK_IR_DOCK = 0x9A`
 
-payload 长度 28 字节，Python 解包格式：
+payload 长度 3 字节，Python 解包格式：
 
 ```python
-(
-    valid,
-    fresh,
-    dock_complete,
-    zone3_action_locked,
-    release_allowed,
-    release_abort_latched,
-    zone3_action_state,
-    last_dock_complete_cmd,
-    last_zone3_action_cmd,
-    last_release_cmd,
-    last_command,
-    release_abort_count_lsb,
-    age_ms,
-    rx_count,
-    crc_error_count,
-    error_count,
-) = struct.unpack("<12B4I", payload)
+valid, fresh, command = struct.unpack("<BBB", payload)
 ```
 
-其中：
-
-| 字段 | 含义 | PC 用途 |
-|---|---|---|
-| `zone3_action_locked` | 动作 38 成功启动后为 1，命令 4 或 PC 取消后为 0 | 判断本轮三层放矿是否仍锁定 |
-| `release_allowed` | 锁定期间收到命令 3 后，许可在 1000 ms 新鲜期内有效 | 观察动作是否获得放矿许可 |
-| `release_abort_latched` | 保留字段，固定为 0 | 中止统一使用 V3 `CANCEL` |
-| `zone3_action_state` | `0=未知,1=启动锁定,2=结束解锁` | 观察动作 38 的锁死生命周期 |
+`command` 是最近收到的合法红外数据 `1~4`。动作 38 是否运行、结束或取消统一以 V3 Job 反馈为准，不再由 `0x9A` 提供内部锁状态。
 | `fresh` | 红外帧是否新鲜 | 建议仅在 `fresh=1` 时信任红外状态 |
 | `dock_complete` | 对接完成状态 | 取矛头/对接类流程可使用 |
 
@@ -166,10 +142,7 @@ class OreState:
 
 class IrDockState:
     fresh = False
-    zone3_action_locked = False
-    release_allowed = False
-    release_abort_latched = False
-    zone3_action_state = 0
+    command = 0
 ```
 
 每轮收到反馈后更新状态：
@@ -320,7 +293,7 @@ if auto_action_done(auto, 34):
 三层放矿只使用完整动作 `38`，不使用前方光电/SICK 判断，也不再拆分 step1/step2：
 
 1. PC 用 V3 `SUBMIT(action=38)` 创建 Job；动作成功启动时 RC02 自动建立本轮锁。相同 `request_id` 重发保持幂等。
-2. PC 从 Job 反馈和 `0x9A.zone3_action_locked=1` 确认动作已经运行。
+2. PC 从 V3 Job 反馈确认动作已经运行；`0x9A` 仅用于观察最近红外命令。
 3. 动作 38 持续锁定 CHASSIS，并展开 Pole；若矿仍在矿仓则先上膛，然后机械臂到 `WAIT_RELEASE_ORE` 等待放矿位。
 4. 平台、机械臂和 Pole 全部准备完成后，动作无限等待 R1 的新命令 `A5 03`。早到的 `03` 无效，必须在机构就绪后重新发送。
 5. 收到有效 `03` 后执行完整放矿；不检查目标格前方是否有矿。放矿完成后 Arm 回到 `WAIT_RELEASE_ORE`，Job 仍保持 `RUNNING`，底盘继续锁定。
@@ -336,12 +309,12 @@ if need_zone3_release and not zone3_job_submitted:
     submit_v3(action=38, request_id=new_nonzero_request_id())
     zone3_job_submitted = True
 
-if zone3_job_is_running and ir.zone3_action_locked:
+if zone3_job_is_running:
     state = "ZONE3_RUNNING"
 else:
     state = "ZONE3_IDLE"
 
-if not ir.zone3_action_locked:
+if zone3_job_is_terminal:
     zone3_job_submitted = False
 ```
 
@@ -406,13 +379,11 @@ def on_feedback_auto_action(payload):
 
 
 def on_feedback_ir_dock(payload):
-    fields = struct.unpack("<12B4I", payload)
+    valid, fresh, command = struct.unpack("<BBB", payload)
     return {
-        "fresh": bool(fields[1]),
-        "zone3_action_locked": bool(fields[3]),
-        "release_allowed": bool(fields[4]),
-        "release_abort_latched": bool(fields[5]),
-        "zone3_action_state": fields[6],
+        "valid": bool(valid),
+        "fresh": bool(fresh),
+        "command": command,
     }
 
 
@@ -421,7 +392,7 @@ def choose_next_action(ore, auto, ir, flow_state):
         flow_state.zone3_job_submitted = True
         return 38
 
-    if ir["zone3_action_locked"]:
+    if flow_state.zone3_job_submitted:
         return None
 
     if auto["busy"]:

@@ -242,7 +242,7 @@ typedef enum {
     PC_AUTO_ACTION_RELEASE_STEP2 = 35,    /* 放矿 step2：确认目标格后继续释放矿 */
     PC_AUTO_ACTION_RELEASE_LIFT_DETECT_STEP1 = 36, /* 三层放矿 step1：竖直观察目标格并等待抬升检测 */
     PC_AUTO_ACTION_RELEASE_LIFT_DETECT_STEP2 = 37, /* 三层放矿 step2：确认目标格/抬升后继续释放矿 */
-    PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT = 38, /* 三层放矿单事务：WAIT_RELEASE 等 04；06 回等待位；05 回 STANDBY 并结束 */
+    PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT = 38, /* 三层放矿单事务：命令3允许放矿；命令4结束；PC CANCEL中止 */
 } PC_AutoAction_t;
 
 typedef enum {
@@ -594,22 +594,9 @@ typedef struct {
 } PC_IrOreBridgeFeedback_t;
 
 typedef struct {
-    uint8_t valid;                                           /* 是否曾成功解析过 R1/R2 红外对接帧，0=否，1=是 */
-    uint8_t fresh;                                           /* 最近一帧是否仍在 IR_DOCK_ONLINE_TIMEOUT_MS 内，0=过期/未收到，1=新鲜 */
-    uint8_t dock_complete;                                   /* 对接完成指令，0=未完成，1=完成 */
-    uint8_t zone3_action_locked;                             /* 三层放矿动作锁：动作 38 启动锁定、命令 4/取消解锁 */
-    uint8_t release_allowed;                                 /* 命令 3 放矿许可是否仍在新鲜期 */
-    uint8_t release_abort_latched;                           /* 保留，固定为 0；中止改用 AutoAction CANCEL */
-    uint8_t zone3_action_state;                              /* 0=未知，1=已启动锁定，2=已结束解锁 */
-    uint8_t last_dock_complete_cmd;                          /* 是否收到过命令 2 对接完成，0=否，1=是 */
-    uint8_t last_zone3_action_cmd;                           /* 0=无，1=动作 38 已启动，2=命令 4 已结束 */
-    uint8_t last_release_cmd;                                /* 0=等待，1=命令 3 允许；2 保留不用 */
-    uint8_t last_command;                                    /* 最近合法红外命令，取值 1~4 */
-    uint8_t release_abort_count_lsb;                         /* 保留，固定为 0 */
-    uint32_t age_ms;                                         /* 距最近成功解析 R1/R2 红外对接帧的时间，单位 ms；未收到过为 0 */
-    uint32_t rx_count;                                       /* 成功解析 R1/R2 红外对接帧累计次数 */
-    uint32_t crc_error_count;                                /* R1/R2 红外对接帧 CRC 错误累计次数 */
-    uint32_t error_count;                                    /* R1/R2 红外接收/解析错误累计次数 */
+    uint8_t valid;                                           /* 是否曾成功解析过红外命令，0/1 */
+    uint8_t fresh;                                           /* 最近合法命令是否仍在线，0/1 */
+    uint8_t command;                                         /* 最近接收到的合法红外数据，1~4 */
 } PC_IrDockFeedback_t;
 
 typedef enum {

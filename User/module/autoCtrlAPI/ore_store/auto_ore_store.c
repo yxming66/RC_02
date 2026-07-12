@@ -3578,7 +3578,14 @@ static void AutoOre_RunStepPickStoreFused(AutoOre_t *ctrl, uint32_t now_ms) {
   switch (ctrl->step_index) {
     case 0:
       AutoOre_EnterStep(ctrl, now_ms);
-      if (AutoOre_RunPickPrealign(ctrl, now_ms)) {
+      const bool fused_prealign_ready = AutoOre_RunPickPrealign(ctrl, now_ms);
+      /* A fused stair action must not stop the lower mechanism while yaw and
+       * the upper Arm are preparing. Keep approaching and correct yaw in
+       * parallel; the front-photo/unstable-Arm protection in later steps is
+       * the only condition allowed to hold the chassis. */
+      AutoOre_CommandChassisMoveYawRate(ctrl, fused->precontact_vx_mps,
+                                        AutoOre_SelectPrealignWz(ctrl));
+      if (fused_prealign_ready) {
         AutoOre_NextStep(ctrl);
       } else {
         (void)AutoOre_CheckTimeoutWithFailure(

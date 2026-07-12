@@ -358,7 +358,7 @@ payload 为 8 字节，Python pack 格式为 `<HHBBBB`：
 | `0x97` | `PC_FEEDBACK_IR_ORE` | 24 | `<BBBB12BII` | 红外矿种简表 |
 | `0x98` | `PC_FEEDBACK_CAMERA_YAW` | 32 | `<BBBBffffffI` | 云台状态 |
 | `0x99` | `PC_FEEDBACK_IR_ORE_BRIDGE` | 56 | `<BBBBBBBB12B18BxxIIII` | 红外桥接调试 |
-| `0x9A` | `PC_FEEDBACK_IR_DOCK` | 28 | `<12B4I` | R1/R2 红外对接状态与最近命令 |
+| `0x9A` | `PC_FEEDBACK_IR_DOCK` | 3 | `<BBB` | 红外有效、新鲜状态与最近命令 |
 | `0x9B` | `PC_FEEDBACK_SICK_CORRECT` | 20 | `<BBBBffff` | 取矛头 SICK 校正标准值/实时值 |
 | `0x9C` | `PC_FEEDBACK_SICK_FRONT_ORE` | 1 | `<B` | 前 SICK 区域正方形矿检测结果 |
 | `0x9D` | `PC_FEEDBACK_SICK_RAW` | 32 | `<I4f4HHBB` | 4 路 SICK 原始 ADC/距离/有效位 |
@@ -651,26 +651,13 @@ A5 command
 | `3` | 允许放矿 | 仅动作 38 锁定期间刷新放矿许可；本地准备完成后收到的新许可才有效 |
 | `4` | 结束并解除三层矿动作锁 | 解除本轮锁定、清除许可；动作 38 将 Arm 收回 `STANDBY`，到位后结束 |
 
-所有合法命令都会刷新红外在线状态；`command` 不在 `1~4` 时按无效帧统计。对接完成和允许放矿带 1000 ms 新鲜期。新一轮三层放矿流程为 `PC V3 SUBMIT(action=38) -> 3 -> 4`：动作 38 启动时由 RC02 自动建锁，命令 3 允许放矿，命令 4 结束并解锁。需要中止时由 PC 使用 V3 `CANCEL`，旧命令 5/6 不再有效。payload 为 28 字节，Python unpack 格式仍为 `<12B4I`。
+所有合法命令都会刷新红外在线状态；`command` 不在 `1~4` 时按无效帧统计。新一轮三层放矿流程为 `PC V3 SUBMIT(action=38) -> 3 -> 4`：动作 38 启动时由 RC02 自动建锁，命令 3 允许放矿，命令 4 结束并解锁。需要中止时由 PC 使用 V3 `CANCEL`，旧命令 5/6 不再有效。`0x9A` payload 为 3 字节，Python 解包格式为 `<BBB`。
 
 | 偏移 | 类型 | 字段 | 说明 |
 |---:|---|---|---|
 | 0 | u8 | `valid` | 是否曾成功解析过新红外帧，`0/1` |
 | 1 | u8 | `fresh` | 最近一帧是否仍在超时时间内，`0/1` |
-| 2 | u8 | `dock_complete` | 命令 `2` 的对接完成状态是否仍在新鲜期，`0/1` |
-| 3 | u8 | `zone3_action_locked` | 动作 38 启动后为 1，命令 `4` 或 CANCEL 后为 0 |
-| 4 | u8 | `release_allowed` | 命令 `3` 的放矿许可是否仍在新鲜期 |
-| 5 | u8 | `release_abort_latched` | 保留兼容字段，固定为 0；中止使用 V3 CANCEL |
-| 6 | u8 | `zone3_action_state` | `0=未知, 1=已启动锁定, 2=已结束解锁` |
-| 7 | u8 | `last_dock_complete_cmd` | 是否收到过命令 `2`，`0/1` |
-| 8 | u8 | `last_zone3_action_cmd` | `0=无, 1=动作38启动, 2=命令4结束` |
-| 9 | u8 | `last_release_cmd` | `0=等待, 1=命令3允许`；值 2 保留不用 |
-| 10 | u8 | `last_command` | 最近成功解析的原始命令，取值 `1~4` |
-| 11 | u8 | `release_abort_count_lsb` | 保留兼容字段，固定为 0 |
-| 12 | u32 | `age_ms` | 距最近成功解析新红外帧的时间，未收到为 `0` |
-| 16 | u32 | `rx_count` | 成功解析新红外帧累计次数 |
-| 20 | u32 | `crc_error_count` | 简化协议无 CRC，固定为 `0` |
-| 24 | u32 | `error_count` | 红外接收/解析错误累计次数 |
+| 2 | u8 | `command` | 最近成功解析的原始命令，取值 `1~4` |
 
 ### 5.12 状态反馈 `0xA0`
 

@@ -627,24 +627,7 @@ static void PcComm_UpdateIrDockFeedback(uint32_t now_ms) {
     PC_IrDockFeedback_t feedback = {0};
     feedback.valid = (g_ir_dock_debug.protocol_frame_rx_count > 0u) ? 1u : 0u;
     feedback.fresh = IrDock_IsOnline(now_ms) ? 1u : 0u;
-    feedback.dock_complete = IrDock_IsDockCompleteFresh(now_ms) ? 1u : 0u;
-    feedback.zone3_action_locked =
-        IrDock_IsZone3ActionLocked() ? 1u : 0u;
-    feedback.release_allowed = IrDock_IsClawOpenFresh(now_ms) ? 1u : 0u;
-    feedback.release_abort_latched =
-        IrDock_IsReleaseAbortLatched() ? 1u : 0u;
-    feedback.zone3_action_state = IrDock_GetZone3ActionState();
-    feedback.last_dock_complete_cmd = g_ir_dock_debug.last_dock_complete_cmd;
-    feedback.last_zone3_action_cmd =
-        g_ir_dock_debug.last_zone3_action_cmd;
-    feedback.last_release_cmd = g_ir_dock_debug.last_claw_open_cmd;
-    feedback.last_command = g_ir_dock_debug.last_rx_status;
-    feedback.release_abort_count_lsb =
-        (uint8_t)g_ir_dock_debug.claw_open_abort_rx_count;
-    feedback.age_ms = g_ir_dock_debug.last_rx_age_ms;
-    feedback.rx_count = g_ir_dock_debug.protocol_frame_rx_count;
-    feedback.crc_error_count = g_ir_dock_debug.crc_error_count;
-    feedback.error_count = g_ir_dock_debug.error_count;
+    feedback.command = g_ir_dock_debug.last_rx_status;
     (void)MrlinkPc_PublishFeedback(PC_FEEDBACK_IR_DOCK, &feedback);
 }
 
