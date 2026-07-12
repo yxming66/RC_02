@@ -70,6 +70,8 @@ static uint8_t auto_ore_light_last_fail_action = PC_AUTO_ACTION_NONE;
 static uint8_t auto_ore_light_last_success_action = PC_AUTO_ACTION_NONE;
 static PhotoTransfer_Snapshot_t photo_transfer_snapshot = {0};
 static bool photo_transfer_inited = false;
+/* Atomic cross-task view: 0=invalid, 1=valid/clear, 2=valid/triggered. */
+static volatile uint8_t ore_high_photo_state = 0u;
 static AutoOre_DebugRequest_t pending_release_step2_request =
   AUTO_ORE_DEBUG_REQUEST_NONE;
 static AutoOre_DebugRequest_t pending_auto_action_request =
@@ -83,8 +85,8 @@ static AutoOre_DebugRequest_t pending_auto_action_request =
 _Static_assert((int)AUTO_ORE_DEBUG_REQUEST_STORE ==
                    (int)PC_AUTO_ACTION_STORE,
                "AutoAction V2 request mapping changed");
-_Static_assert((int)AUTO_ORE_DEBUG_REQUEST_RELEASE_IR_LIFT_DETECT_STEP2 ==
-                   (int)PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT_STEP2,
+_Static_assert((int)AUTO_ORE_DEBUG_REQUEST_RELEASE_IR_LIFT_DETECT ==
+                   (int)PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT,
                "AutoAction V2 request range changed");
 _Static_assert(AUTO_ACTION_SCHEDULER_CAPACITY ==
                    PC_AUTO_ACTION_V3_JOB_CAPACITY,
@@ -198,8 +200,7 @@ static bool AutoCtrlFeed_PopAutoActionV2(PC_AutoActionV2CMD_t *command) {
 static bool AutoCtrlFeed_RequestIsReleaseStep2(
     AutoOre_DebugRequest_t request) {
   return request == AUTO_ORE_DEBUG_REQUEST_RELEASE_STEP2 ||
-         request == AUTO_ORE_DEBUG_REQUEST_RELEASE_LIFT_DETECT_STEP2 ||
-         request == AUTO_ORE_DEBUG_REQUEST_RELEASE_IR_LIFT_DETECT_STEP2;
+         request == AUTO_ORE_DEBUG_REQUEST_RELEASE_LIFT_DETECT_STEP2;
 }
 
 static bool AutoCtrlFeed_RequestMatchesReleaseStep1(
@@ -212,9 +213,6 @@ static bool AutoCtrlFeed_RequestMatchesReleaseStep1(
   }
   if (request == AUTO_ORE_DEBUG_REQUEST_RELEASE_LIFT_DETECT_STEP2) {
     return auto_ore_ctrl.action == AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP1;
-  }
-  if (request == AUTO_ORE_DEBUG_REQUEST_RELEASE_IR_LIFT_DETECT_STEP2) {
-    return auto_ore_ctrl.action == AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT_STEP1;
   }
   return false;
 }
@@ -277,7 +275,6 @@ static bool AutoCtrlFeed_RequestCanQueueAfterFusedStepDone(
     case AUTO_ORE_DEBUG_REQUEST_ABORT:
     case AUTO_ORE_DEBUG_REQUEST_RELEASE_STEP2:
     case AUTO_ORE_DEBUG_REQUEST_RELEASE_LIFT_DETECT_STEP2:
-    case AUTO_ORE_DEBUG_REQUEST_RELEASE_IR_LIFT_DETECT_STEP2:
       return false;
     default:
       return true;
@@ -460,6 +457,16 @@ static bool AutoCtrlFeed_ReadOreHighPhoto(void) {
   return AutoCtrlFeed_ReadPhotoTransferBit(PHOTO_TRANSFER_BIT_ORE_HIGH);
 }
 
+bool Task_AutoCtrlGetOreHighPhoto(bool *triggered) {
+  if (triggered == NULL) {
+    return false;
+  }
+
+  const uint8_t state = ore_high_photo_state;
+  *triggered = state == 2u;
+  return state != 0u;
+}
+
 static bool AutoCtrlFeed_ReadArmOrePhoto(void) {
   return AutoCtrlFeed_ReadPhotoTransferBit(PHOTO_TRANSFER_BIT_ARM_ORE);
 }
@@ -508,9 +515,8 @@ static PC_AutoAction_t AutoCtrlFeed_MapOreAction(AutoOre_Action_t action) {
     case AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP2:
       return PC_AUTO_ACTION_RELEASE_LIFT_DETECT_STEP2;
     case AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT_STEP1:
-      return PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT_STEP1;
     case AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT_STEP2:
-      return PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT_STEP2;
+      return PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT;
     case AUTO_ORE_ACTION_CHAMBER:
       return PC_AUTO_ACTION_CHAMBER;
     case AUTO_ORE_ACTION_PICK_POS_400:
@@ -564,10 +570,6 @@ static AutoOre_Action_t AutoCtrlFeed_RequestToOreAction(
       return AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP1;
     case AUTO_ORE_DEBUG_REQUEST_RELEASE_LIFT_DETECT_STEP2:
       return AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP2;
-    case AUTO_ORE_DEBUG_REQUEST_RELEASE_IR_LIFT_DETECT_STEP1:
-      return AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT_STEP1;
-    case AUTO_ORE_DEBUG_REQUEST_RELEASE_IR_LIFT_DETECT_STEP2:
-      return AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT_STEP2;
     case AUTO_ORE_DEBUG_REQUEST_CHAMBER:
       return AUTO_ORE_ACTION_CHAMBER;
     case AUTO_ORE_DEBUG_REQUEST_PICK_POS_400:
@@ -832,8 +834,6 @@ static bool AutoCtrlFeed_IsOreAction(PC_AutoAction_t action) {
     case PC_AUTO_ACTION_RELEASE_STEP2:
     case PC_AUTO_ACTION_RELEASE_LIFT_DETECT_STEP1:
     case PC_AUTO_ACTION_RELEASE_LIFT_DETECT_STEP2:
-    case PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT_STEP1:
-    case PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT_STEP2:
     case PC_AUTO_ACTION_CHAMBER:
     case PC_AUTO_ACTION_PICK_POS_400:
     case PC_AUTO_ACTION_PICK_POS_200:
@@ -920,7 +920,6 @@ static bool AutoCtrlFeed_IsFusedPcOreAction(PC_AutoAction_t action) {
     case PC_AUTO_ACTION_PICK_STORE_NEG_200:
     case PC_AUTO_ACTION_RELEASE_STEP1:
     case PC_AUTO_ACTION_RELEASE_LIFT_DETECT_STEP1:
-    case PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT_STEP1:
       return true;
     default:
       return false;
@@ -1118,8 +1117,7 @@ static uint16_t AutoCtrlFeed_OreFailureMask(AutoOre_Action_t action) {
 static bool AutoCtrlFeed_OreActionReportsRealResult(
     PC_AutoAction_t action) {
   return action == PC_AUTO_ACTION_RELEASE_STEP1 ||
-         action == PC_AUTO_ACTION_RELEASE_LIFT_DETECT_STEP1 ||
-         action == PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT_STEP1;
+         action == PC_AUTO_ACTION_RELEASE_LIFT_DETECT_STEP1;
 }
 
 static uint16_t AutoCtrlFeed_RodFailureMask(PC_AutoAction_t action) {
@@ -1706,7 +1704,9 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms, bool update_debug) {
           auto_ctrl_sick_output.valid[release_lift_sick_index],
       .release_lift_ir_claw_open = Task_IrDockIsClawOpenFresh(),
       .release_lift_ir_cmd = IrDock_GetLastClawOpenCommand(),
+      .release_lift_ir_allow_rx_ms = IrDock_GetClawOpenRxTimeMs(),
       .release_lift_ir_abort_count = IrDock_GetClawOpenAbortCount(),
+      .release_lift_ir_finish_count = IrDock_GetZone3ActionFinishCount(),
       .arm_joint1_rad = (arm_fb != NULL) ? arm_fb->joint1_angle_rad : 0.0f,
       .arm_joint1_velocity_rad_s =
           (arm_fb != NULL) ? arm_fb->joint1_velocity_rad_s : 0.0f,
@@ -1956,8 +1956,9 @@ static void AutoCtrlFeed_UpdateAutoRodSpearhead(uint32_t now_ms,
   }
 
   uint32_t dock_complete_rx_ms = 0u;
-  (void)IrDock_IsDockCompleteFresh(now_ms);
-  dock_complete_rx_ms = g_ir_dock_debug.last_complete_rx_ms;
+  if (IrDock_IsDockCompleteFresh(now_ms)) {
+    dock_complete_rx_ms = g_ir_dock_debug.last_complete_rx_ms;
+  }
   if (MrlinkPc_IsR2Ready()) {
     const uint32_t r2_ready_tick_ms = MrlinkPc_GetR2ReadyStateTickMs();
     if (r2_ready_tick_ms > dock_complete_rx_ms) {
@@ -1968,6 +1969,7 @@ static void AutoCtrlFeed_UpdateAutoRodSpearhead(uint32_t now_ms,
   AutoRodSpearhead_Feedback_t feedback = {
       .rod_photo_triggered = AutoCtrlFeed_ReadRodSpearheadPhoto(),
       .rod_at_target = false,
+      .rod_dock_wait_at_target = false,
       .ore_store_at_target = false,
       .ore_store_position_valid = false,
       .ore_store_platform_position_rad = 0.0f,
@@ -1977,6 +1979,8 @@ static void AutoCtrlFeed_UpdateAutoRodSpearhead(uint32_t now_ms,
   const RodNew_Feedback_t *rod_fb = Task_RodNewGetFeedback();
   if (rod_fb != NULL) {
     feedback.rod_at_target = rod_fb->at_target;
+    feedback.rod_dock_wait_at_target =
+        rod_fb->pose == ROD_NEW_POSE_DOCK_WAIT && rod_fb->at_target;
   }
   const OreStore_CMD_t *auto_rod_ore_store_cmd =
       AutoRodSpearhead_GetOreStoreCommand(&auto_rod_spearhead_ctrl);
@@ -2274,7 +2278,7 @@ static bool AutoCtrlFeed_HandleAutoOreDebugRequest(uint32_t now_ms) {
   }
   if (!auto_action_v3_dispatching &&
       request != AUTO_ORE_DEBUG_REQUEST_ABORT &&
-      request <= AUTO_ORE_DEBUG_REQUEST_RELEASE_IR_LIFT_DETECT_STEP2) {
+      request <= AUTO_ORE_DEBUG_REQUEST_RELEASE_IR_LIFT_DETECT) {
     AutoCtrlFeed_BeginLegacyJob((PC_AutoAction_t)request, now_ms);
   }
 
@@ -2314,7 +2318,9 @@ static bool AutoCtrlFeed_HandleAutoOreDebugRequest(uint32_t now_ms) {
       result = Task_AutoOreStartReleaseLiftDetect();
       break;
     case AUTO_ORE_DEBUG_REQUEST_RELEASE_IR_LIFT_DETECT:
-      result = Task_AutoOreStartReleaseIrLiftDetect();
+      result = IrDock_IsZone3ActionLocked() &&
+               !IrDock_IsReleaseAbortLatched() &&
+               Task_AutoOreStartReleaseIrLiftDetect();
       break;
     case AUTO_ORE_DEBUG_REQUEST_RELEASE_STEP1:
       result = Task_AutoOreStartReleaseStep1();
@@ -2340,19 +2346,6 @@ static bool AutoCtrlFeed_HandleAutoOreDebugRequest(uint32_t now_ms) {
         result = true;
       } else {
         result = Task_AutoOreStartReleaseLiftDetectStep2();
-      }
-      break;
-    case AUTO_ORE_DEBUG_REQUEST_RELEASE_IR_LIFT_DETECT_STEP1:
-      result = Task_AutoOreStartReleaseIrLiftDetectStep1();
-      break;
-    case AUTO_ORE_DEBUG_REQUEST_RELEASE_IR_LIFT_DETECT_STEP2:
-      if (AutoCtrlFeed_ContinueReleaseStep2(request, now_ms)) {
-        result = true;
-      } else if (AutoCtrlFeed_RequestMatchesReleaseStep1(request)) {
-        pending_release_step2_request = request;
-        result = true;
-      } else {
-        result = Task_AutoOreStartReleaseIrLiftDetectStep2();
       }
       break;
     case AUTO_ORE_DEBUG_REQUEST_CHAMBER:
@@ -2496,7 +2489,6 @@ static uint8_t AutoCtrlFeed_ActionRequiredMask(PC_AutoAction_t action) {
     case PC_AUTO_ACTION_STORE:
     case PC_AUTO_ACTION_RELEASE_STEP1:
     case PC_AUTO_ACTION_RELEASE_LIFT_DETECT_STEP1:
-    case PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT_STEP1:
     case PC_AUTO_ACTION_ROD_SPEARHEAD_STEP1:
     case PC_AUTO_ACTION_ROD_DOCK_WAIT:
       return PC_AUTO_ACTION_SEGMENT_STORE;
@@ -2594,8 +2586,6 @@ static uint8_t AutoCtrlFeed_ActionRequiredResourceMask(
     case PC_AUTO_ACTION_RELEASE_STEP2:
     case PC_AUTO_ACTION_RELEASE_LIFT_DETECT_STEP1:
     case PC_AUTO_ACTION_RELEASE_LIFT_DETECT_STEP2:
-    case PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT_STEP1:
-    case PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT_STEP2:
     case PC_AUTO_ACTION_CHAMBER:
       return chassis_pole | upper;
     case PC_AUTO_ACTION_NONE:
@@ -2706,7 +2696,7 @@ static void AutoCtrlFeed_ProcessAutoActionV2(uint32_t now_ms) {
     case PC_AUTO_ACTION_V2_OP_START: {
       if (command.request_id == 0u ||
           command.action <= PC_AUTO_ACTION_ABORT ||
-          command.action > PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT_STEP2) {
+          command.action > PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT) {
         AutoCtrlFeed_SetV2Reject(&command,
                                  PC_AUTO_ACTION_REJECT_INVALID_ACTION, now_ms);
         return;
@@ -3237,6 +3227,13 @@ static void AutoCtrlFeed_UpdateAutoActionV3(uint32_t now_ms) {
         AutoActionScheduler_IsTerminal((AutoActionJobState_t)job->state)) {
       continue;
     }
+    if (job->action == PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT &&
+        !job->executor_started &&
+        (IrDock_IsReleaseAbortLatched() ||
+         !IrDock_IsZone3ActionLocked()) &&
+        job->state != AUTO_ACTION_JOB_CANCEL_REQUESTED) {
+      (void)AutoActionScheduler_RequestCancel(&auto_action_scheduler, job);
+    }
     if (job->state == AUTO_ACTION_JOB_CANCEL_REQUESTED) {
       AutoCtrlFeed_CancelV3Job(job, now_ms);
       continue;
@@ -3669,6 +3666,10 @@ void Task_auto_ctrl(void *argument) {
       } else {
         photo_transfer_snapshot = PhotoTransfer_GetSnapshot(now_ms);
       }
+      ore_high_photo_state =
+          !photo_transfer_snapshot.valid
+              ? 0u
+              : (AutoCtrlFeed_ReadOreHighPhoto() ? 2u : 1u);
 
       AutoCtrlFeed_CacheLocalYawZero();
 

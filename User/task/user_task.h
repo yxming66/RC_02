@@ -162,8 +162,6 @@ typedef enum {
     AUTO_ORE_DEBUG_REQUEST_RELEASE_LIFT_DETECT_STEP1 = 36,
     AUTO_ORE_DEBUG_REQUEST_RELEASE_LIFT_DETECT_STEP2 = 37,
     AUTO_ORE_DEBUG_REQUEST_RELEASE_IR_LIFT_DETECT = 38,
-    AUTO_ORE_DEBUG_REQUEST_RELEASE_IR_LIFT_DETECT_STEP1 = 39,
-    AUTO_ORE_DEBUG_REQUEST_RELEASE_IR_LIFT_DETECT_STEP2 = 40,
 } AutoOre_DebugRequest_t;
 
 typedef struct {
@@ -593,6 +591,7 @@ bool Task_AutoStepStartDescend200Head(void);
 bool Task_AutoStepStartAscend400Head(void);
 bool Task_AutoStepStartDescend400Head(void);
 void Task_AutoOreAbort(void);
+bool Task_AutoCtrlGetOreHighPhoto(bool *triggered);
 bool Task_AutoActionSubmitV2(uint16_t request_id, uint16_t job_id,
                              uint8_t operation, uint8_t action,
                              uint8_t gate_id, uint8_t flags);

@@ -23,26 +23,28 @@ extern "C" {
 #define IR_DOCK_FRAME_SIZE (2u)
 #define IR_DOCK_CMD_ONLINE (0x01u)
 #define IR_DOCK_CMD_DOCK_COMPLETE (0x02u)
-#define IR_DOCK_CMD_RELEASE_ALLOW (0x03u)
-#define IR_DOCK_CMD_RELEASE_ABORT (0x04u)
-#define IR_DOCK_CMD_MOVE_ALLOW (0x05u)
-#define IR_DOCK_LEAVE_ZONE1_FORBID (0x00u)
-#define IR_DOCK_LEAVE_ZONE1_ALLOW (0x01u)
+#define IR_DOCK_CMD_ZONE3_ACTION_START (0x03u)
+#define IR_DOCK_CMD_RELEASE_ALLOW (0x04u)
+#define IR_DOCK_CMD_ZONE3_ACTION_FINISH (0x05u)
+#define IR_DOCK_CMD_RELEASE_ABORT (0x06u)
+#define IR_DOCK_ZONE3_ACTION_CMD_NONE (0x00u)
+#define IR_DOCK_ZONE3_ACTION_CMD_START (0x01u)
+#define IR_DOCK_ZONE3_ACTION_CMD_FINISH (0x02u)
 #define IR_DOCK_CLAW_OPEN_WAIT (0x00u)
 #define IR_DOCK_CLAW_OPEN_ALLOW (0x01u)
 #define IR_DOCK_CLAW_OPEN_ABORT (0x02u)
-#define IR_DOCK_ZONE3_R2_WORK (0x01u)
-#define IR_DOCK_ZONE3_R2_STANDBY (0x02u)
-#define IR_DOCK_ZONE3_R2_UNKNOWN (0x00u)
-#define IR_DOCK_CLEARED_ORE_NONE (0xFFu)
+#define IR_DOCK_ZONE3_ACTION_UNKNOWN (0x00u)
+#define IR_DOCK_ZONE3_ACTION_LOCKED (0x01u)
+#define IR_DOCK_ZONE3_ACTION_FINISHED (0x02u)
 
 typedef enum {
   IR_DOCK_STATUS_IDLE = 0x00u,
   IR_DOCK_STATUS_ONLINE = IR_DOCK_CMD_ONLINE,
   IR_DOCK_STATUS_DOCK_COMPLETE = IR_DOCK_CMD_DOCK_COMPLETE,
+  IR_DOCK_STATUS_ZONE3_ACTION_START = IR_DOCK_CMD_ZONE3_ACTION_START,
   IR_DOCK_STATUS_RELEASE_ALLOW = IR_DOCK_CMD_RELEASE_ALLOW,
+  IR_DOCK_STATUS_ZONE3_ACTION_FINISH = IR_DOCK_CMD_ZONE3_ACTION_FINISH,
   IR_DOCK_STATUS_RELEASE_ABORT = IR_DOCK_CMD_RELEASE_ABORT,
-  IR_DOCK_STATUS_MOVE_ALLOW = IR_DOCK_CMD_MOVE_ALLOW,
 } IrDock_Status_t;
 
 typedef struct {
@@ -50,15 +52,15 @@ typedef struct {
   volatile bool online;
   volatile bool rx_busy;
   volatile bool dock_complete_fresh;
-  volatile bool r2_leave_zone1_allowed;
+  volatile bool zone3_action_locked;
   volatile bool claw_open;
+  volatile bool release_abort_latched;
   volatile uint8_t last_rx_status;
   volatile uint8_t last_rx_raw_byte;
   volatile uint8_t last_dock_complete_cmd;
-  volatile uint8_t last_r2_leave_zone1_cmd;
+  volatile uint8_t last_zone3_action_cmd;
   volatile uint8_t last_claw_open_cmd;
-  volatile uint8_t last_cleared_ore_id;
-  volatile uint8_t last_zone3_r2_state;
+  volatile uint8_t zone3_action_state;
   volatile uint8_t last_rx_len;
   volatile uint8_t last_rx_raw_len;
   volatile uint8_t last_rx_raw_data[IR_DOCK_RX_BUFFER_SIZE];
@@ -76,6 +78,8 @@ typedef struct {
   volatile uint32_t rx_count;
   volatile uint32_t online_rx_count;
   volatile uint32_t complete_rx_count;
+  volatile uint32_t zone3_action_start_rx_count;
+  volatile uint32_t zone3_action_finish_rx_count;
   volatile uint32_t claw_open_rx_count;
   volatile uint32_t claw_open_abort_rx_count;
   volatile uint32_t protocol_frame_rx_count;
@@ -92,12 +96,15 @@ void IrDock_Process(uint32_t now_ms);
 bool IrDock_IsDockCompleteFresh(uint32_t now_ms);
 bool IrDock_IsOnline(uint32_t now_ms);
 IrDock_Status_t IrDock_GetLastRxStatus(void);
-bool IrDock_IsR2LeaveZone1Allowed(void);
+bool IrDock_IsZone3ActionLocked(void);
+bool IrDock_IsReleaseAbortLatched(void);
 bool IrDock_IsClawOpenFresh(uint32_t now_ms);
 uint8_t IrDock_GetLastClawOpenCommand(void);
+uint32_t IrDock_GetClawOpenRxTimeMs(void);
 uint32_t IrDock_GetClawOpenAbortCount(void);
-uint8_t IrDock_GetLastClearedOreId(void);
-uint8_t IrDock_GetLastZone3R2State(void);
+uint32_t IrDock_GetZone3ActionStartCount(void);
+uint32_t IrDock_GetZone3ActionFinishCount(void);
+uint8_t IrDock_GetZone3ActionState(void);
 
 #ifdef __cplusplus
 }

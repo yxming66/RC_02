@@ -9,7 +9,7 @@
 #define AUTO_ROD_SPEARHEAD_DEFAULT_DOCK_WAIT_DELAY_MS (500u)
 #define AUTO_ROD_SPEARHEAD_DEFAULT_PHOTO_CHECK_MS (1000u)
 #define AUTO_ROD_SPEARHEAD_DOCK_WAIT_POSE_DELAY_MS (300u)
-#define AUTO_ROD_SPEARHEAD_DOCK_WAIT_STANDBY_THRESHOLD_RAD (15.0f)
+#define AUTO_ROD_SPEARHEAD_DOCK_WAIT_STANDBY_THRESHOLD_RAD (18.0f)
 #define AUTO_ROD_SPEARHEAD_STEP1_PICKUP_OFFSET_RAD (1.0f)
 
 static uint32_t AutoRodSpearhead_OpenDelayMs(
@@ -238,7 +238,8 @@ static bool AutoRodSpearhead_StartAction(AutoRodSpearhead_t *ctrl,
   ctrl->photo_stable_state = false;
   ctrl->photo_stable_start_time_ms = now_ms;
   ctrl->dock_complete_latched = false;
-  ctrl->dock_wait_start_time_ms = now_ms;
+  ctrl->dock_wait_local_ready = false;
+  ctrl->dock_wait_ready_time_ms = 0u;
   AutoRodSpearhead_ClearOutputs(ctrl);
   return true;
 }
@@ -557,16 +558,6 @@ static void AutoRodSpearhead_RunDockWait(
     AutoRodSpearhead_t *ctrl,
     const AutoRodSpearhead_Feedback_t *feedback,
     uint32_t now_ms) {
-  const bool dock_complete_received =
-      feedback != 0 && feedback->dock_complete_received &&
-      feedback->dock_complete_rx_ms >= ctrl->dock_wait_start_time_ms;
-  if (dock_complete_received) {
-    ctrl->dock_complete_latched = true;
-  }
-  if (ctrl->dock_complete_latched && ctrl->step_index < 2u) {
-    ctrl->step_index = 2u;
-    ctrl->step_entered = false;
-  }
   const bool transform_position_high =
       feedback == 0 || !feedback->ore_store_position_valid ||
       feedback->ore_store_platform_position_rad >
@@ -601,6 +592,23 @@ static void AutoRodSpearhead_RunDockWait(
           !AutoRodSpearhead_CommandRod(ctrl, ROD_NEW_POSE_DOCK_WAIT,
                                        ROD_NEW_GRIP_GRAB)) {
         return;
+      }
+      const bool local_ready =
+          feedback != 0 && feedback->ore_store_at_target &&
+          feedback->rod_dock_wait_at_target;
+      if (!local_ready) {
+        ctrl->dock_wait_local_ready = false;
+        ctrl->dock_wait_ready_time_ms = 0u;
+      } else {
+        if (!ctrl->dock_wait_local_ready) {
+          ctrl->dock_wait_local_ready = true;
+          ctrl->dock_wait_ready_time_ms = now_ms;
+        }
+        if (feedback->dock_complete_received &&
+            feedback->dock_complete_rx_ms >=
+                ctrl->dock_wait_ready_time_ms) {
+          ctrl->dock_complete_latched = true;
+        }
       }
       if (ctrl->dock_complete_latched) {
         AutoRodSpearhead_NextStep(ctrl);

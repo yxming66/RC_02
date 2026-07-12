@@ -33,7 +33,7 @@ static void IrDock_ErrorCallback(void) {
 }
 
 static bool IrDock_CommandIsValid(uint8_t command) {
-  return command >= IR_DOCK_CMD_ONLINE && command <= IR_DOCK_CMD_MOVE_ALLOW;
+  return command >= IR_DOCK_CMD_ONLINE && command <= IR_DOCK_CMD_RELEASE_ABORT;
 }
 
 static void IrDock_ClearRawRxData(void) {
@@ -86,24 +86,55 @@ static void IrDock_ParseProtocolFrame(uint8_t command, uint32_t now_ms) {
     g_ir_dock_debug.complete_rx_count++;
     break;
 
-  case IR_DOCK_CMD_RELEASE_ALLOW:
-    g_ir_dock_debug.last_claw_open_cmd = IR_DOCK_CLAW_OPEN_ALLOW;
-    g_ir_dock_debug.last_claw_open_rx_ms = now_ms;
-    g_ir_dock_debug.claw_open = true;
-    g_ir_dock_debug.claw_open_rx_count++;
+  case IR_DOCK_CMD_ZONE3_ACTION_START:
+    if (!g_ir_dock_debug.zone3_action_locked) {
+      g_ir_dock_debug.zone3_action_locked = true;
+      g_ir_dock_debug.zone3_action_state = IR_DOCK_ZONE3_ACTION_LOCKED;
+      g_ir_dock_debug.last_zone3_action_cmd =
+          IR_DOCK_ZONE3_ACTION_CMD_START;
+      g_ir_dock_debug.zone3_action_start_rx_count++;
+      g_ir_dock_debug.last_claw_open_cmd = IR_DOCK_CLAW_OPEN_WAIT;
+      g_ir_dock_debug.last_claw_open_rx_ms = 0u;
+      g_ir_dock_debug.last_claw_open_age_ms = 0u;
+      g_ir_dock_debug.claw_open = false;
+      g_ir_dock_debug.release_abort_latched = false;
+    }
     break;
 
-  case IR_DOCK_CMD_RELEASE_ABORT:
-    g_ir_dock_debug.last_claw_open_cmd = IR_DOCK_CLAW_OPEN_ABORT;
+  case IR_DOCK_CMD_RELEASE_ALLOW:
+    if (g_ir_dock_debug.zone3_action_locked &&
+        !g_ir_dock_debug.release_abort_latched) {
+      g_ir_dock_debug.last_claw_open_cmd = IR_DOCK_CLAW_OPEN_ALLOW;
+      g_ir_dock_debug.last_claw_open_rx_ms = now_ms;
+      g_ir_dock_debug.claw_open = true;
+      g_ir_dock_debug.claw_open_rx_count++;
+    }
+    break;
+
+  case IR_DOCK_CMD_ZONE3_ACTION_FINISH:
+    if (g_ir_dock_debug.zone3_action_locked) {
+      g_ir_dock_debug.zone3_action_locked = false;
+      g_ir_dock_debug.zone3_action_finish_rx_count++;
+    }
+    g_ir_dock_debug.zone3_action_state = IR_DOCK_ZONE3_ACTION_FINISHED;
+    g_ir_dock_debug.last_zone3_action_cmd =
+        IR_DOCK_ZONE3_ACTION_CMD_FINISH;
+    g_ir_dock_debug.last_claw_open_cmd = IR_DOCK_CLAW_OPEN_WAIT;
     g_ir_dock_debug.last_claw_open_rx_ms = 0u;
     g_ir_dock_debug.last_claw_open_age_ms = 0u;
     g_ir_dock_debug.claw_open = false;
-    g_ir_dock_debug.claw_open_abort_rx_count++;
+    g_ir_dock_debug.release_abort_latched = false;
     break;
 
-  case IR_DOCK_CMD_MOVE_ALLOW:
-    g_ir_dock_debug.last_r2_leave_zone1_cmd = IR_DOCK_LEAVE_ZONE1_ALLOW;
-    g_ir_dock_debug.r2_leave_zone1_allowed = true;
+  case IR_DOCK_CMD_RELEASE_ABORT:
+    if (!g_ir_dock_debug.release_abort_latched) {
+      g_ir_dock_debug.release_abort_latched = true;
+      g_ir_dock_debug.last_claw_open_cmd = IR_DOCK_CLAW_OPEN_ABORT;
+      g_ir_dock_debug.last_claw_open_rx_ms = 0u;
+      g_ir_dock_debug.last_claw_open_age_ms = 0u;
+      g_ir_dock_debug.claw_open = false;
+      g_ir_dock_debug.claw_open_abort_rx_count++;
+    }
     break;
 
   case IR_DOCK_CMD_ONLINE:
@@ -194,15 +225,15 @@ void IrDock_Init(uint32_t now_ms) {
   g_ir_dock_debug.online = false;
   g_ir_dock_debug.rx_busy = false;
   g_ir_dock_debug.dock_complete_fresh = false;
-  g_ir_dock_debug.r2_leave_zone1_allowed = false;
+  g_ir_dock_debug.zone3_action_locked = false;
   g_ir_dock_debug.claw_open = false;
+  g_ir_dock_debug.release_abort_latched = false;
   g_ir_dock_debug.last_rx_status = (uint8_t)IR_DOCK_STATUS_IDLE;
   g_ir_dock_debug.last_rx_raw_byte = 0u;
   g_ir_dock_debug.last_dock_complete_cmd = 0u;
-  g_ir_dock_debug.last_r2_leave_zone1_cmd = IR_DOCK_LEAVE_ZONE1_FORBID;
+  g_ir_dock_debug.last_zone3_action_cmd = IR_DOCK_ZONE3_ACTION_CMD_NONE;
   g_ir_dock_debug.last_claw_open_cmd = IR_DOCK_CLAW_OPEN_WAIT;
-  g_ir_dock_debug.last_cleared_ore_id = IR_DOCK_CLEARED_ORE_NONE;
-  g_ir_dock_debug.last_zone3_r2_state = IR_DOCK_ZONE3_R2_UNKNOWN;
+  g_ir_dock_debug.zone3_action_state = IR_DOCK_ZONE3_ACTION_UNKNOWN;
   g_ir_dock_debug.last_rx_len = 0u;
   ir_dock_frame_head_pending = false;
   IrDock_ClearRawRxData();
@@ -282,8 +313,12 @@ IrDock_Status_t IrDock_GetLastRxStatus(void) {
   return (IrDock_Status_t)g_ir_dock_debug.last_rx_status;
 }
 
-bool IrDock_IsR2LeaveZone1Allowed(void) {
-  return g_ir_dock_debug.r2_leave_zone1_allowed;
+bool IrDock_IsZone3ActionLocked(void) {
+  return g_ir_dock_debug.zone3_action_locked;
+}
+
+bool IrDock_IsReleaseAbortLatched(void) {
+  return g_ir_dock_debug.release_abort_latched;
 }
 
 bool IrDock_IsClawOpenFresh(uint32_t now_ms) {
@@ -294,14 +329,22 @@ uint8_t IrDock_GetLastClawOpenCommand(void) {
   return g_ir_dock_debug.last_claw_open_cmd;
 }
 
+uint32_t IrDock_GetClawOpenRxTimeMs(void) {
+  return g_ir_dock_debug.last_claw_open_rx_ms;
+}
+
 uint32_t IrDock_GetClawOpenAbortCount(void) {
   return g_ir_dock_debug.claw_open_abort_rx_count;
 }
 
-uint8_t IrDock_GetLastClearedOreId(void) {
-  return g_ir_dock_debug.last_cleared_ore_id;
+uint32_t IrDock_GetZone3ActionStartCount(void) {
+  return g_ir_dock_debug.zone3_action_start_rx_count;
 }
 
-uint8_t IrDock_GetLastZone3R2State(void) {
-  return g_ir_dock_debug.last_zone3_r2_state;
+uint32_t IrDock_GetZone3ActionFinishCount(void) {
+  return g_ir_dock_debug.zone3_action_finish_rx_count;
+}
+
+uint8_t IrDock_GetZone3ActionState(void) {
+  return g_ir_dock_debug.zone3_action_state;
 }

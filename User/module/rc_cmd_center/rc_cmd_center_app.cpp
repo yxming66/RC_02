@@ -71,6 +71,14 @@
 #define RC_PC_START_MATCH_ENABLE (1u)
 #endif
 
+#ifndef RC_ORE_STORE_IDLE_CLAMP_STABLE_MS
+#define RC_ORE_STORE_IDLE_CLAMP_STABLE_MS (50u)
+#endif
+
+#ifndef RC_ORE_STORE_IDLE_RELEASE_STABLE_MS
+#define RC_ORE_STORE_IDLE_RELEASE_STABLE_MS (200u)
+#endif
+
 #ifndef RC_MANUAL_IO_CH_THRESHOLD
 #define RC_MANUAL_IO_CH_THRESHOLD (0.90f)
 
@@ -91,6 +99,9 @@ static Pole_CMD_t pole_cmd;
 static ArmSimple_CMD_t arm_simple_cmd;
 static OreStore_CMD_t ore_store_cmd;
 static AutoOre_OutputSnapshot_t auto_ore_output_snapshot;
+static bool ore_store_idle_photo_candidate_valid = false;
+static bool ore_store_idle_photo_candidate = false;
+static uint32_t ore_store_idle_photo_candidate_since_ms = 0u;
 static DR16_SwitchPos_t last_sw_l = DR16_SW_ERR;
 static DR16_SwitchPos_t last_sw_r = DR16_SW_ERR;
 static RodNew_CMD_t rod_cmd;
@@ -409,6 +420,36 @@ static bool Rc_GetOreStoreFeedbackFixedCylinderClosed(void) {
     return feedback->fixed_ore_cylinder_closed;
   }
   return ore_store_cmd.fixed_ore_cylinder_closed;
+}
+
+static void Rc_ResetOreStoreIdlePhotoPolicy(void) {
+  ore_store_idle_photo_candidate_valid = false;
+  ore_store_idle_photo_candidate = false;
+  ore_store_idle_photo_candidate_since_ms = 0u;
+}
+
+static bool Rc_OreStoreIdleCylinderClosed(uint32_t now_ms) {
+  bool high_photo_triggered = false;
+  if (!Task_AutoCtrlGetOreHighPhoto(&high_photo_triggered)) {
+    Rc_ResetOreStoreIdlePhotoPolicy();
+    return Rc_GetOreStoreFeedbackFixedCylinderClosed();
+  }
+
+  if (!ore_store_idle_photo_candidate_valid ||
+      high_photo_triggered != ore_store_idle_photo_candidate) {
+    ore_store_idle_photo_candidate_valid = true;
+    ore_store_idle_photo_candidate = high_photo_triggered;
+    ore_store_idle_photo_candidate_since_ms = now_ms;
+  }
+
+  const uint32_t stable_ms = high_photo_triggered
+                                 ? RC_ORE_STORE_IDLE_CLAMP_STABLE_MS
+                                 : RC_ORE_STORE_IDLE_RELEASE_STABLE_MS;
+  if ((uint32_t)(now_ms - ore_store_idle_photo_candidate_since_ms) <
+      stable_ms) {
+    return Rc_GetOreStoreFeedbackFixedCylinderClosed();
+  }
+  return high_photo_triggered;
 }
 
 static void Rc_SetRodRelax(void) {
@@ -2024,7 +2065,9 @@ struct RcOreStorePcRoute {
   bool operator()(const RcRuntimeInput &, cmd::Context &,
                   OreStore_CMD_t &out) const {
     const bool pc_hold_fixed_cylinder_closed =
-        Rc_GetOreStoreFeedbackFixedCylinderClosed();
+        rc_current_plan == RC_CMD_PLAN_PC
+            ? Rc_OreStoreIdleCylinderClosed(BSP_TIME_Get_ms())
+            : Rc_GetOreStoreFeedbackFixedCylinderClosed();
     const PC_OreStoreCMD_t *pc_ore_store_cmd =
         MrlinkPc_HasOreStoreCMD() ? MrlinkPc_GetOreStoreCMD() : NULL;
     if (pc_ore_store_cmd != NULL) {
@@ -2389,6 +2432,9 @@ void RcCmdCenterApp_Update(uint32_t now_ms) {
 
   behavior = Rc_SelectMappedBehavior();
   rc_current_plan = Rc_SelectCommandPlan(behavior);
+  if (rc_current_plan != RC_CMD_PLAN_PC) {
+    Rc_ResetOreStoreIdlePhotoPolicy();
+  }
   if (Rc_ShouldRequestStartMatchBySwitch()) {
     (void)MrlinkPc_RequestStartMatch(1u);
   }

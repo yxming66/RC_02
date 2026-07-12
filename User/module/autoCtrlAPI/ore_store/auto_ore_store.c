@@ -94,6 +94,7 @@ static bool AutoOre_CommandReleasePoleTarget(AutoOre_t *ctrl);
 static bool AutoOre_CommandReleaseOreStoreHold(
   AutoOre_t *ctrl, OreStore_TransformPoint_t transform,
   bool cylinder_closed);
+static void AutoOre_CommandChassisZeroVector(AutoOre_t *ctrl);
 static bool AutoOre_WaitArmCommandTarget(AutoOre_t *ctrl, uint32_t now_ms);
 static bool AutoOre_WaitPickArmCommandTargetStable(AutoOre_t *ctrl,
                                                     uint32_t now_ms);
@@ -121,11 +122,15 @@ static bool AutoOre_ActionUsesReleaseLiftDetect(AutoOre_Action_t action) {
       action == AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT_STEP2;
 }
 
-  static bool AutoOre_ActionUsesIrReleaseLiftDetect(AutoOre_Action_t action) {
-    return action == AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT ||
+static bool AutoOre_ActionUsesIrReleaseLiftDetect(AutoOre_Action_t action) {
+  return action == AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT ||
       action == AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT_STEP1 ||
       action == AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT_STEP2;
-  }
+}
+
+static bool AutoOre_ActionIsZone3IrRelease(AutoOre_Action_t action) {
+  return action == AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT;
+}
 
 static bool AutoOre_ActionIsReleaseStep1(AutoOre_Action_t action) {
   return action == AUTO_ORE_ACTION_RELEASE_STEP1 ||
@@ -514,13 +519,20 @@ static void AutoOre_RunIrReleaseAbortRecovery(AutoOre_t *ctrl,
   if (!ctrl->release_ir_abort_recovery_active) {
     ctrl->release_ir_abort_recovery_active = true;
     ctrl->release_ir_abort_source_step = ctrl->step_index;
-    ctrl->release_ir_abort_recovery_phase =
-        (ctrl->step_index >= 4u) ? 0u : ((ctrl->step_index >= 3u) ? 1u : 2u);
-    ctrl->release_ir_abort_suction_on = ctrl->step_index < 5u;
+    if (ctrl->active_position != AUTO_ORE_POSITION_ARM) {
+      ctrl->release_ir_abort_recovery_phase = 2u;
+      ctrl->release_ir_abort_suction_on = true;
+    } else {
+      ctrl->release_ir_abort_recovery_phase =
+          (ctrl->step_index >= 4u) ? 0u :
+          ((ctrl->step_index >= 3u) ? 1u : 2u);
+      ctrl->release_ir_abort_suction_on = ctrl->step_index < 5u;
+    }
     ctrl->step_entered = false;
     ctrl->step_condition_met = false;
   }
 
+  AutoOre_CommandChassisZeroVector(ctrl);
   AutoOre_EnterStep(ctrl, now_ms);
   const Suction_State_t suction_state = ctrl->release_ir_abort_suction_on
                                             ? SUCTION_ON
@@ -1485,7 +1497,9 @@ static void AutoOre_FinishSuccess(AutoOre_t *ctrl) {
   const AutoOre_Fault_t fault_before_finish = ctrl->fault;
   if (ctrl->action == AUTO_ORE_ACTION_STORE) {
     AutoOre_SetActivePositionHasOre(ctrl, true);
-  } else if (AutoOre_ActionIsReleaseLike(ctrl->action)) {
+  } else if (AutoOre_ActionIsReleaseLike(ctrl->action) &&
+             (!AutoOre_ActionIsZone3IrRelease(ctrl->action) ||
+              ctrl->release_ir_release_started)) {
     AutoOre_SetActivePositionHasOre(ctrl, false);
   } else if (ctrl->action == AUTO_ORE_ACTION_CHAMBER) {
     AutoOre_FinishChamberSuccess(ctrl);
@@ -1737,6 +1751,9 @@ static bool AutoOre_CommandReleasePoleDuringChamber(AutoOre_t *ctrl) {
   if (!AutoOre_ActionIsReleaseLike(ctrl->action)) {
     return true;
   }
+  if (AutoOre_ActionIsZone3IrRelease(ctrl->action)) {
+    AutoOre_CommandChassisZeroVector(ctrl);
+  }
   return AutoOre_CommandReleasePoleTarget(ctrl);
 }
 
@@ -1784,9 +1801,35 @@ static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
       const bool arm_ready = AutoOre_WaitConditionThenDelay(
           ctrl, now_ms, ctrl->feedback.arm_at_target,
           AutoOre_ReleaseWaitMs(ctrl));
-        const bool ir_release =
+      const bool ir_release =
           AutoOre_ActionUsesIrReleaseLiftDetect(ctrl->action);
-        const bool grid_check_done = arm_ready && AutoOre_ReleasePoleAtTarget(ctrl)
+      if (AutoOre_ActionIsZone3IrRelease(ctrl->action)) {
+        const bool local_ready = arm_ready &&
+                                 AutoOre_ReleasePoleAtTarget(ctrl) &&
+                                 ctrl->feedback.ore_store_all_at_target;
+        if (!local_ready) {
+          ctrl->release_ir_wait_ready = false;
+          ctrl->release_ir_wait_ready_time_ms = 0u;
+          (void)AutoOre_CheckTimeout(ctrl, now_ms);
+          return;
+        }
+        if (!ctrl->release_ir_wait_ready) {
+          ctrl->release_ir_wait_ready = true;
+          ctrl->release_ir_wait_ready_time_ms = now_ms;
+        }
+        const bool allow_is_new =
+            (int32_t)(ctrl->feedback.release_lift_ir_allow_rx_ms -
+                      ctrl->release_ir_wait_ready_time_ms) >= 0;
+        if (ctrl->feedback.release_lift_ir_claw_open && allow_is_new) {
+          ctrl->release_ir_allow_latched = true;
+        }
+        if (ctrl->release_ir_allow_latched) {
+          ctrl->release_ir_release_started = true;
+          AutoOre_NextStep(ctrl);
+        }
+        return;
+      }
+      const bool grid_check_done = arm_ready && AutoOre_ReleasePoleAtTarget(ctrl)
                          ? AutoOre_UpdateReleaseGridCheck(
                            ctrl, now_ms, ir_release)
                                        : false;
@@ -1942,7 +1985,10 @@ static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
         return;
       }
       if (AutoOre_WaitArmCommandTarget(ctrl, now_ms)) {
-        AutoOre_FinishSuccess(ctrl);
+        if (!AutoOre_ActionIsZone3IrRelease(ctrl->action) ||
+            ctrl->release_ir_finish_pending) {
+          AutoOre_FinishSuccess(ctrl);
+        }
       } else {
         (void)AutoOre_CheckTimeout(ctrl, now_ms);
       }
@@ -1954,6 +2000,10 @@ static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
 }
 
 static void AutoOre_RunChamberHigh(AutoOre_t *ctrl, uint32_t now_ms) {
+  if (ctrl->release_ir_abort_pending) {
+    AutoOre_RunIrReleaseAbortRecovery(ctrl, now_ms);
+    return;
+  }
   if (!AutoOre_CommandReleasePoleDuringChamber(ctrl)) {
     AutoOre_FailInvalidParam(ctrl);
     return;
@@ -2029,6 +2079,10 @@ static void AutoOre_RunChamberHigh(AutoOre_t *ctrl, uint32_t now_ms) {
 }
 
 static void AutoOre_RunChamberLow(AutoOre_t *ctrl, uint32_t now_ms) {
+  if (ctrl->release_ir_abort_pending) {
+    AutoOre_RunIrReleaseAbortRecovery(ctrl, now_ms);
+    return;
+  }
   if (!AutoOre_CommandReleasePoleDuringChamber(ctrl)) {
     AutoOre_FailInvalidParam(ctrl);
     return;
@@ -3807,12 +3861,18 @@ static bool AutoOre_StartResolved(AutoOre_t *ctrl, AutoOre_Action_t action,
   ctrl->fused_store_position = AUTO_ORE_POSITION_NONE;
   ctrl->release_ir_allow_latched = false;
   ctrl->release_ir_abort_pending = false;
+  ctrl->release_ir_finish_pending = false;
+  ctrl->release_ir_wait_ready = false;
+  ctrl->release_ir_release_started = false;
   ctrl->release_ir_abort_recovery_active = false;
   ctrl->release_ir_abort_suction_on = true;
   ctrl->release_ir_abort_source_step = 0u;
   ctrl->release_ir_abort_recovery_phase = 0u;
   ctrl->release_ir_abort_count_at_start =
       ctrl->feedback.release_lift_ir_abort_count;
+  ctrl->release_ir_finish_count_at_start =
+      ctrl->feedback.release_lift_ir_finish_count;
+  ctrl->release_ir_wait_ready_time_ms = 0u;
   AutoOre_ResetReleaseLiftObserver(ctrl);
   AutoOre_ResetDistanceGate(ctrl);
   AutoOre_ClearOutputs(ctrl);
@@ -4042,6 +4102,22 @@ void AutoOre_Update(AutoOre_t *ctrl, const AutoOre_Feedback_t *feedback,
     ctrl->release_ir_abort_pending = true;
     ctrl->release_ir_abort_count_at_start =
         ctrl->feedback.release_lift_ir_abort_count;
+  }
+  if (AutoOre_ActionIsZone3IrRelease(ctrl->action) &&
+      ctrl->feedback.release_lift_ir_finish_count !=
+          ctrl->release_ir_finish_count_at_start) {
+    ctrl->release_ir_finish_pending = true;
+    ctrl->release_ir_finish_count_at_start =
+        ctrl->feedback.release_lift_ir_finish_count;
+  }
+  if (AutoOre_ActionIsZone3IrRelease(ctrl->action) &&
+      ctrl->release_ir_finish_pending && !ctrl->release_ir_abort_pending &&
+      (ctrl->active_position != AUTO_ORE_POSITION_ARM ||
+       ctrl->step_index <= 1u)) {
+    AutoOre_FinishSuccess(ctrl);
+    AutoOre_ClearOutputs(ctrl);
+    AutoOre_PublishOutputSnapshot(ctrl);
+    return;
   }
   AutoOre_UpdateFusedAscendPhoto1Latch(ctrl, now_ms);
   AutoOre_UpdateFusedDescendPhoto2Latch(ctrl, now_ms);

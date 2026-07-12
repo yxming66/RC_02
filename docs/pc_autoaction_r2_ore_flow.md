@@ -78,28 +78,32 @@ payload 长度 28 字节，Python 解包格式：
     valid,
     fresh,
     dock_complete,
-    r2_leave_zone1_allowed,
-    release_lift_step2_ready,
-    cleared_ore_id,
-    zone3_r2_state,
+    zone3_action_locked,
+    release_allowed,
+    release_abort_latched,
+    zone3_action_state,
     last_dock_complete_cmd,
-    last_r2_leave_zone1_cmd,
-    last_release_lift_step2_cmd,
+    last_zone3_action_cmd,
+    last_release_cmd,
+    last_command,
+    release_abort_count_lsb,
     age_ms,
     rx_count,
     crc_error_count,
     error_count,
-) = struct.unpack("<BBBBBBBBBBxxIIII", payload)
+) = struct.unpack("<12B4I", payload)
 ```
 
 其中：
 
 | 字段 | 含义 | PC 用途 |
 |---|---|---|
-| `release_lift_step2_ready` | 红外通知三层放矿 step2 可执行，`0/1` | 为 `1` 时，PC 可下发 `PC_AUTO_ACTION_RELEASE_LIFT_DETECT_STEP2` |
+| `zone3_action_locked` | 三层放矿启动锁，命令 3 后为 1、命令 5 后为 0 | 判断本轮红外流程是否仍锁定 |
+| `release_allowed` | 命令 4 放矿许可是否仍在 1000 ms 新鲜期 | 观察动作是否获得放矿许可 |
+| `release_abort_latched` | 本轮是否已接受命令 6 中止 | 判断是否进入安全回撤 |
+| `zone3_action_state` | `0=未知,1=启动锁定,2=结束解锁` | 观察 03/05 锁死生命周期 |
 | `fresh` | 红外帧是否新鲜 | 建议仅在 `fresh=1` 时信任红外状态 |
 | `dock_complete` | 对接完成状态 | 取矛头/对接类流程可使用 |
-| `r2_leave_zone1_allowed` | R2 是否可以出一区 | 导航/离区策略使用 |
 
 ## 2. PC 下发一键动作的方法
 
@@ -140,8 +144,8 @@ def clear_auto_action_latch():
 | `34` | `PC_AUTO_ACTION_RELEASE_STEP1` | 普通放矿 step1：观察目标格并保持矿 |
 | `35` | `PC_AUTO_ACTION_RELEASE_STEP2` | 普通放矿 step2：确认后继续释放 |
 | `36` | `PC_AUTO_ACTION_RELEASE_LIFT_DETECT_STEP1` | 三层放矿 step1：观察目标格并等待抬升检测 |
-| `37` | `PC_AUTO_ACTION_RELEASE_LIFT_DETECT_STEP2` | 三层放矿 step2
-：红外允许后继续释放 |
+| `37` | `PC_AUTO_ACTION_RELEASE_LIFT_DETECT_STEP2` | SICK 抬升检测放矿 step2 |
+| `38` | `PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT` | 与 R1 操作手配合的三层放矿单事务 |
 
 ## 4. 基础状态机
 
@@ -162,7 +166,10 @@ class OreState:
 
 class IrDockState:
     fresh = False
-    release_lift_step2_ready = False
+    zone3_action_locked = False
+    release_allowed = False
+    release_abort_latched = False
+    zone3_action_state = 0
 ```
 
 每轮收到反馈后更新状态：
@@ -310,121 +317,53 @@ if auto_action_done(auto, 34):
 
 ## 8. 三层放矿流程
 
-三层放矿建议使用分步动作：
+三层放矿只使用完整动作 `38`，不使用前方光电/SICK 判断，也不再拆分 step1/step2：
 
-1. PC 先发 `PC_AUTO_ACTION_RELEASE_LIFT_DETECT_STEP1 = 36`。
-2. 固件执行竖直观察/抬升检测相关准备，并保持矿。
-3. PC 看到 `0x96.action=36` 且 `segment_mask bit1` 已置位，表示 step1 的等待/保持段已完成，但此时固件通常仍保持 `busy=1`。
-4. PC 等待红外 `0x9A.release_lift_step2_ready == 1`。
-5. PC 再发 `PC_AUTO_ACTION_RELEASE_LIFT_DETECT_STEP2 = 37`；固件允许 step1 正在 busy 时续接 step2。
+1. R1 发送 `A5 03`，RC02 建立本轮锁；`03` 本身不启动 AutoAction。
+2. PC 从 `0x9A.zone3_action_locked=1` 检测到新一轮，用 V3 `SUBMIT(action=38)` 创建 Job。相同 `request_id` 重发保持幂等。
+3. 动作 38 持续锁定 CHASSIS，并展开 Pole；若矿仍在矿仓则先上膛，然后机械臂到竖直位。
+4. 平台、机械臂和 Pole 全部准备完成后，动作无限等待 R1 的新命令 `A5 04`。早到的 `04` 无效，必须在机构就绪后重新发送。
+5. 收到有效 `04` 后执行完整放矿；不检查目标格前方是否有矿。放矿和安全返回完成后 Job 仍保持 `RUNNING`，底盘继续锁定。
+6. R1 发送 `A5 05` 后，动作 38 进入 `SUCCEEDED`，释放资源并解除红外锁。如果 `05` 在释放过程中到达，固件先完成安全返回再结束。
+7. 任意运行阶段收到 `A5 06`，固件执行安全回撤并让 Job 进入 `CANCELLED`；随后仍需 `A5 05` 解除红外锁。
 
-### 8.1 Step1 启动条件
+### 8.1 PC 观察逻辑
 
-```python
-can_start_lift_release_step1 = auto_action_idle(auto) and ore.arm_has_ore
-```
-
-如果 arm 没矿，PC 应先尝试上膛：
+PC 只提交动作 38。PC 必须对本轮 `03` 做一次性去重：
 
 ```python
-if not ore.arm_has_ore and (ore.low_has_ore or ore.high_has_ore):
-    send_auto_action(5)  # CHAMBER
+if ir.zone3_action_locked and not zone3_job_submitted:
+    submit_v3(action=38, request_id=new_nonzero_request_id())
+    zone3_job_submitted = True
+
+if ir.release_abort_latched:
+    state = "SAFE_RETREAT"
+elif zone3_job_is_running:
+    state = "ZONE3_RUNNING"
+else:
+    state = "ZONE3_IDLE"
+
+if not ir.zone3_action_locked:
+    zone3_job_submitted = False
 ```
 
-### 8.2 Step1 执行
+### 8.2 异常处理
 
-```python
-if auto_action_idle(auto) and ore.arm_has_ore:
-    send_auto_action(36)  # RELEASE_LIFT_DETECT_STEP1
-```
-
-等待 step1 的可续接条件：
-
-```python
-step1_ready_for_step2 = (
-    auto.action == 36
-    and bool(auto.segment_mask & (1 << 1))  # store/upper finished
-)
-```
-
-注意：三层放矿 step1 完成后，固件会保持 AutoOre 运行以继续持矿等待 PC 决策，所以此时 `auto.busy` 可能仍为 `1`。PC 不应等待 `busy=0` 才发 step2。
-
-### 8.3 Step2 触发条件
-
-PC 需要同时满足：
-
-```python
-can_send_lift_step2 = (
-    step1_ready_for_step2
-    and ir.fresh
-    and ir.release_lift_step2_ready
-    and ore.arm_has_ore
-    and auto.action == 36
-)
-```
-
-满足后下发：
-
-```python
-send_auto_action(37)  # RELEASE_LIFT_DETECT_STEP2
-```
-
-### 8.4 三层放矿完整伪代码
-
-```python
-def update_r2_release_lift_flow(auto, ore, ir, state):
-    if state == "IDLE":
-        if auto_action_idle(auto):
-            if not ore.arm_has_ore:
-                if ore.low_has_ore or ore.high_has_ore:
-                    send_auto_action(5)  # CHAMBER
-                    return "CHAMBERING"
-                return "WAIT_ORE"
-            send_auto_action(36)  # RELEASE_LIFT_DETECT_STEP1
-            return "LIFT_STEP1"
-
-    if state == "CHAMBERING":
-        if auto_action_done(auto, 5) and ore.arm_has_ore:
-            send_auto_action(36)
-            return "LIFT_STEP1"
-        return state
-
-    if state == "LIFT_STEP1":
-        if auto.action == 36 and (auto.segment_mask & (1 << 1)):
-            return "WAIT_IR_STEP2"
-        return state
-
-    if state == "WAIT_IR_STEP2":
-        if ir.fresh and ir.release_lift_step2_ready and ore.arm_has_ore and auto.action == 36:
-            send_auto_action(37)
-            return "LIFT_STEP2"
-        return state
-
-    if state == "LIFT_STEP2":
-        if auto_action_done(auto, 37):
-            return "DONE"
-        return state
-
-    return state
-```
-
-### 8.5 异常处理建议
-
-| 场景 | 建议 |
+| 场景 | 固件行为 |
 |---|---|
-| 等待 `release_lift_step2_ready` 超时 | PC 重规划或发送 `ABORT=1` |
-| `ore.arm_has_ore` 在 step2 前变 0 | 不发 step2，进入异常处理 |
-| `ir.fresh == 0` | 不信任 `release_lift_step2_ready` |
-| `auto.busy == 1 && auto.action == 36 && segment bit1 已置位` | 这是三层 step1 等待 step2 的正常状态，可以在红外允许后发 `37` |
-| `auto.busy == 1 && auto.action != 36` | 等待当前动作结束，不抢发互斥动作 |
+| PC 提交 38 时没有可用矿或配置非法 | Job 启动失败；需发 05 结束本轮，修复条件后重新走 03 |
+| PC 提交 38 时资源被占用 | V3 Job 进入 `WAIT_RESOURCE`，不持有部分资源 |
+| 命令 04 在机构就绪前到达或超过 1000 ms | 动作继续保持，不释放矿；就绪后重新发送 04 |
+| 前方光电显示有矿 | 动作 38 忽略该检测，是否允许释放完全由 R1 命令 04 决定 |
+| 运行中收到命令 06 | 触发一次安全回撤，重复 06 无副作用 |
 
 ## 9. 推荐总控优先级
 
 PC 侧可以按如下优先级处理动作：
 
 1. 安全/中止最高优先级：需要停止时发 `ABORT=1`。
-2. 如果正在三层放矿 step1 且 `segment_mask bit1` 已置位，则优先等待红外 `release_lift_step2_ready` 并发 `37`。
-3. 除上述 step1→step2 续接特例外，如果已有 `auto.busy=1`，只监听反馈，不发新的互斥 autoaction。
+2. `zone3_action_locked=1` 时，PC 为本轮只提交一次动作 38。
+3. 如果已有 `auto.busy=1`，只监听反馈，不发新的互斥 autoaction。
 4. 如果需要放矿并且 arm 有矿，按目标类型发普通放矿或三层分步放矿。
 5. 如果 arm 没矿但低/高位有矿，先发 `CHAMBER=5`。
 6. 如果 arm 有矿且存矿位有空位，可发 `STORE=2`。
@@ -468,23 +407,23 @@ def on_feedback_auto_action(payload):
 
 
 def on_feedback_ir_dock(payload):
-    fields = struct.unpack("<BBBBBBBBBBxxIIII", payload)
+    fields = struct.unpack("<12B4I", payload)
     return {
         "fresh": bool(fields[1]),
-        "release_lift_step2_ready": bool(fields[4]),
+        "zone3_action_locked": bool(fields[3]),
+        "release_allowed": bool(fields[4]),
+        "release_abort_latched": bool(fields[5]),
+        "zone3_action_state": fields[6],
     }
 
 
 def choose_next_action(ore, auto, ir, flow_state):
-    if (
-        flow_state == "WAIT_IR_STEP2"
-        and auto["action"] == AUTO_RELEASE_LIFT_STEP1
-        and (auto["segment"] & (1 << 1))
-        and ore["arm_has_ore"]
-        and ir["fresh"]
-        and ir["release_lift_step2_ready"]
-    ):
-        return AUTO_RELEASE_LIFT_STEP2
+    if ir["zone3_action_locked"] and not flow_state.zone3_job_submitted:
+        flow_state.zone3_job_submitted = True
+        return 38
+
+    if ir["zone3_action_locked"]:
+        return None
 
     if auto["busy"]:
         return None
@@ -502,6 +441,6 @@ def choose_next_action(ore, auto, ir, flow_state):
 
 1. `0x95` 的占矿信息是 PC 做“是否能上膛/是否能存矿/是否仍持矿”的主要依据。
 2. `0x96` 是动作调度反馈，不能单独证明矿真的在目标位置；动作结束后应再看 `0x95`。
-3. `0x9A.release_lift_step2_ready` 只表示红外允许三层放矿 step2，不代表固件会自动执行 step2；PC 仍需下发 `action=37`。
+3. 红外命令 3 只建立锁；PC 必须用 V3 为本轮提交一次动作 38。
 4. 分步放矿 step1 后如果目标格已有矿，不要发 step2，应重新规划目标格或中止。
 5. 同一个 autoaction 需要重复触发时，先发 `action=0` 清 latch，再发目标 action。

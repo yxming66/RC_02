@@ -242,9 +242,7 @@ typedef enum {
     PC_AUTO_ACTION_RELEASE_STEP2 = 35,    /* 放矿 step2：确认目标格后继续释放矿 */
     PC_AUTO_ACTION_RELEASE_LIFT_DETECT_STEP1 = 36, /* 三层放矿 step1：竖直观察目标格并等待抬升检测 */
     PC_AUTO_ACTION_RELEASE_LIFT_DETECT_STEP2 = 37, /* 三层放矿 step2：确认目标格/抬升后继续释放矿 */
-    PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT = 38, /* 三层放矿：使用红外 claw_open 允许信号替代 SICK 检测 */
-    PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT_STEP1 = 39, /* 三层放矿 step1：竖直观察目标格并等待红外 claw_open */
-    PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT_STEP2 = 40, /* 三层放矿 step2：红外允许后继续释放矿 */
+    PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT = 38, /* 三层放矿单事务：03 锁定后由 PC 提交，等待 04 放矿、05 结束或 06 中止 */
 } PC_AutoAction_t;
 
 typedef enum {
@@ -599,15 +597,15 @@ typedef struct {
     uint8_t valid;                                           /* 是否曾成功解析过 R1/R2 红外对接帧，0=否，1=是 */
     uint8_t fresh;                                           /* 最近一帧是否仍在 IR_DOCK_ONLINE_TIMEOUT_MS 内，0=过期/未收到，1=新鲜 */
     uint8_t dock_complete;                                   /* 对接完成指令，0=未完成，1=完成 */
-    uint8_t r2_leave_zone1_allowed;                          /* R2 是否可以出一区，0=不可以，1=可以 */
-    uint8_t claw_open;                                        /* 允许放矿状态，0=未允许，1=当前允许释放三层矿 */
-    uint8_t cleared_ore_id;                                  /* 哪个 R1 矿被清掉，合法值 0-12 且不含 5/8；未收到时为 0xFF */
-    uint8_t zone3_r2_state;                                  /* 三区 R2 状态，1=工作状态，2=待机状态；未收到时为 0 */
+    uint8_t zone3_action_locked;                             /* 三层放矿动作锁，命令 3 锁定、命令 5 解锁 */
+    uint8_t release_allowed;                                 /* 命令 4 放矿许可是否仍在新鲜期 */
+    uint8_t release_abort_latched;                           /* 是否已锁存命令 6 中止；命令 3/5 清除 */
+    uint8_t zone3_action_state;                              /* 0=未知，1=已启动锁定，2=已结束解锁 */
     uint8_t last_dock_complete_cmd;                          /* 是否收到过命令 2 对接完成，0=否，1=是 */
-    uint8_t last_r2_leave_zone1_cmd;                         /* 是否收到过命令 5 允许移动，0=否，1=是 */
-    uint8_t last_claw_open_cmd;                              /* 最近放矿命令：0=等待，1=命令 3 允许，2=命令 4 中止 */
-    uint8_t last_command;                                    /* 最近成功解析的红外数据：1=在线，2=对接完成，3=允许放矿，4=中止放矿，5=允许移动 */
-    uint8_t release_abort_count_lsb;                         /* 命令 4 中止放矿累计接收次数低 8 位，可用于识别重复中止事件 */
+    uint8_t last_zone3_action_cmd;                           /* 0=无，1=命令 3 启动，2=命令 5 结束 */
+    uint8_t last_release_cmd;                                /* 0=等待，1=命令 4 允许，2=命令 6 中止 */
+    uint8_t last_command;                                    /* 最近合法命令，取值 1~6 */
+    uint8_t release_abort_count_lsb;                         /* 命令 6 有效中止事件累计次数低 8 位 */
     uint32_t age_ms;                                         /* 距最近成功解析 R1/R2 红外对接帧的时间，单位 ms；未收到过为 0 */
     uint32_t rx_count;                                       /* 成功解析 R1/R2 红外对接帧累计次数 */
     uint32_t crc_error_count;                                /* R1/R2 红外对接帧 CRC 错误累计次数 */

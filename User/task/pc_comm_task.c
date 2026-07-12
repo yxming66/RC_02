@@ -104,10 +104,6 @@ static AutoOre_DebugRequest_t PcComm_MapAutoAction(uint8_t action) {
             return AUTO_ORE_DEBUG_REQUEST_RELEASE_LIFT_DETECT_STEP1;
         case PC_AUTO_ACTION_RELEASE_LIFT_DETECT_STEP2:
             return AUTO_ORE_DEBUG_REQUEST_RELEASE_LIFT_DETECT_STEP2;
-        case PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT_STEP1:
-            return AUTO_ORE_DEBUG_REQUEST_RELEASE_IR_LIFT_DETECT_STEP1;
-        case PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT_STEP2:
-            return AUTO_ORE_DEBUG_REQUEST_RELEASE_IR_LIFT_DETECT_STEP2;
         case PC_AUTO_ACTION_CHAMBER:
             return AUTO_ORE_DEBUG_REQUEST_CHAMBER;
         case PC_AUTO_ACTION_PICK_POS_400:
@@ -188,12 +184,10 @@ static bool PcComm_ProcessAutoActionCommand(void) {
 
     const bool release_step2_continue =
         (request == AUTO_ORE_DEBUG_REQUEST_RELEASE_STEP2 ||
-         request == AUTO_ORE_DEBUG_REQUEST_RELEASE_LIFT_DETECT_STEP2 ||
-         request == AUTO_ORE_DEBUG_REQUEST_RELEASE_IR_LIFT_DETECT_STEP2) &&
+         request == AUTO_ORE_DEBUG_REQUEST_RELEASE_LIFT_DETECT_STEP2) &&
         auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl) &&
         (auto_ore_ctrl.action == AUTO_ORE_ACTION_RELEASE_STEP1 ||
-         auto_ore_ctrl.action == AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP1 ||
-         auto_ore_ctrl.action == AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT_STEP1) &&
+         auto_ore_ctrl.action == AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP1) &&
         AutoOre_IsUpperFinished(&auto_ore_ctrl);
 
     if (g_auto_ore_debug.request != AUTO_ORE_DEBUG_REQUEST_NONE &&
@@ -634,15 +628,16 @@ static void PcComm_UpdateIrDockFeedback(uint32_t now_ms) {
     feedback.valid = (g_ir_dock_debug.protocol_frame_rx_count > 0u) ? 1u : 0u;
     feedback.fresh = IrDock_IsOnline(now_ms) ? 1u : 0u;
     feedback.dock_complete = IrDock_IsDockCompleteFresh(now_ms) ? 1u : 0u;
-    feedback.r2_leave_zone1_allowed =
-        IrDock_IsR2LeaveZone1Allowed() ? 1u : 0u;
-    feedback.claw_open = IrDock_IsClawOpenFresh(now_ms) ? 1u : 0u;
-    feedback.cleared_ore_id = IrDock_GetLastClearedOreId();
-    feedback.zone3_r2_state = IrDock_GetLastZone3R2State();
+    feedback.zone3_action_locked =
+        IrDock_IsZone3ActionLocked() ? 1u : 0u;
+    feedback.release_allowed = IrDock_IsClawOpenFresh(now_ms) ? 1u : 0u;
+    feedback.release_abort_latched =
+        IrDock_IsReleaseAbortLatched() ? 1u : 0u;
+    feedback.zone3_action_state = IrDock_GetZone3ActionState();
     feedback.last_dock_complete_cmd = g_ir_dock_debug.last_dock_complete_cmd;
-    feedback.last_r2_leave_zone1_cmd =
-        g_ir_dock_debug.last_r2_leave_zone1_cmd;
-    feedback.last_claw_open_cmd = g_ir_dock_debug.last_claw_open_cmd;
+    feedback.last_zone3_action_cmd =
+        g_ir_dock_debug.last_zone3_action_cmd;
+    feedback.last_release_cmd = g_ir_dock_debug.last_claw_open_cmd;
     feedback.last_command = g_ir_dock_debug.last_rx_status;
     feedback.release_abort_count_lsb =
         (uint8_t)g_ir_dock_debug.claw_open_abort_rx_count;
