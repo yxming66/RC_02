@@ -64,8 +64,16 @@ int main(void) {
   assert(rod->owned_resource_mask == 0u);
   assert((rod->waiting_resource_mask & (RES_STORE | RES_VALVE)) != 0u);
 
+  /* A reporting policy may turn a terminal executor failure into public
+   * success.  The scheduler must not leak stale failure bits or expose an
+   * internally inconsistent SUCCEEDED record. */
+  AutoActionScheduler_SetProgress(&scheduler, fused, 0u, 0x04u, 0x03u,
+                                  0x0022u, 9u);
   AutoActionScheduler_Finish(&scheduler, fused, AUTO_ACTION_JOB_SUCCEEDED, 0u,
                              108u);
+  assert(fused->completed_segment_mask == fused->required_segment_mask);
+  assert(fused->failed_segment_mask == 0u);
+  assert(fused->failure_mask == 0u);
   start = AutoActionScheduler_NextStartable(&scheduler, 0u, 0u, 109u);
   assert(start == rod);
   AutoActionScheduler_MarkStarted(&scheduler, rod, 109u);

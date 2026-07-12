@@ -62,7 +62,7 @@ action, busy, finished, result, failure_mask, segment_mask, reserved = struct.un
 | `segment_mask bit1` | store 存矿侧完成 | 存矿机构侧完成 |
 | `segment_mask bit2` | step/底盘侧完成 | 台阶/底盘侧完成，可继续导航 |
 
-当前固件按真实结果填写 `result/failure_mask`；PC 应同时依赖：
+当前固件只对放矿观察 step1（普通、SICK 抬升、红外抬升）以及取矛头分段/等待动作填写真实失败；其他动作在底层状态机结束后兼容映射为成功。该映射不会提前结束动作。PC 应同时依赖：
 
 1. `busy` 判断是否正在跑。
 2. `finished` 判断总动作是否结束。

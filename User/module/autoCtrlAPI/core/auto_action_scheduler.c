@@ -324,7 +324,16 @@ void AutoActionScheduler_Finish(AutoActionScheduler_t *scheduler,
   AutoActionScheduler_ReleaseAll(scheduler, job);
   job->state = (uint8_t)terminal_state;
   job->running_segment_mask = 0u;
-  job->failure_mask |= failure_mask;
+  if (terminal_state == AUTO_ACTION_JOB_SUCCEEDED) {
+    /* Public success can intentionally mask a local executor failure.  Keep
+     * the wire-visible Job invariant coherent.  Callers may only finish a Job
+     * after its executor has itself reached a terminal result. */
+    job->completed_segment_mask |= job->required_segment_mask;
+    job->failed_segment_mask = 0u;
+    job->failure_mask = 0u;
+  } else {
+    job->failure_mask |= failure_mask;
+  }
   job->finish_time_ms = now_ms;
   AutoActionScheduler_Touch(scheduler, job);
 }

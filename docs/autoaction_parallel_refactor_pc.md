@@ -190,6 +190,26 @@ def parse_v3(payload: bytes):
 
 Job 可以保持 RUNNING，同时 `completed_segment_mask.STEP = 1`。此时表示台阶资源已经归还，但其他分支尚未结束。
 
+### 6.4 终态与“仅上报成功”策略
+
+资源释放、`completed_segment_mask` 某一位置位，都不代表整个 Job 已结束。RC02 只有在对应底层执行器真正进入 `SUCCESS`、`FAIL` 或 `ABORTED` 后，才会生成 Job 终态。因此，普通取矿释放 CHASSIS、融合动作释放 CHASSIS/POLE 后，Job 仍保持 `RUNNING`，上层机构继续执行到自己的状态机终点。
+
+为了兼容既有比赛流程，部分动作故意不向 PC 暴露内部失败。底层状态机仍正常运行到终态；仅在生成 PC 终态反馈时进行映射：
+
+| 动作 | 底层 FAIL 时 PC 看到 |
+|---|---|
+| `RELEASE_STEP1`、`RELEASE_LIFT_DETECT_STEP1`、`RELEASE_IR_LIFT_DETECT_STEP1` | `FAILED`，保留真实 `failure_mask` |
+| `ROD_SPEARHEAD_STEP1`、`ROD_SPEARHEAD_STEP2`、`ROD_DOCK_WAIT` | `FAILED`，保留真实 `failure_mask` |
+| 其他可提交动作 | `SUCCEEDED`，`failure_mask=0`、`failed_segment_mask=0`，并补齐 required segment |
+
+以下情况不参与“仅上报成功”映射：
+
+- V3 显式 `CANCEL`、遥控器退出 PC 控制页、PC 心跳失效，或底层执行器进入 `ABORTED`（包括红外安全中止）：返回 `CANCELLED`；
+- 请求非法、队列满、状态不允许：返回 reject；
+- Job 尚未成功启动执行器：返回 `FAILED/START_FAILED` 或 reject，不能伪造为已正常执行成功。
+
+因此上位机不能把底盘资源释放当作 AutoAction 成功；必须以该 `job_id` 的终态为准。
+
 ## 7. V3 拒绝反馈
 
 Topic：`PC_FEEDBACK_AUTO_ACTION_V3_REJECT = 0xA1`

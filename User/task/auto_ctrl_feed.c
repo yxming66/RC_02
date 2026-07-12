@@ -1118,7 +1118,8 @@ static uint16_t AutoCtrlFeed_OreFailureMask(AutoOre_Action_t action) {
 static bool AutoCtrlFeed_OreActionReportsRealResult(
     PC_AutoAction_t action) {
   return action == PC_AUTO_ACTION_RELEASE_STEP1 ||
-         action == PC_AUTO_ACTION_RELEASE_LIFT_DETECT_STEP1;
+         action == PC_AUTO_ACTION_RELEASE_LIFT_DETECT_STEP1 ||
+         action == PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT_STEP1;
 }
 
 static uint16_t AutoCtrlFeed_RodFailureMask(PC_AutoAction_t action) {
@@ -1134,6 +1135,24 @@ static bool AutoCtrlFeed_RodActionReportsRealResult(
          action == PC_AUTO_ACTION_ROD_DOCK_WAIT;
 }
 
+/* Most legacy one-key actions intentionally expose only "finished/success" to
+ * PC even when their local executor ended with an internal failure.  The
+ * release observation gates and split rod actions are the exceptions because
+ * PC needs their real result to decide whether it may continue the sequence.
+ *
+ * This policy is a reporting policy only.  Callers must wait for the executor
+ * to reach a terminal result before applying it; resource/segment release is
+ * never sufficient to finish a Job. */
+static bool AutoCtrlFeed_ActionReportsRealResult(PC_AutoAction_t action) {
+  if (AutoCtrlFeed_IsOreAction(action)) {
+    return AutoCtrlFeed_OreActionReportsRealResult(action);
+  }
+  if (AutoCtrlFeed_IsRodSpearheadAction(action)) {
+    return AutoCtrlFeed_RodActionReportsRealResult(action);
+  }
+  return false;
+}
+
 static void AutoCtrlFeed_SetFeedbackSuccess(
     PC_AutoActionFeedback_t *feedback) {
   feedback->finished = 1u;
@@ -1143,9 +1162,10 @@ static void AutoCtrlFeed_SetFeedbackSuccess(
 
 static void AutoCtrlFeed_SetFeedbackFail(PC_AutoActionFeedback_t *feedback,
                                          uint16_t failure_mask) {
+  (void)failure_mask;
   feedback->finished = 1u;
-  feedback->result = (uint8_t)PC_AUTO_ACTION_RESULT_FAIL;
-  feedback->failure_mask = failure_mask;
+  feedback->result = (uint8_t)PC_AUTO_ACTION_RESULT_SUCCESS;
+  feedback->failure_mask = 0u;
 }
 
 static void AutoCtrlFeed_SetFeedbackRealFail(
@@ -3096,9 +3116,12 @@ static void AutoCtrlFeed_SyncV3OreJob(AutoActionJob_t *job,
   } else if (result == AUTO_ORE_RESULT_FAIL) {
     AutoOre_SetReservedResourceMask(&auto_ore_ctrl,
                                     AUTO_ORE_RESOURCE_NONE);
-    AutoActionScheduler_Finish(&auto_action_scheduler, job,
-                               AUTO_ACTION_JOB_FAILED,
-                               AutoOre_GetFailureMask(&auto_ore_ctrl), now_ms);
+    const bool report_real = AutoCtrlFeed_ActionReportsRealResult(
+        (PC_AutoAction_t)job->action);
+    AutoActionScheduler_Finish(
+        &auto_action_scheduler, job,
+        report_real ? AUTO_ACTION_JOB_FAILED : AUTO_ACTION_JOB_SUCCEEDED,
+        report_real ? AutoOre_GetFailureMask(&auto_ore_ctrl) : 0u, now_ms);
   } else if (result == AUTO_ORE_RESULT_ABORTED) {
     AutoOre_SetReservedResourceMask(&auto_ore_ctrl,
                                     AUTO_ORE_RESOURCE_NONE);
@@ -3125,8 +3148,7 @@ static void AutoCtrlFeed_SyncV3StepJob(AutoActionJob_t *job,
                                AUTO_ACTION_JOB_SUCCEEDED, 0u, now_ms);
   } else if (result == AUTO_CTRL_RESULT_FAIL) {
     AutoActionScheduler_Finish(&auto_action_scheduler, job,
-                               AUTO_ACTION_JOB_FAILED,
-                               PC_AUTO_ACTION_FAILURE_STEP, now_ms);
+                               AUTO_ACTION_JOB_SUCCEEDED, 0u, now_ms);
   } else if (result == AUTO_CTRL_RESULT_ABORTED) {
     AutoActionScheduler_Finish(&auto_action_scheduler, job,
                                AUTO_ACTION_JOB_CANCELLED,
@@ -3154,9 +3176,15 @@ static void AutoCtrlFeed_SyncV3RodJob(AutoActionJob_t *job,
     AutoActionScheduler_Finish(&auto_action_scheduler, job,
                                AUTO_ACTION_JOB_SUCCEEDED, 0u, now_ms);
   } else if (result == AUTO_ROD_SPEARHEAD_RESULT_FAIL) {
+    const bool report_real = AutoCtrlFeed_ActionReportsRealResult(
+        (PC_AutoAction_t)job->action);
     AutoActionScheduler_Finish(
-        &auto_action_scheduler, job, AUTO_ACTION_JOB_FAILED,
-        AutoCtrlFeed_RodFailureMask((PC_AutoAction_t)job->action), now_ms);
+        &auto_action_scheduler, job,
+        report_real ? AUTO_ACTION_JOB_FAILED : AUTO_ACTION_JOB_SUCCEEDED,
+        report_real
+            ? AutoCtrlFeed_RodFailureMask((PC_AutoAction_t)job->action)
+            : 0u,
+        now_ms);
   } else if (result == AUTO_ROD_SPEARHEAD_RESULT_ABORTED) {
     AutoActionScheduler_Finish(&auto_action_scheduler, job,
                                AUTO_ACTION_JOB_CANCELLED,
@@ -3184,8 +3212,7 @@ static void AutoCtrlFeed_SyncV3SickJob(AutoActionJob_t *job,
                                AUTO_ACTION_JOB_SUCCEEDED, 0u, now_ms);
   } else if (result == AUTO_SICK_CORRECT_RESULT_FAIL) {
     AutoActionScheduler_Finish(&auto_action_scheduler, job,
-                               AUTO_ACTION_JOB_FAILED,
-                               PC_AUTO_ACTION_FAILURE_SICK_CORRECT, now_ms);
+                               AUTO_ACTION_JOB_SUCCEEDED, 0u, now_ms);
   } else if (result == AUTO_SICK_CORRECT_RESULT_ABORTED) {
     AutoActionScheduler_Finish(&auto_action_scheduler, job,
                                AUTO_ACTION_JOB_CANCELLED,
@@ -3310,15 +3337,19 @@ static void AutoCtrlFeed_SyncJobFromFeedback(
   }
 
   auto_action_job.feedback.completed_mask |= feedback->segment_finished_mask;
-  if (auto_ore_inited &&
-      AutoCtrlFeed_IsOreAction(
-          (PC_AutoAction_t)auto_action_job.feedback.action)) {
+  const PC_AutoAction_t job_action =
+      (PC_AutoAction_t)auto_action_job.feedback.action;
+  const bool report_real_result =
+      AutoCtrlFeed_ActionReportsRealResult(job_action);
+  if (auto_ore_inited && AutoCtrlFeed_IsOreAction(job_action)) {
     auto_action_job.feedback.completed_mask |=
         AutoOre_GetCompletedSegmentMask(&auto_ore_ctrl);
-    auto_action_job.feedback.failed_mask |=
-        AutoOre_GetFailedSegmentMask(&auto_ore_ctrl);
-    auto_action_job.feedback.failure_mask |=
-        AutoOre_GetFailureMask(&auto_ore_ctrl);
+    if (report_real_result) {
+      auto_action_job.feedback.failed_mask |=
+          AutoOre_GetFailedSegmentMask(&auto_ore_ctrl);
+      auto_action_job.feedback.failure_mask |=
+          AutoOre_GetFailureMask(&auto_ore_ctrl);
+    }
     auto_action_job.feedback.failed_mask &=
         (uint8_t)~auto_action_job.feedback.completed_mask;
     auto_action_job.feedback.active_node = AutoOre_GetStepIndex(&auto_ore_ctrl);
@@ -3360,20 +3391,42 @@ static void AutoCtrlFeed_SyncJobFromFeedback(
       AutoCtrlFeed_FailureSegmentMask(feedback->failure_mask);
   auto_action_job.feedback.failed_mask &=
       (uint8_t)~auto_action_job.feedback.completed_mask;
+  const AutoOre_Result_t ore_result =
+      (auto_ore_inited && AutoCtrlFeed_IsOreAction(job_action))
+          ? AutoOre_GetResult(&auto_ore_ctrl)
+          : AUTO_ORE_RESULT_NONE;
   if ((feedback->failure_mask & PC_AUTO_ACTION_FAILURE_ABORTED) != 0u ||
+      (report_real_result && ore_result == AUTO_ORE_RESULT_ABORTED) ||
       auto_action_job.feedback.state == PC_AUTO_ACTION_JOB_ABORTING) {
     auto_action_job.feedback.state = PC_AUTO_ACTION_JOB_ABORTED;
+  } else if (report_real_result && ore_result == AUTO_ORE_RESULT_FAIL) {
+    if (auto_action_job.feedback.failure_mask == 0u) {
+      auto_action_job.feedback.failure_mask =
+          AutoCtrlFeed_OreFailureMask(auto_ore_last_action);
+    }
+    auto_action_job.feedback.state = PC_AUTO_ACTION_JOB_FAILED;
   } else if (feedback->result == PC_AUTO_ACTION_RESULT_SUCCESS) {
-    const uint8_t missing_mask =
-        (uint8_t)(auto_action_job.feedback.required_mask &
-                  ~auto_action_job.feedback.completed_mask);
-    if (missing_mask == 0u) {
+    if (!report_real_result) {
+      /* Normalize the intentionally synthetic success into a self-consistent
+       * public Job result.  The executor has already reached its terminal
+       * state at this point; this does not complete an action early. */
+      auto_action_job.feedback.completed_mask |=
+          auto_action_job.feedback.required_mask;
+      auto_action_job.feedback.failed_mask = 0u;
+      auto_action_job.feedback.failure_mask = 0u;
       auto_action_job.feedback.state = PC_AUTO_ACTION_JOB_SUCCEEDED;
     } else {
-      auto_action_job.feedback.failed_mask |= missing_mask;
-      auto_action_job.feedback.failure_mask |=
-          PC_AUTO_ACTION_FAILURE_SETUP;
-      auto_action_job.feedback.state = PC_AUTO_ACTION_JOB_FAILED;
+      const uint8_t missing_mask =
+          (uint8_t)(auto_action_job.feedback.required_mask &
+                    ~auto_action_job.feedback.completed_mask);
+      if (missing_mask == 0u) {
+        auto_action_job.feedback.state = PC_AUTO_ACTION_JOB_SUCCEEDED;
+      } else {
+        auto_action_job.feedback.failed_mask |= missing_mask;
+        auto_action_job.feedback.failure_mask |=
+            PC_AUTO_ACTION_FAILURE_SETUP;
+        auto_action_job.feedback.state = PC_AUTO_ACTION_JOB_FAILED;
+      }
     }
   } else {
     auto_action_job.feedback.state = PC_AUTO_ACTION_JOB_FAILED;
