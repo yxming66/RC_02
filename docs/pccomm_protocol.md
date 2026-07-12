@@ -698,7 +698,7 @@ AA 55 02 msg_id side ore_type[12] crc8
 |---:|---|
 | 0 | NONE |
 | 1 | ABORT |
-| 2 | STORE |
+| 2 | STORE；若最终存入低位，平台返回 STANDBY 后执行小幅快速上下颠动，最后回到 STANDBY 才结束 |
 | 3 | RELEASE |
 | 4 | RELEASE_LIFT_DETECT，Pole 到放矿目标后比较预留 SICK 原始 ADC 阈值，确认被抬起后继续放矿 |
 | 5 | CHAMBER |

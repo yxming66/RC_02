@@ -190,6 +190,8 @@ def parse_v3(payload: bytes):
 
 Job 可以保持 RUNNING，同时 `completed_segment_mask.STEP = 1`。此时表示台阶资源已经归还，但其他分支尚未结束。
 
+低位存矿包含平台收尾颠动。平台完成配置次数的快速上/下往返并回到 `STANDBY` 后，才设置 `completed_segment_mask.STORE`；颠动期间 Job 和 STORE 分支仍为运行中。高位存矿不执行该阶段。
+
 ### 6.4 终态与“仅上报成功”策略
 
 资源释放、`completed_segment_mask` 某一位置位，都不代表整个 Job 已结束。RC02 只有在对应底层执行器真正进入 `SUCCESS`、`FAIL` 或 `ABORTED` 后，才会生成 Job 终态。因此，普通取矿释放 CHASSIS、融合动作释放 CHASSIS/POLE 后，Job 仍保持 `RUNNING`，上层机构继续执行到自己的状态机终点。

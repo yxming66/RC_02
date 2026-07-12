@@ -133,7 +133,7 @@ def clear_auto_action_latch():
 | ID | 名称 | 用途 |
 |---:|---|---|
 | `1` | `PC_AUTO_ACTION_ABORT` | 中止当前一键动作 |
-| `2` | `PC_AUTO_ACTION_STORE` | 一键存矿，把 arm 持有矿存入低/高位空位 |
+| `2` | `PC_AUTO_ACTION_STORE` | 一键存矿，把 arm 持有矿存入低/高位空位；低位流程最后执行平台快速上下颠动，回到 STANDBY 后才完成 |
 | `3` | `PC_AUTO_ACTION_RELEASE` | 一键放矿，普通完整放矿流程 |
 | `4` | `PC_AUTO_ACTION_RELEASE_LIFT_DETECT` | 一键三层放矿，含抬升检测流程 |
 | `5` | `PC_AUTO_ACTION_CHAMBER` | 一键上膛，从低/高位取矿到 arm/发射准备位 |

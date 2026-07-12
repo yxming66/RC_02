@@ -484,7 +484,7 @@ Config_RobotParam_t robot_config = {
         },
         /*
          * 低位存矿收尾颠动：平台回到 STANDBY 后，向 LIFT 方向小幅快速往返。
-         * cycles 为完整“上+下”次数；只作用于最终存入低位矿仓的流程。
+         * cycles 为完整“上+下”次数，0 表示关闭；只作用于最终存入低位矿仓的流程。
          */
         .store_low_shake_amplitude_rad = 1.0f,
         .store_low_shake_velocity_rad_s = 50.0f,

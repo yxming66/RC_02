@@ -17,7 +17,6 @@
 #define AUTO_ORE_STORE_LOW_RETURN_MIN_VELOCITY_RAD_S (0.05f)
 #define AUTO_ORE_DEFAULT_STORE_LOW_SHAKE_AMPLITUDE_RAD (1.0f)
 #define AUTO_ORE_DEFAULT_STORE_LOW_SHAKE_VELOCITY_RAD_S (50.0f)
-#define AUTO_ORE_DEFAULT_STORE_LOW_SHAKE_CYCLES (3u)
 #define AUTO_ORE_STORE_LOW_SHAKE_MAX_CYCLES (16u)
 #define AUTO_ORE_DEFAULT_RELEASE_WAIT_MS (50u)
 #define AUTO_ORE_RELEASE_GRID_CHECK_MS (500u)
@@ -311,9 +310,7 @@ static float AutoOre_StoreLowShakeVelocityRadS(const AutoOre_t *ctrl) {
 }
 
 static uint8_t AutoOre_StoreLowShakeCycles(const AutoOre_t *ctrl) {
-  uint8_t cycles = (ctrl->param.store_low_shake_cycles > 0u)
-                       ? ctrl->param.store_low_shake_cycles
-                       : AUTO_ORE_DEFAULT_STORE_LOW_SHAKE_CYCLES;
+  uint8_t cycles = ctrl->param.store_low_shake_cycles;
   if (cycles > AUTO_ORE_STORE_LOW_SHAKE_MAX_CYCLES) {
     cycles = AUTO_ORE_STORE_LOW_SHAKE_MAX_CYCLES;
   }
