@@ -5,7 +5,13 @@
 #include "task/user_task.h"
 
 #include "device/dr16.h"
+#ifndef RC_MAIN_RF_REMOTE_ENABLE
+#define RC_MAIN_RF_REMOTE_ENABLE (0u)
+#endif
+
+#if RC_MAIN_RF_REMOTE_ENABLE
 #include "device/rf_remote.h"
+#endif
 #include "module/rc_cmd_center/rc_cmd_center_app.h"
 
 #define RC_MAIN_DR16_OFFLINE_TIMEOUT_US (100000ULL)
@@ -37,12 +43,14 @@ void Task_rc_main(void *argument) {
     }
   }
 
+#if RC_MAIN_RF_REMOTE_ENABLE
   if (RF_Remote_Init() == DEVICE_OK) {
     if (RF_Remote_StartDmaRecv() != DEVICE_OK) {
       RF_Remote_Restart();
       (void)RF_Remote_StartDmaRecv();
     }
   }
+#endif
 
   RcCmdCenterApp_Init();
 
@@ -70,7 +78,9 @@ void Task_rc_main(void *argument) {
       (void)DR16_StartDmaRecv(&dr16);
     }
 
+#if RC_MAIN_RF_REMOTE_ENABLE
     (void)RF_Remote_Poll(RC_MAIN_DR16_OFFLINE_TIMEOUT_US);
+#endif
 
     RcCmdCenterApp_Update(BSP_TIME_Get_ms());
 
