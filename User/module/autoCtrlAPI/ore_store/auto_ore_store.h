@@ -348,6 +348,7 @@ typedef struct {
   uint32_t fused_arm_photo_since_ms;
   bool fused_photo1_stable_trigger_seen;
   bool fused_photo1_stable_release_latched;
+  bool fused_photo1_arm_protection_latched;
   uint32_t fused_photo1_triggered_since_ms;
   uint32_t fused_photo1_released_since_ms;
   bool fused_photo2_stable_trigger_seen;
@@ -369,7 +370,10 @@ typedef struct {
   bool release_ir_finish_pending;
   bool release_ir_wait_ready;
   bool release_ir_release_started;
+  bool release_ir_suction_released;
   bool release_ir_abort_recovery_active;
+  bool release_ir_abort_recovered;
+  bool release_ir_finish_return_active;
   bool release_ir_abort_suction_on;
   uint8_t release_ir_abort_source_step;
   uint8_t release_ir_abort_recovery_phase;

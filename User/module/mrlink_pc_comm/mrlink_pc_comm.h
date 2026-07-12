@@ -242,7 +242,7 @@ typedef enum {
     PC_AUTO_ACTION_RELEASE_STEP2 = 35,    /* 放矿 step2：确认目标格后继续释放矿 */
     PC_AUTO_ACTION_RELEASE_LIFT_DETECT_STEP1 = 36, /* 三层放矿 step1：竖直观察目标格并等待抬升检测 */
     PC_AUTO_ACTION_RELEASE_LIFT_DETECT_STEP2 = 37, /* 三层放矿 step2：确认目标格/抬升后继续释放矿 */
-    PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT = 38, /* 三层放矿单事务：03 锁定后由 PC 提交，等待 04 放矿、05 结束或 06 中止 */
+    PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT = 38, /* 三层放矿单事务：WAIT_RELEASE 等 04；06 回等待位；05 回 STANDBY 并结束 */
 } PC_AutoAction_t;
 
 typedef enum {

@@ -86,6 +86,7 @@ static auto_ctrl_template_e AutoOre_FusedStepTemplateId(
 static float AutoOre_SelectPrealignWz(AutoOre_t *ctrl);
 static float AutoOre_OreStoreArriveThresholdRad(const AutoOre_t *ctrl);
 static void AutoOre_FinishSuccess(AutoOre_t *ctrl);
+static void AutoOre_SetActivePositionHasOre(AutoOre_t *ctrl, bool has_ore);
 static bool AutoOre_CommandArm(AutoOre_t *ctrl,
                  ArmSimple_BehaviorPoint_t point,
                  Suction_State_t suction,
@@ -94,6 +95,9 @@ static bool AutoOre_CommandReleasePoleTarget(AutoOre_t *ctrl);
 static bool AutoOre_CommandReleaseOreStoreHold(
   AutoOre_t *ctrl, OreStore_TransformPoint_t transform,
   bool cylinder_closed);
+static void AutoOre_CommandChassisMoveYawRate(AutoOre_t *ctrl, float vx_mps,
+                                               float wz_rad_s);
+static void AutoOre_CommandChassisHold(AutoOre_t *ctrl);
 static void AutoOre_CommandChassisZeroVector(AutoOre_t *ctrl);
 static bool AutoOre_WaitArmCommandTarget(AutoOre_t *ctrl, uint32_t now_ms);
 static bool AutoOre_WaitPickArmCommandTargetStable(AutoOre_t *ctrl,
@@ -178,6 +182,7 @@ static bool AutoOre_PickActionUsesPhoto1Falling(AutoOre_Action_t action) {
 static void AutoOre_ResetPhoto1Latch(AutoOre_t *ctrl) {
   ctrl->fused_photo1_stable_trigger_seen = false;
   ctrl->fused_photo1_stable_release_latched = false;
+  ctrl->fused_photo1_arm_protection_latched = false;
   ctrl->fused_photo1_triggered_since_ms = 0u;
   ctrl->fused_photo1_released_since_ms = 0u;
 }
@@ -504,6 +509,10 @@ static bool AutoOre_UpdateReleaseGridCheck(AutoOre_t *ctrl, uint32_t now_ms,
 }
 
 static void AutoOre_FinishIrReleaseAbort(AutoOre_t *ctrl) {
+  if (AutoOre_ActionIsZone3IrRelease(ctrl->action) &&
+      ctrl->release_ir_suction_released) {
+    AutoOre_SetActivePositionHasOre(ctrl, false);
+  }
   ctrl->state = AUTO_ORE_STATE_ABORT;
   ctrl->result = AUTO_ORE_RESULT_ABORTED;
   ctrl->fault = AUTO_ORE_FAULT_ABORTED;
@@ -516,6 +525,43 @@ static void AutoOre_FinishIrReleaseAbort(AutoOre_t *ctrl) {
 
 static void AutoOre_RunIrReleaseAbortRecovery(AutoOre_t *ctrl,
                                                uint32_t now_ms) {
+  if (AutoOre_ActionIsZone3IrRelease(ctrl->action)) {
+    if (!ctrl->release_ir_abort_recovery_active) {
+      ctrl->release_ir_abort_recovery_active = true;
+      ctrl->release_ir_abort_source_step = ctrl->step_index;
+      ctrl->release_ir_abort_suction_on =
+          !ctrl->release_ir_suction_released;
+      ctrl->step_entered = false;
+      ctrl->step_condition_met = false;
+    }
+
+    AutoOre_CommandChassisZeroVector(ctrl);
+    AutoOre_EnterStep(ctrl, now_ms);
+    const Suction_State_t suction_state = ctrl->release_ir_abort_suction_on
+                                              ? SUCTION_ON
+                                              : SUCTION_OFF;
+    if (!AutoOre_CommandReleasePoleTarget(ctrl) ||
+        !AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_WAIT_RELEASE_ORE,
+                            suction_state,
+                            &ctrl->param.arm_speed.release_wait) ||
+        !AutoOre_CommandReleaseOreStoreHold(ctrl,
+                                            ORE_STORE_TRANSFORM_STANDBY,
+                                            true)) {
+      AutoOre_FailInvalidParam(ctrl);
+      return;
+    }
+    if (!AutoOre_WaitArmCommandTarget(ctrl, now_ms)) {
+      (void)AutoOre_CheckTimeout(ctrl, now_ms);
+      return;
+    }
+    ctrl->release_ir_abort_pending = false;
+    ctrl->release_ir_abort_recovery_active = false;
+    ctrl->release_ir_abort_recovered = true;
+    ctrl->step_entered = false;
+    ctrl->step_condition_met = false;
+    return;
+  }
+
   if (!ctrl->release_ir_abort_recovery_active) {
     ctrl->release_ir_abort_recovery_active = true;
     ctrl->release_ir_abort_source_step = ctrl->step_index;
@@ -565,6 +611,58 @@ static void AutoOre_RunIrReleaseAbortRecovery(AutoOre_t *ctrl,
     return;
   }
   AutoOre_FinishIrReleaseAbort(ctrl);
+}
+
+static void AutoOre_RunZone3AbortHold(AutoOre_t *ctrl, uint32_t now_ms) {
+  AutoOre_CommandChassisZeroVector(ctrl);
+  const Suction_State_t suction_state = ctrl->release_ir_abort_suction_on
+                                            ? SUCTION_ON
+                                            : SUCTION_OFF;
+  if (!AutoOre_CommandReleasePoleTarget(ctrl) ||
+      !AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_WAIT_RELEASE_ORE,
+                          suction_state,
+                          &ctrl->param.arm_speed.release_wait) ||
+      !AutoOre_CommandReleaseOreStoreHold(ctrl,
+                                          ORE_STORE_TRANSFORM_STANDBY,
+                                          true)) {
+    AutoOre_FailInvalidParam(ctrl);
+    return;
+  }
+  (void)now_ms;
+}
+
+static void AutoOre_RunZone3FinishReturn(AutoOre_t *ctrl,
+                                         uint32_t now_ms) {
+  if (!ctrl->release_ir_finish_return_active) {
+    ctrl->release_ir_finish_return_active = true;
+    ctrl->step_entered = false;
+    ctrl->step_condition_met = false;
+  }
+
+  AutoOre_CommandChassisZeroVector(ctrl);
+  AutoOre_EnterStep(ctrl, now_ms);
+  const Suction_State_t suction_state = ctrl->release_ir_suction_released
+                                            ? SUCTION_OFF
+                                            : SUCTION_ON;
+  if (!AutoOre_CommandReleasePoleTarget(ctrl) ||
+      !AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_STANDBY,
+                          suction_state,
+                          &ctrl->param.arm_speed.release_standby) ||
+      !AutoOre_CommandReleaseOreStoreHold(ctrl,
+                                          ORE_STORE_TRANSFORM_STANDBY,
+                                          true)) {
+    AutoOre_FailInvalidParam(ctrl);
+    return;
+  }
+  if (!AutoOre_WaitArmCommandTarget(ctrl, now_ms)) {
+    (void)AutoOre_CheckTimeout(ctrl, now_ms);
+    return;
+  }
+  if (ctrl->release_ir_abort_recovered) {
+    AutoOre_FinishIrReleaseAbort(ctrl);
+  } else {
+    AutoOre_FinishSuccess(ctrl);
+  }
 }
 
 static bool AutoOre_UpdateReleaseLiftObserver(AutoOre_t *ctrl,
@@ -929,6 +1027,35 @@ static bool AutoOre_WaitPickArmCommandTargetStable(AutoOre_t *ctrl,
     return stable_ms == 0u;
   }
   return (now_ms - ctrl->arm_target_stable_since_ms) >= stable_ms;
+}
+
+static bool AutoOre_FusedPhoto1ProtectsUnstableArm(
+    AutoOre_t *ctrl, bool arm_stable) {
+  if (ctrl == 0) {
+    return false;
+  }
+  if (arm_stable) {
+    ctrl->fused_photo1_arm_protection_latched = false;
+    return false;
+  }
+  if (ctrl->feedback.photo_transfer_valid &&
+      ctrl->feedback.pe13_photo1_triggered) {
+    ctrl->fused_photo1_arm_protection_latched = true;
+  }
+  return ctrl->fused_photo1_arm_protection_latched;
+}
+
+static void AutoOre_CommandFusedApproachWithArmProtection(
+    AutoOre_t *ctrl, const AutoOre_FusedParam_t *fused, bool arm_stable) {
+  if (ctrl == 0 || fused == 0) {
+    return;
+  }
+  if (AutoOre_FusedPhoto1ProtectsUnstableArm(ctrl, arm_stable)) {
+    AutoOre_CommandChassisHold(ctrl);
+    return;
+  }
+  AutoOre_CommandChassisMoveYawRate(ctrl, fused->precontact_vx_mps,
+                                    ctrl->feedback.yaw_rate_cmd_rad_s);
 }
 
 static bool AutoOre_WaitOreStoreCommandTarget(AutoOre_t *ctrl,
@@ -1768,8 +1895,12 @@ static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
   switch (ctrl->step_index) {
     case 0:
       AutoOre_EnterStep(ctrl, now_ms);
+      const bool zone3_ir_release_step0 =
+          AutoOre_ActionIsZone3IrRelease(ctrl->action);
       if (!AutoOre_CommandReleasePoleTarget(ctrl) ||
-          !AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_VERTICAL,
+          !AutoOre_CommandArm(ctrl,
+              zone3_ir_release_step0 ? ARM_SIMPLE_BEHAVIOR_WAIT_RELEASE_ORE
+                                     : ARM_SIMPLE_BEHAVIOR_VERTICAL,
               SUCTION_ON,
               &ctrl->param.arm_speed.release_wait) ||
           !AutoOre_CommandReleaseOreStoreHold(ctrl,
@@ -1788,8 +1919,12 @@ static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
       return;
     case 1:
       AutoOre_EnterStep(ctrl, now_ms);
+      const bool zone3_ir_release_step1 =
+          AutoOre_ActionIsZone3IrRelease(ctrl->action);
       if (!AutoOre_CommandReleasePoleTarget(ctrl) ||
-          !AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_VERTICAL,
+          !AutoOre_CommandArm(ctrl,
+              zone3_ir_release_step1 ? ARM_SIMPLE_BEHAVIOR_WAIT_RELEASE_ORE
+                                     : ARM_SIMPLE_BEHAVIOR_VERTICAL,
               SUCTION_ON,
               &ctrl->param.arm_speed.release_wait) ||
           !AutoOre_CommandReleaseOreStoreHold(ctrl,
@@ -1955,6 +2090,9 @@ static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
       return;
     case 5:
       AutoOre_EnterStep(ctrl, now_ms);
+      if (AutoOre_ActionIsZone3IrRelease(ctrl->action)) {
+        ctrl->release_ir_suction_released = true;
+      }
       if (!AutoOre_CommandReleasePoleTarget(ctrl) ||
           !AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_RELEASE_ORE,
               SUCTION_OFF,
@@ -1974,10 +2112,15 @@ static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
       return;
     case 6:
       AutoOre_EnterStep(ctrl, now_ms);
+      const bool zone3_ir_release_step6 =
+          AutoOre_ActionIsZone3IrRelease(ctrl->action);
       if (!AutoOre_CommandReleasePoleTarget(ctrl) ||
-          !AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_STANDBY,
+          !AutoOre_CommandArm(ctrl,
+              zone3_ir_release_step6 ? ARM_SIMPLE_BEHAVIOR_WAIT_RELEASE_ORE
+                                     : ARM_SIMPLE_BEHAVIOR_STANDBY,
               SUCTION_OFF,
-              &ctrl->param.arm_speed.release_standby) ||
+              zone3_ir_release_step6 ? &ctrl->param.arm_speed.release_wait
+                                     : &ctrl->param.arm_speed.release_standby) ||
           !AutoOre_CommandReleaseOreStoreHold(ctrl,
                                               ORE_STORE_TRANSFORM_STANDBY,
                                               true)) {
@@ -1985,8 +2128,7 @@ static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
         return;
       }
       if (AutoOre_WaitArmCommandTarget(ctrl, now_ms)) {
-        if (!AutoOre_ActionIsZone3IrRelease(ctrl->action) ||
-            ctrl->release_ir_finish_pending) {
+        if (!zone3_ir_release_step6) {
           AutoOre_FinishSuccess(ctrl);
         }
       } else {
@@ -3443,13 +3585,16 @@ static void AutoOre_RunStepPickStoreFused(AutoOre_t *ctrl, uint32_t now_ms) {
       return;
     case 1:
       AutoOre_EnterStep(ctrl, now_ms);
-      AutoOre_CommandChassisHold(ctrl);
       if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_STANDBY, SUCTION_ON,
                               &ctrl->param.arm_speed.pick_standby) ||
           !AutoOre_CommandFusedPickPoleTarget(ctrl, pole_target)) {
         AutoOre_FailPickInvalidParam(ctrl);
         return;
       }
+      /* STANDBY is only a transit target.  For photo1 protection the Arm is
+       * not considered safe until the fused pick target in case 2 is stable. */
+      AutoOre_CommandFusedApproachWithArmProtection(
+          ctrl, fused, false);
       if (ctrl->feedback.pole_all_at_target) {
         AutoOre_NextStep(ctrl);
       } else {
@@ -3459,11 +3604,6 @@ static void AutoOre_RunStepPickStoreFused(AutoOre_t *ctrl, uint32_t now_ms) {
       return;
     case 2:
       AutoOre_EnterStep(ctrl, now_ms);
-      /* Start the configured low-speed approach while Arm moves from standby
-       * to the fused pick point.  Case 3 keeps the same command, so chassis
-       * motion no longer pauses for the entire initial Arm move. */
-      AutoOre_CommandChassisMoveYawRate(ctrl, fused->precontact_vx_mps,
-                                        ctrl->feedback.yaw_rate_cmd_rad_s);
       if (!AutoOre_CommandArm(ctrl, AutoOre_FusedPickArmPoint(ctrl),
                               SUCTION_ON,
                               &ctrl->param.arm_speed.pick_place) ||
@@ -3471,7 +3611,11 @@ static void AutoOre_RunStepPickStoreFused(AutoOre_t *ctrl, uint32_t now_ms) {
         AutoOre_FailPickInvalidParam(ctrl);
         return;
       }
-      if (AutoOre_WaitPickArmCommandTargetStable(ctrl, now_ms)) {
+      const bool pick_arm_stable =
+          AutoOre_WaitPickArmCommandTargetStable(ctrl, now_ms);
+      AutoOre_CommandFusedApproachWithArmProtection(
+          ctrl, fused, pick_arm_stable);
+      if (pick_arm_stable) {
         AutoOre_NextStep(ctrl);
       } else {
         (void)AutoOre_CheckTimeoutWithFailure(
@@ -3852,6 +3996,7 @@ static bool AutoOre_StartResolved(AutoOre_t *ctrl, AutoOre_Action_t action,
   ctrl->fused_arm_photo_since_ms = 0u;
   ctrl->fused_photo1_stable_trigger_seen = false;
   ctrl->fused_photo1_stable_release_latched = false;
+  ctrl->fused_photo1_arm_protection_latched = false;
   ctrl->fused_photo1_triggered_since_ms = 0u;
   ctrl->fused_photo1_released_since_ms = 0u;
   AutoOre_ResetPhoto2Latch(ctrl);
@@ -3864,7 +4009,10 @@ static bool AutoOre_StartResolved(AutoOre_t *ctrl, AutoOre_Action_t action,
   ctrl->release_ir_finish_pending = false;
   ctrl->release_ir_wait_ready = false;
   ctrl->release_ir_release_started = false;
+  ctrl->release_ir_suction_released = false;
   ctrl->release_ir_abort_recovery_active = false;
+  ctrl->release_ir_abort_recovered = false;
+  ctrl->release_ir_finish_return_active = false;
   ctrl->release_ir_abort_suction_on = true;
   ctrl->release_ir_abort_source_step = 0u;
   ctrl->release_ir_abort_recovery_phase = 0u;
@@ -4110,15 +4258,6 @@ void AutoOre_Update(AutoOre_t *ctrl, const AutoOre_Feedback_t *feedback,
     ctrl->release_ir_finish_count_at_start =
         ctrl->feedback.release_lift_ir_finish_count;
   }
-  if (AutoOre_ActionIsZone3IrRelease(ctrl->action) &&
-      ctrl->release_ir_finish_pending && !ctrl->release_ir_abort_pending &&
-      (ctrl->active_position != AUTO_ORE_POSITION_ARM ||
-       ctrl->step_index <= 1u)) {
-    AutoOre_FinishSuccess(ctrl);
-    AutoOre_ClearOutputs(ctrl);
-    AutoOre_PublishOutputSnapshot(ctrl);
-    return;
-  }
   AutoOre_UpdateFusedAscendPhoto1Latch(ctrl, now_ms);
   AutoOre_UpdateFusedDescendPhoto2Latch(ctrl, now_ms);
   if ((!AutoOre_ActionIsPick(ctrl->action) ||
@@ -4137,7 +4276,30 @@ void AutoOre_Update(AutoOre_t *ctrl, const AutoOre_Feedback_t *feedback,
   }
 
   AutoOre_ClearOutputs(ctrl);
-  if (ctrl->action == AUTO_ORE_ACTION_STORE) {
+  bool zone3_control_handled = false;
+  if (AutoOre_ActionIsZone3IrRelease(ctrl->action)) {
+    if (ctrl->release_ir_abort_pending) {
+      AutoOre_RunIrReleaseAbortRecovery(ctrl, now_ms);
+      zone3_control_handled = true;
+    } else if (ctrl->release_ir_abort_recovered) {
+      if (ctrl->release_ir_finish_pending) {
+        AutoOre_RunZone3FinishReturn(ctrl, now_ms);
+      } else {
+        AutoOre_RunZone3AbortHold(ctrl, now_ms);
+      }
+      zone3_control_handled = true;
+    } else if (ctrl->release_ir_finish_pending &&
+               (!ctrl->release_ir_release_started ||
+                ctrl->step_index >= 6u)) {
+      AutoOre_RunZone3FinishReturn(ctrl, now_ms);
+      zone3_control_handled = true;
+    }
+  }
+
+  if (zone3_control_handled) {
+    /* Command 06 holds WAIT_RELEASE_ORE; command 05 owns the final STANDBY
+     * transition.  Keep the normal release state machine paused meanwhile. */
+  } else if (ctrl->action == AUTO_ORE_ACTION_STORE) {
     switch (ctrl->active_position) {
       case AUTO_ORE_POSITION_TRANSFORM_LOW:
         AutoOre_RunStoreLow(ctrl, now_ms);
