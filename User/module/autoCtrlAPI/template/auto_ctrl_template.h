@@ -21,6 +21,7 @@ typedef struct {
   bool photo_stop_entered;       /* descend photo stop hold has started */
   bool descend_start_move_entered; /* 下台阶首次冲刺计时已启动。 */
   bool descend_start_lift_ready;  /* 下台阶起步前的撑杆高度已达到安全门限。 */
+  bool descend_landing_approach_done; /* 当前下台阶伸杆组已完成高速接近段。 */
   uint8_t step_index;            /* 当前模板执行到的 step 编号。 */
   uint32_t step_enter_time_ms;   /* 当前 step 首次进入时刻（ms）。 */
   uint32_t template_start_time_ms; /* 当前模板开始时刻（ms）。 */

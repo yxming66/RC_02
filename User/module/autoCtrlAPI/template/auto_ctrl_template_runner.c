@@ -141,6 +141,7 @@ static void AutoCtrlTemplate_SetStep(auto_ctrl_t *ctrl, uint8_t step_index) {
   ctrl->template_ctx.final_photo_sprint_start_ms = 0u;
   ctrl->template_ctx.descend_start_move_entered = false;
   ctrl->template_ctx.descend_start_lift_ready = false;
+  ctrl->template_ctx.descend_landing_approach_done = false;
   ctrl->template_ctx.descend_start_move_time_ms = 0u;
   ctrl->template_ctx.distance_latch_valid = false;
   ctrl->template_ctx.wheel_delta_rad = 0.0f;

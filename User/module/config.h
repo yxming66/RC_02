@@ -83,6 +83,8 @@ typedef struct {
   float pole_rear_extend_accel;    /* 后杆伸出加速度，单位 rad/s^2。 */
   float pole_rear_retract_speed;   /* 后杆回收速度，单位 rad/s。 */
   float pole_rear_retract_accel;   /* 后杆回收加速度，单位 rad/s^2。 */
+  float pole_extend_landing_zone_rad; /* 下台阶伸杆末段软着陆区长度，单位 rad；<=0 禁用。 */
+  float pole_extend_landing_speed; /* 下台阶软着陆区伸杆速度，单位 rad/s；<=0 禁用。 */
 
   uint32_t front_photo_timeout_ms; /* 当前前侧光电等待超时，单位 ms。 */
   uint32_t rear_photo_timeout_ms;  /* 当前后侧光电等待超时，单位 ms。 */

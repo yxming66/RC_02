@@ -817,6 +817,30 @@ static bool AutoOre_LatchPhotoStableFalling(
   return *stable_release_latched;
 }
 
+static bool AutoOre_LatchPhotoStableTriggered(
+    bool triggered, bool *stable_trigger_latched,
+    uint32_t *triggered_since_ms, uint32_t now_ms) {
+  if (stable_trigger_latched == 0 || triggered_since_ms == 0) {
+    return false;
+  }
+  if (*stable_trigger_latched) {
+    return true;
+  }
+  if (!triggered) {
+    *triggered_since_ms = 0u;
+    return false;
+  }
+  if (*triggered_since_ms == 0u) {
+    *triggered_since_ms = now_ms;
+    return false;
+  }
+  if ((now_ms - *triggered_since_ms) >=
+      AUTO_ORE_FUSED_STEP_PHOTO_STABLE_MS) {
+    *stable_trigger_latched = true;
+  }
+  return *stable_trigger_latched;
+}
+
 static bool AutoOre_ArmCommandAtTarget(const AutoOre_t *ctrl) {
   const float threshold =
       (ctrl != 0 && ctrl->param.arm_arrive_threshold_rad > 0.0f)
@@ -2295,7 +2319,7 @@ static bool AutoOre_FusedArmLiftPhotoReached(AutoOre_t *ctrl,
   switch (AutoOre_FusedStepTemplateId(ctrl)) {
     case AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD:
     case AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD:
-      return ctrl->feedback.pe13_photo1_triggered;
+      return ctrl->fused_photo1_stable_trigger_seen;
     case AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD:
     case AUTO_CTRL_TEMPLATE_DESCEND_400_HEAD:
       return AutoOre_LatchPhotoStableFalling(
@@ -2313,20 +2337,45 @@ static bool AutoOre_FusedArmLiftPhotoReached(AutoOre_t *ctrl,
  * descend template must enter its normal flow and detect the first stair edge
  * from photo2 (pe9) inside AutoCtrlTemplate_DescendFirstPhotoFallingStable(). */
 static bool AutoOre_FusedStepStartShortcutReached(const AutoOre_t *ctrl) {
-  if (ctrl == 0 || !ctrl->feedback.photo_transfer_valid) {
+  if (ctrl == 0) {
     return false;
   }
 
   switch (AutoOre_FusedStepTemplateId(ctrl)) {
     case AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD:
     case AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD:
-      return ctrl->feedback.pe13_photo1_triggered;
+      return ctrl->fused_photo1_stable_trigger_seen;
     case AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD:
     case AUTO_CTRL_TEMPLATE_DESCEND_400_HEAD:
     case AUTO_CTRL_TEMPLATE_NONE:
     default:
       return false;
   }
+}
+
+static bool AutoOre_UsesFusedAscendTemplate(const AutoOre_t *ctrl) {
+  const auto_ctrl_template_e template_id = AutoOre_FusedStepTemplateId(ctrl);
+  return ctrl != 0 && AutoOre_ActionIsFused(ctrl->action) &&
+         (template_id == AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD ||
+          template_id == AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD);
+}
+
+/* The first stair edge for fused ascend is photo1, but Arm/Pole setup can
+ * delay creation of the embedded step template.  Latch a stable photo1 high
+ * from action start so the event remains available after the raw pulse ends. */
+static void AutoOre_UpdateFusedAscendPhoto1Latch(AutoOre_t *ctrl,
+                                                 uint32_t now_ms) {
+  if (!AutoOre_UsesFusedAscendTemplate(ctrl) || ctrl->step_ctrl_started) {
+    return;
+  }
+  if (!ctrl->feedback.photo_transfer_valid) {
+    AutoOre_PausePhoto1Latch(ctrl, now_ms);
+    return;
+  }
+  (void)AutoOre_LatchPhotoStableTriggered(
+      ctrl->feedback.pe13_photo1_triggered,
+      &ctrl->fused_photo1_stable_trigger_seen,
+      &ctrl->fused_photo1_triggered_since_ms, now_ms);
 }
 
 static bool AutoOre_UsesFusedDescendTemplate(const AutoOre_t *ctrl) {
@@ -3885,6 +3934,7 @@ void AutoOre_Update(AutoOre_t *ctrl, const AutoOre_Feedback_t *feedback,
     ctrl->release_ir_abort_count_at_start =
         ctrl->feedback.release_lift_ir_abort_count;
   }
+  AutoOre_UpdateFusedAscendPhoto1Latch(ctrl, now_ms);
   AutoOre_UpdateFusedDescendPhoto2Latch(ctrl, now_ms);
   if ((!AutoOre_ActionIsPick(ctrl->action) ||
       AutoOre_ActionIsFused(ctrl->action) ||

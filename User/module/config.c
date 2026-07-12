@@ -170,7 +170,7 @@ Config_RobotParam_t robot_config = {
             /* 200mm 下台阶起步/小抬升位。 */
             .step_200_descend_small = {0.1f, 0.1f},
             /* 400mm 下台阶四杆全伸位。 */
-            .step_400_descend_all_extend = {10.5f, 10.5f},
+            .step_400_descend_all_extend = {10.2f, 10.2f},
             /* 400mm 下台阶前杆收回、后杆保持支撑位。         */
             .step_400_descend_front_retract = {0.06f, 10.5f},
             /* 400mm 下台阶四杆全收位。 */
@@ -389,10 +389,30 @@ Config_RobotParam_t robot_config = {
             .chamber_place = {.joint1_max_vel_rad_s = 8.0f, .joint2_max_vel_rad_s = 6.0f},
             .chamber_standby = {.joint1_max_vel_rad_s = 8.0f, .joint2_max_vel_rad_s = 4.0f},
             /* pick_*：一键取矿流程，standby=取矿前/后待机位，place=伸到取矿位，fetch=底盘前进取矿时保持取矿位。 */
-            .pick_standby = {.joint1_max_vel_rad_s = 2.0f, .joint2_max_vel_rad_s = 1.0f},
-            .pick_place = {.joint1_max_vel_rad_s = 8.0f, .joint2_max_vel_rad_s = 4.0f},
-            .pick_fetch = {.joint1_max_vel_rad_s = 2.0f, .joint2_max_vel_rad_s = 4.0f},
-            .pick_lift_detect = {.joint1_max_vel_rad_s = 8.0f, .joint2_max_vel_rad_s = 6.0f},
+            .pick_standby = {
+                .joint1_max_vel_rad_s = 5.0f,
+                .joint2_max_vel_rad_s = 4.0f,
+                .joint1_max_accel_rad_s2 = 25.0f,
+                .joint2_max_accel_rad_s2 = 50.0f,
+            },
+            .pick_place = {
+                .joint1_max_vel_rad_s = 8.0f,
+                .joint2_max_vel_rad_s = 6.0f,
+                .joint1_max_accel_rad_s2 = 30.0f,
+                .joint2_max_accel_rad_s2 = 60.0f,
+            },
+            .pick_fetch = {
+                .joint1_max_vel_rad_s = 6.5f,
+                .joint2_max_vel_rad_s = 6.0f,
+                .joint1_max_accel_rad_s2 = 30.0f,
+                .joint2_max_accel_rad_s2 = 60.0f,
+            },
+            .pick_lift_detect = {
+                .joint1_max_vel_rad_s = 8.0f,
+                .joint2_max_vel_rad_s = 6.0f,
+                .joint1_max_accel_rad_s2 = 30.0f,
+                .joint2_max_accel_rad_s2 = 60.0f,
+            },
         },
         /* 一键存/放/上膛/取矿流程中的动作延时，单位 ms；<=0 时使用状态机内置默认值。 */
         .timing = {
@@ -690,30 +710,30 @@ Config_RobotParam_t robot_config = {
              * - step7：四杆保持全伸，并使用 second_photo_retract_move_speed 离开，持续 final_move_ms 后结束。
              */
             /* AutoCtrlTemplate_RunHeadDescend200Optimized 使用的有效字段。 */
-            .prealign_move_speed = 0.42f,       /* PREALIGN yaw 对正时叠加的前进 vx，单位 m/s。 */
-            .front_retract_move_speed = 0.42f,  /* step4 等待 PE13/photo1 下降沿的慢速 vx，单位 m/s。 */
+            .prealign_move_speed = 0.4f,       /* PREALIGN yaw 对正时叠加的前进 vx，单位 m/s。 */
+            .front_retract_move_speed = 0.4f,  /* step4 等待 PE13/photo1 下降沿的慢速 vx，单位 m/s。 */
             .mid_move_speed = 0.8f,            /* step0/step3 两段固定快跑 vx，单位 m/s。 */
             .mid_move_ms = 150u,                 /* step0 第一次固定快跑持续时间，单位 ms。 */ 
             .timed_move_yaw_tolerance_rad = 0.35f, /* 中段定时移动切步 yaw 容差，约 10 deg。 */
-            .rear_retract_move_speed = 0.42f,   /* step1 等待 PA2/photo3 下降沿的慢速 vx，单位 m/s。 */
+            .rear_retract_move_speed = 0.4f,   /* step1 等待 PA2/photo3 下降沿的慢速 vx，单位 m/s。 */
             .rear_retract_move_ms = 150u,      /* step3 第二次固定快跑持续时间，单位 ms。 */
             .rear_retract_move_wheel_delta_rad = 8.66f, /* step3 第二次固定快跑轮转角阈值，单位 rad；0 表示按时间切步。 */
             .second_photo_retract_move_speed = 0.5f, /* step7 第二个下降沿后保持全伸离开 vx，单位 m/s。 */
             .final_move_speed = 0.0f,          /* step7 离开 vx 的备用值；second_photo_retract_move_speed <= 0 时使用。 */
-            .final_move_ms = 50u,              /* step7 保持全伸离开持续时间，单位 ms。 */
+            .final_move_ms = 100u,              /* step7 保持全伸离开持续时间，单位 ms。 */
 
-            .pole_front_extend_speed = 30.0f,   /* step2 前杆伸出、step5-7 四杆全伸时的前杆速度，单位 rad/s。 */
-            .pole_front_retract_speed = 0.0f,  /* step0/1 前杆保持或回收到全收目标的速度，单位 rad/s。 */
-            .pole_rear_extend_speed = 30.0f,    /* step5-7 四杆全伸时的后杆速度，单位 rad/s。 */
-            .pole_rear_retract_speed = 0.0f,   /* step0-4 后杆保持或回收到全收目标的速度，单位 rad/s。 */
+            .pole_front_extend_speed = 40.0f,   /* step2 前杆伸出、step5-7 四杆全伸时的前杆速度，单位 rad/s。 */
+            .pole_front_retract_speed = 30.0f,  /* step0/1 前杆保持或回收到全收目标的速度，单位 rad/s。 */
+            .pole_rear_extend_speed = 40.0f,    /* step5-7 四杆全伸时的后杆速度，单位 rad/s。 */
+            .pole_rear_retract_speed = 30.0f,   /* step0-4 后杆保持或回收到全收目标的速度，单位 rad/s。 */
             .pole_all_extend_speed = 30.0f,
 
-            .pole_all_extend_accel = 0.0f,
-            .pole_all_retract_speed = 15.0f,
-            .pole_all_retract_accel = 30.0f,
-            .pole_front_extend_accel = 500.0f,
+            .pole_all_extend_accel = 250.0f,
+            .pole_all_retract_speed = 30.0f,
+            .pole_all_retract_accel = 250.0f,
+            .pole_front_extend_accel = 700.0f,
             .pole_front_retract_accel = 30.0f,
-            .pole_rear_extend_accel = 500.0f,
+            .pole_rear_extend_accel = 700.0f,
             .pole_rear_retract_accel = 30.0f,
             .front_photo_timeout_ms = 5000u,    /* step4 等待 PE13/photo1 下降沿超时，单位 ms。 */
             .rear_photo_timeout_ms = 5000u,     /* step1 等待 PA2/photo3 下降沿超时，单位 ms。 */
