@@ -3636,13 +3636,12 @@ static void AutoOre_RunStepPickStoreFused(AutoOre_t *ctrl, uint32_t now_ms) {
       AutoOre_CommandChassisMoveYawRate(ctrl, fused->precontact_vx_mps,
                                         ctrl->feedback.yaw_rate_cmd_rad_s);
       if (AutoOre_FusedFastPickOnFrontPhotoEnabled(ctrl, fused)) {
-        const bool start_pole_ready = AutoOre_FusedStepStartPoleReady(ctrl);
         /* Latch the falling edge even before Pole reports ready.  The old
          * short-circuit expression skipped sampling during that interval and
          * made a short photo1 pulse intermittently disappear. */
         const bool arm_lift_photo_reached =
             AutoOre_FusedArmLiftPhotoReached(ctrl, now_ms);
-        if (start_pole_ready && arm_lift_photo_reached) {
+        if (arm_lift_photo_reached) {
           if (!AutoOre_WaitConditionThenDelay(
                   ctrl, now_ms, true,
               AutoOre_FusedPhoto1LiftDelayMs(ctrl))) {
@@ -3650,8 +3649,9 @@ static void AutoOre_RunStepPickStoreFused(AutoOre_t *ctrl, uint32_t now_ms) {
           }
           ctrl->pick_lift_confirmed = true;
           AutoOre_SetArmHasOre(ctrl, true);
-          ctrl->fused_step_template_start_step_index =
-              AutoOre_FusedFastPickTemplateStartStepIndex(ctrl);
+          /* Start the stair branch independently from step 0. Its own Pole
+           * pose gates decide when stair photo inputs become valid. */
+          ctrl->fused_step_template_start_step_index = 0u;
           AutoOre_JumpToStep(ctrl, 5u);
           ctrl->step_phase = 1u;
           AutoOre_RunFusedStoreAndStepParallel(ctrl, now_ms, fused);

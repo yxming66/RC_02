@@ -123,7 +123,7 @@ static uint32_t auto_action_v3_reject_until_ms = 0u;
 static bool auto_action_v3_dispatching = false;
 
 #ifndef AUTO_CTRL_POLE_TARGET_THRESHOLD_RAD
-#define AUTO_CTRL_POLE_TARGET_THRESHOLD_RAD (0.30f)
+#define AUTO_CTRL_POLE_TARGET_THRESHOLD_RAD (0.80f)
 #endif
 
 #ifndef AUTO_CTRL_POLE_TARGET_STABLE_CYCLES

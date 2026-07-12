@@ -12,6 +12,12 @@ typedef struct {
   const float *small;
 } auto_ctrl_pole_targets_t;
 
+/* Record photo edges near a Pole target, but consume them only after the
+ * commanded Pole pose passes the normal at-target debounce. */
+#define AUTO_CTRL_ASCEND_200_PHOTO_RECORD_LIFT_RAD (3.5f)
+#define AUTO_CTRL_ASCEND_400_PHOTO_RECORD_LIFT_RAD (7.0f)
+#define AUTO_CTRL_DESCEND_PHOTO_RECORD_LIFT_RAD (2.5f)
+
 typedef enum {
   AUTO_CTRL_POLE_PROFILE_NONE = 0,
   AUTO_CTRL_POLE_PROFILE_ALL_EXTEND,
@@ -862,6 +868,9 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
     const AutoCtrl_TemplateParam_t *param, bool use_400mm) {
   auto_ctrl_pole_targets_t pole;
   AutoCtrlTemplate_SelectPoleTargets(robot_param, use_400mm, false, &pole);
+  const float photo_record_lift_rad =
+      use_400mm ? AUTO_CTRL_ASCEND_400_PHOTO_RECORD_LIFT_RAD
+                : AUTO_CTRL_ASCEND_200_PHOTO_RECORD_LIFT_RAD;
 
   switch (ctrl->template_ctx.step_index) {
     case 0: /* 四杆全伸并前进，等待四杆到位�?*/
@@ -873,6 +882,10 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
           param->pole_all_extend_speed, param->pole_all_extend_speed,
           AUTO_CTRL_POLE_PROFILE_ALL_EXTEND,
           AUTO_CTRL_POLE_PROFILE_ALL_EXTEND);
+      if (ctrl->feedback.pole_front_lift_rad >= photo_record_lift_rad &&
+          ctrl->feedback.pole_rear_lift_rad >= photo_record_lift_rad) {
+        (void)AutoCtrlTemplate_LatchFrontPhotoStable(ctrl, now_ms);
+      }
       if (AutoCtrlTemplate_PoleReadyAfterNewTarget(
               ctrl, ctrl->feedback.pole_all_at_target)) {
         AutoCtrlTemplate_NextStep(ctrl);
@@ -882,6 +895,7 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
     case 1: /* 等待前光电连续稳定触发�?*/
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
       const bool first_photo_ready =
+          ctrl->feedback.pole_all_at_target &&
           AutoCtrlTemplate_LatchFrontPhotoStable(ctrl, now_ms);
       if (!first_photo_ready) {
         if (param->front_photo_timeout_ms > 0u &&
@@ -915,6 +929,9 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
           param->pole_front_retract_speed, param->pole_rear_extend_speed,
           AUTO_CTRL_POLE_PROFILE_FRONT_RETRACT,
           AUTO_CTRL_POLE_PROFILE_REAR_EXTEND);
+      if (ctrl->feedback.pole_rear_lift_rad >= photo_record_lift_rad) {
+        (void)AutoCtrlTemplate_LatchRearPhotoStable(ctrl, now_ms);
+      }
         AutoCtrlTemplate_DebugMarkPoleCommand(
           ctrl, now_ms, AUTO_CTRL_TEMPLATE_DEBUG_POLE_AFTER_PHOTO);
       if (AutoCtrlTemplate_PoleReadyAfterNewTarget(
@@ -929,7 +946,12 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
       return false;
 
     case 3: /* 前杆收回后的中段定时移动�?*/
-      if (use_400mm && AutoCtrlTemplate_LatchRearPhotoStable(ctrl, now_ms)) {
+      if (ctrl->feedback.pole_rear_lift_rad >= photo_record_lift_rad) {
+        (void)AutoCtrlTemplate_LatchRearPhotoStable(ctrl, now_ms);
+      }
+      if (use_400mm && ctrl->feedback.pole_front_at_target &&
+          ctrl->feedback.pole_rear_at_target &&
+          AutoCtrlTemplate_LatchRearPhotoStable(ctrl, now_ms)) {
         AutoCtrlTemplate_DebugMarkPhotoEvent(
             ctrl, now_ms, AUTO_CTRL_TEMPLATE_DEBUG_PHOTO_ASCEND_REAR);
         AutoCtrlTemplate_CommandChassisZeroVector(ctrl);
@@ -960,8 +982,15 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
 
     case 4: /* 等待后光电连续稳定触发�?*/
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      const bool second_photo_ready =
-          AutoCtrlTemplate_LatchRearPhotoStable(ctrl, now_ms);
+      bool second_photo_latched =
+          ctrl->template_ctx.pa2_photo3_triggered_latched;
+      if (ctrl->feedback.pole_rear_lift_rad >= photo_record_lift_rad) {
+        second_photo_latched =
+            AutoCtrlTemplate_LatchRearPhotoStable(ctrl, now_ms);
+      }
+      const bool second_photo_ready = second_photo_latched &&
+          ctrl->feedback.pole_front_at_target &&
+          ctrl->feedback.pole_rear_at_target;
       if (!second_photo_ready) {
         if (param->rear_photo_timeout_ms > 0u &&
             AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
@@ -1050,26 +1079,36 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
       /* Down-200: latch a complete first-photo falling edge during the
        * preceding sprint so a pulse cannot disappear across the step change. */
-      const bool first_photo_captured_during_sprint =
-          !use_400mm && AutoCtrlTemplate_DescendFirstPhotoFallingStable(
-                            ctrl, use_400mm, now_ms);
       const bool descend_start_sprint_ready =
           AutoCtrlTemplate_RunDescendStartSprint(
               ctrl, now_ms, param, param->mid_move_speed,
-              use_400mm ? pole.all_retract[0] : pole.small[0],
-              use_400mm ? pole.all_retract[1] : pole.small[1],
+              pole.all_retract[0], pole.all_retract[1],
               param->pole_front_retract_speed,
               param->pole_rear_retract_speed);
-      if (first_photo_captured_during_sprint ||
-          descend_start_sprint_ready) {
+      if (ctrl->feedback.pole_front_lift_rad <=
+              AUTO_CTRL_DESCEND_PHOTO_RECORD_LIFT_RAD &&
+          ctrl->feedback.pole_rear_lift_rad <=
+              AUTO_CTRL_DESCEND_PHOTO_RECORD_LIFT_RAD) {
+        (void)AutoCtrlTemplate_DescendFirstPhotoFallingStable(
+            ctrl, use_400mm, now_ms);
+      }
+      if (descend_start_sprint_ready) {
         AutoCtrlTemplate_NextStep(ctrl);
       }
       return false;
 
     case 1: /* 慢速捕获第一个稳定下降沿，随后伸前杆�?*/
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      if (AutoCtrlTemplate_DescendFirstPhotoFallingStable(ctrl, use_400mm,
-                          now_ms)) {
+      bool first_photo_latched =
+          ctrl->template_ctx.pe9_photo2_stable_release_latched;
+      if (ctrl->feedback.pole_front_lift_rad <=
+              AUTO_CTRL_DESCEND_PHOTO_RECORD_LIFT_RAD &&
+          ctrl->feedback.pole_rear_lift_rad <=
+              AUTO_CTRL_DESCEND_PHOTO_RECORD_LIFT_RAD) {
+        first_photo_latched = AutoCtrlTemplate_DescendFirstPhotoFallingStable(
+            ctrl, use_400mm, now_ms);
+      }
+      if (ctrl->feedback.pole_all_at_target && first_photo_latched) {
         AutoCtrlTemplate_DebugMarkPhotoEvent(
           ctrl, now_ms,
           AUTO_CTRL_TEMPLATE_DEBUG_PHOTO_DESCEND_FIRST_FALLING);
@@ -1141,12 +1180,10 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
 
     case 3: /* 前杆支撑后的第二段定时接近�?*/
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      /* Down-200: pre-latch the second-photo falling edge for the same
-       * cross-step race as the first photo. */
-      if (!use_400mm && AutoCtrlTemplate_DescendSecondPhotoFallingStable(
-                            ctrl, use_400mm, now_ms)) {
-        AutoCtrlTemplate_NextStep(ctrl);
-        return false;
+      if (ctrl->feedback.pole_rear_lift_rad <=
+          AUTO_CTRL_DESCEND_PHOTO_RECORD_LIFT_RAD) {
+        (void)AutoCtrlTemplate_DescendSecondPhotoFallingStable(
+            ctrl, use_400mm, now_ms);
       }
       const uint32_t rear_retract_move_ms =
           AutoCtrlTemplate_DescendRearRetractMoveMs(ctrl, param);
@@ -1172,8 +1209,15 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
 
     case 4: /* 慢速捕获第二个稳定下降沿，随后四杆全伸�?*/
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
-      if (AutoCtrlTemplate_DescendSecondPhotoFallingStable(ctrl, use_400mm,
-                           now_ms)) {
+      bool second_photo_latched =
+          ctrl->template_ctx.pa0_photo4_stable_release_latched;
+      if (ctrl->feedback.pole_rear_lift_rad <=
+          AUTO_CTRL_DESCEND_PHOTO_RECORD_LIFT_RAD) {
+        second_photo_latched = AutoCtrlTemplate_DescendSecondPhotoFallingStable(
+            ctrl, use_400mm, now_ms);
+      }
+      if (ctrl->feedback.pole_front_at_target &&
+          ctrl->feedback.pole_rear_at_target && second_photo_latched) {
         AutoCtrlTemplate_DebugMarkPhotoEvent(
           ctrl, now_ms,
           AUTO_CTRL_TEMPLATE_DEBUG_PHOTO_DESCEND_SECOND_FALLING);
