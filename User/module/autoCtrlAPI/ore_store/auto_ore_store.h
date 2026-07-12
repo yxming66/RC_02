@@ -292,6 +292,9 @@ typedef struct {
   float store_low_return_decel_rad_s2;
   AutoOre_StoreLowReturnSegment_t
       store_low_return_segments[AUTO_ORE_STORE_LOW_RETURN_SEGMENT_COUNT];
+  float store_low_shake_amplitude_rad;
+  float store_low_shake_velocity_rad_s;
+  uint8_t store_low_shake_cycles;
   AutoOre_FusedParam_t fused_step_pick_store_ascend_200_head;
   AutoOre_FusedParam_t fused_step_pick_store_descend_200_head;
   AutoOre_FusedParam_t fused_step_pick_store_ascend_400_head;

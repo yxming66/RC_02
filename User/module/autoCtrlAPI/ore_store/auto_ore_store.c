@@ -15,6 +15,10 @@
 #define AUTO_ORE_DEFAULT_STORE_LOW_RETURN_ACCEL_RAD_S2 (80.0f)
 #define AUTO_ORE_DEFAULT_STORE_LOW_RETURN_DECEL_RAD_S2 (80.0f)
 #define AUTO_ORE_STORE_LOW_RETURN_MIN_VELOCITY_RAD_S (0.05f)
+#define AUTO_ORE_DEFAULT_STORE_LOW_SHAKE_AMPLITUDE_RAD (1.0f)
+#define AUTO_ORE_DEFAULT_STORE_LOW_SHAKE_VELOCITY_RAD_S (50.0f)
+#define AUTO_ORE_DEFAULT_STORE_LOW_SHAKE_CYCLES (3u)
+#define AUTO_ORE_STORE_LOW_SHAKE_MAX_CYCLES (16u)
 #define AUTO_ORE_DEFAULT_RELEASE_WAIT_MS (50u)
 #define AUTO_ORE_RELEASE_GRID_CHECK_MS (500u)
 #define AUTO_ORE_DEFAULT_RELEASE_LIFT_DETECT_TIMEOUT_MS (10000u)
@@ -290,6 +294,30 @@ static float AutoOre_StoreLowReturnDecelRadS2(const AutoOre_t *ctrl) {
   return (ctrl->param.store_low_return_decel_rad_s2 > 0.0f)
              ? ctrl->param.store_low_return_decel_rad_s2
              : AUTO_ORE_DEFAULT_STORE_LOW_RETURN_DECEL_RAD_S2;
+}
+
+static float AutoOre_StoreLowShakeAmplitudeRad(const AutoOre_t *ctrl) {
+  return (ctrl->param.store_low_shake_amplitude_rad > 0.0f &&
+          isfinite(ctrl->param.store_low_shake_amplitude_rad))
+             ? ctrl->param.store_low_shake_amplitude_rad
+             : AUTO_ORE_DEFAULT_STORE_LOW_SHAKE_AMPLITUDE_RAD;
+}
+
+static float AutoOre_StoreLowShakeVelocityRadS(const AutoOre_t *ctrl) {
+  return (ctrl->param.store_low_shake_velocity_rad_s > 0.0f &&
+          isfinite(ctrl->param.store_low_shake_velocity_rad_s))
+             ? ctrl->param.store_low_shake_velocity_rad_s
+             : AUTO_ORE_DEFAULT_STORE_LOW_SHAKE_VELOCITY_RAD_S;
+}
+
+static uint8_t AutoOre_StoreLowShakeCycles(const AutoOre_t *ctrl) {
+  uint8_t cycles = (ctrl->param.store_low_shake_cycles > 0u)
+                       ? ctrl->param.store_low_shake_cycles
+                       : AUTO_ORE_DEFAULT_STORE_LOW_SHAKE_CYCLES;
+  if (cycles > AUTO_ORE_STORE_LOW_SHAKE_MAX_CYCLES) {
+    cycles = AUTO_ORE_STORE_LOW_SHAKE_MAX_CYCLES;
+  }
+  return cycles;
 }
 
 static bool AutoOre_StoreLowReturnSegmentsConfigured(const AutoOre_t *ctrl) {
@@ -1040,6 +1068,59 @@ static bool AutoOre_CommandOreStoreWithVelocity(
   return true;
 }
 
+static bool AutoOre_UpdateStoreLowShake(AutoOre_t *ctrl, uint8_t *phase,
+                                        bool *done) {
+  if (ctrl == 0 || phase == 0 || done == 0 ||
+      ctrl->param.ore_store_param == 0) {
+    return false;
+  }
+
+  *done = false;
+  const uint8_t cycles = AutoOre_StoreLowShakeCycles(ctrl);
+  const uint8_t phase_count = (uint8_t)(cycles * 2u);
+  const float standby_rad =
+      ctrl->param.ore_store_param->preset
+          .transform_position_rad[ORE_STORE_TRANSFORM_STANDBY];
+  const float lift_rad =
+      ctrl->param.ore_store_param->preset
+          .transform_position_rad[ORE_STORE_TRANSFORM_LIFT];
+  const float travel_rad = AutoOre_AbsFloat(lift_rad - standby_rad);
+
+  if (*phase >= phase_count || travel_rad <= 0.0001f) {
+    if (!AutoOre_CommandOreStoreWithVelocity(
+            ctrl, ORE_STORE_TRANSFORM_STANDBY, false,
+            AutoOre_StoreLowShakeVelocityRadS(ctrl))) {
+      return false;
+    }
+    *done = AutoOre_OreStorePlatformAtTarget(
+        ctrl, ctrl->param.ore_store_arrive_threshold_rad);
+    return true;
+  }
+
+  float amplitude_rad = AutoOre_StoreLowShakeAmplitudeRad(ctrl);
+  if (amplitude_rad > travel_rad) {
+    amplitude_rad = travel_rad;
+  }
+  const bool move_up = ((*phase & 1u) == 0u);
+  const float direction = (lift_rad >= standby_rad) ? 1.0f : -1.0f;
+  const float target_rad =
+      move_up ? standby_rad + direction * amplitude_rad : standby_rad;
+
+  if (!AutoOre_CommandOreStoreWithVelocity(
+          ctrl, ORE_STORE_TRANSFORM_STANDBY, false,
+          AutoOre_StoreLowShakeVelocityRadS(ctrl))) {
+    return false;
+  }
+  ctrl->ore_store_cmd.platform_target_rad = target_rad;
+
+  if (AutoOre_OreStorePlatformAtTarget(
+          ctrl, ctrl->param.ore_store_arrive_threshold_rad)) {
+    (*phase)++;
+    *done = (*phase >= phase_count);
+  }
+  return true;
+}
+
 static bool AutoOre_CommandPoleTarget(AutoOre_t *ctrl,
                                       const float target_lift[2]) {
   if (target_lift == 0) {
@@ -1554,11 +1635,28 @@ static void AutoOre_RunStoreLow(AutoOre_t *ctrl, uint32_t now_ms) {
         return;
       }
       if (AutoOre_WaitArmCommandTarget(ctrl, now_ms)) {
+        AutoOre_NextStep(ctrl);
+      } else {
+        (void)AutoOre_CheckTimeout(ctrl, now_ms);
+      }
+      return;
+    case 8: {
+      AutoOre_EnterStep(ctrl, now_ms);
+      bool shake_done = false;
+      if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_STANDBY, SUCTION_OFF,
+                              &ctrl->param.arm_speed.store_standby) ||
+          !AutoOre_UpdateStoreLowShake(ctrl, &ctrl->step_phase,
+                                       &shake_done)) {
+        AutoOre_FailInvalidParam(ctrl);
+        return;
+      }
+      if (shake_done) {
         AutoOre_FinishSuccess(ctrl);
       } else {
         (void)AutoOre_CheckTimeout(ctrl, now_ms);
       }
       return;
+    }
     default:
       AutoOre_FinishSuccess(ctrl);
       return;
@@ -2766,9 +2864,23 @@ static void AutoOre_RunFusedStoreLow(AutoOre_t *ctrl, uint32_t now_ms) {
         return;
       }
       if (AutoOre_WaitArmCommandTarget(ctrl, now_ms)) {
+        AutoOre_FusedStoreNextStep(ctrl);
+      }
+      return;
+    case 8: {
+      bool shake_done = false;
+      if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_STANDBY, SUCTION_OFF,
+                              &ctrl->param.arm_speed.store_standby) ||
+          !AutoOre_UpdateStoreLowShake(ctrl, &ctrl->fused_store_step_phase,
+                                       &shake_done)) {
+        AutoOre_FailStoreInvalidParam(ctrl);
+        return;
+      }
+      if (shake_done) {
         AutoOre_FusedStoreMarkDone(ctrl);
       }
       return;
+    }
     default:
       AutoOre_FusedStoreMarkDone(ctrl);
       return;

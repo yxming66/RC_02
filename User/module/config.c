@@ -483,6 +483,13 @@ Config_RobotParam_t robot_config = {
             {.end_ratio = 1.00f, .velocity_rad_s = 25.0f},
         },
         /*
+         * 低位存矿收尾颠动：平台回到 STANDBY 后，向 LIFT 方向小幅快速往返。
+         * cycles 为完整“上+下”次数；只作用于最终存入低位矿仓的流程。
+         */
+        .store_low_shake_amplitude_rad = 1.0f,
+        .store_low_shake_velocity_rad_s = 50.0f,
+        .store_low_shake_cycles = 3u,
+        /*
          * 融合动作轮转角阈值说明：
          * - *_wheel_delta_rad 使用四轮累计转角变化绝对值的平均值，单位 rad。
          * - <=0 表示跳过对应轮转角门控或回退到时间门控。
