@@ -829,7 +829,6 @@ static bool AutoCtrlFeed_IsOreAction(PC_AutoAction_t action) {
     case PC_AUTO_ACTION_STORE:
     case PC_AUTO_ACTION_RELEASE:
     case PC_AUTO_ACTION_RELEASE_LIFT_DETECT:
-    case PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT:
     case PC_AUTO_ACTION_RELEASE_STEP1:
     case PC_AUTO_ACTION_RELEASE_STEP2:
     case PC_AUTO_ACTION_RELEASE_LIFT_DETECT_STEP1:
@@ -1727,7 +1726,14 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms, bool update_debug) {
           chassis_feedback->motor[i].position_rad;
     }
   }
+  const bool zone3_ir_release_was_running =
+      auto_ore_ctrl.state == AUTO_ORE_STATE_RUNNING &&
+      auto_ore_ctrl.action == AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT;
   AutoOre_Update(&auto_ore_ctrl, &auto_ore_feedback, now_ms);
+  if (zone3_ir_release_was_running &&
+      auto_ore_ctrl.state != AUTO_ORE_STATE_RUNNING) {
+    IrDock_EndZone3Action();
+  }
 
   if (auto_ore_ctrl.state != AUTO_ORE_STATE_RUNNING) {
     auto_ore_release_light_position = AUTO_ORE_POSITION_NONE;
@@ -2132,7 +2138,12 @@ bool Task_AutoOreStartReleaseLiftDetect(void) {
 }
 
 bool Task_AutoOreStartReleaseIrLiftDetect(void) {
-  return AutoCtrlFeed_StartOreAction(AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT);
+  const bool started =
+      AutoCtrlFeed_StartOreAction(AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT);
+  if (started) {
+    IrDock_BeginZone3Action();
+  }
+  return started;
 }
 
 bool Task_AutoOreStartReleaseStep1(void) {
@@ -2250,6 +2261,9 @@ void Task_AutoOreAbort(void) {
     }
     AutoOre_Abort(&auto_ore_ctrl);
   }
+  if (IrDock_IsZone3ActionLocked()) {
+    IrDock_EndZone3Action();
+  }
 }
 
 static bool AutoCtrlFeed_HandleAutoOreDebugRequest(uint32_t now_ms) {
@@ -2318,9 +2332,7 @@ static bool AutoCtrlFeed_HandleAutoOreDebugRequest(uint32_t now_ms) {
       result = Task_AutoOreStartReleaseLiftDetect();
       break;
     case AUTO_ORE_DEBUG_REQUEST_RELEASE_IR_LIFT_DETECT:
-      result = IrDock_IsZone3ActionLocked() &&
-               !IrDock_IsReleaseAbortLatched() &&
-               Task_AutoOreStartReleaseIrLiftDetect();
+      result = Task_AutoOreStartReleaseIrLiftDetect();
       break;
     case AUTO_ORE_DEBUG_REQUEST_RELEASE_STEP1:
       result = Task_AutoOreStartReleaseStep1();
@@ -2581,13 +2593,17 @@ static uint8_t AutoCtrlFeed_ActionRequiredResourceMask(
       return chassis_pole | upper;
     case PC_AUTO_ACTION_RELEASE:
     case PC_AUTO_ACTION_RELEASE_LIFT_DETECT:
-    case PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT:
     case PC_AUTO_ACTION_RELEASE_STEP1:
     case PC_AUTO_ACTION_RELEASE_STEP2:
     case PC_AUTO_ACTION_RELEASE_LIFT_DETECT_STEP1:
     case PC_AUTO_ACTION_RELEASE_LIFT_DETECT_STEP2:
     case PC_AUTO_ACTION_CHAMBER:
       return chassis_pole | upper;
+    case PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT:
+      /* Action 38 owns the complete robot until red-IR FINISH (04) or PC
+       * CANCEL. RELEASE_ALLOW (03) only performs one release cycle and must
+       * never release resources or complete the Job. */
+      return chassis_pole | upper | AUTO_ORE_RESOURCE_ROD;
     case PC_AUTO_ACTION_NONE:
     case PC_AUTO_ACTION_ABORT:
     default:
@@ -3226,13 +3242,6 @@ static void AutoCtrlFeed_UpdateAutoActionV3(uint32_t now_ms) {
     if (!job->allocated ||
         AutoActionScheduler_IsTerminal((AutoActionJobState_t)job->state)) {
       continue;
-    }
-    if (job->action == PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT &&
-        !job->executor_started &&
-        (IrDock_IsReleaseAbortLatched() ||
-         !IrDock_IsZone3ActionLocked()) &&
-        job->state != AUTO_ACTION_JOB_CANCEL_REQUESTED) {
-      (void)AutoActionScheduler_RequestCancel(&auto_action_scheduler, job);
     }
     if (job->state == AUTO_ACTION_JOB_CANCEL_REQUESTED) {
       AutoCtrlFeed_CancelV3Job(job, now_ms);

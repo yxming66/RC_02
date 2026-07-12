@@ -23,10 +23,8 @@ extern "C" {
 #define IR_DOCK_FRAME_SIZE (2u)
 #define IR_DOCK_CMD_ONLINE (0x01u)
 #define IR_DOCK_CMD_DOCK_COMPLETE (0x02u)
-#define IR_DOCK_CMD_ZONE3_ACTION_START (0x03u)
-#define IR_DOCK_CMD_RELEASE_ALLOW (0x04u)
-#define IR_DOCK_CMD_ZONE3_ACTION_FINISH (0x05u)
-#define IR_DOCK_CMD_RELEASE_ABORT (0x06u)
+#define IR_DOCK_CMD_RELEASE_ALLOW (0x03u)
+#define IR_DOCK_CMD_ZONE3_ACTION_FINISH (0x04u)
 #define IR_DOCK_ZONE3_ACTION_CMD_NONE (0x00u)
 #define IR_DOCK_ZONE3_ACTION_CMD_START (0x01u)
 #define IR_DOCK_ZONE3_ACTION_CMD_FINISH (0x02u)
@@ -41,10 +39,8 @@ typedef enum {
   IR_DOCK_STATUS_IDLE = 0x00u,
   IR_DOCK_STATUS_ONLINE = IR_DOCK_CMD_ONLINE,
   IR_DOCK_STATUS_DOCK_COMPLETE = IR_DOCK_CMD_DOCK_COMPLETE,
-  IR_DOCK_STATUS_ZONE3_ACTION_START = IR_DOCK_CMD_ZONE3_ACTION_START,
   IR_DOCK_STATUS_RELEASE_ALLOW = IR_DOCK_CMD_RELEASE_ALLOW,
   IR_DOCK_STATUS_ZONE3_ACTION_FINISH = IR_DOCK_CMD_ZONE3_ACTION_FINISH,
-  IR_DOCK_STATUS_RELEASE_ABORT = IR_DOCK_CMD_RELEASE_ABORT,
 } IrDock_Status_t;
 
 typedef struct {
@@ -96,6 +92,8 @@ void IrDock_Process(uint32_t now_ms);
 bool IrDock_IsDockCompleteFresh(uint32_t now_ms);
 bool IrDock_IsOnline(uint32_t now_ms);
 IrDock_Status_t IrDock_GetLastRxStatus(void);
+void IrDock_BeginZone3Action(void);
+void IrDock_EndZone3Action(void);
 bool IrDock_IsZone3ActionLocked(void);
 bool IrDock_IsReleaseAbortLatched(void);
 bool IrDock_IsClawOpenFresh(uint32_t now_ms);

@@ -33,7 +33,8 @@ static void IrDock_ErrorCallback(void) {
 }
 
 static bool IrDock_CommandIsValid(uint8_t command) {
-  return command >= IR_DOCK_CMD_ONLINE && command <= IR_DOCK_CMD_RELEASE_ABORT;
+  return command >= IR_DOCK_CMD_ONLINE &&
+         command <= IR_DOCK_CMD_ZONE3_ACTION_FINISH;
 }
 
 static void IrDock_ClearRawRxData(void) {
@@ -86,21 +87,6 @@ static void IrDock_ParseProtocolFrame(uint8_t command, uint32_t now_ms) {
     g_ir_dock_debug.complete_rx_count++;
     break;
 
-  case IR_DOCK_CMD_ZONE3_ACTION_START:
-    if (!g_ir_dock_debug.zone3_action_locked) {
-      g_ir_dock_debug.zone3_action_locked = true;
-      g_ir_dock_debug.zone3_action_state = IR_DOCK_ZONE3_ACTION_LOCKED;
-      g_ir_dock_debug.last_zone3_action_cmd =
-          IR_DOCK_ZONE3_ACTION_CMD_START;
-      g_ir_dock_debug.zone3_action_start_rx_count++;
-      g_ir_dock_debug.last_claw_open_cmd = IR_DOCK_CLAW_OPEN_WAIT;
-      g_ir_dock_debug.last_claw_open_rx_ms = 0u;
-      g_ir_dock_debug.last_claw_open_age_ms = 0u;
-      g_ir_dock_debug.claw_open = false;
-      g_ir_dock_debug.release_abort_latched = false;
-    }
-    break;
-
   case IR_DOCK_CMD_RELEASE_ALLOW:
     if (g_ir_dock_debug.zone3_action_locked &&
         !g_ir_dock_debug.release_abort_latched) {
@@ -124,17 +110,6 @@ static void IrDock_ParseProtocolFrame(uint8_t command, uint32_t now_ms) {
     g_ir_dock_debug.last_claw_open_age_ms = 0u;
     g_ir_dock_debug.claw_open = false;
     g_ir_dock_debug.release_abort_latched = false;
-    break;
-
-  case IR_DOCK_CMD_RELEASE_ABORT:
-    if (!g_ir_dock_debug.release_abort_latched) {
-      g_ir_dock_debug.release_abort_latched = true;
-      g_ir_dock_debug.last_claw_open_cmd = IR_DOCK_CLAW_OPEN_ABORT;
-      g_ir_dock_debug.last_claw_open_rx_ms = 0u;
-      g_ir_dock_debug.last_claw_open_age_ms = 0u;
-      g_ir_dock_debug.claw_open = false;
-      g_ir_dock_debug.claw_open_abort_rx_count++;
-    }
     break;
 
   case IR_DOCK_CMD_ONLINE:
@@ -311,6 +286,28 @@ bool IrDock_IsOnline(uint32_t now_ms) {
 
 IrDock_Status_t IrDock_GetLastRxStatus(void) {
   return (IrDock_Status_t)g_ir_dock_debug.last_rx_status;
+}
+
+void IrDock_BeginZone3Action(void) {
+  g_ir_dock_debug.zone3_action_locked = true;
+  g_ir_dock_debug.zone3_action_state = IR_DOCK_ZONE3_ACTION_LOCKED;
+  g_ir_dock_debug.last_zone3_action_cmd = IR_DOCK_ZONE3_ACTION_CMD_START;
+  g_ir_dock_debug.zone3_action_start_rx_count++;
+  g_ir_dock_debug.last_claw_open_cmd = IR_DOCK_CLAW_OPEN_WAIT;
+  g_ir_dock_debug.last_claw_open_rx_ms = 0u;
+  g_ir_dock_debug.last_claw_open_age_ms = 0u;
+  g_ir_dock_debug.claw_open = false;
+  g_ir_dock_debug.release_abort_latched = false;
+}
+
+void IrDock_EndZone3Action(void) {
+  g_ir_dock_debug.zone3_action_locked = false;
+  g_ir_dock_debug.zone3_action_state = IR_DOCK_ZONE3_ACTION_FINISHED;
+  g_ir_dock_debug.last_claw_open_cmd = IR_DOCK_CLAW_OPEN_WAIT;
+  g_ir_dock_debug.last_claw_open_rx_ms = 0u;
+  g_ir_dock_debug.last_claw_open_age_ms = 0u;
+  g_ir_dock_debug.claw_open = false;
+  g_ir_dock_debug.release_abort_latched = false;
 }
 
 bool IrDock_IsZone3ActionLocked(void) {

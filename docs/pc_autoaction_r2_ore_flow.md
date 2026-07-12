@@ -98,10 +98,10 @@ payload 长度 28 字节，Python 解包格式：
 
 | 字段 | 含义 | PC 用途 |
 |---|---|---|
-| `zone3_action_locked` | 三层放矿启动锁，命令 3 后为 1、命令 5 后为 0 | 判断本轮红外流程是否仍锁定 |
-| `release_allowed` | 命令 4 放矿许可是否仍在 1000 ms 新鲜期 | 观察动作是否获得放矿许可 |
-| `release_abort_latched` | 本轮是否已接受命令 6 中止 | 判断是否进入安全回撤 |
-| `zone3_action_state` | `0=未知,1=启动锁定,2=结束解锁` | 观察 03/05 锁死生命周期 |
+| `zone3_action_locked` | 动作 38 成功启动后为 1，命令 4 或 PC 取消后为 0 | 判断本轮三层放矿是否仍锁定 |
+| `release_allowed` | 锁定期间收到命令 3 后，许可在 1000 ms 新鲜期内有效 | 观察动作是否获得放矿许可 |
+| `release_abort_latched` | 保留字段，固定为 0 | 中止统一使用 V3 `CANCEL` |
+| `zone3_action_state` | `0=未知,1=启动锁定,2=结束解锁` | 观察动作 38 的锁死生命周期 |
 | `fresh` | 红外帧是否新鲜 | 建议仅在 `fresh=1` 时信任红外状态 |
 | `dock_complete` | 对接完成状态 | 取矛头/对接类流程可使用 |
 
@@ -319,26 +319,24 @@ if auto_action_done(auto, 34):
 
 三层放矿只使用完整动作 `38`，不使用前方光电/SICK 判断，也不再拆分 step1/step2：
 
-1. R1 发送 `A5 03`，RC02 建立本轮锁；`03` 本身不启动 AutoAction。
-2. PC 从 `0x9A.zone3_action_locked=1` 检测到新一轮，用 V3 `SUBMIT(action=38)` 创建 Job。相同 `request_id` 重发保持幂等。
+1. PC 用 V3 `SUBMIT(action=38)` 创建 Job；动作成功启动时 RC02 自动建立本轮锁。相同 `request_id` 重发保持幂等。
+2. PC 从 Job 反馈和 `0x9A.zone3_action_locked=1` 确认动作已经运行。
 3. 动作 38 持续锁定 CHASSIS，并展开 Pole；若矿仍在矿仓则先上膛，然后机械臂到 `WAIT_RELEASE_ORE` 等待放矿位。
-4. 平台、机械臂和 Pole 全部准备完成后，动作无限等待 R1 的新命令 `A5 04`。早到的 `04` 无效，必须在机构就绪后重新发送。
-5. 收到有效 `04` 后执行完整放矿；不检查目标格前方是否有矿。放矿完成后 Arm 回到 `WAIT_RELEASE_ORE`，Job 仍保持 `RUNNING`，底盘继续锁定。
-6. 任意运行阶段收到 `A5 06`，固件撤销放矿并让 Arm 回到 `WAIT_RELEASE_ORE`；Job 暂不结束，保持资源锁并记住本轮已经中止。
-7. R1 发送 `A5 05` 后，Arm 才回到 `STANDBY`；到位后解除资源和红外锁。正常流程进入 `SUCCEEDED`，发生过 `06` 的流程进入 `CANCELLED`。
+4. 平台、机械臂和 Pole 全部准备完成后，动作无限等待 R1 的新命令 `A5 03`。早到的 `03` 无效，必须在机构就绪后重新发送。
+5. 收到有效 `03` 后执行完整放矿；不检查目标格前方是否有矿。放矿完成后 Arm 回到 `WAIT_RELEASE_ORE`，Job 仍保持 `RUNNING`，底盘继续锁定。
+6. R1 发送 `A5 04` 后，Arm 回到 `STANDBY`；到位后解除资源和红外锁，Job 进入 `SUCCEEDED`。
+7. 需要中止时 PC 使用 V3 `CANCEL`；RC02 中止动作、解除锁死，Job 进入 `CANCELLED`。
 
 ### 8.1 PC 观察逻辑
 
-PC 只提交动作 38。PC 必须对本轮 `03` 做一次性去重：
+动作 38 由 PC 主动提交，不再等待红外侧先建立锁。PC 应保存 Job ID，避免周期性重复提交：
 
 ```python
-if ir.zone3_action_locked and not zone3_job_submitted:
+if need_zone3_release and not zone3_job_submitted:
     submit_v3(action=38, request_id=new_nonzero_request_id())
     zone3_job_submitted = True
 
-if ir.release_abort_latched:
-    state = "SAFE_RETREAT"
-elif zone3_job_is_running:
+if zone3_job_is_running and ir.zone3_action_locked:
     state = "ZONE3_RUNNING"
 else:
     state = "ZONE3_IDLE"
@@ -351,18 +349,19 @@ if not ir.zone3_action_locked:
 
 | 场景 | 固件行为 |
 |---|---|
-| PC 提交 38 时没有可用矿或配置非法 | Job 启动失败；需发 05 结束本轮，修复条件后重新走 03 |
+| PC 提交 38 时没有可用矿或配置非法 | Job 启动失败且不建立锁；修复条件后用新的 Job 重新提交 |
 | PC 提交 38 时资源被占用 | V3 Job 进入 `WAIT_RESOURCE`，不持有部分资源 |
-| 命令 04 在机构就绪前到达或超过 1000 ms | 动作继续保持，不释放矿；就绪后重新发送 04 |
-| 前方光电显示有矿 | 动作 38 忽略该检测，是否允许释放完全由 R1 命令 04 决定 |
-| 运行中收到命令 06 | Arm 回 `WAIT_RELEASE_ORE` 并继续持锁；重复 06 无副作用，收到 05 并回到 STANDBY 后才返回 `CANCELLED` |
+| 命令 03 在机构就绪前到达或超过 1000 ms | 动作继续保持，不释放矿；就绪后重新发送 03 |
+| 前方光电显示有矿 | 动作 38 忽略该检测，是否允许释放完全由 R1 命令 03 决定 |
+| PC 需要中止 | 发送 V3 `CANCEL`；Arm 执行安全中止并解除锁，Job 返回 `CANCELLED` |
+| 收到旧命令 05/06 | 按无效红外帧统计，不改变动作状态 |
 
 ## 9. 推荐总控优先级
 
 PC 侧可以按如下优先级处理动作：
 
 1. 安全/中止最高优先级：需要停止时发 `ABORT=1`。
-2. `zone3_action_locked=1` 时，PC 为本轮只提交一次动作 38。
+2. 需要三层放矿时，PC 为本轮只提交一次动作 38，并保存 Job ID。
 3. 如果已有 `auto.busy=1`，只监听反馈，不发新的互斥 autoaction。
 4. 如果需要放矿并且 arm 有矿，按目标类型发普通放矿或三层分步放矿。
 5. 如果 arm 没矿但低/高位有矿，先发 `CHAMBER=5`。
@@ -418,7 +417,7 @@ def on_feedback_ir_dock(payload):
 
 
 def choose_next_action(ore, auto, ir, flow_state):
-    if ir["zone3_action_locked"] and not flow_state.zone3_job_submitted:
+    if flow_state.need_zone3_release and not flow_state.zone3_job_submitted:
         flow_state.zone3_job_submitted = True
         return 38
 

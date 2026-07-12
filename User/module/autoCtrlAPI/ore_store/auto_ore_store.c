@@ -2131,6 +2131,8 @@ static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
         if (!zone3_ir_release_step6) {
           AutoOre_FinishSuccess(ctrl);
         }
+        /* Action 38 deliberately remains RUNNING after one release cycle.
+         * Command 04 or PC CANCEL owns termination. */
       } else {
         (void)AutoOre_CheckTimeout(ctrl, now_ms);
       }
@@ -4303,8 +4305,8 @@ void AutoOre_Update(AutoOre_t *ctrl, const AutoOre_Feedback_t *feedback,
   }
 
   if (zone3_control_handled) {
-    /* Command 06 holds WAIT_RELEASE_ORE; command 05 owns the final STANDBY
-     * transition.  Keep the normal release state machine paused meanwhile. */
+    /* A recovery path holds WAIT_RELEASE_ORE; red-IR command 04 owns the final
+     * STANDBY transition. Keep the normal release state machine paused. */
   } else if (ctrl->action == AUTO_ORE_ACTION_STORE) {
     switch (ctrl->active_position) {
       case AUTO_ORE_POSITION_TRANSFORM_LOW:
