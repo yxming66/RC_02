@@ -369,6 +369,33 @@ static float AutoCtrlTemplate_ResolvePoleSpeed(
   return configured_speed > 0.0f ? configured_speed : fallback_speed;
 }
 
+static bool AutoCtrlTemplate_DescendLandingEnabled(
+    const AutoCtrl_TemplateParam_t *param) {
+  return param != 0 && isfinite(param->pole_extend_landing_zone_rad) &&
+         param->pole_extend_landing_zone_rad > 0.0f &&
+         isfinite(param->pole_extend_landing_speed) &&
+         param->pole_extend_landing_speed > 0.0f;
+}
+
+static float AutoCtrlTemplate_DescendLandingApproachTarget(
+    const AutoCtrl_TemplateParam_t *param, float hold_target,
+    float final_target) {
+  if (!AutoCtrlTemplate_DescendLandingEnabled(param) ||
+      final_target <= hold_target) {
+    return final_target;
+  }
+  return fmaxf(hold_target,
+               final_target - param->pole_extend_landing_zone_rad);
+}
+
+static float AutoCtrlTemplate_DescendLandingSpeed(
+    const AutoCtrl_TemplateParam_t *param, float normal_speed) {
+  if (!AutoCtrlTemplate_DescendLandingEnabled(param)) {
+    return normal_speed;
+  }
+  return fminf(normal_speed, param->pole_extend_landing_speed);
+}
+
 static void AutoCtrlTemplate_CommandPoleProfile(
     auto_ctrl_t *ctrl, float front_target, float rear_target, float front_speed,
     float rear_speed, auto_ctrl_pole_profile_e front_profile,
@@ -391,6 +418,27 @@ static void AutoCtrlTemplate_CommandPoleProfile(
   ctrl->pole_cmd.auto_lift_accel[0] = front_accel;
   ctrl->pole_cmd.auto_lift_accel[1] = rear_accel;
   ctrl->pole_cmd.disable_lift_accel = front_accel < 0.0f || rear_accel < 0.0f;
+}
+
+static void AutoCtrlTemplate_CommandPoleProfileWithLanding(
+    auto_ctrl_t *ctrl, const AutoCtrl_TemplateParam_t *param,
+    float front_target, float rear_target, float front_speed,
+    float rear_speed, auto_ctrl_pole_profile_e front_profile,
+    auto_ctrl_pole_profile_e rear_profile, bool front_landing,
+    bool rear_landing) {
+  AutoCtrlTemplate_CommandPoleProfile(
+      ctrl, front_target, rear_target, front_speed, rear_speed,
+      front_profile, rear_profile);
+  if (front_landing) {
+    ctrl->pole_cmd.auto_lift_speed[0] =
+        AutoCtrlTemplate_DescendLandingSpeed(
+            param, ctrl->pole_cmd.auto_lift_speed[0]);
+  }
+  if (rear_landing) {
+    ctrl->pole_cmd.auto_lift_speed[1] =
+        AutoCtrlTemplate_DescendLandingSpeed(
+            param, ctrl->pole_cmd.auto_lift_speed[1]);
+  }
 }
 
 static bool AutoCtrlTemplate_DescendStartPoleLiftReady(
@@ -1031,7 +1079,9 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
                 pole.all_retract[0], pole.all_retract[1],
                 param->pole_front_retract_speed,
                 param->pole_rear_retract_speed,
-                pole.all_extend[0], pole.all_retract[1],
+                AutoCtrlTemplate_DescendLandingApproachTarget(
+                    param, pole.all_retract[0], pole.all_extend[0]),
+                pole.all_retract[1],
                 param->pole_front_extend_speed,
                 param->pole_rear_retract_speed,
                 AUTO_CTRL_POLE_PROFILE_FRONT_EXTEND,
@@ -1061,11 +1111,28 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
       } else {
         AutoCtrlPrimitive_CommandFlatMoveWithYawRate(ctrl, 0.2f);
       }
-      AutoCtrlTemplate_CommandPoleProfile(
-          ctrl, pole.all_extend[0], pole.all_retract[1],
+      const float front_landing_approach =
+          AutoCtrlTemplate_DescendLandingApproachTarget(
+              param, pole.all_retract[0], pole.all_extend[0]);
+      if (front_landing_approach < pole.all_extend[0] &&
+          !ctrl->template_ctx.descend_landing_approach_done) {
+        AutoCtrlTemplate_CommandPoleProfile(
+            ctrl, front_landing_approach, pole.all_retract[1],
+            param->pole_front_extend_speed, param->pole_rear_retract_speed,
+            AUTO_CTRL_POLE_PROFILE_FRONT_EXTEND,
+            AUTO_CTRL_POLE_PROFILE_REAR_RETRACT);
+        if (AutoCtrlTemplate_PoleReadyAfterNewTarget(
+                ctrl, ctrl->feedback.pole_front_at_target)) {
+          ctrl->template_ctx.descend_landing_approach_done = true;
+          ctrl->template_ctx.pole_target_seen_not_ready = false;
+        }
+        return false;
+      }
+      AutoCtrlTemplate_CommandPoleProfileWithLanding(
+          ctrl, param, pole.all_extend[0], pole.all_retract[1],
           param->pole_front_extend_speed, param->pole_rear_retract_speed,
           AUTO_CTRL_POLE_PROFILE_FRONT_EXTEND,
-          AUTO_CTRL_POLE_PROFILE_REAR_RETRACT);
+          AUTO_CTRL_POLE_PROFILE_REAR_RETRACT, true, false);
       if (AutoCtrlTemplate_PoleReadyAfterNewTarget(
               ctrl, ctrl->feedback.pole_front_at_target)) {
         AutoCtrlTemplate_NextStep(ctrl);
@@ -1091,11 +1158,11 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
       } else {
         AutoCtrlPrimitive_CommandFlatMoveWithYawRate(ctrl, 0.0f);
       }
-      AutoCtrlTemplate_CommandPoleProfile(
-          ctrl, pole.all_extend[0], pole.all_retract[1],
+      AutoCtrlTemplate_CommandPoleProfileWithLanding(
+          ctrl, param, pole.all_extend[0], pole.all_retract[1],
           param->pole_front_extend_speed, param->pole_rear_retract_speed,
           AUTO_CTRL_POLE_PROFILE_FRONT_EXTEND,
-          AUTO_CTRL_POLE_PROFILE_REAR_RETRACT);
+          AUTO_CTRL_POLE_PROFILE_REAR_RETRACT, true, false);
       if (AutoCtrlTemplate_WheelDeltaMoveReady(
               ctrl, now_ms, rear_retract_wheel_delta_rad,
               rear_retract_move_ms, param, robot_param)) {
@@ -1116,7 +1183,9 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
                 pole.all_extend[0], pole.all_retract[1],
                 param->pole_front_extend_speed,
                 param->pole_rear_retract_speed,
-                pole.all_extend[0], pole.all_extend[1],
+                pole.all_extend[0],
+                AutoCtrlTemplate_DescendLandingApproachTarget(
+                    param, pole.all_retract[1], pole.all_extend[1]),
                 param->pole_front_extend_speed,
                 param->pole_rear_extend_speed,
                 AUTO_CTRL_POLE_PROFILE_FRONT_EXTEND,
@@ -1127,11 +1196,11 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
       }
       AutoCtrlPrimitive_CommandFlatMoveWithYawRate(
           ctrl, param->front_retract_move_speed);
-      AutoCtrlTemplate_CommandPoleProfile(
-          ctrl, pole.all_extend[0], pole.all_retract[1],
+      AutoCtrlTemplate_CommandPoleProfileWithLanding(
+          ctrl, param, pole.all_extend[0], pole.all_retract[1],
           param->pole_front_extend_speed, param->pole_rear_retract_speed,
           AUTO_CTRL_POLE_PROFILE_FRONT_EXTEND,
-          AUTO_CTRL_POLE_PROFILE_REAR_RETRACT);
+          AUTO_CTRL_POLE_PROFILE_REAR_RETRACT, true, false);
       if (param->front_photo_timeout_ms > 0u &&
           AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
               param->front_photo_timeout_ms) {
@@ -1146,11 +1215,28 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
       } else {
         AutoCtrlPrimitive_CommandFlatMoveWithYawRate(ctrl, 0.2f);
       }
-      AutoCtrlTemplate_CommandPoleProfile(
-          ctrl, pole.all_extend[0], pole.all_extend[1],
+      const float rear_landing_approach =
+          AutoCtrlTemplate_DescendLandingApproachTarget(
+              param, pole.all_retract[1], pole.all_extend[1]);
+      if (rear_landing_approach < pole.all_extend[1] &&
+          !ctrl->template_ctx.descend_landing_approach_done) {
+        AutoCtrlTemplate_CommandPoleProfileWithLanding(
+            ctrl, param, pole.all_extend[0], rear_landing_approach,
+            param->pole_front_extend_speed, param->pole_rear_extend_speed,
+            AUTO_CTRL_POLE_PROFILE_FRONT_EXTEND,
+            AUTO_CTRL_POLE_PROFILE_REAR_EXTEND, true, false);
+        if (AutoCtrlTemplate_PoleReadyAfterNewTarget(
+                ctrl, ctrl->feedback.pole_rear_at_target)) {
+          ctrl->template_ctx.descend_landing_approach_done = true;
+          ctrl->template_ctx.pole_target_seen_not_ready = false;
+        }
+        return false;
+      }
+      AutoCtrlTemplate_CommandPoleProfileWithLanding(
+          ctrl, param, pole.all_extend[0], pole.all_extend[1],
           param->pole_front_extend_speed, param->pole_rear_extend_speed,
           AUTO_CTRL_POLE_PROFILE_FRONT_EXTEND,
-          AUTO_CTRL_POLE_PROFILE_REAR_EXTEND);
+          AUTO_CTRL_POLE_PROFILE_REAR_EXTEND, true, true);
       if (AutoCtrlTemplate_PoleReadyAfterNewTarget(
               ctrl, ctrl->feedback.pole_all_at_target)) {
         AutoCtrlTemplate_NextStep(ctrl);
@@ -1161,11 +1247,11 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
       AutoCtrlTemplate_EnterStep(ctrl, now_ms);
       AutoCtrlPrimitive_CommandFlatMoveWithYawRate(
           ctrl, param->pole_extend_move_speed);
-      AutoCtrlTemplate_CommandPoleProfile(
-          ctrl, pole.all_extend[0], pole.all_extend[1],
+      AutoCtrlTemplate_CommandPoleProfileWithLanding(
+          ctrl, param, pole.all_extend[0], pole.all_extend[1],
           param->pole_front_extend_speed, param->pole_rear_extend_speed,
           AUTO_CTRL_POLE_PROFILE_FRONT_EXTEND,
-          AUTO_CTRL_POLE_PROFILE_REAR_EXTEND);
+          AUTO_CTRL_POLE_PROFILE_REAR_EXTEND, true, true);
       if (AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >= param->hold_ms) {
         AutoCtrlTemplate_NextStep(ctrl);
       }
@@ -1176,11 +1262,11 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
       AutoCtrlPrimitive_CommandFlatMoveWithYawRate(
           ctrl,
           AutoCtrlTemplate_SecondPhotoRetractVx(param, param->final_move_speed));
-      AutoCtrlTemplate_CommandPoleProfile(
-          ctrl, pole.all_extend[0], pole.all_extend[1],
+      AutoCtrlTemplate_CommandPoleProfileWithLanding(
+          ctrl, param, pole.all_extend[0], pole.all_extend[1],
           param->pole_front_extend_speed, param->pole_rear_extend_speed,
           AUTO_CTRL_POLE_PROFILE_FRONT_EXTEND,
-          AUTO_CTRL_POLE_PROFILE_REAR_EXTEND);
+          AUTO_CTRL_POLE_PROFILE_REAR_EXTEND, true, true);
       if (AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >= param->final_move_ms) {
         AutoCtrlTemplate_NextStep(ctrl);
       }
