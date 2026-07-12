@@ -287,6 +287,7 @@ typedef struct {
   uint16_t recover_front_sick_adc_threshold;
   float fetch_chassis_vx_mps;
   float fetch_neg_200_chassis_vx_mps;
+  float recover_pole_target_lift_rad[2];
   float recover_chassis_forward_vx_mps;
   float recover_chassis_retreat_vx_mps;
   float store_low_return_velocity_rad_s;

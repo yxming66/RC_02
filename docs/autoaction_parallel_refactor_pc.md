@@ -57,7 +57,7 @@ SUBMIT
 | 融合台阶先完成，上层仍在取矿/存矿 | 释放 CHASSIS、POLE；等待的纯台阶 Job 可以自动启动；也可由 PC 跑航点 |
 | 普通取矿推进完成，机械臂仍在抬升 | 仅释放 CHASSIS；PC 可跑航点，POLE 仍由当前 Job 持有 |
 | 取矿存矿自动后退完成 | 释放 CHASSIS、POLE；ARM/STORE/VALVE 继续运行 |
-| 回收地面矿后退完成 | 释放 CHASSIS；ARM/STORE/VALVE 继续运行，POLE 未被该 Job 占用 |
+| 回收地面矿后退完成 | 释放 CHASSIS；ARM/STORE/VALVE 继续运行；POLE 由该 Job 持续保持前/后 `0.8 rad` 目标，直到动作终态才释放 |
 | 纯 STORE 与纯台阶同时提交 | 分别使用上层资源和 CHASSIS/POLE，可并行运行 |
 | 两个 Job 需要同一资源 | 后提交者进入 WAIT_RESOURCE，持有资源为 0 |
 | 两个 Job 使用同一执行器 | 后提交者等待 EXECUTOR |

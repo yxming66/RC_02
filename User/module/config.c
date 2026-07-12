@@ -436,10 +436,10 @@ Config_RobotParam_t robot_config = {
             /* 取 -200 矿：底盘向矿位前进的独立持续时间；可设为 0 禁止底盘前进，避免走太多掉下去。 */
             .fetch_neg_200_chassis_move_ms = 1000u,
             /* 回收地面矿：前进最长等待、前 SICK 触发后续行、静止吸附和后退时间。 */
-            .recover_chassis_forward_ms = 1200u, /* 前 SICK 未触发时的安全超时。 */
+            .recover_chassis_forward_ms = 5000u, /* 前 SICK 未触发时的安全超时。 */
             .recover_front_sick_delay_ms = 50u,  /* 前 SICK 达阈值后继续前进时间。 */
-            .recover_suction_settle_ms = 200u,
-            .recover_chassis_retreat_ms = 700u,
+            .recover_suction_settle_ms = 50u,
+            .recover_chassis_retreat_ms = 500u,
             /* 融合取矿/存矿/上台阶动作延时；0 使用代码默认值。 */
             .fused_prealign_stable_ms = 120u,          /* 融合动作 yaw 对正后稳定等待时间，单位 ms。 */
             .fused_pick_precontact_timeout_ms = 2000u, /* 融合取矿低速靠近超时，单位 ms。 */
@@ -450,7 +450,7 @@ Config_RobotParam_t robot_config = {
         /* 单个状态机 step 的超时时间，单位 ms。 */
         .default_step_timeout_ms = 5000u,
         /* 到位判定阈值：arm/ore_store/pole 分别使用的误差阈值，单位 rad。 */
-        .arm_arrive_threshold_rad = 0.1f,
+        .arm_arrive_threshold_rad = 0.5f,
         .arm_arrive_velocity_threshold_rad_s = 0.25f,
         .pick_arm_arrive_stable_ms = 50u,
         .ore_store_arrive_threshold_rad = 0.05f,
@@ -461,14 +461,16 @@ Config_RobotParam_t robot_config = {
         .release_lift_detect_sick_adc_threshold = 3200u,
         .release_lift_detect_sick_greater_than_threshold = true,
         /* 动作 33 专用：向地面矿靠近时，前 SICK ADC <= 此值即触发。 */
-        .recover_front_sick_adc_threshold = 2800u,
+        .recover_front_sick_adc_threshold = 2950u,
         /* 取矿流程中正向 200/400 取矿的底盘前进速度，单位 m/s；与融合上台阶取矿靠近速度保持一致。 */
         .fetch_chassis_vx_mps = 0.20f,
         /* 取 -200 矿时底盘前进速度，单位 m/s；可设为 0 禁止底盘前进。 */
         .fetch_neg_200_chassis_vx_mps = 0.20f,
+        /* 回收地面矿动作全程保持的 Pole 自动目标：[0]前组，[1]后组，单位 rad。 */
+        .recover_pole_target_lift_rad = {0.8f, 0.8f},
         /* 回收地面矿时底盘低速前进/后退速度，单位 m/s。 */
-        .recover_chassis_forward_vx_mps = 0.30f,
-        .recover_chassis_retreat_vx_mps = 0.30f,
+        .recover_chassis_forward_vx_mps = 0.4f,
+        .recover_chassis_retreat_vx_mps = 1.0f,
         /* 低位存矿完成后，transform 从高位 LIFT 回低位 STANDBY 的旧梯形速度规划；三段速度未配置时兜底使用。 */
         .store_low_return_velocity_rad_s = 50.0f,
         .store_low_return_accel_rad_s2 = 60.0f,
@@ -486,9 +488,9 @@ Config_RobotParam_t robot_config = {
          * 低位存矿收尾颠动：平台回到 STANDBY 后，向 LIFT 方向小幅快速往返。
          * cycles 为完整“上+下”次数，0 表示关闭；只作用于最终存入低位矿仓的流程。
          */
-        .store_low_shake_amplitude_rad = 1.0f,
+        .store_low_shake_amplitude_rad = 2.0f,
         .store_low_shake_velocity_rad_s = 50.0f,
-        .store_low_shake_cycles = 3u,
+        .store_low_shake_cycles = 2u,
         /*
          * 融合动作轮转角阈值说明：
          * - *_wheel_delta_rad 使用四轮累计转角变化绝对值的平均值，单位 rad。
@@ -541,6 +543,7 @@ Config_RobotParam_t robot_config = {
         .detect_grip_delay_ms = 150u,
         .detect_pose_delay_ms = 450u,
         .detect_success_hold_ms = 50u,
+        /* 取矛头 step1/step2 等待平台到取矛头位的移动超时；动作 15 对接等待本身不超时。 */
         .dock_wait_delay_ms = 10000u,
         /* 等待对接时 transform 的目标点；实际角度在 ore_store_param.preset.transform_position_rad 中标定。 */
         .dock_wait_transform = ORE_STORE_TRANSFORM_SPEARHEAD_DOCK_WAIT,

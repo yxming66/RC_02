@@ -614,10 +614,8 @@ static void AutoRodSpearhead_RunDockWait(
         AutoRodSpearhead_NextStep(ctrl);
         return;
       }
-      if (AutoRodSpearhead_StepElapsed(ctrl, now_ms) >=
-          AutoRodSpearhead_DockWaitDelayMs(ctrl)) {
-        AutoRodSpearhead_FinishTimeout(ctrl);
-      }
+      /* No docking timeout: keep the platform and servo at their verified
+       * local-ready poses until a fresh completion signal or an abort. */
       return;
     case 2:
       AutoRodSpearhead_EnterStep(ctrl, now_ms);

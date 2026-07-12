@@ -2568,7 +2568,7 @@ static uint8_t AutoCtrlFeed_ActionRequiredResourceMask(
       return chassis_pole | AUTO_ORE_RESOURCE_ARM |
              AUTO_ORE_RESOURCE_SHARED_VALVE;
     case PC_AUTO_ACTION_RECOVER_STORE:
-      return AUTO_ORE_RESOURCE_CHASSIS | upper;
+      return chassis_pole | upper;
     case PC_AUTO_ACTION_PICK_STORE_POS_400:
     case PC_AUTO_ACTION_PICK_STORE_POS_200:
     case PC_AUTO_ACTION_PICK_STORE_NEG_200:

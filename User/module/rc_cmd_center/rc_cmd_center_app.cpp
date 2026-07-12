@@ -801,6 +801,18 @@ static void Rc_LatchPoleCurrentTarget(void) {
   }
 }
 
+static void Rc_LatchPoleCurrentPosition(void) {
+  float front_lift_rad = 0.0f;
+  float rear_lift_rad = 0.0f;
+  if (Task_PoleMainGetSupportLift(&front_lift_rad, &rear_lift_rad) &&
+      isfinite(front_lift_rad) && isfinite(rear_lift_rad)) {
+    Rc_SetPoleAutoTarget(front_lift_rad, rear_lift_rad);
+    return;
+  }
+
+  Rc_LatchPoleCurrentTarget();
+}
+
 static void Rc_LatchArmSimpleCurrentTarget(void) {
   const ArmSimple_Feedback_t* feedback = Task_ArmSimpleGetFeedback();
   if (feedback == NULL) {
@@ -873,6 +885,20 @@ static void Rc_LatchRodCurrentTarget(void) {
       Rc_ClampRodNewTarget(feedback->target_angle_rad);
   rod_grip_latched = rod_cmd.grip;
   rod_target_angle_latched_rad = rod_cmd.target_angle_rad;
+}
+
+static void Rc_LatchHoldTargetsAfterSafe(void) {
+  /*
+   * SAFE intentionally relaxes Arm/Pole.  Their normal fallback routes keep
+   * the last command, so reusing that command after the RC link recovers
+   * would either send the Arm to the zeroed 0/0 target or leave the Pole in
+   * RELAX.  Rebuild all upper-mechanism hold commands from live feedback on
+   * the SAFE -> active edge before command arbitration runs.
+   */
+  Rc_LatchPoleCurrentPosition();
+  Rc_LatchArmSimpleCurrentTarget();
+  Rc_LatchOreStoreCurrentTarget();
+  Rc_LatchRodCurrentTarget();
 }
 
 static void Rc_LatchAutoRodSpearheadHoldTargets(void) {
@@ -2414,6 +2440,7 @@ void RcCmdCenterApp_Init(void) {
 
 void RcCmdCenterApp_Update(uint32_t now_ms) {
   RcBehavior_t behavior;
+  RcCommandPlan_t previous_plan;
   const bool update_debug = Rc_DebugPeriodicDue(now_ms);
 
   Rc_ResetFrameDebugEvents();
@@ -2431,7 +2458,12 @@ void RcCmdCenterApp_Update(uint32_t now_ms) {
   Rc_RefreshAutoOreOutputSnapshot();
 
   behavior = Rc_SelectMappedBehavior();
+  previous_plan = rc_current_plan;
   rc_current_plan = Rc_SelectCommandPlan(behavior);
+  if (previous_plan == RC_CMD_PLAN_SAFE &&
+      rc_current_plan != RC_CMD_PLAN_SAFE) {
+    Rc_LatchHoldTargetsAfterSafe();
+  }
   if (rc_current_plan != RC_CMD_PLAN_PC) {
     Rc_ResetOreStoreIdlePhotoPolicy();
   }

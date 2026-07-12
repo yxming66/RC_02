@@ -50,7 +50,7 @@ typedef struct {
   uint32_t detect_grip_delay_ms;
   uint32_t detect_pose_delay_ms;
   uint32_t detect_success_hold_ms;
-  uint32_t dock_wait_delay_ms;
+  uint32_t dock_wait_delay_ms; /* 取矛头移动到位超时；不限制 DOCK_WAIT 信号等待。 */
   OreStore_TransformPoint_t dock_wait_transform;
   bool use_photo_check;
   uint32_t photo_check_ms;

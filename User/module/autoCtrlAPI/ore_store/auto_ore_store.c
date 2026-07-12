@@ -3791,6 +3791,12 @@ static void AutoOre_RunPickOre(AutoOre_t *ctrl, uint32_t now_ms) {
 }
 
 static void AutoOre_RunRecoverStore(AutoOre_t *ctrl, uint32_t now_ms) {
+  if (!AutoOre_CommandPoleTarget(
+          ctrl, ctrl->param.recover_pole_target_lift_rad)) {
+    AutoOre_FailSetupInvalidParam(ctrl);
+    return;
+  }
+
   switch (ctrl->step_index) {
     case 0:
       AutoOre_EnterStep(ctrl, now_ms);
