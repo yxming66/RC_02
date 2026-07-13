@@ -500,6 +500,7 @@ static bool AutoCtrlFeed_IsOreAction(PC_AutoAction_t action) {
     case PC_AUTO_ACTION_STORE:
     case PC_AUTO_ACTION_RELEASE:
     case PC_AUTO_ACTION_RELEASE_LIFT_DETECT:
+    case PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT:
     case PC_AUTO_ACTION_RELEASE_STEP1:
     case PC_AUTO_ACTION_RELEASE_STEP2:
     case PC_AUTO_ACTION_RELEASE_LIFT_DETECT_STEP1:
@@ -1260,6 +1261,8 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms, bool update_debug) {
   if (zone3_ir_release_was_running &&
       auto_ore_ctrl.state != AUTO_ORE_STATE_RUNNING) {
     IrDock_EndZone3Action();
+    MrlinkPc_RearmAutoActionCommand(
+        (uint8_t)PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT);
   }
 
   if (auto_ore_ctrl.state != AUTO_ORE_STATE_RUNNING) {
@@ -1778,6 +1781,9 @@ bool Task_AutoStepStartDescend400Head(void) {
 }
 
 void Task_AutoOreAbort(void) {
+  const bool zone3_ir_release_was_running =
+      auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl) &&
+      auto_ore_ctrl.action == AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT;
   if (auto_ore_inited) {
     if (AutoOre_IsBusy(&auto_ore_ctrl)) {
       AutoCtrlFeed_RememberOreAction(auto_ore_ctrl.action);
@@ -1788,6 +1794,10 @@ void Task_AutoOreAbort(void) {
   }
   if (IrDock_IsZone3ActionLocked()) {
     IrDock_EndZone3Action();
+  }
+  if (zone3_ir_release_was_running) {
+    MrlinkPc_RearmAutoActionCommand(
+        (uint8_t)PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT);
   }
 }
 
@@ -1806,6 +1816,10 @@ static bool AutoCtrlFeed_HandleAutoOreDebugRequest(uint32_t now_ms) {
   if (request != AUTO_ORE_DEBUG_REQUEST_ABORT &&
       AutoCtrlFeed_AnyAutoActionBusy()) {
     g_auto_ore_debug.last_result = false;
+    if (request == AUTO_ORE_DEBUG_REQUEST_RELEASE_IR_LIFT_DETECT) {
+      MrlinkPc_RearmAutoActionCommand(
+          (uint8_t)PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT);
+    }
     return false;
   }
 
@@ -1928,6 +1942,11 @@ static bool AutoCtrlFeed_HandleAutoOreDebugRequest(uint32_t now_ms) {
   }
 
   g_auto_ore_debug.last_result = result;
+  if (!result &&
+      request == AUTO_ORE_DEBUG_REQUEST_RELEASE_IR_LIFT_DETECT) {
+    MrlinkPc_RearmAutoActionCommand(
+        (uint8_t)PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT);
+  }
   if (result) {
     g_auto_ore_debug.accept_count++;
     g_auto_ore_debug.force_output_enable =

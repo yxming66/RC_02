@@ -84,6 +84,9 @@ static void PcComm_TxErrorCallback(void) {
 }
 
 static AutoOre_DebugRequest_t PcComm_MapAutoAction(uint8_t action) {
+    if (action == 0x38u) {
+        action = (uint8_t)PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT;
+    }
     switch ((PC_AutoAction_t)action) {
         case PC_AUTO_ACTION_STORE:
             return AUTO_ORE_DEBUG_REQUEST_STORE;
@@ -167,6 +170,12 @@ static AutoOre_DebugRequest_t PcComm_MapAutoAction(uint8_t action) {
     }
 }
 
+static bool PcComm_AnyAutoActionBusy(void) {
+    return (auto_ctrl_inited && AutoCtrl_IsBusy(&auto_ctrl)) ||
+           (auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl)) ||
+           Task_AutoRodSpearheadIsBusy() || Task_AutoSickCorrectIsBusy();
+}
+
 static bool PcComm_ProcessAutoActionCommand(void) {
     const PC_AutoActionCMD_t *cmd = MrlinkPc_GetAutoActionCMD();
     if (cmd == NULL) {
@@ -179,8 +188,9 @@ static bool PcComm_ProcessAutoActionCommand(void) {
         return false;
     }
 
-    if (g_auto_ore_debug.request != AUTO_ORE_DEBUG_REQUEST_NONE &&
-        request != AUTO_ORE_DEBUG_REQUEST_ABORT) {
+    if (request != AUTO_ORE_DEBUG_REQUEST_ABORT &&
+        (g_auto_ore_debug.request != AUTO_ORE_DEBUG_REQUEST_NONE ||
+         PcComm_AnyAutoActionBusy())) {
         return true;
     }
 

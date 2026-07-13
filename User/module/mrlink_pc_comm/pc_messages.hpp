@@ -239,7 +239,7 @@ static_assert(sizeof(PC_ChassisFeedback_t) == 12u,
               "PC_FEEDBACK_CHASSIS wire size changed");
 static_assert(sizeof(PC_PoleFeedback_t) == 24u,
               "PC_FEEDBACK_POLE wire size changed");
-static_assert(sizeof(PC_AutoActionFeedback_t) == 4u,
+static_assert(sizeof(PC_AutoActionFeedback_t) == 8u,
               "PC_FEEDBACK_AUTO_ACTION wire size changed");
 static_assert(sizeof(PC_IrOreFeedback_t) == 24u,
               "PC_FEEDBACK_IR_ORE wire size changed");

@@ -271,12 +271,19 @@ void OnAutoAction(const wire::AutoActionCmd &cmd) {
       static_cast<uint8_t>(~(PC_ABSTRACT_MODULE_POLE |
                             PC_ABSTRACT_MODULE_ARM_SIMPLE));
 
-  if (cmd.action == PC_AUTO_ACTION_NONE) {
-    s_auto_action_rx_latch = PC_AUTO_ACTION_NONE;
+  g_pc_comm_debug.rx_auto_action.action = cmd.action;
+  const uint8_t action =
+      cmd.action == 0x38u
+          ? static_cast<uint8_t>(PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT)
+          : cmd.action;
+  if (action == PC_AUTO_ACTION_NONE) {
+    __atomic_store_n(&s_auto_action_rx_latch,
+                     static_cast<uint8_t>(PC_AUTO_ACTION_NONE),
+                     __ATOMIC_RELEASE);
     s_state.cmd.auto_action.action = PC_AUTO_ACTION_NONE;
-  } else if (cmd.action != s_auto_action_rx_latch) {
-    s_state.cmd.auto_action.action = cmd.action;
-    s_auto_action_rx_latch = cmd.action;
+  } else if (__atomic_exchange_n(&s_auto_action_rx_latch, action,
+                                 __ATOMIC_ACQ_REL) != action) {
+    s_state.cmd.auto_action.action = action;
   }
   MarkRxFrame(PC_CMD_AUTO_ACTION, sizeof(cmd), MRLINK_OK);
   TouchOnline(PC_CMD_AUTO_ACTION);
@@ -725,8 +732,6 @@ extern "C" void MrlinkPc_DebugUpdate(void) {
                       &s_state.cmd.camera_yaw);
   CopyPlainToVolatile(&g_pc_comm_debug.rx_abstract_position,
                       &s_state.cmd.abstract_position);
-  CopyPlainToVolatile(&g_pc_comm_debug.rx_auto_action,
-                      &s_state.cmd.auto_action);
   CopyPlainToVolatile(&g_pc_comm_debug.rx_step, &s_state.cmd.step);
   CopyPlainToVolatile(&g_pc_comm_debug.rx_imu, &s_state.cmd.imu);
   CopyPlainToVolatile(&g_pc_comm_debug.rx_r2_ready_state,
@@ -1016,6 +1021,14 @@ extern "C" void MrlinkPc_ClearStepCommand(void) {
 
 extern "C" void MrlinkPc_ClearAutoActionCommand(void) {
   s_state.cmd.auto_action.action = PC_AUTO_ACTION_NONE;
+}
+
+extern "C" void MrlinkPc_RearmAutoActionCommand(uint8_t action) {
+  uint8_t expected = action;
+  (void)__atomic_compare_exchange_n(
+      &s_auto_action_rx_latch, &expected,
+      static_cast<uint8_t>(PC_AUTO_ACTION_NONE), false, __ATOMIC_ACQ_REL,
+      __ATOMIC_ACQUIRE);
 }
 
 extern "C" void MrlinkPc_ClearIrOreAckCommand(void) {

@@ -237,7 +237,7 @@ typedef enum {
     PC_AUTO_ACTION_RELEASE_STEP2 = 35,    /* 放矿 step2：确认目标格后继续释放矿 */
     PC_AUTO_ACTION_RELEASE_LIFT_DETECT_STEP1 = 36, /* 三层放矿 step1：竖直观察目标格并等待抬升检测 */
     PC_AUTO_ACTION_RELEASE_LIFT_DETECT_STEP2 = 37, /* 三层放矿 step2：确认目标格/抬升后继续释放矿 */
-    PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT = 38, /* 三层放矿整体动作：红外3允许放矿，红外4结束，action=1中止 */
+    PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT = 38, /* 三层放矿整体动作；红外3允许、红外4结束、action=1中止；结束/失败后固件自动重新武装 */
 } PC_AutoAction_t;
 
 typedef enum {
@@ -255,6 +255,10 @@ typedef enum {
 #define PC_AUTO_ACTION_FAILURE_ROD_DOCK_WAIT (1u << 7)  /* 矛头对接等待失败 */
 #define PC_AUTO_ACTION_FAILURE_SICK_CORRECT (1u << 8)   /* SICK 校正失败 */
 #define PC_AUTO_ACTION_FAILURE_ABORTED (1u << 9)        /* 人为中止 */
+
+#define PC_AUTO_ACTION_SEGMENT_PICK (1u << 0)  /* 取矿/Arm/取矛头侧动作完成 */
+#define PC_AUTO_ACTION_SEGMENT_STORE (1u << 1) /* 存矿/矿仓侧动作完成 */
+#define PC_AUTO_ACTION_SEGMENT_STEP (1u << 2)  /* 台阶/底盘侧动作完成 */
 
 typedef struct {
     uint8_t action;    /* 一键动作类型，见 PC_AutoAction_t */
@@ -362,6 +366,9 @@ typedef struct {
     uint8_t busy;                   /* 任意一键动作是否正在执行，0=空闲，1=忙 */
     uint8_t finished;               /* 是否已有总动作结束结果，0=无，1=有 */
     uint8_t result;                 /* 结束结果，见 PC_AutoActionResult_t */
+    uint16_t failure_mask;          /* 失败部位 bitmask，见 PC_AUTO_ACTION_FAILURE_* */
+    uint8_t segment_finished_mask;  /* 完成位：bit0=pick，bit1=store，bit2=step */
+    uint8_t reserved;               /* 保留字段，发送端固定为 0 */
 } PC_AutoActionFeedback_t;
 
 typedef struct {
@@ -721,6 +728,9 @@ void MrlinkPc_ClearStepCommand(void);
 
 /* 清除待消费一键动作命令，通常在 pc_comm_task 分发后调用。 */
 void MrlinkPc_ClearAutoActionCommand(void);
+
+/* 若当前接收 latch 等于 action，则解除去重锁，允许下一次同 action 重新触发。 */
+void MrlinkPc_RearmAutoActionCommand(uint8_t action);
 
 /* 清除待转发红外对接 ACK 命令，通常在 ACK 成功提交或不可恢复失败后调用。 */
 void MrlinkPc_ClearIrOreAckCommand(void);
