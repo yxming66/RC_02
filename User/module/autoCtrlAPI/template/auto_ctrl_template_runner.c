@@ -1033,8 +1033,10 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
       AutoCtrlTemplate_CommandPoleProfile(
           ctrl, pole.all_retract[0], pole.all_retract[1],
           param->pole_front_retract_speed, param->pole_rear_retract_speed,
-          AUTO_CTRL_POLE_PROFILE_ALL_RETRACT,
-          AUTO_CTRL_POLE_PROFILE_ALL_RETRACT);
+          use_400mm ? AUTO_CTRL_POLE_PROFILE_ALL_RETRACT
+              : AUTO_CTRL_POLE_PROFILE_FRONT_RETRACT,
+          use_400mm ? AUTO_CTRL_POLE_PROFILE_ALL_RETRACT
+              : AUTO_CTRL_POLE_PROFILE_REAR_RETRACT);
       AutoCtrlTemplate_DebugMarkPoleCommand(
           ctrl, now_ms, AUTO_CTRL_TEMPLATE_DEBUG_POLE_AFTER_PHOTO);
       if (AutoCtrlTemplate_PoleReadyAfterNewTarget(
@@ -1058,8 +1060,10 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
       AutoCtrlTemplate_CommandPoleProfile(
           ctrl, pole.all_retract[0], pole.all_retract[1],
           param->pole_front_retract_speed, param->pole_rear_retract_speed,
-          AUTO_CTRL_POLE_PROFILE_ALL_RETRACT,
-          AUTO_CTRL_POLE_PROFILE_ALL_RETRACT);
+          use_400mm ? AUTO_CTRL_POLE_PROFILE_ALL_RETRACT
+              : AUTO_CTRL_POLE_PROFILE_FRONT_RETRACT,
+          use_400mm ? AUTO_CTRL_POLE_PROFILE_ALL_RETRACT
+              : AUTO_CTRL_POLE_PROFILE_REAR_RETRACT);
       if (AutoCtrlTemplate_FinalPhotoSprintReady(ctrl, now_ms, param)) {
         AutoCtrlTemplate_NextStep(ctrl);
       } else if (!ctrl->template_ctx.final_photo_sprint_started &&
