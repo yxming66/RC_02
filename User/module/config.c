@@ -732,18 +732,18 @@ Config_RobotParam_t robot_config = {
             .final_move_speed = 0.0f,          /* step7 离开 vx 的备用值；second_photo_retract_move_speed <= 0 时使用。 */
             .final_move_ms = 150u,              /* step7 保持全伸离开持续时间，单位 ms。 */
 
-            .pole_front_extend_speed = 60.0f,   /* step2 前杆伸出、step5-7 四杆全伸时的前杆速度，单位 rad/s。 */
+            .pole_front_extend_speed = 40.0f,   /* step2 前杆伸出、step5-7 四杆全伸时的前杆速度，单位 rad/s。 */
             .pole_front_retract_speed = 30.0f,  /* step0/1 前杆保持或回收到全收目标的速度，单位 rad/s。 */
-            .pole_rear_extend_speed = 60.0f,    /* step5-7 四杆全伸时的后杆速度，单位 rad/s。 */
+            .pole_rear_extend_speed = 40.0f,    /* step5-7 四杆全伸时的后杆速度，单位 rad/s。 */
             .pole_rear_retract_speed = 30.0f,   /* step0-4 后杆保持或回收到全收目标的速度，单位 rad/s。 */
             .pole_all_extend_speed = 30.0f,
 
             .pole_all_extend_accel = 250.0f,
             .pole_all_retract_speed = 30.0f,
             .pole_all_retract_accel = 250.0f,
-            .pole_front_extend_accel = 900.0f,
+            .pole_front_extend_accel = 700.0f,
             .pole_front_retract_accel = 30.0f,
-            .pole_rear_extend_accel = 900.0f,
+            .pole_rear_extend_accel = 700.0f,
             .pole_rear_retract_accel = 30.0f,
             .pole_extend_landing_zone_rad = 0.1f,
             .pole_extend_landing_speed = 10.0f,
@@ -790,6 +790,8 @@ Config_RobotParam_t robot_config = {
             .pole_front_retract_accel = 120.0f,
             .pole_rear_extend_accel = 400.0f,
             .pole_rear_retract_accel = 120.0f,
+            .pole_extend_landing_zone_rad = 0.1f, /* 前/后 Pole 伸出最后 0.1 rad 进入低速落地段。 */
+            .pole_extend_landing_speed = 10.0f,   /* 末段伸出速度，单位 rad/s。 */
             .front_photo_timeout_ms = 5000u,    /* 等待前光电触发/下降沿超时，单位 ms。 */
             .rear_photo_timeout_ms = 5000u,     /* 等待后光电触发/下降沿超时，单位 ms。 */
             .pole_extend_move_speed = 1.0f,    /* step6 四杆全伸行走 vx，单位 m/s。 */
