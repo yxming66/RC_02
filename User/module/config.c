@@ -643,14 +643,14 @@ Config_RobotParam_t robot_config = {
             /* 200mm全伸：快速建立速度，并在目标前按120rad/s^2主动制动。 */
             .pole_all_extend_speed = 22.0f,
             .pole_front_extend_speed = 22.0f,   /* 前杆伸出目标跟随速度，单位 rad/s。 */
-            .pole_front_retract_speed = 50.0f,/* 前杆回收目标跟随速度，单位 rad/s。 */
+            .pole_front_retract_speed = 0.0f,/* 前杆回收目标跟随速度，单位 rad/s。 */
             .pole_rear_extend_speed = 22.0f,    /* 后杆伸出目标跟随速度，单位 rad/s。 */
             .pole_rear_retract_speed = 0.0f,    /* 后杆回收直接使用最终目标，不做速度限幅。 */
             .pole_all_extend_accel = 120.0f,
             .pole_all_retract_speed = 30.0f,
             .pole_all_retract_accel = 600.0f,
             .pole_front_extend_accel = 120.0f,
-            .pole_front_retract_accel = 1000.0f,
+            .pole_front_retract_accel = 0.0f,
             .pole_rear_extend_accel = 120.0f,
             .pole_rear_retract_accel = 0.0f,    /* 与速度同为 0，跳过轨迹及末端制动。 */
             
@@ -721,11 +721,11 @@ Config_RobotParam_t robot_config = {
              */
             /* AutoCtrlTemplate_RunHeadDescend200Optimized 使用的有效字段。 */
             .prealign_move_speed = 0.4f,       /* PREALIGN yaw 对正时叠加的前进 vx，单位 m/s。 */
-            .front_retract_move_speed = 0.4f,  /* step4 等待 PE13/photo1 下降沿的慢速 vx，单位 m/s。 */
+            .front_retract_move_speed = 0.25f,  /* step4 等待 PE13/photo1 下降沿的慢速 vx，单位 m/s。 */
             .mid_move_speed = 0.6f,            /* step0/step3 两段固定快跑 vx，单位 m/s。 */
             .mid_move_ms = 200u,                 /* step0 第一次固定快跑持续时间，单位 ms。 */ 
             .timed_move_yaw_tolerance_rad = 0.35f, /* 中段定时移动切步 yaw 容差，约 10 deg。 */
-            .rear_retract_move_speed = 0.4f,   /* step1 等待 PA2/photo3 下降沿的慢速 vx，单位 m/s。 */
+            .rear_retract_move_speed = 0.3f,   /* step1 等待 PA2/photo3 下降沿的慢速 vx，单位 m/s。 */
             .rear_retract_move_ms = 150u,      /* step3 第二次固定快跑持续时间，单位 ms。 */
             .rear_retract_move_wheel_delta_rad = 8.66f, /* step3 第二次固定快跑轮转角阈值，单位 rad；0 表示按时间切步。 */
             .second_photo_retract_move_speed = 0.6f, /* step7 第二个下降沿后保持全伸离开 vx，单位 m/s。 */
@@ -745,8 +745,8 @@ Config_RobotParam_t robot_config = {
             .pole_front_retract_accel = 30.0f,
             .pole_rear_extend_accel = 700.0f,
             .pole_rear_retract_accel = 30.0f,
-            .pole_extend_landing_zone_rad = 0.1f,
-            .pole_extend_landing_speed = 10.0f,
+            .pole_extend_landing_zone_rad = 0.15f,
+            .pole_extend_landing_speed = 5.0f,
             .front_photo_timeout_ms = 5000u,    /* step4 等待 PE13/photo1 下降沿超时，单位 ms。 */
             .rear_photo_timeout_ms = 5000u,     /* step1 等待 PA2/photo3 下降沿超时，单位 ms。 */
             .pole_extend_move_speed = 1.5f,    /* step6 四杆全伸行走 vx，单位 m/s。 */
