@@ -442,10 +442,10 @@ Config_RobotParam_t robot_config = {
             .recover_chassis_retreat_ms = 500u,
             /* 融合取矿/存矿/上台阶动作延时；0 使用代码默认值。 */
             .fused_prealign_stable_ms = 120u,          /* 融合动作 yaw 对正后稳定等待时间，单位 ms。 */
-            .fused_pick_precontact_timeout_ms = 2000u, /* 融合取矿低速靠近超时，单位 ms。 */
+            .fused_pick_precontact_timeout_ms = 500u,  /* 融合取矿低速靠近兜底超时，避免光电条件未命中时长时间卡住。 */
             .fused_pick_lift_detect_ms = 200u,         /* 融合取矿抬矿检测位到位后的确认延时，单位 ms。 */
             .fused_arm_photo_stable_ms = 120u,         /* 机械臂取矿传感器稳定确认时间，单位 ms。 */
-            .fused_photo1_lift_delay_ms = 50u,        /* 检测到光电1后，延迟抬 arm/开始并行存矿，单位 ms；0 表示立即。 */
+            .fused_photo1_lift_delay_ms = 0u,         /* 光电1有效沿确认后立即抬 Arm/开始并行存矿。 */
         },
         /* 单个状态机 step 的超时时间，单位 ms。 */
         .default_step_timeout_ms = 5000u,
@@ -454,7 +454,7 @@ Config_RobotParam_t robot_config = {
         .arm_arrive_velocity_threshold_rad_s = 0.25f,
         .pick_arm_arrive_stable_ms = 50u,
         .ore_store_arrive_threshold_rad = 0.05f,
-        .pole_arrive_threshold_rad = 0.80f,
+        .pole_arrive_threshold_rad = 1.50f,
         .prealign_yaw_tolerance_rad =
             CONFIG_AUTO_ORE_PREALIGN_YAW_TOLERANCE_RAD,
         .release_lift_detect_sick_index = SICK_BOTTOM_PHOTO_INDEX,
@@ -469,7 +469,7 @@ Config_RobotParam_t robot_config = {
         /* 回收地面矿动作全程保持的 Pole 自动目标：[0]前组，[1]后组，单位 rad。 */
         .recover_pole_target_lift_rad = {0.8f, 0.8f},
         /* 回收地面矿时底盘低速前进/后退速度，单位 m/s。 */
-        .recover_chassis_forward_vx_mps = 0.4f,
+        .recover_chassis_forward_vx_mps = 0.5f,
         .recover_chassis_retreat_vx_mps = 1.0f,
         /* 低位存矿完成后，transform 从高位 LIFT 回低位 STANDBY 的旧梯形速度规划；三段速度未配置时兜底使用。 */
         .store_low_return_velocity_rad_s = 50.0f,
@@ -502,7 +502,7 @@ Config_RobotParam_t robot_config = {
             .pick_action = AUTO_ORE_ACTION_PICK_POS_200,         /* 融合动作取正 200mm 矿。 */
             .precontact_vx_mps = 0.20f,                          /* 取矿前低速靠近速度，单位 m/s。 */
             .precontact_wheel_delta_rad = 4.5f,                 /* 取矿前低速靠近轮转角阈值，单位 rad。 */
-            .precontact_timeout_ms = 3000u,                     /* 取矿前低速靠近兜底超时，单位 ms。 */
+            .precontact_timeout_ms = 500u,                      /* 光电未命中时快速进入抬矿检测兜底。 */
             .step_start_vx_mps = 0.40f,                          /* 存矿后进入台阶模板前的起步冲刺速度，单位 m/s。 */
             .step_start_wheel_delta_rad = 2.36f,                 /* 存矿后进入台阶模板前的起步冲刺轮转角阈值，单位 rad。 */
             .fast_pick_on_front_photo = true,                    /* true=前光电触发即认为取矿完成，跳过停顿抬矿检测并直接并行存矿/上台阶。 */
@@ -513,7 +513,7 @@ Config_RobotParam_t robot_config = {
             .pick_action = AUTO_ORE_ACTION_PICK_NEG_200,          /* 融合动作取负 200mm 矿。 */
             .precontact_vx_mps = 0.20f,                           /* 取矿前低速靠近速度，单位 m/s。 */
             .precontact_wheel_delta_rad = 4.0f,                  /* 取矿前低速靠近轮转角阈值，单位 rad。 */
-            .precontact_timeout_ms = 2000u,                      /* 取矿前低速靠近兜底超时，单位 ms。 */
+            .precontact_timeout_ms = 500u,                       /* 光电未命中时快速进入抬矿检测兜底。 */
             .step_start_vx_mps = 0.20f,                           /* 存矿后进入台阶模板前的起步冲刺速度，单位 m/s。 */
             .step_start_wheel_delta_rad = 0.0f,                   /* 头向下台阶默认不额外起步冲刺；>0 时按轮转角门控冲刺。 */
             .override_descend_move = true,
@@ -528,7 +528,7 @@ Config_RobotParam_t robot_config = {
             .pick_action = AUTO_ORE_ACTION_PICK_POS_400,         /* 融合动作取正 400mm 矿。 */
             .precontact_vx_mps = 0.15f,                          /* 取矿前低速靠近速度，单位 m/s。 */
             .precontact_wheel_delta_rad = 4.5f,                 /* 取矿前低速靠近轮转角阈值，单位 rad。 */
-            .precontact_timeout_ms = 2500u,                     /* 取矿前低速靠近兜底超时，单位 ms。 */
+            .precontact_timeout_ms = 500u,                      /* 光电未命中时快速进入抬矿检测兜底。 */
             .step_start_vx_mps = 0.40f,                          /* 存矿后进入台阶模板前的起步冲刺速度，单位 m/s。 */
             .step_start_wheel_delta_rad = 2.36f,                 /* 存矿后进入台阶模板前的起步冲刺轮转角阈值，单位 rad。 */
             .fast_pick_on_front_photo = true,                    /* true=前光电触发即认为取矿完成，跳过停顿抬矿检测并直接并行存矿/上台阶。 */
