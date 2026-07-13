@@ -158,6 +158,7 @@ typedef enum {
   RC_CMD_PLAN_AUTO_CTRL_OUTPUT,
   RC_CMD_PLAN_AUTO_ORE_OUTPUT,
   RC_CMD_PLAN_AUTO_ROD_OUTPUT,
+  RC_CMD_PLAN_PC_AUTO_ROD_STEP1,
   RC_CMD_PLAN_AUTO_SICK_CORRECT_OUTPUT,
 } RcCommandPlan_t;
 
@@ -1637,6 +1638,10 @@ static RcCommandPlan_t Rc_SelectCommandPlan(RcBehavior_t behavior) {
     if (!auto_rod_spearhead_was_busy) {
       Rc_LatchAutoRodSpearheadHoldTargets();
     }
+    if (Task_AutoRodSpearheadIsPickupStep1() && Rc_ShouldUsePcCommand()) {
+      g_pc_command_source = PC_COMMAND_SOURCE_PC;
+      return RC_CMD_PLAN_PC_AUTO_ROD_STEP1;
+    }
     return RC_CMD_PLAN_AUTO_ROD_OUTPUT;
   }
 
@@ -2181,7 +2186,8 @@ static void Rc_ConfigureCmdCenter(void) {
               .when<RcPlanIn<RC_CMD_PLAN_DRIVE> >()
               .priority(cmd::Priority::Manual),
           cmd::from<RcRuntimeInput, RcChassisPcRoute>()
-              .when<RcPlanIn<RC_CMD_PLAN_PC> >()
+              .when<RcPlanIn<RC_CMD_PLAN_PC,
+                     RC_CMD_PLAN_PC_AUTO_ROD_STEP1> >()
               .priority(cmd::Priority::Remote),
           cmd::from<RcRuntimeInput, RcChassisAutoCtrlRoute>()
               .when<RcPlanIn<RC_CMD_PLAN_AUTO_CTRL_OUTPUT,
@@ -2236,7 +2242,8 @@ static void Rc_ConfigureCmdCenter(void) {
               .when<RcPlanIn<RC_CMD_PLAN_AUTO_SICK_CORRECT_OUTPUT> >()
               .priority(cmd::Priority::CriticalAuto),
           cmd::from<RcRuntimeInput, RcPoleAutoRodRoute>()
-              .when<RcPlanIn<RC_CMD_PLAN_AUTO_ROD_OUTPUT> >()
+              .when<RcPlanIn<RC_CMD_PLAN_AUTO_ROD_OUTPUT,
+                     RC_CMD_PLAN_PC_AUTO_ROD_STEP1> >()
               .priority(cmd::Priority::Auto),
           cmd::from<RcRuntimeInput, RcPoleFallbackKeepRoute>()
               .when<RcPlanIn<RC_CMD_PLAN_AUTO_STANDBY,
@@ -2275,6 +2282,7 @@ static void Rc_ConfigureCmdCenter(void) {
                              RC_CMD_PLAN_AUTO_CTRL_OUTPUT,
                              RC_CMD_PLAN_PC_AUTO_CTRL,
                              RC_CMD_PLAN_AUTO_ROD_OUTPUT,
+                             RC_CMD_PLAN_PC_AUTO_ROD_STEP1,
                              RC_CMD_PLAN_AUTO_SICK_CORRECT_OUTPUT> >()
               .priority(cmd::Priority::Fallback));
 
@@ -2295,7 +2303,8 @@ static void Rc_ConfigureCmdCenter(void) {
               .when<RcAutoOreOwnsResource<AUTO_ORE_RESOURCE_STORE> >()
               .priority(cmd::Priority::CriticalAuto),
           cmd::from<RcRuntimeInput, RcOreStoreAutoRodRoute>()
-              .when<RcPlanIn<RC_CMD_PLAN_AUTO_ROD_OUTPUT> >()
+              .when<RcPlanIn<RC_CMD_PLAN_AUTO_ROD_OUTPUT,
+                     RC_CMD_PLAN_PC_AUTO_ROD_STEP1> >()
               .priority(cmd::Priority::CriticalAuto),
           cmd::from<RcRuntimeInput, RcOreStoreHoldRoute>()
               .when<RcPlanIn<RC_CMD_PLAN_DRIVE,
@@ -2324,7 +2333,8 @@ static void Rc_ConfigureCmdCenter(void) {
               .when<RcPlanIn<RC_CMD_PLAN_PC> >()
               .priority(cmd::Priority::Remote),
           cmd::from<RcRuntimeInput, RcRodNewAutoRoute>()
-              .when<RcPlanIn<RC_CMD_PLAN_AUTO_ROD_OUTPUT> >()
+              .when<RcPlanIn<RC_CMD_PLAN_AUTO_ROD_OUTPUT,
+                     RC_CMD_PLAN_PC_AUTO_ROD_STEP1> >()
               .priority(cmd::Priority::CriticalAuto),
           cmd::from<RcRuntimeInput, RcRodNewHoldRoute>()
               .when<RcPlanIn<RC_CMD_PLAN_DRIVE,

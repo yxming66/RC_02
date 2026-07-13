@@ -204,20 +204,7 @@ static void AutoSickCorrect_ClearOutputs(AutoSickCorrect_t *ctrl) {
 }
 
 static void AutoSickCorrect_CommandPole(
-    AutoSickCorrect_t *ctrl, const AutoSickCorrect_PointParams_t *param) {
-  const float target_lift = AutoSickCorrect_PoleTargetLift(param);
-
-  memset(&ctrl->pole_cmd, 0, sizeof(ctrl->pole_cmd));
-  ctrl->pole_cmd.mode = POLE_MODE_ACTIVE;
-  ctrl->pole_cmd.auto_target_enable[0] = true;
-  ctrl->pole_cmd.auto_target_enable[1] = true;
-  ctrl->pole_cmd.auto_target_lift[0] = target_lift;
-  ctrl->pole_cmd.auto_target_lift[1] = target_lift;
-  ctrl->pole_cmd.auto_lift_speed[0] = param->pole_speed;
-  ctrl->pole_cmd.auto_lift_speed[1] = param->pole_speed;
-  ctrl->pole_cmd.auto_lift_accel[0] = 0.0f;
-  ctrl->pole_cmd.auto_lift_accel[1] = 0.0f;
-  ctrl->pole_cmd.disable_lift_accel = false;
+7  ctrl->pole_cmd.disable_lift_accel = false;
   ctrl->pole_cmd_valid = true;
 }
 
