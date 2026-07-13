@@ -2944,45 +2944,6 @@ static AutoOre_Action_t AutoOre_FusedDefaultPickAction(
   }
 }
 
-static const float *AutoOre_FusedPickPoleTarget(const AutoOre_t *ctrl) {
-  if (ctrl == 0 || ctrl->param.pole_param == 0) {
-    return 0;
-  }
-  if (ctrl->action == AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD ||
-      ctrl->action == AUTO_ORE_ACTION_STEP_DROP_STORE_DESCEND_200_HEAD) {
-    return ctrl->param.pole_param->preset.step_200_descend_all_retract;
-  }
-  const AutoOre_FusedParam_t *param = AutoOre_FusedParam(ctrl);
-  AutoOre_Action_t pick_action = (param != 0)
-                                     ? param->pick_action
-                                     : AUTO_ORE_ACTION_NONE;
-  if (!AutoOre_ActionIsPick(pick_action)) {
-    pick_action = AutoOre_FusedDefaultPickAction(ctrl->action);
-  }
-
-  switch (pick_action) {
-    case AUTO_ORE_ACTION_PICK_POS_400:
-      return ctrl->param.pole_param->preset.step_400_all_extend;
-    case AUTO_ORE_ACTION_PICK_POS_200:
-      return ctrl->param.pole_param->preset.step_200_all_extend;
-    case AUTO_ORE_ACTION_PICK_NEG_200:
-      return ctrl->param.pole_param->preset.step_200_small;
-    default:
-      return 0;
-  }
-}
-
-static bool AutoOre_CommandFusedPickPoleTarget(AutoOre_t *ctrl,
-                                               const float target_lift[2]) {
-  if (!AutoOre_CommandPoleTarget(ctrl, target_lift)) {
-    return false;
-  }
-
-  AutoOre_ApplyPoleCommandLimitsFromTemplate(
-      ctrl, AutoOre_FusedStepTemplateParam(ctrl));
-  return true;
-}
-
 static ArmSimple_BehaviorPoint_t AutoOre_FusedPickArmPoint(
     const AutoOre_t *ctrl) {
   const AutoOre_FusedParam_t *param = AutoOre_FusedParam(ctrl);
@@ -3488,6 +3449,14 @@ static void AutoOre_RunFusedStepSide(AutoOre_t *ctrl, uint32_t now_ms,
     return;
   }
 
+  if (ctrl->step_ctrl_started) {
+    AutoOre_RunFusedStepTemplate(ctrl, now_ms);
+    if (ctrl->fused_step_done) {
+      AutoOre_FinishFusedStepSide(ctrl);
+    }
+    return;
+  }
+
   switch (ctrl->step_phase) {
     case 0:
       if (!AutoOre_CommandFusedStepStartPoleTarget(ctrl)) {
@@ -3535,6 +3504,17 @@ static void AutoOre_RunFusedStepSide(AutoOre_t *ctrl, uint32_t now_ms,
       AutoOre_FinishFusedStepSide(ctrl);
       return;
   }
+}
+
+static bool AutoOre_RunIndependentFusedStep(AutoOre_t *ctrl,
+                                             uint32_t now_ms) {
+  if (!ctrl->fused_step_done) {
+    AutoOre_RunFusedStepTemplate(ctrl, now_ms);
+  }
+  if (ctrl->fused_step_done) {
+    AutoOre_FinishFusedStepSide(ctrl);
+  }
+  return ctrl->state == AUTO_ORE_STATE_RUNNING;
 }
 
 static void AutoOre_RunFusedStoreAndStepParallel(AutoOre_t *ctrl,
@@ -3695,11 +3675,6 @@ static void AutoOre_RunStepPickStoreFused(AutoOre_t *ctrl, uint32_t now_ms) {
     AutoOre_FailSetupInvalidParam(ctrl);
     return;
   }
-  const float *pole_target = AutoOre_FusedPickPoleTarget(ctrl);
-  if (pole_target == 0) {
-    AutoOre_FailSetupInvalidParam(ctrl);
-    return;
-  }
 
   switch (ctrl->step_index) {
     case 0:
@@ -3717,6 +3692,9 @@ static void AutoOre_RunStepPickStoreFused(AutoOre_t *ctrl, uint32_t now_ms) {
        * the only condition allowed to hold the chassis. */
       AutoOre_CommandChassisMoveYawRate(ctrl, fused->precontact_vx_mps,
                                         AutoOre_SelectPrealignWz(ctrl));
+      if (!AutoOre_RunIndependentFusedStep(ctrl, now_ms)) {
+        return;
+      }
       if (fused_prealign_ready) {
         AutoOre_NextStep(ctrl);
       } else {
@@ -3728,26 +3706,22 @@ static void AutoOre_RunStepPickStoreFused(AutoOre_t *ctrl, uint32_t now_ms) {
       AutoOre_EnterStep(ctrl, now_ms);
       if (!AutoOre_CommandArm(ctrl, AutoOre_FusedPickArmPoint(ctrl),
                               SUCTION_ON,
-                              &ctrl->param.arm_speed.pick_place) ||
-          !AutoOre_CommandFusedPickPoleTarget(ctrl, pole_target)) {
+                              &ctrl->param.arm_speed.pick_place)) {
         AutoOre_FailPickInvalidParam(ctrl);
         return;
       }
       AutoOre_CommandFusedApproachWithArmProtection(
           ctrl, fused, false);
-      if (ctrl->feedback.pole_all_at_target) {
-        AutoOre_NextStep(ctrl);
-      } else {
-        (void)AutoOre_CheckTimeoutWithFailure(
-            ctrl, now_ms, AUTO_ORE_FAILURE_PICK_ORE);
+      if (!AutoOre_RunIndependentFusedStep(ctrl, now_ms)) {
+        return;
       }
+      AutoOre_NextStep(ctrl);
       return;
     case 2:
       AutoOre_EnterStep(ctrl, now_ms);
       if (!AutoOre_CommandArm(ctrl, AutoOre_FusedPickArmPoint(ctrl),
                               SUCTION_ON,
-                              &ctrl->param.arm_speed.pick_place) ||
-          !AutoOre_CommandFusedPickPoleTarget(ctrl, pole_target)) {
+                              &ctrl->param.arm_speed.pick_place)) {
         AutoOre_FailPickInvalidParam(ctrl);
         return;
       }
@@ -3755,6 +3729,9 @@ static void AutoOre_RunStepPickStoreFused(AutoOre_t *ctrl, uint32_t now_ms) {
           AutoOre_WaitPickArmCommandTargetStable(ctrl, now_ms);
       AutoOre_CommandFusedApproachWithArmProtection(
           ctrl, fused, pick_arm_stable);
+      if (!AutoOre_RunIndependentFusedStep(ctrl, now_ms)) {
+        return;
+      }
       if (pick_arm_stable) {
         AutoOre_NextStep(ctrl);
       } else {
@@ -3766,13 +3743,15 @@ static void AutoOre_RunStepPickStoreFused(AutoOre_t *ctrl, uint32_t now_ms) {
       AutoOre_EnterStep(ctrl, now_ms);
       if (!AutoOre_CommandArm(ctrl, AutoOre_FusedPickArmPoint(ctrl),
                               SUCTION_ON,
-                              &ctrl->param.arm_speed.pick_fetch) ||
-          !AutoOre_CommandFusedPickPoleTarget(ctrl, pole_target)) {
+                              &ctrl->param.arm_speed.pick_fetch)) {
         AutoOre_FailPickInvalidParam(ctrl);
         return;
       }
       AutoOre_CommandChassisMoveYawRate(ctrl, fused->precontact_vx_mps,
                                         ctrl->feedback.yaw_rate_cmd_rad_s);
+      if (!AutoOre_RunIndependentFusedStep(ctrl, now_ms)) {
+        return;
+      }
       if (AutoOre_FusedFastPickOnFrontPhotoEnabled(ctrl, fused)) {
         /* Latch the falling edge even before Pole reports ready.  The old
          * short-circuit expression skipped sampling during that interval and
@@ -3787,12 +3766,7 @@ static void AutoOre_RunStepPickStoreFused(AutoOre_t *ctrl, uint32_t now_ms) {
           }
           ctrl->pick_lift_confirmed = true;
           AutoOre_SetArmHasOre(ctrl, true);
-          /* Start the stair branch independently from step 0. Its own Pole
-           * pose gates decide when stair photo inputs become valid. */
-          ctrl->fused_step_template_start_step_index = 0u;
           AutoOre_JumpToStep(ctrl, 5u);
-          ctrl->step_phase = 1u;
-          AutoOre_RunFusedStoreAndStepParallel(ctrl, now_ms, fused);
           return;
         }
 
@@ -3820,9 +3794,11 @@ static void AutoOre_RunStepPickStoreFused(AutoOre_t *ctrl, uint32_t now_ms) {
       AutoOre_CommandChassisHold(ctrl);
       if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_PICK_LIFT_DETECT,
                               SUCTION_ON,
-                              &ctrl->param.arm_speed.pick_lift_detect) ||
-          !AutoOre_CommandFusedPickPoleTarget(ctrl, pole_target)) {
+                              &ctrl->param.arm_speed.pick_lift_detect)) {
         AutoOre_FailPickInvalidParam(ctrl);
+        return;
+      }
+      if (!AutoOre_RunIndependentFusedStep(ctrl, now_ms)) {
         return;
       }
       if (AutoOre_WaitConditionThenDelay(
