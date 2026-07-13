@@ -25,8 +25,10 @@ typedef struct {
   uint8_t step_index;            /* 当前模板执行到的 step 编号。 */
   uint32_t step_enter_time_ms;   /* 当前 step 首次进入时刻（ms）。 */
   uint32_t template_start_time_ms; /* 当前模板开始时刻（ms）。 */
+  uint32_t ascend_rear_retract_delay_start_ms; /* 上200光电3逻辑触发后的收杆延时起点。 */
   uint32_t final_photo_sprint_start_ms; /* 末尾光电触发后额外冲刺起始时刻（ms）。 */
   bool step_entered;             /* 当前 step 是否已经执行过 enter 初始化。 */
+  bool ascend_rear_retract_delay_started; /* 上200光电3后的收杆延时已启动。 */
   bool final_photo_sprint_started; /* 末尾光电后的额外冲刺计时已启动。 */
   /* 光电稳定触发/释放检测状态。 */
   bool pe13_photo1_triggered_latched; /* PE13/photo1 latched as triggered. */

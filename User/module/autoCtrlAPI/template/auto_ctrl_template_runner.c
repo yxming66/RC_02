@@ -16,6 +16,7 @@ typedef struct {
  * commanded Pole pose passes the normal at-target debounce. */
 #define AUTO_CTRL_ASCEND_200_PHOTO_RECORD_LIFT_RAD (3.5f)
 #define AUTO_CTRL_ASCEND_400_PHOTO_RECORD_LIFT_RAD (7.0f)
+#define AUTO_CTRL_ASCEND_200_REAR_RETRACT_DELAY_MS (10u)
 #define AUTO_CTRL_DESCEND_PHOTO_RECORD_LIFT_RAD (2.5f)
 
 typedef enum {
@@ -143,6 +144,8 @@ static void AutoCtrlTemplate_SetStep(auto_ctrl_t *ctrl, uint8_t step_index) {
   ctrl->template_ctx.pole_target_seen_not_ready = false;
   ctrl->template_ctx.photo_stop_entered = false;
   ctrl->template_ctx.photo_stop_enter_time_ms = 0u;
+  ctrl->template_ctx.ascend_rear_retract_delay_started = false;
+  ctrl->template_ctx.ascend_rear_retract_delay_start_ms = 0u;
   ctrl->template_ctx.final_photo_sprint_started = false;
   ctrl->template_ctx.final_photo_sprint_start_ms = 0u;
   ctrl->template_ctx.descend_start_move_entered = false;
@@ -1020,6 +1023,31 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
       }
       AutoCtrlTemplate_DebugMarkPhotoEvent(
           ctrl, now_ms, AUTO_CTRL_TEMPLATE_DEBUG_PHOTO_ASCEND_REAR);
+      if (!use_400mm) {
+        if (!ctrl->template_ctx.ascend_rear_retract_delay_started) {
+          ctrl->template_ctx.ascend_rear_retract_delay_started = true;
+          ctrl->template_ctx.ascend_rear_retract_delay_start_ms = now_ms;
+        }
+        if ((now_ms -
+             ctrl->template_ctx.ascend_rear_retract_delay_start_ms) <
+            AUTO_CTRL_ASCEND_200_REAR_RETRACT_DELAY_MS) {
+          AutoCtrlPrimitive_ApplyPrealignWithMove(
+              ctrl, param->rear_retract_move_speed, 0.0f);
+          AutoCtrlTemplate_CommandPoleProfile(
+              ctrl, pole.front_retract[0], pole.front_retract[1],
+              param->pole_front_retract_speed, param->pole_rear_extend_speed,
+              AUTO_CTRL_POLE_PROFILE_FRONT_RETRACT,
+              AUTO_CTRL_POLE_PROFILE_REAR_EXTEND);
+          return false;
+        }
+        AutoCtrlTemplate_CommandPoleProfile(
+            ctrl, pole.all_retract[0], pole.all_retract[1],
+            param->pole_front_retract_speed, param->pole_rear_retract_speed,
+            AUTO_CTRL_POLE_PROFILE_FRONT_RETRACT,
+            AUTO_CTRL_POLE_PROFILE_REAR_RETRACT);
+        AutoCtrlTemplate_DebugMarkPoleCommand(
+            ctrl, now_ms, AUTO_CTRL_TEMPLATE_DEBUG_POLE_AFTER_PHOTO);
+      }
       AutoCtrlTemplate_NextStep(ctrl);
       return false;
 
