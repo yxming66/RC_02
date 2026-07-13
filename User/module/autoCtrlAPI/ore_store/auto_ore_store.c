@@ -46,6 +46,8 @@
 #define AUTO_ORE_FUSED_HEAD_ASCEND_FRONT_RETRACT_STEP_INDEX (2u)
 #define AUTO_ORE_FUSED_HEAD_DESCEND_FIRST_EDGE_STEP_INDEX (1u)
 #define AUTO_ORE_FUSED_ARM_PHOTO_ENABLE_JOINT1_RAD (0.6981317f)
+#define AUTO_ORE_FUSED_ASCEND_200_PHOTO_POLE_GATE_RAD (3.5f)
+#define AUTO_ORE_FUSED_ASCEND_400_PHOTO_POLE_GATE_RAD (7.0f)
 
 #ifndef AUTO_CTRL_STM32_YAW_WZ_ENABLE
 #define AUTO_CTRL_STM32_YAW_WZ_ENABLE (0u)
@@ -1038,8 +1040,10 @@ static bool AutoOre_FusedPhoto1ProtectsUnstableArm(
     ctrl->fused_photo1_arm_protection_latched = false;
     return false;
   }
-  if (ctrl->feedback.photo_transfer_valid &&
-      ctrl->feedback.pe13_photo1_triggered) {
+  /* Protect only on a stable photo event armed by a low level in this action.
+   * A stale high level present when action 27/29 starts must not pin chassis
+   * while the Arm is moving to its pick target. */
+  if (ctrl->fused_photo1_stable_trigger_seen) {
     ctrl->fused_photo1_arm_protection_latched = true;
   }
   return ctrl->fused_photo1_arm_protection_latched;
@@ -2663,6 +2667,30 @@ static void AutoOre_UpdateFusedAscendPhoto1Latch(AutoOre_t *ctrl,
   }
   if (!ctrl->feedback.photo_transfer_valid) {
     AutoOre_PausePhoto1Latch(ctrl, now_ms);
+    return;
+  }
+  const auto_ctrl_template_e template_id = AutoOre_FusedStepTemplateId(ctrl);
+  const float pole_gate_rad =
+      (template_id == AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD)
+          ? AUTO_ORE_FUSED_ASCEND_400_PHOTO_POLE_GATE_RAD
+          : AUTO_ORE_FUSED_ASCEND_200_PHOTO_POLE_GATE_RAD;
+  if (ctrl->feedback.pole_front_lift_rad < pole_gate_rad ||
+      ctrl->feedback.pole_rear_lift_rad < pole_gate_rad) {
+    /* Before the Pole reaches the observation height, ignore all sensor
+     * levels and edges. In particular, do not arm chassis protection. */
+    ctrl->fused_photo1_stable_release_latched = false;
+    ctrl->fused_photo1_stable_trigger_seen = false;
+    ctrl->fused_photo1_triggered_since_ms = 0u;
+    ctrl->fused_photo1_arm_protection_latched = false;
+    return;
+  }
+  if (!ctrl->feedback.pe13_photo1_triggered) {
+    ctrl->fused_photo1_stable_release_latched = true;
+    ctrl->fused_photo1_triggered_since_ms = 0u;
+    return;
+  }
+  if (!ctrl->fused_photo1_stable_release_latched) {
+    /* Wait for a low baseline before accepting the rising event. */
     return;
   }
   (void)AutoOre_LatchPhotoStableTriggered(
