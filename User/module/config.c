@@ -147,13 +147,13 @@ Config_RobotParam_t robot_config = {
         },
         .preset = {
             /* 200mm 上台阶四杆全伸位；一键取矿 PICK_POS_200 也使用该撑杆高度。 */
-            .step_200_all_extend = {5.40490055f, 5.40490055f},
+            .step_200_all_extend = {5.60490055f, 5.60490055f},
             /* 200mm 上台阶前杆收回、后杆保持支撑位。 */
-            .step_200_front_retract = {0.1f, 5.40490055f},
+            .step_200_front_retract = {0.1f, 5.60490055f},
             /* 200mm 上台阶四杆全收位。 */
             .step_200_all_retract = {0.1f, 0.1f},
             /* 200mm 上台阶小抬升位；一键取矿 PICK_NEG_200 使用该撑杆高度。 */
-            .step_200_small = {5.40490055f, 5.40490055f},
+            .step_200_small = {5.60490055f, 5.60490055f},
             /* 400mm 上台阶四杆全伸位；一键取矿 PICK_POS_400 也使用该撑杆高度。 */
             .step_400_all_extend = {10.8f, 10.8f},
             /* 400mm 上台阶前杆收回、后杆保持支撑位。 */
@@ -170,9 +170,9 @@ Config_RobotParam_t robot_config = {
             /* 200mm 下台阶起步/小抬升位。 */
             .step_200_descend_small = {0.1f, 0.1f},
             /* 400mm 下台阶四杆全伸位。 */
-            .step_400_descend_all_extend = {10.60f, 10.6f},
+            .step_400_descend_all_extend = {10.80f, 10.8f},
             /* 400mm 下台阶前杆收回、后杆保持支撑位。         */
-            .step_400_descend_front_retract = {0.15f, 10.6f},
+            .step_400_descend_front_retract = {0.15f, 10.8f},
             /* 400mm 下台阶四杆全收位。 */
             .step_400_descend_all_retract = {0.15f, 0.15f},
             /* 一键放矿撑杆目标位；与 PC 放矿期间持续下发的 10.5 rad 保持一致。 */
@@ -376,9 +376,9 @@ Config_RobotParam_t robot_config = {
         /* ArmSimple 一键行为速度上限，单位 rad/s；<=0 表示使用 arm_simple_param.vel_limit 默认值。 */
         .arm_speed = {
             /* store_*：一键存矿流程，wait=等待/预备位，place=伸到存矿位，standby=回待机位。 */
-            .store_wait = {.joint1_max_vel_rad_s = 2.5f, .joint2_max_vel_rad_s = 4.5f},
-            .store_place = {.joint1_max_vel_rad_s = 2.5f, .joint2_max_vel_rad_s = 4.5f},
-            .store_standby = {.joint1_max_vel_rad_s = 2.5f, .joint2_max_vel_rad_s = 4.5f},
+            .store_wait = {.joint1_max_vel_rad_s = 1.5f, .joint2_max_vel_rad_s = 4.0f},
+            .store_place = {.joint1_max_vel_rad_s = 1.5f, .joint2_max_vel_rad_s = 4.0f},
+            .store_standby = {.joint1_max_vel_rad_s = 1.5f, .joint2_max_vel_rad_s = 4.0f},
             /* release_*：一键放矿流程，wait=放矿前等待位，assist=放矿辅助进位，place=放矿位，standby=放矿后回待机位。 */
             .release_wait = {.joint1_max_vel_rad_s = 4.5f, .joint2_max_vel_rad_s = 4.0f},
             .release_assist = {.joint1_max_vel_rad_s = 4.5f, .joint2_max_vel_rad_s = 4.0f},
@@ -417,10 +417,10 @@ Config_RobotParam_t robot_config = {
         /* 一键存/放/上膛/取矿流程中的动作延时，单位 ms；<=0 时使用状态机内置默认值。 */
         .timing = {
             /* 存矿：arm 到存矿位后的稳定等待、固矿气缸关闭等待、气缸重新打开等待。 */
-            .store_arm_settle_ms = 150u,
-            .store_cylinder_close_ms = 120u,
-            .store_arm_suction_off_ms = 1200u,
-            .store_cylinder_open_ms = 120u, 
+            .store_arm_settle_ms = 300u,
+            .store_cylinder_close_ms = 200u,
+            .store_arm_suction_off_ms = 2300u,
+            .store_cylinder_open_ms = 200u, 
             /* 放矿：放矿前等待、Pole 到位后抬升观测超时、抬升确认后稳定等待、到放矿位后短暂停稳、吸盘关闭后矿石脱离等待。 */
             .release_wait_ms = 150u,
             .release_lift_detect_timeout_ms = 20000u,
@@ -472,7 +472,7 @@ Config_RobotParam_t robot_config = {
         .recover_chassis_forward_vx_mps = 0.5f,
         .recover_chassis_retreat_vx_mps = 1.0f,
         /* 低位存矿完成后，transform 从高位 LIFT 回低位 STANDBY 的旧梯形速度规划；三段速度未配置时兜底使用。 */
-        .store_low_return_velocity_rad_s = 50.0f,
+        .store_low_return_velocity_rad_s = 30.0f,
         .store_low_return_accel_rad_s2 = 60.0f,
         .store_low_return_decel_rad_s2 = 60.0f,
         /*
@@ -480,9 +480,9 @@ Config_RobotParam_t robot_config = {
          * 最多 3 段；end_ratio/velocity <=0 表示该段关闭；至少一段有效时禁用上面的梯形规划。
          */
         .store_low_return_segments = {
-            {.end_ratio = 0.20f, .velocity_rad_s = 30.0f},
-            {.end_ratio = 0.80f, .velocity_rad_s = 50.0f},
-            {.end_ratio = 1.00f, .velocity_rad_s = 25.0f},
+            {0},
+            {0},
+            {0},
         },
         /*
          * 低位存矿收尾颠动：平台回到 STANDBY 后，向 LIFT 方向小幅快速往返。
@@ -490,7 +490,7 @@ Config_RobotParam_t robot_config = {
          */
         .store_low_shake_amplitude_rad = 2.0f,
         .store_low_shake_velocity_rad_s = 50.0f,
-        .store_low_shake_cycles = 2u,
+        .store_low_shake_cycles = 0u,
         /*
          * 融合动作轮转角阈值说明：
          * - *_wheel_delta_rad 使用四轮累计转角变化绝对值的平均值，单位 rad。
