@@ -2720,6 +2720,17 @@ static void AutoOre_UpdateFusedDescendPhoto2Latch(AutoOre_t *ctrl,
     AutoOre_PausePhoto2Latch(ctrl, now_ms);
     return;
   }
+  if (ctrl->feedback.pole_front_lift_rad > 2.5f ||
+      ctrl->feedback.pole_rear_lift_rad > 2.5f) {
+    /* Ignore photo2 completely until all Pole groups enter the descend
+     * observation zone. This prevents an unrelated early pulse from being
+     * handed to the stair template. */
+    ctrl->fused_photo2_stable_trigger_seen = false;
+    ctrl->fused_photo2_stable_release_latched = false;
+    ctrl->fused_photo2_triggered_since_ms = 0u;
+    ctrl->fused_photo2_released_since_ms = 0u;
+    return;
+  }
   (void)AutoOre_LatchPhotoStableFalling(
       ctrl->feedback.pe9_photo2_triggered,
       &ctrl->fused_photo2_stable_trigger_seen,
@@ -2755,7 +2766,11 @@ static void AutoOre_ApplyFusedDescendPhoto2Handoff(AutoOre_t *ctrl) {
     step_ctx->pe9_photo2_released_since_ms =
         ctrl->fused_photo2_released_since_ms;
   }
-  ctrl->fused_photo2_handoff_applied = true;
+  /* Keep merging the partial detector state. Mark the handoff complete only
+   * after the full stable high-to-low edge is present; otherwise a falling
+   * edge arriving just after template startup can be lost forever. */
+  ctrl->fused_photo2_handoff_applied =
+      ctrl->fused_photo2_stable_release_latched;
 }
 
 static bool AutoOre_PickPhoto1LiftReached(AutoOre_t *ctrl, uint32_t now_ms) {
@@ -3318,6 +3333,22 @@ static void AutoOre_RunFusedStepTemplate(AutoOre_t *ctrl, uint32_t now_ms) {
   AutoOre_CopyFeedbackToStepCtrl(ctrl);
   const auto_ctrl_run_state_e state_before_update =
       AutoCtrl_GetState(&ctrl->step_ctrl);
+  if (AutoOre_UsesFusedDescendTemplate(ctrl) &&
+      state_before_update == AUTO_CTRL_STATE_RUN_TEMPLATE) {
+    /* The outer fused detector may complete while AutoCtrl is resetting or
+     * changing template steps. Re-assert the latched edge before every
+     * template update so step 1 cannot miss a valid photo2 falling edge. */
+    if (ctrl->fused_photo2_stable_trigger_seen) {
+      ctrl->step_ctrl.template_ctx.pe9_photo2_stable_trigger_seen = true;
+      ctrl->step_ctrl.template_ctx.pe9_photo2_triggered_since_ms =
+          ctrl->fused_photo2_triggered_since_ms;
+    }
+    if (ctrl->fused_photo2_stable_release_latched) {
+      ctrl->step_ctrl.template_ctx.pe9_photo2_stable_release_latched = true;
+      ctrl->step_ctrl.template_ctx.pe9_photo2_released_since_ms =
+          ctrl->fused_photo2_released_since_ms;
+    }
+  }
   AutoOre_ApplyFusedStepTemplateOverrides(ctrl, param);
   AutoCtrl_Update(&ctrl->step_ctrl, now_ms);
   const auto_ctrl_run_state_e state_after_update =

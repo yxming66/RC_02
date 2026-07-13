@@ -149,9 +149,9 @@ Config_RobotParam_t robot_config = {
             /* 200mm 上台阶四杆全伸位；一键取矿 PICK_POS_200 也使用该撑杆高度。 */
             .step_200_all_extend = {5.40490055f, 5.40490055f},
             /* 200mm 上台阶前杆收回、后杆保持支撑位。 */
-            .step_200_front_retract = {0.3f, 5.40490055f},
+            .step_200_front_retract = {0.1f, 5.40490055f},
             /* 200mm 上台阶四杆全收位。 */
-            .step_200_all_retract = {0.3f, 0.3f},
+            .step_200_all_retract = {0.1f, 0.1f},
             /* 200mm 上台阶小抬升位；一键取矿 PICK_NEG_200 使用该撑杆高度。 */
             .step_200_small = {5.40490055f, 5.40490055f},
             /* 400mm 上台阶四杆全伸位；一键取矿 PICK_POS_400 也使用该撑杆高度。 */
@@ -170,7 +170,7 @@ Config_RobotParam_t robot_config = {
             /* 200mm 下台阶起步/小抬升位。 */
             .step_200_descend_small = {0.1f, 0.1f},
             /* 400mm 下台阶四杆全伸位。 */
-            .step_400_descend_all_extend = {10.2f, 10.2f},
+            .step_400_descend_all_extend = {10.5f, 10.5f},
             /* 400mm 下台阶前杆收回、后杆保持支撑位。         */
             .step_400_descend_front_retract = {0.06f, 10.5f},
             /* 400mm 下台阶四杆全收位。 */
@@ -650,9 +650,9 @@ Config_RobotParam_t robot_config = {
             .pole_all_retract_speed = 30.0f,
             .pole_all_retract_accel = 600.0f,
             .pole_front_extend_accel = 120.0f,
-            .pole_front_retract_accel = 700.0f,
+            .pole_front_retract_accel = 1000.0f,
             .pole_rear_extend_accel = 120.0f,
-            .pole_rear_retract_accel = 900.0f,
+            .pole_rear_retract_accel = 1000.0f,
             
             /* 当前模板撑杆加速度限幅，单位 rad/s^2。 */
             .front_photo_timeout_ms = 5000u,    /* 等待前光电触发/下降沿超时，单位 ms。 */
@@ -778,17 +778,17 @@ Config_RobotParam_t robot_config = {
             .second_photo_retract_move_speed = 0.50f, /* step7 第二个下降沿后保持全伸离开 vx，单位 m/s。 */
             .final_move_speed = 0.5f,          /* 收尾离开台阶 vx，单位 m/s。 */
             .final_move_ms = 200u,             /* 收尾离开台阶持续时间，单位 ms。 */
-            .pole_front_extend_speed = 22.0f,   /* 400mm伸出速度，单位 rad/s。 */
+            .pole_front_extend_speed = 30.0f,   /* 400mm伸出速度，单位 rad/s。 */
             .pole_front_retract_speed = 30.0f,  /* 400mm回收速度，单位 rad/s。 */
-            .pole_rear_extend_speed  = 22.0f,   /* 400mm伸出速度，单位 rad/s。 */
+            .pole_rear_extend_speed  = 30.0f,   /* 400mm伸出速度，单位 rad/s。 */
             .pole_rear_retract_speed = 30.0f,   /* 400mm回收速度，单位 rad/s。 */
             .pole_all_extend_speed = 30.0f,
             .pole_all_extend_accel = 250.0f,
             .pole_all_retract_speed = 30.0f,
             .pole_all_retract_accel = 120.0f,
-            .pole_front_extend_accel = 120.0f,    
+            .pole_front_extend_accel = 250.0f,    
             .pole_front_retract_accel = 120.0f,
-            .pole_rear_extend_accel = 120.0f,
+            .pole_rear_extend_accel = 250.0f,
             .pole_rear_retract_accel = 120.0f,
             .front_photo_timeout_ms = 5000u,    /* 等待前光电触发/下降沿超时，单位 ms。 */
             .rear_photo_timeout_ms = 5000u,     /* 等待后光电触发/下降沿超时，单位 ms。 */

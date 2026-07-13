@@ -1108,7 +1108,7 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
         first_photo_latched = AutoCtrlTemplate_DescendFirstPhotoFallingStable(
             ctrl, use_400mm, now_ms);
       }
-      if (ctrl->feedback.pole_all_at_target && first_photo_latched) {
+      if (first_photo_latched) {
         AutoCtrlTemplate_DebugMarkPhotoEvent(
           ctrl, now_ms,
           AUTO_CTRL_TEMPLATE_DEBUG_PHOTO_DESCEND_FIRST_FALLING);
@@ -1216,8 +1216,7 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
         second_photo_latched = AutoCtrlTemplate_DescendSecondPhotoFallingStable(
             ctrl, use_400mm, now_ms);
       }
-      if (ctrl->feedback.pole_front_at_target &&
-          ctrl->feedback.pole_rear_at_target && second_photo_latched) {
+      if (second_photo_latched) {
         AutoCtrlTemplate_DebugMarkPhotoEvent(
           ctrl, now_ms,
           AUTO_CTRL_TEMPLATE_DEBUG_PHOTO_DESCEND_SECOND_FALLING);
