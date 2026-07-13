@@ -32,6 +32,7 @@ typedef enum {
   BSP_UART_IR,
   BSP_UART_ORE,
   BSP_UART_RF_RC,
+  BSP_UART_IR_AUX,
   BSP_UART_NUM,
   BSP_UART_ERR,
 } BSP_UART_t;

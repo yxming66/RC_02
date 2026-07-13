@@ -341,37 +341,37 @@ static void AutoCtrlTemplate_CommandPole(auto_ctrl_t *ctrl, float front_target,
       AUTO_CTRL_POLE_PROFILE_NONE, AUTO_CTRL_POLE_PROFILE_NONE);
 }
 
+static float AutoCtrlTemplate_ConfiguredPoleSpeed(
+    const AutoCtrl_TemplateParam_t *template_param,
+    auto_ctrl_pole_profile_e action) {
+  if (template_param == 0) {
+    return 0.0f;
+  }
+
+  switch (action) {
+    case AUTO_CTRL_POLE_PROFILE_ALL_EXTEND:
+      return template_param->pole_all_extend_speed;
+    case AUTO_CTRL_POLE_PROFILE_ALL_RETRACT:
+      return template_param->pole_all_retract_speed;
+    case AUTO_CTRL_POLE_PROFILE_FRONT_EXTEND:
+      return template_param->pole_front_extend_speed;
+    case AUTO_CTRL_POLE_PROFILE_FRONT_RETRACT:
+      return template_param->pole_front_retract_speed;
+    case AUTO_CTRL_POLE_PROFILE_REAR_EXTEND:
+      return template_param->pole_rear_extend_speed;
+    case AUTO_CTRL_POLE_PROFILE_REAR_RETRACT:
+      return template_param->pole_rear_retract_speed;
+    case AUTO_CTRL_POLE_PROFILE_NONE:
+    default:
+      return 0.0f;
+  }
+}
+
 static float AutoCtrlTemplate_ResolvePoleSpeed(
     const AutoCtrl_TemplateParam_t *template_param,
     auto_ctrl_pole_profile_e action, float fallback_speed) {
-  if (template_param == 0) {
-    return fallback_speed;
-  }
-
-  float configured_speed = 0.0f;
-  switch (action) {
-    case AUTO_CTRL_POLE_PROFILE_ALL_EXTEND:
-      configured_speed = template_param->pole_all_extend_speed;
-      break;
-    case AUTO_CTRL_POLE_PROFILE_ALL_RETRACT:
-      configured_speed = template_param->pole_all_retract_speed;
-      break;
-    case AUTO_CTRL_POLE_PROFILE_FRONT_EXTEND:
-      configured_speed = template_param->pole_front_extend_speed;
-      break;
-    case AUTO_CTRL_POLE_PROFILE_FRONT_RETRACT:
-      configured_speed = template_param->pole_front_retract_speed;
-      break;
-    case AUTO_CTRL_POLE_PROFILE_REAR_EXTEND:
-      configured_speed = template_param->pole_rear_extend_speed;
-      break;
-    case AUTO_CTRL_POLE_PROFILE_REAR_RETRACT:
-      configured_speed = template_param->pole_rear_retract_speed;
-      break;
-    case AUTO_CTRL_POLE_PROFILE_NONE:
-    default:
-      break;
-  }
+  const float configured_speed =
+      AutoCtrlTemplate_ConfiguredPoleSpeed(template_param, action);
   return configured_speed > 0.0f ? configured_speed : fallback_speed;
 }
 
@@ -413,14 +413,26 @@ static void AutoCtrlTemplate_CommandPoleProfile(
       robot_param, template_param, front_profile);
   const float rear_accel = AutoCtrlTemplate_ResolvePoleLiftAccel(
       robot_param, template_param, rear_profile);
-  front_speed = AutoCtrlTemplate_ResolvePoleSpeed(
-      template_param, front_profile, front_speed);
-  rear_speed = AutoCtrlTemplate_ResolvePoleSpeed(
-      template_param, rear_profile, rear_speed);
+    const bool front_bypass_limit =
+      front_profile != AUTO_CTRL_POLE_PROFILE_NONE && front_accel == 0.0f &&
+      AutoCtrlTemplate_ConfiguredPoleSpeed(template_param, front_profile) ==
+        0.0f;
+    const bool rear_bypass_limit =
+      rear_profile != AUTO_CTRL_POLE_PROFILE_NONE && rear_accel == 0.0f &&
+      AutoCtrlTemplate_ConfiguredPoleSpeed(template_param, rear_profile) ==
+        0.0f;
+    front_speed = front_bypass_limit
+            ? 0.0f
+            : AutoCtrlTemplate_ResolvePoleSpeed(
+                template_param, front_profile, front_speed);
+    rear_speed = rear_bypass_limit
+             ? 0.0f
+             : AutoCtrlTemplate_ResolvePoleSpeed(
+               template_param, rear_profile, rear_speed);
 
   AutoCtrlPrimitive_CommandPoleTargetWithSpeed(ctrl, front_target, rear_target,
                                                front_speed, rear_speed);
-  /* 0 表示�?Pole 使用全局默认值；负值表示禁用加速度限制�?*/
+  /* speed/accel 同为 0 表示直接使用最终目标，不做轨迹或末端制动限速。 */
   ctrl->pole_cmd.auto_lift_accel[0] = front_accel;
   ctrl->pole_cmd.auto_lift_accel[1] = rear_accel;
   ctrl->pole_cmd.disable_lift_accel = front_accel < 0.0f || rear_accel < 0.0f;

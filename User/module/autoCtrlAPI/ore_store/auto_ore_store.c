@@ -3705,6 +3705,12 @@ static void AutoOre_RunStepPickStoreFused(AutoOre_t *ctrl, uint32_t now_ms) {
     case 0:
       AutoOre_EnterStep(ctrl, now_ms);
       const bool fused_prealign_ready = AutoOre_RunPickPrealign(ctrl, now_ms);
+      if (!AutoOre_CommandArm(ctrl, AutoOre_FusedPickArmPoint(ctrl),
+                              SUCTION_ON,
+                              &ctrl->param.arm_speed.pick_place)) {
+        AutoOre_FailPickInvalidParam(ctrl);
+        return;
+      }
       /* A fused stair action must not stop the lower mechanism while yaw and
        * the upper Arm are preparing. Keep approaching and correct yaw in
        * parallel; the front-photo/unstable-Arm protection in later steps is
@@ -3720,14 +3726,13 @@ static void AutoOre_RunStepPickStoreFused(AutoOre_t *ctrl, uint32_t now_ms) {
       return;
     case 1:
       AutoOre_EnterStep(ctrl, now_ms);
-      if (!AutoOre_CommandArm(ctrl, ARM_SIMPLE_BEHAVIOR_STANDBY, SUCTION_ON,
-                              &ctrl->param.arm_speed.pick_standby) ||
+      if (!AutoOre_CommandArm(ctrl, AutoOre_FusedPickArmPoint(ctrl),
+                              SUCTION_ON,
+                              &ctrl->param.arm_speed.pick_place) ||
           !AutoOre_CommandFusedPickPoleTarget(ctrl, pole_target)) {
         AutoOre_FailPickInvalidParam(ctrl);
         return;
       }
-      /* STANDBY is only a transit target.  For photo1 protection the Arm is
-       * not considered safe until the fused pick target in case 2 is stable. */
       AutoOre_CommandFusedApproachWithArmProtection(
           ctrl, fused, false);
       if (ctrl->feedback.pole_all_at_target) {

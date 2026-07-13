@@ -32,6 +32,8 @@ static BSP_UART_t UART_Get(UART_HandleTypeDef *huart) {
     return BSP_UART_PC;
   else if (huart->Instance == UART8)
     return BSP_UART_IR;
+  else if (huart->Instance == UART7)
+    return BSP_UART_IR_AUX;
   else if (huart->Instance == USART10)
     return BSP_UART_ORE;
   else
@@ -141,6 +143,8 @@ UART_HandleTypeDef *BSP_UART_GetHandle(BSP_UART_t uart) {
       return &huart1;
     case BSP_UART_IR:
       return &huart8;
+    case BSP_UART_IR_AUX:
+      return &huart7;
     case BSP_UART_ORE:
       return &huart10;
     default:

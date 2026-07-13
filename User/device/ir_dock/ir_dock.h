@@ -36,6 +36,13 @@ extern "C" {
 #define IR_DOCK_ZONE3_ACTION_FINISHED (0x02u)
 
 typedef enum {
+  IR_DOCK_SOURCE_UART8 = 0u,
+  IR_DOCK_SOURCE_UART7 = 1u,
+  IR_DOCK_SOURCE_COUNT = 2u,
+  IR_DOCK_SOURCE_NONE = 0xFFu,
+} IrDock_Source_t;
+
+typedef enum {
   IR_DOCK_STATUS_IDLE = 0x00u,
   IR_DOCK_STATUS_ONLINE = IR_DOCK_CMD_ONLINE,
   IR_DOCK_STATUS_DOCK_COMPLETE = IR_DOCK_CMD_DOCK_COMPLETE,
@@ -47,10 +54,34 @@ typedef struct {
   volatile bool inited;
   volatile bool online;
   volatile bool rx_busy;
+  volatile uint8_t last_rx_status;
+  volatile uint8_t last_rx_raw_byte;
+  volatile uint8_t last_rx_len;
+  volatile uint8_t last_rx_raw_len;
+  volatile uint8_t last_rx_raw_data[IR_DOCK_RX_BUFFER_SIZE];
+  volatile uint32_t last_rx_start_ms;
+  volatile uint32_t last_rx_raw_ms;
+  volatile uint32_t last_online_rx_ms;
+  volatile uint32_t last_rx_ms;
+  volatile uint32_t last_rx_age_ms;
+  volatile uint32_t last_online_age_ms;
+  volatile uint32_t last_rx_raw_age_ms;
+  volatile uint32_t rx_count;
+  volatile uint32_t online_rx_count;
+  volatile uint32_t protocol_frame_rx_count;
+  volatile uint32_t invalid_rx_count;
+  volatile uint32_t error_count;
+} IrDock_ChannelDebug_t;
+
+typedef struct {
+  volatile bool inited;
+  volatile bool online;
+  volatile bool rx_busy;
   volatile bool dock_complete_fresh;
   volatile bool zone3_action_locked;
   volatile bool claw_open;
   volatile bool release_abort_latched;
+  volatile uint8_t last_rx_source;
   volatile uint8_t last_rx_status;
   volatile uint8_t last_rx_raw_byte;
   volatile uint8_t last_dock_complete_cmd;
@@ -83,6 +114,7 @@ typedef struct {
   volatile uint32_t invalid_rx_count;
   volatile uint32_t error_count;
   volatile uint32_t rx_interval_block_count;
+  IrDock_ChannelDebug_t channel[IR_DOCK_SOURCE_COUNT];
 } IrDock_Debug_t;
 
 extern volatile IrDock_Debug_t g_ir_dock_debug;

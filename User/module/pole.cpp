@@ -524,8 +524,12 @@ int8_t Pole_Control(Pole_t *c, const Pole_CMD_t *c_cmd, uint32_t now) {
     const float brake_velocity_limit_rpm =
         Pole_GetBrakeVelocityLimitRpm(c, i, fb_angle);
     const uint8_t side = (i < 2u) ? 0u : 1u;
+    const bool bypass_target_limit =
+      c_cmd->auto_target_enable[side] &&
+      c_cmd->auto_lift_speed[side] == 0.0f &&
+      c_cmd->auto_lift_accel[side] == 0.0f;
     const bool brake_velocity_limit_active =
-        c_cmd->auto_target_enable[side];
+      c_cmd->auto_target_enable[side] && !bypass_target_limit;
     vel[i] = brake_velocity_limit_active
                  ? mr::component::math::abs_clip_scalar(
                        position_velocity_raw_rpm, brake_velocity_limit_rpm)
