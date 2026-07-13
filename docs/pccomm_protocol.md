@@ -687,21 +687,15 @@ while True:
     time.sleep(0.05)
 ```
 
-启动一个自动上 200mm 台阶流程：
+启动一个普通头向上 200mm 台阶整体动作：
 
 ```python
-PC_STEP_TEMPLATE_ASCEND_200_HEAD = 1
-PC_STEP_DIR_HEAD_FORWARD = 0
-
-payload = struct.pack(
-    "<BBff",
-    PC_STEP_TEMPLATE_ASCEND_200_HEAD,
-    PC_STEP_DIR_HEAD_FORWARD,
-    0.0,   # target_yaw_rad
-    0.08,  # yaw_tolerance_rad
-)
-send(0x12, payload)
+PC_AUTO_ACTION_STEP_ASCEND_200_HEAD = 23
+send(0x16, struct.pack("<B", 0))
+send(0x16, struct.pack("<B", PC_AUTO_ACTION_STEP_ASCEND_200_HEAD))
 ```
+
+`PC_CMD_STEP (0x12)` 当前只保留解析兼容，不会直接启动 AutoCtrl；普通台阶也必须作为整体 AutoAction 通过 `0x16` 调用。
 
 调用并等待一个整体 AutoAction：
 
