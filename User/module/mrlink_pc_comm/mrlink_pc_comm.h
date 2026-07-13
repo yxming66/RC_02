@@ -49,8 +49,6 @@ typedef enum {
     PC_CMD_IMU = 0x20,           /* PC 下发姿态数据命令 */
     PC_CMD_IR_ORE_ACK = 0x21,    /* PC 透传红外对接 ACK 帧，payload 为 6 字节原始 ACK */
     PC_CMD_R2_READY_STATE = 0x22,/* PC 下发 R2 准备/重试状态，驱动灯效模式 */
-    PC_CMD_AUTO_ACTION_V2 = 0x23, /* 带 request/job 标识的一键动作事务命令 */
-    PC_CMD_AUTO_ACTION_V3 = 0x24, /* 多 Job 资源调度命令 */
 } PC_CMD_t;
 
 typedef enum {
@@ -72,9 +70,6 @@ typedef enum {
     PC_FEEDBACK_SICK_CORRECT = 0x9B, /* 取矛头 SICK 校正标准值/实时值反馈 */
     PC_FEEDBACK_SICK_FRONT_ORE = 0x9C, /* 前 SICK 区域正方形矿检测反馈。 */
     PC_FEEDBACK_SICK_RAW = 0x9D,      /* 4 路 SICK 原始 ADC/距离/有效位反馈 */
-    PC_FEEDBACK_AUTO_ACTION_V2 = 0x9E, /* 一键动作事务、分支和失败状态 */
-    PC_FEEDBACK_AUTO_ACTION_V3 = 0x9F, /* 全部 AutoAction Job 快照 */
-    PC_FEEDBACK_AUTO_ACTION_V3_REJECT = 0xA1, /* V3 命令拒绝结果 */
 } PC_FeedbackCMD_t;
 
 
@@ -261,160 +256,9 @@ typedef enum {
 #define PC_AUTO_ACTION_FAILURE_SICK_CORRECT (1u << 8)   /* SICK 校正失败 */
 #define PC_AUTO_ACTION_FAILURE_ABORTED (1u << 9)        /* 人为中止 */
 
-#define PC_AUTO_ACTION_SEGMENT_PICK (1u << 0)  /* 取矿/arm 交矿侧动作完成 */
-#define PC_AUTO_ACTION_SEGMENT_STORE (1u << 1) /* 存矿机构侧动作完成 */
-#define PC_AUTO_ACTION_SEGMENT_STEP (1u << 2)  /* 台阶/底盘侧动作完成 */
-
 typedef struct {
     uint8_t action;    /* 一键动作类型，见 PC_AutoAction_t */
 } PC_AutoActionCMD_t;
-
-typedef enum {
-    PC_AUTO_ACTION_V2_OP_NONE = 0,
-    PC_AUTO_ACTION_V2_OP_START = 1,
-    PC_AUTO_ACTION_V2_OP_CONTINUE = 2,
-    PC_AUTO_ACTION_V2_OP_ABORT = 3,
-    PC_AUTO_ACTION_V2_OP_ACK = 4,
-} PC_AutoActionV2Operation_t;
-
-typedef enum {
-    PC_AUTO_ACTION_JOB_IDLE = 0,
-    PC_AUTO_ACTION_JOB_ACCEPTED = 1,
-    PC_AUTO_ACTION_JOB_RUNNING = 2,
-    PC_AUTO_ACTION_JOB_WAIT_GATE = 3,
-    PC_AUTO_ACTION_JOB_ABORTING = 4,
-    PC_AUTO_ACTION_JOB_SUCCEEDED = 5,
-    PC_AUTO_ACTION_JOB_FAILED = 6,
-    PC_AUTO_ACTION_JOB_ABORTED = 7,
-    PC_AUTO_ACTION_JOB_REJECTED = 8,
-} PC_AutoActionJobState_t;
-
-typedef enum {
-    PC_AUTO_ACTION_REJECT_NONE = 0,
-    PC_AUTO_ACTION_REJECT_INVALID_OPERATION = 1,
-    PC_AUTO_ACTION_REJECT_INVALID_ACTION = 2,
-    PC_AUTO_ACTION_REJECT_BUSY = 3,
-    PC_AUTO_ACTION_REJECT_JOB_MISMATCH = 4,
-    PC_AUTO_ACTION_REJECT_NOT_WAITING_GATE = 5,
-    PC_AUTO_ACTION_REJECT_START_FAILED = 6,
-    PC_AUTO_ACTION_REJECT_QUEUE_FULL = 7,
-} PC_AutoActionRejectReason_t;
-
-typedef enum {
-    PC_AUTO_ACTION_GATE_NONE = 0,
-    PC_AUTO_ACTION_GATE_RELEASE_STEP2 = 1,
-} PC_AutoActionGate_t;
-
-/* 精确线格式为 <HHBBBB：8 字节，小端。 */
-typedef struct __attribute__((packed)) {
-    uint16_t request_id;
-    uint16_t job_id;
-    uint8_t operation; /* PC_AutoActionV2Operation_t */
-    uint8_t action;    /* START 时为 PC_AutoAction_t */
-    uint8_t gate_id;   /* CONTINUE 时为 PC_AutoActionGate_t */
-    uint8_t flags;
-} PC_AutoActionV2CMD_t;
-
-/* 精确线格式为 <HHBBBBBBHBB：14 字节，小端。 */
-typedef struct __attribute__((packed)) {
-    uint16_t request_id;
-    uint16_t job_id;
-    uint8_t action;
-    uint8_t state; /* PC_AutoActionJobState_t */
-    uint8_t required_mask;
-    uint8_t running_mask;
-    uint8_t completed_mask;
-    uint8_t failed_mask;
-    uint16_t failure_mask;
-    uint8_t reject_reason; /* PC_AutoActionRejectReason_t */
-    uint8_t active_node;
-} PC_AutoActionV2Feedback_t;
-
-typedef enum {
-    PC_AUTO_ACTION_V3_OP_NONE = 0,
-    PC_AUTO_ACTION_V3_OP_SUBMIT = 1,
-    PC_AUTO_ACTION_V3_OP_CANCEL = 2,
-    PC_AUTO_ACTION_V3_OP_CONTINUE = 3,
-    PC_AUTO_ACTION_V3_OP_ACK = 4,
-    PC_AUTO_ACTION_V3_OP_QUERY = 5,
-} PC_AutoActionV3Operation_t;
-
-typedef enum {
-    PC_AUTO_ACTION_V3_JOB_FREE = 0,
-    PC_AUTO_ACTION_V3_JOB_QUEUED = 1,
-    PC_AUTO_ACTION_V3_JOB_WAIT_RESOURCE = 2,
-    PC_AUTO_ACTION_V3_JOB_STARTING = 3,
-    PC_AUTO_ACTION_V3_JOB_RUNNING = 4,
-    PC_AUTO_ACTION_V3_JOB_WAIT_GATE = 5,
-    PC_AUTO_ACTION_V3_JOB_CANCEL_REQUESTED = 6,
-    PC_AUTO_ACTION_V3_JOB_SUCCEEDED = 7,
-    PC_AUTO_ACTION_V3_JOB_FAILED = 8,
-    PC_AUTO_ACTION_V3_JOB_CANCELLED = 9,
-    PC_AUTO_ACTION_V3_JOB_REJECTED = 10,
-} PC_AutoActionV3JobState_t;
-
-typedef enum {
-    PC_AUTO_ACTION_V3_BLOCK_NONE = 0,
-    PC_AUTO_ACTION_V3_BLOCK_RESOURCE = 1,
-    PC_AUTO_ACTION_V3_BLOCK_EXECUTOR = 2,
-    PC_AUTO_ACTION_V3_BLOCK_DEPENDENCY = 3,
-    PC_AUTO_ACTION_V3_BLOCK_MOTION_CONSTRAINT = 4,
-    PC_AUTO_ACTION_V3_BLOCK_SENSOR = 5,
-    PC_AUTO_ACTION_V3_BLOCK_EXTERNAL_GATE = 6,
-} PC_AutoActionV3BlockedReason_t;
-
-typedef enum {
-    PC_AUTO_ACTION_V3_REJECT_NONE = 0,
-    PC_AUTO_ACTION_V3_REJECT_INVALID_REQUEST = 1,
-    PC_AUTO_ACTION_V3_REJECT_INVALID_ACTION = 2,
-    PC_AUTO_ACTION_V3_REJECT_QUEUE_FULL = 3,
-    PC_AUTO_ACTION_V3_REJECT_REQUEST_CONFLICT = 4,
-    PC_AUTO_ACTION_V3_REJECT_JOB_NOT_FOUND = 5,
-    PC_AUTO_ACTION_V3_REJECT_INVALID_STATE = 6,
-    PC_AUTO_ACTION_V3_REJECT_START_FAILED = 7,
-} PC_AutoActionV3RejectReason_t;
-
-typedef struct __attribute__((packed)) {
-    uint16_t request_id;
-    uint16_t job_id;
-    uint8_t operation; /* PC_AutoActionV3Operation_t */
-    uint8_t action;    /* SUBMIT 时为 PC_AutoAction_t */
-    uint8_t gate_id;
-    uint8_t flags;
-} PC_AutoActionV3CMD_t;
-
-typedef struct __attribute__((packed)) {
-    uint16_t request_id;
-    uint16_t job_id;
-    uint16_t failure_mask;
-    uint8_t action;
-    uint8_t state;
-    uint8_t owned_resource_mask;
-    uint8_t waiting_resource_mask;
-    uint8_t running_segment_mask;
-    uint8_t completed_segment_mask;
-    uint8_t failed_segment_mask;
-    uint8_t blocked_reason;
-    uint8_t reject_reason;
-} PC_AutoActionV3JobFeedback_t;
-
-#define PC_AUTO_ACTION_V3_JOB_CAPACITY (4u)
-
-typedef struct __attribute__((packed)) {
-    uint16_t generation;
-    uint8_t count;
-    uint8_t capacity;
-    PC_AutoActionV3JobFeedback_t jobs[PC_AUTO_ACTION_V3_JOB_CAPACITY];
-} PC_AutoActionV3Feedback_t;
-
-typedef struct __attribute__((packed)) {
-    uint16_t request_id;
-    uint16_t job_id;
-    uint8_t operation;
-    uint8_t action;
-    uint8_t reject_reason;
-    uint8_t reserved;
-} PC_AutoActionV3RejectFeedback_t;
 
 typedef enum {
     PC_R2_READY_STATE_NOT_READY = 0,  /* 上位机未准备完毕，对应灯效 0 号模式 */
@@ -518,9 +362,6 @@ typedef struct {
     uint8_t busy;                   /* 任意一键动作是否正在执行，0=空闲，1=忙 */
     uint8_t finished;               /* 是否已有总动作结束结果，0=无，1=有 */
     uint8_t result;                 /* 结束结果，见 PC_AutoActionResult_t */
-    uint16_t failure_mask;          /* 失败部位 bitmask，见 PC_AUTO_ACTION_FAILURE_* */
-    uint8_t segment_finished_mask;  /* 分段完成 bit0=pick/arm交矿，bit1=store，bit2=step */
-    uint8_t reserved;               /* 保留字段，发送端固定为 0 */
 } PC_AutoActionFeedback_t;
 
 typedef struct {
@@ -851,10 +692,6 @@ const PC_AbstractPositionCMD_t *MrlinkPc_GetAbstractPositionCMD(void);
 /* 获取待消费的一键动作命令；无待消费命令时返回 NULL。 */
 const PC_AutoActionCMD_t *MrlinkPc_GetAutoActionCMD(void);
 
-/* 获取待消费的 V2 事务命令；无待消费命令时返回 NULL。 */
-const PC_AutoActionV2CMD_t *MrlinkPc_GetAutoActionV2CMD(void);
-const PC_AutoActionV3CMD_t *MrlinkPc_GetAutoActionV3CMD(void);
-
 /* 获取最近一次 PC 自动台阶命令。 */
 const PC_StepCMD_t *MrlinkPc_GetStepCMD(void);
 
@@ -884,9 +721,6 @@ void MrlinkPc_ClearStepCommand(void);
 
 /* 清除待消费一键动作命令，通常在 pc_comm_task 分发后调用。 */
 void MrlinkPc_ClearAutoActionCommand(void);
-
-void MrlinkPc_ClearAutoActionV2Command(void);
-void MrlinkPc_ClearAutoActionV3Command(void);
 
 /* 清除待转发红外对接 ACK 命令，通常在 ACK 成功提交或不可恢复失败后调用。 */
 void MrlinkPc_ClearIrOreAckCommand(void);

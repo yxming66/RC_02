@@ -170,9 +170,9 @@ Config_RobotParam_t robot_config = {
             /* 200mm 下台阶起步/小抬升位。 */
             .step_200_descend_small = {0.1f, 0.1f},
             /* 400mm 下台阶四杆全伸位。 */
-            .step_400_descend_all_extend = {10.5f, 10.5f},
+            .step_400_descend_all_extend = {10.65f, 10.65f},
             /* 400mm 下台阶前杆收回、后杆保持支撑位。         */
-            .step_400_descend_front_retract = {0.06f, 10.5f},
+            .step_400_descend_front_retract = {0.06f, 10.65f},
             /* 400mm 下台阶四杆全收位。 */
             .step_400_descend_all_retract = {0.06f, 0.06f},
             /* 一键放矿撑杆目标位；与 PC 放矿期间持续下发的 10.5 rad 保持一致。 */

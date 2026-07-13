@@ -42,9 +42,6 @@ static uint32_t s_sick_front_ore_stable_since_ms = 0u;
 static const uint8_t s_feedback_cmds[] = {
     PC_FEEDBACK_HEARTBEAT,
     PC_FEEDBACK_AUTO_ACTION,
-    PC_FEEDBACK_AUTO_ACTION_V2,
-    PC_FEEDBACK_AUTO_ACTION_V3,
-    PC_FEEDBACK_AUTO_ACTION_V3_REJECT,
     PC_FEEDBACK_CHASSIS,
     PC_FEEDBACK_POLE,
     PC_FEEDBACK_ARM_SIMPLE,
@@ -182,17 +179,8 @@ static bool PcComm_ProcessAutoActionCommand(void) {
         return false;
     }
 
-    const bool release_step2_continue =
-        (request == AUTO_ORE_DEBUG_REQUEST_RELEASE_STEP2 ||
-         request == AUTO_ORE_DEBUG_REQUEST_RELEASE_LIFT_DETECT_STEP2) &&
-        auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl) &&
-        (auto_ore_ctrl.action == AUTO_ORE_ACTION_RELEASE_STEP1 ||
-         auto_ore_ctrl.action == AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP1) &&
-        AutoOre_IsUpperFinished(&auto_ore_ctrl);
-
     if (g_auto_ore_debug.request != AUTO_ORE_DEBUG_REQUEST_NONE &&
-        request != AUTO_ORE_DEBUG_REQUEST_ABORT &&
-        !release_step2_continue) {
+        request != AUTO_ORE_DEBUG_REQUEST_ABORT) {
         return true;
     }
 
@@ -202,36 +190,6 @@ static bool PcComm_ProcessAutoActionCommand(void) {
     }
     g_auto_ore_debug.request = request;
     MrlinkPc_ClearAutoActionCommand();
-    return true;
-}
-
-static bool PcComm_ProcessAutoActionV2Command(void) {
-    const PC_AutoActionV2CMD_t *cmd = MrlinkPc_GetAutoActionV2CMD();
-    if (cmd == NULL) {
-        return false;
-    }
-
-    const bool submitted = Task_AutoActionSubmitV2(
-        cmd->request_id, cmd->job_id, cmd->operation, cmd->action,
-        cmd->gate_id, cmd->flags);
-    if (submitted) {
-        MrlinkPc_ClearAutoActionV2Command();
-    }
-    return true;
-}
-
-static bool PcComm_ProcessAutoActionV3Command(void) {
-    const PC_AutoActionV3CMD_t *cmd = MrlinkPc_GetAutoActionV3CMD();
-    if (cmd == NULL) {
-        return false;
-    }
-
-    const bool submitted = Task_AutoActionSubmitV3(
-        cmd->request_id, cmd->job_id, cmd->operation, cmd->action,
-        cmd->gate_id, cmd->flags);
-    if (submitted) {
-        MrlinkPc_ClearAutoActionV3Command();
-    }
     return true;
 }
 
@@ -758,8 +716,6 @@ void Task_PcCommStep(void) {
     uint32_t now = BSP_TIME_Get_ms();
 
     MrlinkPc_CommProcess(now);
-    (void)PcComm_ProcessAutoActionV2Command();
-    (void)PcComm_ProcessAutoActionV3Command();
     PcComm_ProcessIrOreAckCommand(now);
     PcComm_UpdateCameraYawCommand(now);
 
@@ -769,29 +725,7 @@ void Task_PcCommStep(void) {
     }
 
     if (MrlinkPc_IsPCControlMode()) {
-        const bool auto_action_pending = PcComm_ProcessAutoActionCommand();
-        const PC_AutoStepParams_t *step_params =
-            (g_pc_command_source == PC_COMMAND_SOURCE_PC && auto_ctrl_inited &&
-             !auto_action_pending)
-                ? MrlinkPc_GetAutoStepParams()
-                : NULL;
-        if (step_params != NULL && !AutoCtrl_IsBusy(&auto_ctrl) &&
-            !(auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl)) &&
-            !Task_AutoRodSpearheadIsBusy() &&
-            !Task_AutoSickCorrectIsBusy()) {
-            AutoCtrl_SetYawSource(&auto_ctrl, AUTO_CTRL_YAW_SOURCE_PC);
-            AutoCtrl_SetYawZeroOffset(&auto_ctrl, 0.0f);
-            if (AutoCtrl_StartTemplate(
-                    &auto_ctrl,
-                    step_params->template_id,
-                    step_params->travel_dir,
-                    step_params->target_yaw_rad,
-                    step_params->yaw_tolerance_rad,
-                    AUTO_CTRL_SENSOR_MODE_NONE,
-                    now)) {
-                MrlinkPc_ClearStepCommand();
-            }
-        }
+        (void)PcComm_ProcessAutoActionCommand();
     }
 
     task_runtime.heartbeat.pc_comm++;

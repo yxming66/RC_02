@@ -8,11 +8,9 @@
 /* USER INCLUDE BEGIN */
 #include "debug_config.h"
 #include "main.h"
-#include "device/dr16.h"
 #include "device/ir_dock/ir_dock.h"
 #include "device/photo_transfer.h"
 #include "module/autoCtrlAPI/api/auto_ctrl_api.h"
-#include "module/autoCtrlAPI/core/auto_action_scheduler.h"
 #include "module/autoCtrlAPI/ore_store/auto_ore_store.h"
 #include "module/autoCtrlAPI/rod/auto_rod_spearhead.h"
 #include "module/chassis.h"
@@ -21,17 +19,6 @@
 #include "module/mrlink_pc_comm/mrlink_pc_comm.h"
 
 #include <math.h>
-#include <string.h>
-
-#ifndef PC_AUTO_ACTION_SEGMENT_PICK
-#define PC_AUTO_ACTION_SEGMENT_PICK (1u << 0)
-#endif
-#ifndef PC_AUTO_ACTION_SEGMENT_STORE
-#define PC_AUTO_ACTION_SEGMENT_STORE (1u << 1)
-#endif
-#ifndef PC_AUTO_ACTION_SEGMENT_STEP
-#define PC_AUTO_ACTION_SEGMENT_STEP (1u << 2)
-#endif
 
 /* USER INCLUDE END */
 
@@ -41,7 +28,6 @@
 /* Private variables -------------------------------------------------------- */
 /* USER STRUCT BEGIN */
 extern Chassis_IMU_t chassis_imu;
-extern DR16_t dr16;
 
 auto_ctrl_t auto_ctrl;
 bool auto_ctrl_inited = false;
@@ -72,55 +58,6 @@ static PhotoTransfer_Snapshot_t photo_transfer_snapshot = {0};
 static bool photo_transfer_inited = false;
 /* Atomic cross-task view: 0=invalid, 1=valid/clear, 2=valid/triggered. */
 static volatile uint8_t ore_high_photo_state = 0u;
-static AutoOre_DebugRequest_t pending_release_step2_request =
-  AUTO_ORE_DEBUG_REQUEST_NONE;
-static AutoOre_DebugRequest_t pending_auto_action_request =
-  AUTO_ORE_DEBUG_REQUEST_NONE;
-
-#define AUTO_ACTION_V2_QUEUE_CAPACITY (5u)
-#define AUTO_ACTION_V2_REJECT_HOLD_MS (200u)
-#define AUTO_ACTION_V3_QUEUE_CAPACITY (8u)
-#define AUTO_ACTION_V3_REJECT_HOLD_MS (500u)
-
-_Static_assert((int)AUTO_ORE_DEBUG_REQUEST_STORE ==
-                   (int)PC_AUTO_ACTION_STORE,
-               "AutoAction V2 request mapping changed");
-_Static_assert((int)AUTO_ORE_DEBUG_REQUEST_RELEASE_IR_LIFT_DETECT ==
-                   (int)PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT,
-               "AutoAction V2 request range changed");
-_Static_assert(AUTO_ACTION_SCHEDULER_CAPACITY ==
-                   PC_AUTO_ACTION_V3_JOB_CAPACITY,
-               "AutoAction V3 scheduler/wire capacity mismatch");
-_Static_assert((int)AUTO_ACTION_JOB_CANCELLED ==
-                   (int)PC_AUTO_ACTION_V3_JOB_CANCELLED,
-               "AutoAction V3 scheduler/wire state mismatch");
-_Static_assert((int)AUTO_ACTION_BLOCK_EXTERNAL_GATE ==
-                   (int)PC_AUTO_ACTION_V3_BLOCK_EXTERNAL_GATE,
-               "AutoAction V3 scheduler/wire block reason mismatch");
-
-typedef struct {
-  PC_AutoActionV2Feedback_t feedback;
-  bool active;
-  bool v2_owned;
-  uint16_t next_job_id;
-  uint32_t start_time_ms;
-} AutoActionJobContext_t;
-
-static AutoActionJobContext_t auto_action_job = {
-    .next_job_id = 1u,
-};
-static PC_AutoActionV2CMD_t auto_action_v2_queue[AUTO_ACTION_V2_QUEUE_CAPACITY];
-static volatile uint8_t auto_action_v2_queue_head = 0u;
-static volatile uint8_t auto_action_v2_queue_tail = 0u;
-static PC_AutoActionV2Feedback_t auto_action_v2_reject = {0};
-static uint32_t auto_action_v2_reject_until_ms = 0u;
-static AutoActionScheduler_t auto_action_scheduler;
-static PC_AutoActionV3CMD_t auto_action_v3_queue[AUTO_ACTION_V3_QUEUE_CAPACITY];
-static volatile uint8_t auto_action_v3_queue_head = 0u;
-static volatile uint8_t auto_action_v3_queue_tail = 0u;
-static PC_AutoActionV3RejectFeedback_t auto_action_v3_reject = {0};
-static uint32_t auto_action_v3_reject_until_ms = 0u;
-static bool auto_action_v3_dispatching = false;
 
 #ifndef AUTO_CTRL_POLE_TARGET_THRESHOLD_RAD
 #define AUTO_CTRL_POLE_TARGET_THRESHOLD_RAD (0.80f)
@@ -143,14 +80,6 @@ static uint32_t auto_ore_debug_last_update_ms = 0u;
 /* Private function --------------------------------------------------------- */
 static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms, bool update_debug);
 static bool AutoCtrlFeed_HandleAutoOreDebugRequest(uint32_t now_ms);
-static void AutoCtrlFeed_ProcessAutoActionV2(uint32_t now_ms);
-static void AutoCtrlFeed_ProcessAutoActionV3(uint32_t now_ms);
-static void AutoCtrlFeed_UpdateAutoActionV3(uint32_t now_ms);
-static void AutoCtrlFeed_PublishAutoActionV3(uint32_t now_ms);
-static bool AutoCtrlFeed_AutoOreWaitingReleaseGate(void);
-static bool AutoCtrlFeed_V3HasNonterminalJobs(void);
-static void AutoCtrlFeed_BeginLegacyJob(PC_AutoAction_t action,
-                                        uint32_t now_ms);
 static void AutoCtrlFeed_PublishAutoActionSnapshot(
     PC_AutoActionFeedback_t *feedback);
 static PC_AutoAction_t AutoCtrlFeed_MapStepRequest(
@@ -159,198 +88,10 @@ static bool AutoCtrlFeed_IsFusedOreAction(AutoOre_Action_t action);
 static uint8_t AutoCtrlFeed_ActionRequiredResourceMask(
     PC_AutoAction_t action);
 
-bool Task_AutoActionSubmitV2(uint16_t request_id, uint16_t job_id,
-                             uint8_t operation, uint8_t action,
-                             uint8_t gate_id, uint8_t flags) {
-  const uint8_t head = auto_action_v2_queue_head;
-  const uint8_t next = (uint8_t)((head + 1u) % AUTO_ACTION_V2_QUEUE_CAPACITY);
-  if (next == auto_action_v2_queue_tail) {
-    return false;
-  }
-
-  PC_AutoActionV2CMD_t command = {
-      .request_id = request_id,
-      .job_id = job_id,
-      .operation = operation,
-      .action = action,
-      .gate_id = gate_id,
-      .flags = flags,
-  };
-  auto_action_v2_queue[head] = command;
-  __DMB();
-  auto_action_v2_queue_head = next;
-  return true;
-}
-
-static bool AutoCtrlFeed_PopAutoActionV2(PC_AutoActionV2CMD_t *command) {
-  if (command == NULL) {
-    return false;
-  }
-  const uint8_t tail = auto_action_v2_queue_tail;
-  if (tail == auto_action_v2_queue_head) {
-    return false;
-  }
-  *command = auto_action_v2_queue[tail];
-  __DMB();
-  auto_action_v2_queue_tail =
-      (uint8_t)((tail + 1u) % AUTO_ACTION_V2_QUEUE_CAPACITY);
-  return true;
-}
-
-static bool AutoCtrlFeed_RequestIsReleaseStep2(
-    AutoOre_DebugRequest_t request) {
-  return request == AUTO_ORE_DEBUG_REQUEST_RELEASE_STEP2 ||
-         request == AUTO_ORE_DEBUG_REQUEST_RELEASE_LIFT_DETECT_STEP2;
-}
-
-static bool AutoCtrlFeed_RequestMatchesReleaseStep1(
-    AutoOre_DebugRequest_t request) {
-  if (!auto_ore_inited || !AutoOre_IsBusy(&auto_ore_ctrl)) {
-    return false;
-  }
-  if (request == AUTO_ORE_DEBUG_REQUEST_RELEASE_STEP2) {
-    return auto_ore_ctrl.action == AUTO_ORE_ACTION_RELEASE_STEP1;
-  }
-  if (request == AUTO_ORE_DEBUG_REQUEST_RELEASE_LIFT_DETECT_STEP2) {
-    return auto_ore_ctrl.action == AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP1;
-  }
-  return false;
-}
-
-static bool AutoCtrlFeed_CanQueueAfterFusedStepDone(void) {
-  const uint8_t step_resources =
-      AUTO_ORE_RESOURCE_CHASSIS | AUTO_ORE_RESOURCE_POLE;
-  return auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl) &&
-         AutoCtrlFeed_IsFusedOreAction(auto_ore_ctrl.action) &&
-         AutoOre_HasSplitResult(&auto_ore_ctrl) &&
-         AutoOre_IsStepFinished(&auto_ore_ctrl) &&
-         (AutoOre_GetOwnedResourceMask(&auto_ore_ctrl) & step_resources) ==
-             0u &&
-         (!AutoOre_IsPickFinished(&auto_ore_ctrl) ||
-          !AutoOre_IsStoreFinished(&auto_ore_ctrl));
-}
-
-bool Task_AutoActionSubmitV3(uint16_t request_id, uint16_t job_id,
-                             uint8_t operation, uint8_t action,
-                             uint8_t gate_id, uint8_t flags) {
-  const uint8_t head = auto_action_v3_queue_head;
-  const uint8_t next =
-      (uint8_t)((head + 1u) % AUTO_ACTION_V3_QUEUE_CAPACITY);
-  if (next == auto_action_v3_queue_tail) {
-    return false;
-  }
-  const PC_AutoActionV3CMD_t command = {
-      .request_id = request_id,
-      .job_id = job_id,
-      .operation = operation,
-      .action = action,
-      .gate_id = gate_id,
-      .flags = flags,
-  };
-  auto_action_v3_queue[head] = command;
-  __DMB();
-  auto_action_v3_queue_head = next;
-  return true;
-}
-
-static bool AutoCtrlFeed_PopAutoActionV3(PC_AutoActionV3CMD_t *command) {
-  if (command == NULL) {
-    return false;
-  }
-  const uint8_t tail = auto_action_v3_queue_tail;
-  if (tail == auto_action_v3_queue_head) {
-    return false;
-  }
-  *command = auto_action_v3_queue[tail];
-  __DMB();
-  auto_action_v3_queue_tail =
-      (uint8_t)((tail + 1u) % AUTO_ACTION_V3_QUEUE_CAPACITY);
-  return true;
-}
-
-static bool AutoCtrlFeed_RequestCanQueueAfterFusedStepDone(
-    AutoOre_DebugRequest_t request) {
-  switch (request) {
-    case AUTO_ORE_DEBUG_REQUEST_NONE:
-    case AUTO_ORE_DEBUG_REQUEST_ABORT:
-    case AUTO_ORE_DEBUG_REQUEST_RELEASE_STEP2:
-    case AUTO_ORE_DEBUG_REQUEST_RELEASE_LIFT_DETECT_STEP2:
-      return false;
-    default:
-      return true;
-  }
-}
-
-static bool AutoCtrlFeed_RequestIsStepOnly(
-    AutoOre_DebugRequest_t request) {
-  return AutoCtrlFeed_MapStepRequest(request) != PC_AUTO_ACTION_NONE;
-}
-
-static bool AutoCtrlFeed_AllAutoActionsIdle(void) {
-  return (!auto_ctrl_inited || !AutoCtrl_IsBusy(&auto_ctrl)) &&
-         (!auto_ore_inited || !AutoOre_IsBusy(&auto_ore_ctrl)) &&
-         !Task_AutoRodSpearheadIsBusy() && !Task_AutoSickCorrectIsBusy();
-}
-
-static bool AutoCtrlFeed_AutoOreBlocksStepAction(void) {
-  if (!auto_ore_inited || !AutoOre_IsBusy(&auto_ore_ctrl)) {
-    return false;
-  }
-  uint8_t owned = AutoOre_GetOwnedResourceMask(&auto_ore_ctrl);
-  if (owned == AUTO_ORE_RESOURCE_NONE &&
-      AutoOre_GetStepIndex(&auto_ore_ctrl) == 0u) {
-    owned = AutoCtrlFeed_ActionRequiredResourceMask(
-        (PC_AutoAction_t)auto_ore_ctrl.action);
-  }
-  if (!auto_action_v3_dispatching) {
-    owned |= AutoActionScheduler_GetOwnedResourceMask(&auto_action_scheduler);
-  }
-  return (owned &
-          (AUTO_ORE_RESOURCE_CHASSIS | AUTO_ORE_RESOURCE_POLE)) != 0u;
-}
-
-static bool AutoCtrlFeed_ContinueReleaseStep2(
-    AutoOre_DebugRequest_t request, uint32_t now_ms) {
-  if (!AutoCtrlFeed_RequestMatchesReleaseStep1(request) ||
-      !AutoOre_IsUpperFinished(&auto_ore_ctrl)) {
-    return false;
-  }
-
-  const AutoOre_Action_t step2_action =
-      (request == AUTO_ORE_DEBUG_REQUEST_RELEASE_STEP2)
-          ? AUTO_ORE_ACTION_RELEASE_STEP2
-          : ((request == AUTO_ORE_DEBUG_REQUEST_RELEASE_LIFT_DETECT_STEP2)
-                 ? AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP2
-                 : AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT_STEP2);
-  return AutoOre_ContinueReleaseStep2(&auto_ore_ctrl, step2_action, now_ms);
-}
-
-static void AutoCtrlFeed_TryPendingReleaseStep2(uint32_t now_ms) {
-  if (!AutoCtrlFeed_RequestIsReleaseStep2(pending_release_step2_request)) {
-    return;
-  }
-
-  if (!AutoCtrlFeed_RequestMatchesReleaseStep1(
-          pending_release_step2_request)) {
-    pending_release_step2_request = AUTO_ORE_DEBUG_REQUEST_NONE;
-    return;
-  }
-
-  if (AutoCtrlFeed_ContinueReleaseStep2(pending_release_step2_request,
-                                        now_ms)) {
-    pending_release_step2_request = AUTO_ORE_DEBUG_REQUEST_NONE;
-  }
-}
-
-static void AutoCtrlFeed_TryPendingAutoAction(void) {
-  if (pending_auto_action_request == AUTO_ORE_DEBUG_REQUEST_NONE ||
-      g_auto_ore_debug.request != AUTO_ORE_DEBUG_REQUEST_NONE ||
-      !AutoCtrlFeed_AllAutoActionsIdle()) {
-    return;
-  }
-
-  g_auto_ore_debug.request = pending_auto_action_request;
-  pending_auto_action_request = AUTO_ORE_DEBUG_REQUEST_NONE;
+static bool AutoCtrlFeed_AnyAutoActionBusy(void) {
+  return (auto_ctrl_inited && AutoCtrl_IsBusy(&auto_ctrl)) ||
+         (auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl)) ||
+         Task_AutoRodSpearheadIsBusy() || Task_AutoSickCorrectIsBusy();
 }
 
 static void AutoCtrlFeed_SendLightEffect(LightEffect_Mode_t mode,
@@ -549,76 +290,6 @@ static PC_AutoAction_t AutoCtrlFeed_MapOreAction(AutoOre_Action_t action) {
     default:
       return PC_AUTO_ACTION_NONE;
   }
-}
-
-static AutoOre_Action_t AutoCtrlFeed_RequestToOreAction(
-    AutoOre_DebugRequest_t request) {
-  switch (request) {
-    case AUTO_ORE_DEBUG_REQUEST_STORE:
-      return AUTO_ORE_ACTION_STORE;
-    case AUTO_ORE_DEBUG_REQUEST_RELEASE:
-      return AUTO_ORE_ACTION_RELEASE;
-    case AUTO_ORE_DEBUG_REQUEST_RELEASE_LIFT_DETECT:
-      return AUTO_ORE_ACTION_RELEASE_LIFT_DETECT;
-    case AUTO_ORE_DEBUG_REQUEST_RELEASE_IR_LIFT_DETECT:
-      return AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT;
-    case AUTO_ORE_DEBUG_REQUEST_RELEASE_STEP1:
-      return AUTO_ORE_ACTION_RELEASE_STEP1;
-    case AUTO_ORE_DEBUG_REQUEST_RELEASE_STEP2:
-      return AUTO_ORE_ACTION_RELEASE_STEP2;
-    case AUTO_ORE_DEBUG_REQUEST_RELEASE_LIFT_DETECT_STEP1:
-      return AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP1;
-    case AUTO_ORE_DEBUG_REQUEST_RELEASE_LIFT_DETECT_STEP2:
-      return AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP2;
-    case AUTO_ORE_DEBUG_REQUEST_CHAMBER:
-      return AUTO_ORE_ACTION_CHAMBER;
-    case AUTO_ORE_DEBUG_REQUEST_PICK_POS_400:
-      return AUTO_ORE_ACTION_PICK_POS_400;
-    case AUTO_ORE_DEBUG_REQUEST_PICK_POS_200:
-      return AUTO_ORE_ACTION_PICK_POS_200;
-    case AUTO_ORE_DEBUG_REQUEST_PICK_NEG_200:
-      return AUTO_ORE_ACTION_PICK_NEG_200;
-    case AUTO_ORE_DEBUG_REQUEST_RECOVER_STORE:
-      return AUTO_ORE_ACTION_RECOVER_STORE;
-    case AUTO_ORE_DEBUG_REQUEST_STEP_PICK_STORE_ASCEND_200_HEAD:
-      return AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD;
-    case AUTO_ORE_DEBUG_REQUEST_STEP_PICK_STORE_DESCEND_200_HEAD:
-      return AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD;
-    case AUTO_ORE_DEBUG_REQUEST_STEP_PICK_STORE_ASCEND_400_HEAD:
-      return AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD;
-    case AUTO_ORE_DEBUG_REQUEST_STEP_DROP_STORE_ASCEND_200_HEAD:
-      return AUTO_ORE_ACTION_STEP_DROP_STORE_ASCEND_200_HEAD;
-    case AUTO_ORE_DEBUG_REQUEST_STEP_DROP_STORE_DESCEND_200_HEAD:
-      return AUTO_ORE_ACTION_STEP_DROP_STORE_DESCEND_200_HEAD;
-    case AUTO_ORE_DEBUG_REQUEST_STEP_DROP_STORE_ASCEND_400_HEAD:
-      return AUTO_ORE_ACTION_STEP_DROP_STORE_ASCEND_400_HEAD;
-    case AUTO_ORE_DEBUG_REQUEST_PICK_STORE_POS_400:
-      return AUTO_ORE_ACTION_PICK_STORE_POS_400;
-    case AUTO_ORE_DEBUG_REQUEST_PICK_STORE_POS_200:
-      return AUTO_ORE_ACTION_PICK_STORE_POS_200;
-    case AUTO_ORE_DEBUG_REQUEST_PICK_STORE_NEG_200:
-      return AUTO_ORE_ACTION_PICK_STORE_NEG_200;
-    case AUTO_ORE_DEBUG_REQUEST_NONE:
-    case AUTO_ORE_DEBUG_REQUEST_ABORT:
-    case AUTO_ORE_DEBUG_REQUEST_ROD_SPEARHEAD:
-    case AUTO_ORE_DEBUG_REQUEST_ROD_SPEARHEAD_STEP1:
-    case AUTO_ORE_DEBUG_REQUEST_ROD_SPEARHEAD_STEP2:
-    case AUTO_ORE_DEBUG_REQUEST_SICK_CORRECT_ORE_RELEASE:
-    case AUTO_ORE_DEBUG_REQUEST_ROD_DOCK_WAIT:
-    case AUTO_ORE_DEBUG_REQUEST_STEP_ASCEND_200_HEAD:
-    case AUTO_ORE_DEBUG_REQUEST_STEP_DESCEND_200_HEAD:
-    case AUTO_ORE_DEBUG_REQUEST_STEP_ASCEND_400_HEAD:
-    case AUTO_ORE_DEBUG_REQUEST_STEP_DESCEND_400_HEAD:
-    default:
-      return AUTO_ORE_ACTION_NONE;
-  }
-}
-
-static bool AutoCtrlFeed_RequestMatchesRunningOreAction(
-    AutoOre_DebugRequest_t request) {
-  const AutoOre_Action_t action = AutoCtrlFeed_RequestToOreAction(request);
-  return action != AUTO_ORE_ACTION_NONE && auto_ore_inited &&
-         AutoOre_IsBusy(&auto_ore_ctrl) && auto_ore_ctrl.action == action;
 }
 
 static PC_AutoAction_t AutoCtrlFeed_MapRodAction(
@@ -906,100 +577,6 @@ static bool AutoCtrlFeed_IsFusedOreAction(AutoOre_Action_t action) {
   }
 }
 
-static bool AutoCtrlFeed_IsFusedPcOreAction(PC_AutoAction_t action) {
-  switch (action) {
-    case PC_AUTO_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD:
-    case PC_AUTO_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD:
-    case PC_AUTO_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD:
-    case PC_AUTO_ACTION_STEP_DROP_STORE_ASCEND_200_HEAD:
-    case PC_AUTO_ACTION_STEP_DROP_STORE_DESCEND_200_HEAD:
-    case PC_AUTO_ACTION_STEP_DROP_STORE_ASCEND_400_HEAD:
-    case PC_AUTO_ACTION_PICK_STORE_POS_400:
-    case PC_AUTO_ACTION_PICK_STORE_POS_200:
-    case PC_AUTO_ACTION_PICK_STORE_NEG_200:
-    case PC_AUTO_ACTION_RELEASE_STEP1:
-    case PC_AUTO_ACTION_RELEASE_LIFT_DETECT_STEP1:
-      return true;
-    default:
-      return false;
-  }
-}
-
-static void AutoCtrlFeed_SetSplitFeedback(PC_AutoActionFeedback_t *feedback) {
-  if (feedback == 0 || !auto_ore_inited ||
-      !AutoCtrlFeed_IsFusedPcOreAction((PC_AutoAction_t)feedback->action)) {
-    return;
-  }
-  feedback->segment_finished_mask |=
-      AutoOre_GetCompletedSegmentMask(&auto_ore_ctrl);
-}
-
-static void AutoCtrlFeed_SetStepCompleteFeedback(
-    PC_AutoActionFeedback_t *feedback) {
-  if (feedback == 0 ||
-      !AutoCtrlFeed_IsStepAction((PC_AutoAction_t)feedback->action)) {
-    return;
-  }
-  feedback->segment_finished_mask |= PC_AUTO_ACTION_SEGMENT_STEP;
-}
-
-static void AutoCtrlFeed_SetOreCompleteFeedback(
-    PC_AutoActionFeedback_t *feedback) {
-  if (feedback == 0) {
-    return;
-  }
-
-  switch ((PC_AutoAction_t)feedback->action) {
-    case PC_AUTO_ACTION_PICK_POS_400:
-    case PC_AUTO_ACTION_PICK_POS_200:
-    case PC_AUTO_ACTION_PICK_NEG_200:
-      feedback->segment_finished_mask |= PC_AUTO_ACTION_SEGMENT_PICK;
-      break;
-    case PC_AUTO_ACTION_STORE:
-      feedback->segment_finished_mask |= PC_AUTO_ACTION_SEGMENT_STORE;
-      break;
-    case PC_AUTO_ACTION_RECOVER_STORE:
-    case PC_AUTO_ACTION_PICK_STORE_POS_400:
-    case PC_AUTO_ACTION_PICK_STORE_POS_200:
-    case PC_AUTO_ACTION_PICK_STORE_NEG_200:
-      feedback->segment_finished_mask |=
-          PC_AUTO_ACTION_SEGMENT_PICK | PC_AUTO_ACTION_SEGMENT_STORE;
-      break;
-    case PC_AUTO_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD:
-    case PC_AUTO_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD:
-    case PC_AUTO_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD:
-    case PC_AUTO_ACTION_STEP_DROP_STORE_ASCEND_200_HEAD:
-    case PC_AUTO_ACTION_STEP_DROP_STORE_DESCEND_200_HEAD:
-    case PC_AUTO_ACTION_STEP_DROP_STORE_ASCEND_400_HEAD:
-      feedback->segment_finished_mask |=
-          PC_AUTO_ACTION_SEGMENT_PICK | PC_AUTO_ACTION_SEGMENT_STORE |
-          PC_AUTO_ACTION_SEGMENT_STEP;
-      break;
-    default:
-      break;
-  }
-}
-
-static void AutoCtrlFeed_SetRodSpearheadCompleteFeedback(
-    PC_AutoActionFeedback_t *feedback) {
-  if (feedback == 0) {
-    return;
-  }
-
-  switch ((PC_AutoAction_t)feedback->action) {
-    case PC_AUTO_ACTION_ROD_SPEARHEAD:
-    case PC_AUTO_ACTION_ROD_SPEARHEAD_STEP2:
-      feedback->segment_finished_mask |= PC_AUTO_ACTION_SEGMENT_PICK;
-      break;
-    case PC_AUTO_ACTION_ROD_SPEARHEAD_STEP1:
-    case PC_AUTO_ACTION_ROD_DOCK_WAIT:
-      feedback->segment_finished_mask |= PC_AUTO_ACTION_SEGMENT_STORE;
-      break;
-    default:
-      break;
-  }
-}
-
 static bool AutoCtrlFeed_IsRodSpearheadAction(PC_AutoAction_t action) {
   return action == PC_AUTO_ACTION_ROD_SPEARHEAD ||
          action == PC_AUTO_ACTION_ROD_SPEARHEAD_STEP1 ||
@@ -1132,29 +709,10 @@ static bool AutoCtrlFeed_RodActionReportsRealResult(
          action == PC_AUTO_ACTION_ROD_DOCK_WAIT;
 }
 
-/* Most legacy one-key actions intentionally expose only "finished/success" to
- * PC even when their local executor ended with an internal failure.  The
- * release observation gates and split rod actions are the exceptions because
- * PC needs their real result to decide whether it may continue the sequence.
- *
- * This policy is a reporting policy only.  Callers must wait for the executor
- * to reach a terminal result before applying it; resource/segment release is
- * never sufficient to finish a Job. */
-static bool AutoCtrlFeed_ActionReportsRealResult(PC_AutoAction_t action) {
-  if (AutoCtrlFeed_IsOreAction(action)) {
-    return AutoCtrlFeed_OreActionReportsRealResult(action);
-  }
-  if (AutoCtrlFeed_IsRodSpearheadAction(action)) {
-    return AutoCtrlFeed_RodActionReportsRealResult(action);
-  }
-  return false;
-}
-
 static void AutoCtrlFeed_SetFeedbackSuccess(
     PC_AutoActionFeedback_t *feedback) {
   feedback->finished = 1u;
   feedback->result = (uint8_t)PC_AUTO_ACTION_RESULT_SUCCESS;
-  feedback->failure_mask = 0u;
 }
 
 static void AutoCtrlFeed_SetFeedbackFail(PC_AutoActionFeedback_t *feedback,
@@ -1162,51 +720,29 @@ static void AutoCtrlFeed_SetFeedbackFail(PC_AutoActionFeedback_t *feedback,
   (void)failure_mask;
   feedback->finished = 1u;
   feedback->result = (uint8_t)PC_AUTO_ACTION_RESULT_SUCCESS;
-  feedback->failure_mask = 0u;
 }
 
 static void AutoCtrlFeed_SetFeedbackRealFail(
     PC_AutoActionFeedback_t *feedback, uint16_t failure_mask) {
+  (void)failure_mask;
   feedback->finished = 1u;
   feedback->result = (uint8_t)PC_AUTO_ACTION_RESULT_FAIL;
-  feedback->failure_mask = failure_mask;
 }
 
 static bool AutoCtrlFeed_StartOreAction(AutoOre_Action_t action) {
   if (!auto_ore_inited) {
     return false;
   }
-  if (AutoOre_IsBusy(&auto_ore_ctrl)) {
-    return false;
-  }
-  if (Task_AutoSickCorrectIsBusy()) {
+  if (AutoCtrlFeed_AnyAutoActionBusy()) {
     return false;
   }
   const uint8_t required_resources =
-      AutoCtrlFeed_ActionRequiredResourceMask((PC_AutoAction_t)action);
-  if (!auto_action_v3_dispatching &&
-      (required_resources & AutoActionScheduler_GetOwnedResourceMask(
-                                &auto_action_scheduler)) != 0u) {
-    return false;
-  }
-  if (auto_ctrl_inited && AutoCtrl_IsBusy(&auto_ctrl) &&
-      (required_resources &
-       (AUTO_ORE_RESOURCE_CHASSIS | AUTO_ORE_RESOURCE_POLE)) != 0u) {
-    return false;
-  }
-  if (Task_AutoRodSpearheadIsBusy() &&
-      (required_resources &
-       (AUTO_ORE_RESOURCE_ROD | AUTO_ORE_RESOURCE_STORE |
-        AUTO_ORE_RESOURCE_SHARED_VALVE)) != 0u) {
-    return false;
-  }
+      AutoCtrlFeed_ActionRequiredResourceMask(
+          AutoCtrlFeed_MapOreAction(action));
 
   bool result = false;
   const uint32_t now_ms = BSP_TIME_Get_ms();
-  if (!auto_action_v3_dispatching) {
-    AutoOre_SetReservedResourceMask(&auto_ore_ctrl,
-                                    AUTO_ORE_RESOURCE_NONE);
-  }
+  AutoOre_SetReservedResourceMask(&auto_ore_ctrl, required_resources);
   AutoCtrlFeed_UpdateAutoOre(now_ms, true);
   switch (action) {
     case AUTO_ORE_ACTION_STORE:
@@ -1297,9 +833,10 @@ static bool AutoCtrlFeed_StartOreAction(AutoOre_Action_t action) {
     AutoCtrlFeed_RememberOreAction(action);
   }
   if (result) {
-    /* Publish the first lease/command frame in the same scheduler cycle so PC
-     * cannot slip through the submit-to-first-update gap. */
     AutoCtrlFeed_UpdateAutoOre(now_ms, false);
+  } else {
+    AutoOre_SetReservedResourceMask(&auto_ore_ctrl,
+                                    AUTO_ORE_RESOURCE_NONE);
   }
   if (AutoCtrlFeed_IsReleaseAction(action)) {
     if (result) {
@@ -1314,9 +851,7 @@ static bool AutoCtrlFeed_StartOreAction(AutoOre_Action_t action) {
 }
 
 static bool AutoCtrlFeed_StartStepAction(PC_AutoAction_t action) {
-  if (!auto_ctrl_inited || AutoCtrl_IsBusy(&auto_ctrl) ||
-      AutoCtrlFeed_AutoOreBlocksStepAction() ||
-      Task_AutoRodSpearheadIsBusy() || Task_AutoSickCorrectIsBusy()) {
+  if (!auto_ctrl_inited || AutoCtrlFeed_AnyAutoActionBusy()) {
     return false;
   }
 
@@ -1349,16 +884,7 @@ static bool AutoCtrlFeed_StartSickCorrectAction(
   if (!auto_sick_correct_inited) {
     return false;
   }
-  if (AutoSickCorrect_IsBusy(&auto_sick_correct_ctrl)) {
-    AutoCtrlFeed_RememberSickCorrectAction(
-        AutoSickCorrect_GetAction(&auto_sick_correct_ctrl));
-    return true;
-  }
-  if ((auto_ctrl_inited && AutoCtrl_IsBusy(&auto_ctrl)) ||
-      (auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl) &&
-       (AutoOre_GetOwnedResourceMask(&auto_ore_ctrl) &
-        (AUTO_ORE_RESOURCE_CHASSIS | AUTO_ORE_RESOURCE_POLE)) != 0u) ||
-      Task_AutoRodSpearheadIsBusy()) {
+  if (AutoCtrlFeed_AnyAutoActionBusy()) {
     return false;
   }
 
@@ -1427,7 +953,6 @@ static void AutoCtrlFeed_PublishAutoActionFeedback(void) {
 
   pc_feedback.busy = (ore_busy || rod_busy || sick_busy) ? 1u : 0u;
   pc_feedback.action = (uint8_t)auto_action_last_action;
-  AutoCtrlFeed_SetSplitFeedback(&pc_feedback);
 
   if (pc_feedback.busy != 0u || auto_action_last_action == PC_AUTO_ACTION_NONE) {
     AutoCtrlFeed_PublishAutoActionSnapshot(&pc_feedback);
@@ -1439,11 +964,9 @@ static void AutoCtrlFeed_PublishAutoActionFeedback(void) {
   } else if (AutoCtrlFeed_IsOreAction(auto_action_last_action) &&
              auto_ore_inited) {
     pc_feedback.action = (uint8_t)AutoCtrlFeed_GetOreFeedbackAction();
-    AutoCtrlFeed_SetSplitFeedback(&pc_feedback);
     const AutoOre_Result_t result = AutoOre_GetResult(&auto_ore_ctrl);
     if (result == AUTO_ORE_RESULT_SUCCESS) {
       AutoCtrlFeed_SetFeedbackSuccess(&pc_feedback);
-      AutoCtrlFeed_SetOreCompleteFeedback(&pc_feedback);
     } else if (result == AUTO_ORE_RESULT_FAIL) {
       const uint16_t failure_mask =
           AutoCtrlFeed_OreFailureMask(auto_ore_last_action);
@@ -1468,7 +991,6 @@ static void AutoCtrlFeed_PublishAutoActionFeedback(void) {
     const auto_ctrl_result_e result = AutoCtrl_GetResult(&auto_ctrl);
     if (result == AUTO_CTRL_RESULT_SUCCESS) {
       AutoCtrlFeed_SetFeedbackSuccess(&pc_feedback);
-      AutoCtrlFeed_SetStepCompleteFeedback(&pc_feedback);
     } else if (result == AUTO_CTRL_RESULT_FAIL) {
       AutoCtrlFeed_SetFeedbackFail(&pc_feedback,
                                    PC_AUTO_ACTION_FAILURE_STEP);
@@ -1484,7 +1006,6 @@ static void AutoCtrlFeed_PublishAutoActionFeedback(void) {
         AutoRodSpearhead_GetResult(&auto_rod_spearhead_ctrl);
     if (result == AUTO_ROD_SPEARHEAD_RESULT_SUCCESS) {
       AutoCtrlFeed_SetFeedbackSuccess(&pc_feedback);
-      AutoCtrlFeed_SetRodSpearheadCompleteFeedback(&pc_feedback);
     } else if (result == AUTO_ROD_SPEARHEAD_RESULT_FAIL) {
       const uint16_t failure_mask = AutoCtrlFeed_RodFailureMask(
           (PC_AutoAction_t)pc_feedback.action);
@@ -1726,10 +1247,16 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms, bool update_debug) {
           chassis_feedback->motor[i].position_rad;
     }
   }
-  const bool zone3_ir_release_was_running =
-      auto_ore_ctrl.state == AUTO_ORE_STATE_RUNNING &&
+    const bool auto_ore_was_running =
+      auto_ore_ctrl.state == AUTO_ORE_STATE_RUNNING;
+    const bool zone3_ir_release_was_running = auto_ore_was_running &&
       auto_ore_ctrl.action == AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT;
   AutoOre_Update(&auto_ore_ctrl, &auto_ore_feedback, now_ms);
+    if (auto_ore_was_running &&
+      auto_ore_ctrl.state != AUTO_ORE_STATE_RUNNING) {
+    AutoOre_SetReservedResourceMask(&auto_ore_ctrl,
+                    AUTO_ORE_RESOURCE_NONE);
+    }
   if (zone3_ir_release_was_running &&
       auto_ore_ctrl.state != AUTO_ORE_STATE_RUNNING) {
     IrDock_EndZone3Action();
@@ -2251,15 +1778,13 @@ bool Task_AutoStepStartDescend400Head(void) {
 }
 
 void Task_AutoOreAbort(void) {
-  pending_release_step2_request = AUTO_ORE_DEBUG_REQUEST_NONE;
-  pending_auto_action_request = AUTO_ORE_DEBUG_REQUEST_NONE;
   if (auto_ore_inited) {
-    AutoOre_SetReservedResourceMask(&auto_ore_ctrl,
-                                    AUTO_ORE_RESOURCE_NONE);
     if (AutoOre_IsBusy(&auto_ore_ctrl)) {
       AutoCtrlFeed_RememberOreAction(auto_ore_ctrl.action);
     }
     AutoOre_Abort(&auto_ore_ctrl);
+    AutoOre_SetReservedResourceMask(&auto_ore_ctrl,
+                                    AUTO_ORE_RESOURCE_NONE);
   }
   if (IrDock_IsZone3ActionLocked()) {
     IrDock_EndZone3Action();
@@ -2277,48 +1802,11 @@ static bool AutoCtrlFeed_HandleAutoOreDebugRequest(uint32_t now_ms) {
   g_auto_ore_debug.request = AUTO_ORE_DEBUG_REQUEST_NONE;
   g_auto_ore_debug.last_request = request;
   g_auto_ore_debug.request_count++;
-  if (!auto_action_v3_dispatching && AutoCtrlFeed_V3HasNonterminalJobs()) {
-    if (request != AUTO_ORE_DEBUG_REQUEST_ABORT) {
-      g_auto_ore_debug.last_result = false;
-      return false;
-    }
-    for (uint8_t i = 0u; i < AUTO_ACTION_SCHEDULER_CAPACITY; ++i) {
-      AutoActionJob_t *job = &auto_action_scheduler.jobs[i];
-      if (job->allocated &&
-          !AutoActionScheduler_IsTerminal((AutoActionJobState_t)job->state)) {
-        (void)AutoActionScheduler_RequestCancel(&auto_action_scheduler, job);
-      }
-    }
-  }
-  if (!auto_action_v3_dispatching &&
-      request != AUTO_ORE_DEBUG_REQUEST_ABORT &&
-      request <= AUTO_ORE_DEBUG_REQUEST_RELEASE_IR_LIFT_DETECT) {
-    AutoCtrlFeed_BeginLegacyJob((PC_AutoAction_t)request, now_ms);
-  }
 
-  if (AutoCtrlFeed_RequestMatchesRunningOreAction(request)) {
-    AutoCtrlFeed_RememberOreAction(auto_ore_ctrl.action);
-    g_auto_ore_debug.last_result = true;
-    g_auto_ore_debug.accept_count++;
-    g_auto_ore_debug.force_output_enable = true;
-    return true;
-  }
-
-  if (AutoCtrlFeed_CanQueueAfterFusedStepDone()) {
-    if (AutoCtrlFeed_RequestIsStepOnly(request)) {
-      result = AutoCtrlFeed_StartStepAction(AutoCtrlFeed_MapStepRequest(request));
-      g_auto_ore_debug.last_result = result;
-      if (result) {
-        g_auto_ore_debug.accept_count++;
-      }
-      return result;
-    }
-    if (AutoCtrlFeed_RequestCanQueueAfterFusedStepDone(request)) {
-      pending_auto_action_request = request;
-      g_auto_ore_debug.last_result = true;
-      g_auto_ore_debug.accept_count++;
-      return true;
-    }
+  if (request != AUTO_ORE_DEBUG_REQUEST_ABORT &&
+      AutoCtrlFeed_AnyAutoActionBusy()) {
+    g_auto_ore_debug.last_result = false;
+    return false;
   }
 
   switch (request) {
@@ -2338,27 +1826,13 @@ static bool AutoCtrlFeed_HandleAutoOreDebugRequest(uint32_t now_ms) {
       result = Task_AutoOreStartReleaseStep1();
       break;
     case AUTO_ORE_DEBUG_REQUEST_RELEASE_STEP2:
-      if (AutoCtrlFeed_ContinueReleaseStep2(request, now_ms)) {
-        result = true;
-      } else if (AutoCtrlFeed_RequestMatchesReleaseStep1(request)) {
-        pending_release_step2_request = request;
-        result = true;
-      } else {
-        result = Task_AutoOreStartReleaseStep2();
-      }
+      result = Task_AutoOreStartReleaseStep2();
       break;
     case AUTO_ORE_DEBUG_REQUEST_RELEASE_LIFT_DETECT_STEP1:
       result = Task_AutoOreStartReleaseLiftDetectStep1();
       break;
     case AUTO_ORE_DEBUG_REQUEST_RELEASE_LIFT_DETECT_STEP2:
-      if (AutoCtrlFeed_ContinueReleaseStep2(request, now_ms)) {
-        result = true;
-      } else if (AutoCtrlFeed_RequestMatchesReleaseStep1(request)) {
-        pending_release_step2_request = request;
-        result = true;
-      } else {
-        result = Task_AutoOreStartReleaseLiftDetectStep2();
-      }
+      result = Task_AutoOreStartReleaseLiftDetectStep2();
       break;
     case AUTO_ORE_DEBUG_REQUEST_CHAMBER:
       result = Task_AutoOreStartChamber();
@@ -2434,18 +1908,10 @@ static bool AutoCtrlFeed_HandleAutoOreDebugRequest(uint32_t now_ms) {
       result = Task_AutoSickCorrectStartOreRelease();
       break;
     case AUTO_ORE_DEBUG_REQUEST_ABORT: {
-      const bool any_auto_busy =
-          (auto_ctrl_inited && AutoCtrl_IsBusy(&auto_ctrl)) ||
-          (auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl)) ||
-          (auto_rod_spearhead_inited &&
-           AutoRodSpearhead_IsBusy(&auto_rod_spearhead_ctrl)) ||
-          (auto_sick_correct_inited &&
-           AutoSickCorrect_IsBusy(&auto_sick_correct_ctrl));
+      const bool any_auto_busy = AutoCtrlFeed_AnyAutoActionBusy();
       if (auto_ctrl_inited) {
         AutoCtrl_Abort(&auto_ctrl);
       }
-      pending_release_step2_request = AUTO_ORE_DEBUG_REQUEST_NONE;
-      pending_auto_action_request = AUTO_ORE_DEBUG_REQUEST_NONE;
       Task_AutoOreAbort();
       Task_AutoRodSpearheadAbort();
       Task_AutoSickCorrectAbort();
@@ -2481,78 +1947,6 @@ static bool AutoCtrlFeed_HandleAutoOreDebugRequest(uint32_t now_ms) {
     g_auto_ore_debug.force_output_enable = false;
   }
   return result;
-}
-
-static bool AutoCtrlFeed_JobStateIsTerminal(uint8_t state) {
-  return state == PC_AUTO_ACTION_JOB_SUCCEEDED ||
-         state == PC_AUTO_ACTION_JOB_FAILED ||
-         state == PC_AUTO_ACTION_JOB_ABORTED ||
-         state == PC_AUTO_ACTION_JOB_REJECTED;
-}
-
-static uint8_t AutoCtrlFeed_ActionRequiredMask(PC_AutoAction_t action) {
-  switch (action) {
-    case PC_AUTO_ACTION_PICK_POS_400:
-    case PC_AUTO_ACTION_PICK_POS_200:
-    case PC_AUTO_ACTION_PICK_NEG_200:
-    case PC_AUTO_ACTION_ROD_SPEARHEAD:
-    case PC_AUTO_ACTION_ROD_SPEARHEAD_STEP2:
-      return PC_AUTO_ACTION_SEGMENT_PICK;
-    case PC_AUTO_ACTION_STORE:
-    case PC_AUTO_ACTION_RELEASE_STEP1:
-    case PC_AUTO_ACTION_RELEASE_LIFT_DETECT_STEP1:
-    case PC_AUTO_ACTION_ROD_SPEARHEAD_STEP1:
-    case PC_AUTO_ACTION_ROD_DOCK_WAIT:
-      return PC_AUTO_ACTION_SEGMENT_STORE;
-    case PC_AUTO_ACTION_RECOVER_STORE:
-    case PC_AUTO_ACTION_PICK_STORE_POS_400:
-    case PC_AUTO_ACTION_PICK_STORE_POS_200:
-    case PC_AUTO_ACTION_PICK_STORE_NEG_200:
-      return PC_AUTO_ACTION_SEGMENT_PICK | PC_AUTO_ACTION_SEGMENT_STORE;
-    case PC_AUTO_ACTION_STEP_ASCEND_200_HEAD:
-    case PC_AUTO_ACTION_STEP_DESCEND_200_HEAD:
-    case PC_AUTO_ACTION_STEP_ASCEND_400_HEAD:
-    case PC_AUTO_ACTION_STEP_DESCEND_400_HEAD:
-      return PC_AUTO_ACTION_SEGMENT_STEP;
-    case PC_AUTO_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD:
-    case PC_AUTO_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD:
-    case PC_AUTO_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD:
-    case PC_AUTO_ACTION_STEP_DROP_STORE_ASCEND_200_HEAD:
-    case PC_AUTO_ACTION_STEP_DROP_STORE_DESCEND_200_HEAD:
-    case PC_AUTO_ACTION_STEP_DROP_STORE_ASCEND_400_HEAD:
-      return PC_AUTO_ACTION_SEGMENT_PICK | PC_AUTO_ACTION_SEGMENT_STORE |
-             PC_AUTO_ACTION_SEGMENT_STEP;
-    default:
-      return 0u;
-  }
-}
-
-static bool AutoCtrlFeed_V3HasNonterminalJobs(void) {
-  for (uint8_t i = 0u; i < AUTO_ACTION_SCHEDULER_CAPACITY; ++i) {
-    const AutoActionJob_t *job = &auto_action_scheduler.jobs[i];
-    if (job->allocated &&
-        !AutoActionScheduler_IsTerminal((AutoActionJobState_t)job->state)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-static AutoActionExecutor_t AutoCtrlFeed_ActionExecutor(
-    PC_AutoAction_t action) {
-  if (AutoCtrlFeed_IsStepAction(action)) {
-    return AUTO_ACTION_EXECUTOR_STEP;
-  }
-  if (AutoCtrlFeed_IsRodSpearheadAction(action)) {
-    return AUTO_ACTION_EXECUTOR_ROD;
-  }
-  if (AutoCtrlFeed_IsSickCorrectAction(action)) {
-    return AUTO_ACTION_EXECUTOR_SICK;
-  }
-  if (AutoCtrlFeed_IsOreAction(action)) {
-    return AUTO_ACTION_EXECUTOR_ORE;
-  }
-  return AUTO_ACTION_EXECUTOR_NONE;
 }
 
 static uint8_t AutoCtrlFeed_ActionRequiredResourceMask(
@@ -2600,9 +1994,6 @@ static uint8_t AutoCtrlFeed_ActionRequiredResourceMask(
     case PC_AUTO_ACTION_CHAMBER:
       return chassis_pole | upper;
     case PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT:
-      /* Action 38 owns the complete robot until red-IR FINISH (04) or PC
-       * CANCEL. RELEASE_ALLOW (03) only performs one release cycle and must
-       * never release resources or complete the Job. */
       return chassis_pole | upper | AUTO_ORE_RESOURCE_ROD;
     case PC_AUTO_ACTION_NONE:
     case PC_AUTO_ACTION_ABORT:
@@ -2611,883 +2002,19 @@ static uint8_t AutoCtrlFeed_ActionRequiredResourceMask(
   }
 }
 
-static uint8_t AutoCtrlFeed_ActionRequiredSegmentsV3(
-    PC_AutoAction_t action) {
-  uint8_t result = AutoCtrlFeed_ActionRequiredMask(action);
-  if (result != 0u) {
-    return result;
-  }
-  if (AutoCtrlFeed_IsSickCorrectAction(action)) {
-    return PC_AUTO_ACTION_SEGMENT_STEP;
-  }
-  if (AutoCtrlFeed_IsOreAction(action)) {
-    return PC_AUTO_ACTION_SEGMENT_STORE;
-  }
-  return 0u;
-}
-
-static uint8_t AutoCtrlFeed_FailureSegmentMask(uint16_t failure_mask) {
-  uint8_t result = 0u;
-  if ((failure_mask & PC_AUTO_ACTION_FAILURE_PICK_ORE) != 0u) {
-    result |= PC_AUTO_ACTION_SEGMENT_PICK;
-  }
-  if ((failure_mask & PC_AUTO_ACTION_FAILURE_STORE_ORE) != 0u) {
-    result |= PC_AUTO_ACTION_SEGMENT_STORE;
-  }
-  if ((failure_mask & PC_AUTO_ACTION_FAILURE_STEP) != 0u) {
-    result |= PC_AUTO_ACTION_SEGMENT_STEP;
-  }
-  return result;
-}
-
-static uint16_t AutoCtrlFeed_NextJobId(void) {
-  uint16_t job_id = auto_action_job.next_job_id++;
-  if (job_id == 0u) {
-    job_id = auto_action_job.next_job_id++;
-  }
-  if (auto_action_job.next_job_id == 0u) {
-    auto_action_job.next_job_id = 1u;
-  }
-  return job_id;
-}
-
-static void AutoCtrlFeed_BeginJob(uint16_t request_id, PC_AutoAction_t action,
-                                  bool v2_owned, uint32_t now_ms) {
-  const uint16_t next_job_id = AutoCtrlFeed_NextJobId();
-  memset(&auto_action_job.feedback, 0, sizeof(auto_action_job.feedback));
-  auto_action_job.feedback.request_id = request_id;
-  auto_action_job.feedback.job_id = next_job_id;
-  auto_action_job.feedback.action = (uint8_t)action;
-  auto_action_job.feedback.state = PC_AUTO_ACTION_JOB_ACCEPTED;
-  auto_action_job.feedback.required_mask =
-      AutoCtrlFeed_ActionRequiredMask(action);
-  auto_action_job.active = true;
-  auto_action_job.v2_owned = v2_owned;
-  auto_action_job.start_time_ms = now_ms;
-}
-
-static void AutoCtrlFeed_BeginLegacyJob(PC_AutoAction_t action,
-                                        uint32_t now_ms) {
-  if (action == PC_AUTO_ACTION_NONE || action == PC_AUTO_ACTION_ABORT) {
-    return;
-  }
-  if (auto_action_job.active &&
-      !AutoCtrlFeed_JobStateIsTerminal(auto_action_job.feedback.state)) {
-    return;
-  }
-  AutoCtrlFeed_BeginJob(0u, action, false, now_ms);
-}
-
-static void AutoCtrlFeed_SetV2Reject(const PC_AutoActionV2CMD_t *command,
-                                     uint8_t reason, uint32_t now_ms) {
-  memset(&auto_action_v2_reject, 0, sizeof(auto_action_v2_reject));
-  auto_action_v2_reject.request_id = command->request_id;
-  auto_action_v2_reject.job_id = command->job_id;
-  auto_action_v2_reject.action = command->action;
-  auto_action_v2_reject.state = PC_AUTO_ACTION_JOB_REJECTED;
-  auto_action_v2_reject.reject_reason = reason;
-  auto_action_v2_reject_until_ms = now_ms + AUTO_ACTION_V2_REJECT_HOLD_MS;
-}
-
-static AutoOre_Action_t AutoCtrlFeed_CurrentReleaseStep2Action(void) {
-  switch (auto_ore_ctrl.action) {
-    case AUTO_ORE_ACTION_RELEASE_STEP1:
-      return AUTO_ORE_ACTION_RELEASE_STEP2;
-    case AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP1:
-      return AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP2;
-    case AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT_STEP1:
-      return AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT_STEP2;
-    default:
-      return AUTO_ORE_ACTION_NONE;
-  }
-}
-
-static void AutoCtrlFeed_ProcessAutoActionV2(uint32_t now_ms) {
-  PC_AutoActionV2CMD_t command = {0};
-  if (!AutoCtrlFeed_PopAutoActionV2(&command)) {
-    return;
-  }
-
-  switch ((PC_AutoActionV2Operation_t)command.operation) {
-    case PC_AUTO_ACTION_V2_OP_START: {
-      if (command.request_id == 0u ||
-          command.action <= PC_AUTO_ACTION_ABORT ||
-          command.action > PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT) {
-        AutoCtrlFeed_SetV2Reject(&command,
-                                 PC_AUTO_ACTION_REJECT_INVALID_ACTION, now_ms);
-        return;
-      }
-      if (auto_action_job.active &&
-          auto_action_job.feedback.request_id == command.request_id) {
-        if (auto_action_job.feedback.action != command.action) {
-          AutoCtrlFeed_SetV2Reject(&command,
-                                   PC_AUTO_ACTION_REJECT_INVALID_ACTION,
-                                   now_ms);
-        }
-        return;
-      }
-      if (auto_action_job.active &&
-          !AutoCtrlFeed_JobStateIsTerminal(auto_action_job.feedback.state)) {
-        AutoCtrlFeed_SetV2Reject(&command, PC_AUTO_ACTION_REJECT_BUSY, now_ms);
-        return;
-      }
-      if (AutoCtrlFeed_V3HasNonterminalJobs()) {
-        AutoCtrlFeed_SetV2Reject(&command, PC_AUTO_ACTION_REJECT_BUSY, now_ms);
-        return;
-      }
-
-      AutoCtrlFeed_BeginJob(command.request_id,
-                            (PC_AutoAction_t)command.action, true, now_ms);
-      g_auto_ore_debug.request = (AutoOre_DebugRequest_t)command.action;
-      if (AutoCtrlFeed_HandleAutoOreDebugRequest(now_ms)) {
-        auto_action_job.feedback.state = PC_AUTO_ACTION_JOB_RUNNING;
-      } else if (auto_ore_inited &&
-                 AutoOre_GetState(&auto_ore_ctrl) == AUTO_ORE_STATE_FAIL) {
-        auto_action_job.feedback.state = PC_AUTO_ACTION_JOB_FAILED;
-        auto_action_job.feedback.failure_mask =
-            AutoOre_GetFailureMask(&auto_ore_ctrl);
-        auto_action_job.feedback.failed_mask = AutoCtrlFeed_FailureSegmentMask(
-            auto_action_job.feedback.failure_mask);
-      } else {
-        auto_action_job.feedback.state = PC_AUTO_ACTION_JOB_REJECTED;
-        auto_action_job.feedback.reject_reason =
-            PC_AUTO_ACTION_REJECT_START_FAILED;
-      }
-      return;
-    }
-
-    case PC_AUTO_ACTION_V2_OP_CONTINUE: {
-      if (!auto_action_job.active ||
-          command.job_id != auto_action_job.feedback.job_id) {
-        AutoCtrlFeed_SetV2Reject(&command,
-                                 PC_AUTO_ACTION_REJECT_JOB_MISMATCH, now_ms);
-        return;
-      }
-      if (command.gate_id != PC_AUTO_ACTION_GATE_RELEASE_STEP2) {
-        AutoCtrlFeed_SetV2Reject(&command,
-                                 PC_AUTO_ACTION_REJECT_INVALID_OPERATION,
-                                 now_ms);
-        return;
-      }
-      const AutoOre_Action_t step2_action =
-          AutoCtrlFeed_CurrentReleaseStep2Action();
-      if (step2_action == AUTO_ORE_ACTION_NONE) {
-        if (auto_ore_ctrl.action == AUTO_ORE_ACTION_RELEASE_STEP2 ||
-            auto_ore_ctrl.action == AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP2 ||
-            auto_ore_ctrl.action ==
-                AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT_STEP2) {
-          return;
-        }
-        AutoCtrlFeed_SetV2Reject(&command,
-                                 PC_AUTO_ACTION_REJECT_NOT_WAITING_GATE,
-                                 now_ms);
-        return;
-      }
-      if (!AutoOre_ContinueReleaseStep2(&auto_ore_ctrl, step2_action, now_ms)) {
-        AutoCtrlFeed_SetV2Reject(&command,
-                                 PC_AUTO_ACTION_REJECT_NOT_WAITING_GATE,
-                                 now_ms);
-        return;
-      }
-      auto_action_job.feedback.state = PC_AUTO_ACTION_JOB_RUNNING;
-      return;
-    }
-
-    case PC_AUTO_ACTION_V2_OP_ABORT:
-      if (!auto_action_job.active ||
-          command.job_id != auto_action_job.feedback.job_id) {
-        AutoCtrlFeed_SetV2Reject(&command,
-                                 PC_AUTO_ACTION_REJECT_JOB_MISMATCH, now_ms);
-        return;
-      }
-      if (AutoCtrlFeed_JobStateIsTerminal(auto_action_job.feedback.state)) {
-        return;
-      }
-      auto_action_job.feedback.state = PC_AUTO_ACTION_JOB_ABORTING;
-      g_auto_ore_debug.request = AUTO_ORE_DEBUG_REQUEST_ABORT;
-      (void)AutoCtrlFeed_HandleAutoOreDebugRequest(now_ms);
-      return;
-
-    case PC_AUTO_ACTION_V2_OP_ACK:
-      if (auto_action_job.active &&
-          command.job_id == auto_action_job.feedback.job_id &&
-          AutoCtrlFeed_JobStateIsTerminal(auto_action_job.feedback.state)) {
-        memset(&auto_action_job.feedback, 0,
-               sizeof(auto_action_job.feedback));
-        auto_action_job.active = false;
-        auto_action_job.v2_owned = false;
-      } else {
-        AutoCtrlFeed_SetV2Reject(&command,
-                                 PC_AUTO_ACTION_REJECT_JOB_MISMATCH, now_ms);
-      }
-      return;
-
-    case PC_AUTO_ACTION_V2_OP_NONE:
-    default:
-      AutoCtrlFeed_SetV2Reject(&command,
-                               PC_AUTO_ACTION_REJECT_INVALID_OPERATION,
-                               now_ms);
-      return;
-  }
-}
-
-static void AutoCtrlFeed_SetV3Reject(const PC_AutoActionV3CMD_t *command,
-                                     PC_AutoActionV3RejectReason_t reason,
-                                     uint32_t now_ms) {
-  memset(&auto_action_v3_reject, 0, sizeof(auto_action_v3_reject));
-  if (command != NULL) {
-    auto_action_v3_reject.request_id = command->request_id;
-    auto_action_v3_reject.job_id = command->job_id;
-    auto_action_v3_reject.operation = command->operation;
-    auto_action_v3_reject.action = command->action;
-  }
-  auto_action_v3_reject.reject_reason = (uint8_t)reason;
-  auto_action_v3_reject_until_ms = now_ms + AUTO_ACTION_V3_REJECT_HOLD_MS;
-}
-
-static AutoActionJob_t *AutoCtrlFeed_FindV3CommandJob(
-    const PC_AutoActionV3CMD_t *command) {
-  if (command == NULL) {
-    return NULL;
-  }
-  AutoActionJob_t *job = AutoActionScheduler_FindByJobId(
-      &auto_action_scheduler, command->job_id);
-  if (job == NULL ||
-      (command->request_id != 0u && command->request_id != job->request_id)) {
-    return NULL;
-  }
-  return job;
-}
-
-static bool AutoCtrlFeed_V3ControlAllowed(void) {
-  return dr16.header.online && dr16.data.sw_l == DR16_SW_UP &&
-         dr16.data.sw_r == DR16_SW_UP && MrlinkPc_IsPCControlMode() &&
-         MrlinkPc_IsHeartbeatValid();
-}
-
-static void AutoCtrlFeed_ProcessAutoActionV3(uint32_t now_ms) {
-  PC_AutoActionV3CMD_t command = {0};
-  uint8_t processed = 0u;
-  while (processed < AUTO_ACTION_V3_QUEUE_CAPACITY &&
-         AutoCtrlFeed_PopAutoActionV3(&command)) {
-    processed++;
-    switch ((PC_AutoActionV3Operation_t)command.operation) {
-      case PC_AUTO_ACTION_V3_OP_SUBMIT: {
-        const PC_AutoAction_t action = (PC_AutoAction_t)command.action;
-        const AutoActionExecutor_t executor =
-            AutoCtrlFeed_ActionExecutor(action);
-        if (command.request_id == 0u || command.job_id != 0u ||
-            executor == AUTO_ACTION_EXECUTOR_NONE) {
-          AutoCtrlFeed_SetV3Reject(
-              &command, PC_AUTO_ACTION_V3_REJECT_INVALID_ACTION, now_ms);
-          break;
-        }
-        if (!AutoCtrlFeed_V3ControlAllowed()) {
-          AutoCtrlFeed_SetV3Reject(
-              &command, PC_AUTO_ACTION_V3_REJECT_INVALID_STATE, now_ms);
-          break;
-        }
-        if (auto_action_job.active &&
-            !AutoCtrlFeed_JobStateIsTerminal(auto_action_job.feedback.state)) {
-          AutoCtrlFeed_SetV3Reject(
-              &command, PC_AUTO_ACTION_V3_REJECT_INVALID_STATE, now_ms);
-          break;
-        }
-        AutoActionJob_t *job = NULL;
-        AutoActionSchedulerReject_t reject = AUTO_ACTION_SCHED_REJECT_NONE;
-        if (!AutoActionScheduler_Submit(
-                &auto_action_scheduler, command.request_id, command.action,
-                executor, AutoCtrlFeed_ActionRequiredResourceMask(action),
-                AutoCtrlFeed_ActionRequiredSegmentsV3(action), command.flags,
-                now_ms, &job, &reject)) {
-          AutoCtrlFeed_SetV3Reject(
-              &command, (PC_AutoActionV3RejectReason_t)reject, now_ms);
-        }
-        break;
-      }
-
-      case PC_AUTO_ACTION_V3_OP_CANCEL: {
-        AutoActionJob_t *job = AutoCtrlFeed_FindV3CommandJob(&command);
-        if (job == NULL) {
-          AutoCtrlFeed_SetV3Reject(
-              &command, PC_AUTO_ACTION_V3_REJECT_JOB_NOT_FOUND, now_ms);
-        } else if (!AutoActionScheduler_RequestCancel(&auto_action_scheduler,
-                                                       job)) {
-          AutoCtrlFeed_SetV3Reject(
-              &command, PC_AUTO_ACTION_V3_REJECT_INVALID_STATE, now_ms);
-        }
-        break;
-      }
-
-      case PC_AUTO_ACTION_V3_OP_CONTINUE: {
-        AutoActionJob_t *job = AutoCtrlFeed_FindV3CommandJob(&command);
-        if (job == NULL) {
-          AutoCtrlFeed_SetV3Reject(
-              &command, PC_AUTO_ACTION_V3_REJECT_JOB_NOT_FOUND, now_ms);
-          break;
-        }
-        if (job->executor != AUTO_ACTION_EXECUTOR_ORE ||
-            job->state != AUTO_ACTION_JOB_WAIT_GATE ||
-            command.gate_id != PC_AUTO_ACTION_GATE_RELEASE_STEP2) {
-          AutoCtrlFeed_SetV3Reject(
-              &command, PC_AUTO_ACTION_V3_REJECT_INVALID_STATE, now_ms);
-          break;
-        }
-        const AutoOre_Action_t step2_action =
-            AutoCtrlFeed_CurrentReleaseStep2Action();
-        if (step2_action == AUTO_ORE_ACTION_NONE ||
-            !AutoOre_ContinueReleaseStep2(&auto_ore_ctrl, step2_action,
-                                          now_ms)) {
-          AutoCtrlFeed_SetV3Reject(
-              &command, PC_AUTO_ACTION_V3_REJECT_INVALID_STATE, now_ms);
-        } else {
-          AutoActionScheduler_SetWaitGate(&auto_action_scheduler, job, false);
-        }
-        break;
-      }
-
-      case PC_AUTO_ACTION_V3_OP_ACK: {
-        AutoActionJob_t *job = AutoCtrlFeed_FindV3CommandJob(&command);
-        if (job == NULL) {
-          AutoCtrlFeed_SetV3Reject(
-              &command, PC_AUTO_ACTION_V3_REJECT_JOB_NOT_FOUND, now_ms);
-        } else if (!AutoActionScheduler_Acknowledge(&auto_action_scheduler,
-                                                     job)) {
-          AutoCtrlFeed_SetV3Reject(
-              &command, PC_AUTO_ACTION_V3_REJECT_INVALID_STATE, now_ms);
-        }
-        break;
-      }
-
-      case PC_AUTO_ACTION_V3_OP_QUERY:
-        if (AutoCtrlFeed_FindV3CommandJob(&command) == NULL) {
-          AutoCtrlFeed_SetV3Reject(
-              &command, PC_AUTO_ACTION_V3_REJECT_JOB_NOT_FOUND, now_ms);
-        }
-        break;
-
-      case PC_AUTO_ACTION_V3_OP_NONE:
-      default:
-        AutoCtrlFeed_SetV3Reject(
-            &command, PC_AUTO_ACTION_V3_REJECT_INVALID_REQUEST, now_ms);
-        break;
-    }
-  }
-}
-
-static uint8_t AutoCtrlFeed_V3UnavailableExecutorMask(void) {
-  uint8_t result = 0u;
-  if (auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl)) {
-    result |= (uint8_t)(1u << AUTO_ACTION_EXECUTOR_ORE);
-  }
-  if (auto_ctrl_inited && AutoCtrl_IsBusy(&auto_ctrl)) {
-    result |= (uint8_t)(1u << AUTO_ACTION_EXECUTOR_STEP);
-    result |= (uint8_t)(1u << AUTO_ACTION_EXECUTOR_ROD);
-  }
-  if (Task_AutoRodSpearheadIsBusy()) {
-    result |= (uint8_t)(1u << AUTO_ACTION_EXECUTOR_ROD);
-    result |= (uint8_t)(1u << AUTO_ACTION_EXECUTOR_STEP);
-    result |= (uint8_t)(1u << AUTO_ACTION_EXECUTOR_SICK);
-  }
-  if (Task_AutoSickCorrectIsBusy()) {
-    result |= (uint8_t)(1u << AUTO_ACTION_EXECUTOR_SICK);
-    result |= (uint8_t)(1u << AUTO_ACTION_EXECUTOR_ROD);
-  }
-  return result;
-}
-
-static uint8_t AutoCtrlFeed_V3ExternallyOwnedResources(void) {
-  uint8_t result = 0u;
-  if (auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl)) {
-    result |= AutoOre_GetOwnedResourceMask(&auto_ore_ctrl);
-  }
-  if (auto_ctrl_inited && AutoCtrl_IsBusy(&auto_ctrl)) {
-    result |= AUTO_ORE_RESOURCE_CHASSIS | AUTO_ORE_RESOURCE_POLE;
-  }
-  if (Task_AutoRodSpearheadIsBusy()) {
-    result |= AUTO_ORE_RESOURCE_ROD | AUTO_ORE_RESOURCE_STORE |
-              AUTO_ORE_RESOURCE_SHARED_VALVE;
-  }
-  if (Task_AutoSickCorrectIsBusy()) {
-    result |= AUTO_ORE_RESOURCE_CHASSIS | AUTO_ORE_RESOURCE_POLE;
-  }
-  return (uint8_t)(result &
-                   ~AutoActionScheduler_GetOwnedResourceMask(
-                       &auto_action_scheduler));
-}
-
-static bool AutoCtrlFeed_StartV3Job(AutoActionJob_t *job,
-                                    uint32_t now_ms) {
-  if (job == NULL || job->state != AUTO_ACTION_JOB_STARTING) {
-    return false;
-  }
-  if (job->executor == AUTO_ACTION_EXECUTOR_ORE) {
-    AutoOre_SetReservedResourceMask(&auto_ore_ctrl,
-                                    job->owned_resource_mask);
-  }
-  g_auto_ore_debug.request = (AutoOre_DebugRequest_t)job->action;
-  auto_action_v3_dispatching = true;
-  const bool started = AutoCtrlFeed_HandleAutoOreDebugRequest(now_ms);
-  auto_action_v3_dispatching = false;
-  if (started) {
-    AutoActionScheduler_MarkStarted(&auto_action_scheduler, job, now_ms);
-    return true;
-  }
-  if (job->executor == AUTO_ACTION_EXECUTOR_ORE) {
-    AutoOre_SetReservedResourceMask(&auto_ore_ctrl,
-                                    AUTO_ORE_RESOURCE_NONE);
-  }
-  AutoActionScheduler_Finish(&auto_action_scheduler, job,
-                             AUTO_ACTION_JOB_FAILED,
-                             PC_AUTO_ACTION_FAILURE_SETUP, now_ms);
-  return false;
-}
-
-static void AutoCtrlFeed_CancelV3Job(AutoActionJob_t *job,
-                                     uint32_t now_ms) {
-  if (job == NULL || job->state != AUTO_ACTION_JOB_CANCEL_REQUESTED) {
-    return;
-  }
-  if (!job->executor_started) {
-    AutoActionScheduler_Finish(&auto_action_scheduler, job,
-                               AUTO_ACTION_JOB_CANCELLED,
-                               PC_AUTO_ACTION_FAILURE_ABORTED, now_ms);
-    return;
-  }
-  switch ((AutoActionExecutor_t)job->executor) {
-    case AUTO_ACTION_EXECUTOR_ORE:
-      AutoOre_SetReservedResourceMask(&auto_ore_ctrl,
-                                      AUTO_ORE_RESOURCE_NONE);
-      Task_AutoOreAbort();
-      break;
-    case AUTO_ACTION_EXECUTOR_STEP:
-      if (auto_ctrl_inited) {
-        AutoCtrl_Abort(&auto_ctrl);
-      }
-      break;
-    case AUTO_ACTION_EXECUTOR_ROD:
-      Task_AutoRodSpearheadAbort();
-      break;
-    case AUTO_ACTION_EXECUTOR_SICK:
-      Task_AutoSickCorrectAbort();
-      break;
-    case AUTO_ACTION_EXECUTOR_NONE:
-    default:
-      break;
-  }
-  AutoActionScheduler_Finish(&auto_action_scheduler, job,
-                             AUTO_ACTION_JOB_CANCELLED,
-                             PC_AUTO_ACTION_FAILURE_ABORTED, now_ms);
-}
-
-static void AutoCtrlFeed_SyncV3OreJob(AutoActionJob_t *job,
-                                      uint32_t now_ms) {
-  AutoActionScheduler_SetProgress(
-      &auto_action_scheduler, job, AutoOre_GetRunningSegmentMask(&auto_ore_ctrl),
-      AutoOre_GetCompletedSegmentMask(&auto_ore_ctrl),
-      AutoOre_GetFailedSegmentMask(&auto_ore_ctrl),
-      AutoOre_GetFailureMask(&auto_ore_ctrl),
-      AutoOre_GetStepIndex(&auto_ore_ctrl));
-
-  uint8_t desired_resources = job->owned_resource_mask;
-  const PC_AutoAction_t action = (PC_AutoAction_t)job->action;
-  if (AutoOre_HasSplitResult(&auto_ore_ctrl) &&
-      AutoOre_IsStepFinished(&auto_ore_ctrl)) {
-    desired_resources &=
-        (uint8_t)~(AUTO_ORE_RESOURCE_CHASSIS | AUTO_ORE_RESOURCE_POLE);
-  } else if ((action == PC_AUTO_ACTION_PICK_POS_400 ||
-              action == PC_AUTO_ACTION_PICK_POS_200 ||
-              action == PC_AUTO_ACTION_PICK_NEG_200) &&
-             AutoOre_GetStepIndex(&auto_ore_ctrl) >= 3u) {
-    desired_resources &= (uint8_t)~AUTO_ORE_RESOURCE_CHASSIS;
-  } else if (action == PC_AUTO_ACTION_RECOVER_STORE &&
-             AutoOre_GetStepIndex(&auto_ore_ctrl) >= 5u) {
-    desired_resources &= (uint8_t)~AUTO_ORE_RESOURCE_CHASSIS;
-  }
-  (void)AutoActionScheduler_SetOwnedResources(
-      &auto_action_scheduler, job, desired_resources,
-      AutoCtrlFeed_V3ExternallyOwnedResources());
-  AutoOre_SetReservedResourceMask(&auto_ore_ctrl, desired_resources);
-
-  if (AutoCtrlFeed_AutoOreWaitingReleaseGate()) {
-    AutoActionScheduler_SetWaitGate(&auto_action_scheduler, job, true);
-    return;
-  }
-  const AutoOre_Result_t result = AutoOre_GetResult(&auto_ore_ctrl);
-  if (result == AUTO_ORE_RESULT_SUCCESS) {
-    AutoOre_SetReservedResourceMask(&auto_ore_ctrl,
-                                    AUTO_ORE_RESOURCE_NONE);
-    AutoActionScheduler_Finish(&auto_action_scheduler, job,
-                               AUTO_ACTION_JOB_SUCCEEDED, 0u, now_ms);
-  } else if (result == AUTO_ORE_RESULT_FAIL) {
-    AutoOre_SetReservedResourceMask(&auto_ore_ctrl,
-                                    AUTO_ORE_RESOURCE_NONE);
-    const bool report_real = AutoCtrlFeed_ActionReportsRealResult(
-        (PC_AutoAction_t)job->action);
-    AutoActionScheduler_Finish(
-        &auto_action_scheduler, job,
-        report_real ? AUTO_ACTION_JOB_FAILED : AUTO_ACTION_JOB_SUCCEEDED,
-        report_real ? AutoOre_GetFailureMask(&auto_ore_ctrl) : 0u, now_ms);
-  } else if (result == AUTO_ORE_RESULT_ABORTED) {
-    AutoOre_SetReservedResourceMask(&auto_ore_ctrl,
-                                    AUTO_ORE_RESOURCE_NONE);
-    AutoActionScheduler_Finish(&auto_action_scheduler, job,
-                               AUTO_ACTION_JOB_CANCELLED,
-                               PC_AUTO_ACTION_FAILURE_ABORTED, now_ms);
-  }
-}
-
-static void AutoCtrlFeed_SyncV3StepJob(AutoActionJob_t *job,
-                                       uint32_t now_ms) {
-  const auto_ctrl_result_e result = AutoCtrl_GetResult(&auto_ctrl);
-  const uint8_t running = AutoCtrl_IsBusy(&auto_ctrl)
-                              ? PC_AUTO_ACTION_SEGMENT_STEP
-                              : 0u;
-  AutoActionScheduler_SetProgress(
-      &auto_action_scheduler, job, running,
-      (result == AUTO_CTRL_RESULT_SUCCESS) ? PC_AUTO_ACTION_SEGMENT_STEP : 0u,
-      (result == AUTO_CTRL_RESULT_FAIL) ? PC_AUTO_ACTION_SEGMENT_STEP : 0u,
-      (result == AUTO_CTRL_RESULT_FAIL) ? PC_AUTO_ACTION_FAILURE_STEP : 0u,
-      AutoCtrl_GetStepIndex(&auto_ctrl));
-  if (result == AUTO_CTRL_RESULT_SUCCESS) {
-    AutoActionScheduler_Finish(&auto_action_scheduler, job,
-                               AUTO_ACTION_JOB_SUCCEEDED, 0u, now_ms);
-  } else if (result == AUTO_CTRL_RESULT_FAIL) {
-    AutoActionScheduler_Finish(&auto_action_scheduler, job,
-                               AUTO_ACTION_JOB_SUCCEEDED, 0u, now_ms);
-  } else if (result == AUTO_CTRL_RESULT_ABORTED) {
-    AutoActionScheduler_Finish(&auto_action_scheduler, job,
-                               AUTO_ACTION_JOB_CANCELLED,
-                               PC_AUTO_ACTION_FAILURE_ABORTED, now_ms);
-  }
-}
-
-static void AutoCtrlFeed_SyncV3RodJob(AutoActionJob_t *job,
-                                      uint32_t now_ms) {
-  const AutoRodSpearhead_Result_t result =
-      AutoRodSpearhead_GetResult(&auto_rod_spearhead_ctrl);
-  AutoActionScheduler_SetProgress(
-      &auto_action_scheduler, job,
-      Task_AutoRodSpearheadIsBusy() ? job->required_segment_mask : 0u,
-      (result == AUTO_ROD_SPEARHEAD_RESULT_SUCCESS)
-          ? job->required_segment_mask
-          : 0u,
-      (result == AUTO_ROD_SPEARHEAD_RESULT_FAIL) ? job->required_segment_mask
-                                                 : 0u,
-      (result == AUTO_ROD_SPEARHEAD_RESULT_FAIL)
-          ? AutoCtrlFeed_RodFailureMask((PC_AutoAction_t)job->action)
-          : 0u,
-      AutoRodSpearhead_GetStepIndex(&auto_rod_spearhead_ctrl));
-  if (result == AUTO_ROD_SPEARHEAD_RESULT_SUCCESS) {
-    AutoActionScheduler_Finish(&auto_action_scheduler, job,
-                               AUTO_ACTION_JOB_SUCCEEDED, 0u, now_ms);
-  } else if (result == AUTO_ROD_SPEARHEAD_RESULT_FAIL) {
-    const bool report_real = AutoCtrlFeed_ActionReportsRealResult(
-        (PC_AutoAction_t)job->action);
-    AutoActionScheduler_Finish(
-        &auto_action_scheduler, job,
-        report_real ? AUTO_ACTION_JOB_FAILED : AUTO_ACTION_JOB_SUCCEEDED,
-        report_real
-            ? AutoCtrlFeed_RodFailureMask((PC_AutoAction_t)job->action)
-            : 0u,
-        now_ms);
-  } else if (result == AUTO_ROD_SPEARHEAD_RESULT_ABORTED) {
-    AutoActionScheduler_Finish(&auto_action_scheduler, job,
-                               AUTO_ACTION_JOB_CANCELLED,
-                               PC_AUTO_ACTION_FAILURE_ABORTED, now_ms);
-  }
-}
-
-static void AutoCtrlFeed_SyncV3SickJob(AutoActionJob_t *job,
-                                       uint32_t now_ms) {
-  const AutoSickCorrect_Result_t result =
-      AutoSickCorrect_GetResult(&auto_sick_correct_ctrl);
-  AutoActionScheduler_SetProgress(
-      &auto_action_scheduler, job,
-      Task_AutoSickCorrectIsBusy() ? job->required_segment_mask : 0u,
-      (result == AUTO_SICK_CORRECT_RESULT_SUCCESS) ? job->required_segment_mask
-                                                   : 0u,
-      (result == AUTO_SICK_CORRECT_RESULT_FAIL) ? job->required_segment_mask
-                                                : 0u,
-      (result == AUTO_SICK_CORRECT_RESULT_FAIL)
-          ? PC_AUTO_ACTION_FAILURE_SICK_CORRECT
-          : 0u,
-      AutoSickCorrect_GetStepIndex(&auto_sick_correct_ctrl));
-  if (result == AUTO_SICK_CORRECT_RESULT_SUCCESS) {
-    AutoActionScheduler_Finish(&auto_action_scheduler, job,
-                               AUTO_ACTION_JOB_SUCCEEDED, 0u, now_ms);
-  } else if (result == AUTO_SICK_CORRECT_RESULT_FAIL) {
-    AutoActionScheduler_Finish(&auto_action_scheduler, job,
-                               AUTO_ACTION_JOB_SUCCEEDED, 0u, now_ms);
-  } else if (result == AUTO_SICK_CORRECT_RESULT_ABORTED) {
-    AutoActionScheduler_Finish(&auto_action_scheduler, job,
-                               AUTO_ACTION_JOB_CANCELLED,
-                               PC_AUTO_ACTION_FAILURE_ABORTED, now_ms);
-  }
-}
-
-static void AutoCtrlFeed_UpdateAutoActionV3(uint32_t now_ms) {
-  if (!AutoCtrlFeed_V3ControlAllowed()) {
-    for (uint8_t i = 0u; i < AUTO_ACTION_SCHEDULER_CAPACITY; ++i) {
-      AutoActionJob_t *job = &auto_action_scheduler.jobs[i];
-      if (job->allocated &&
-          !AutoActionScheduler_IsTerminal((AutoActionJobState_t)job->state) &&
-          job->state != AUTO_ACTION_JOB_CANCEL_REQUESTED) {
-        (void)AutoActionScheduler_RequestCancel(&auto_action_scheduler, job);
-      }
-    }
-  }
-  for (uint8_t i = 0u; i < AUTO_ACTION_SCHEDULER_CAPACITY; ++i) {
-    AutoActionJob_t *job = &auto_action_scheduler.jobs[i];
-    if (!job->allocated ||
-        AutoActionScheduler_IsTerminal((AutoActionJobState_t)job->state)) {
-      continue;
-    }
-    if (job->state == AUTO_ACTION_JOB_CANCEL_REQUESTED) {
-      AutoCtrlFeed_CancelV3Job(job, now_ms);
-      continue;
-    }
-    if (job->state != AUTO_ACTION_JOB_RUNNING &&
-        job->state != AUTO_ACTION_JOB_WAIT_GATE) {
-      continue;
-    }
-    switch ((AutoActionExecutor_t)job->executor) {
-      case AUTO_ACTION_EXECUTOR_ORE:
-        AutoCtrlFeed_SyncV3OreJob(job, now_ms);
-        break;
-      case AUTO_ACTION_EXECUTOR_STEP:
-        AutoCtrlFeed_SyncV3StepJob(job, now_ms);
-        break;
-      case AUTO_ACTION_EXECUTOR_ROD:
-        AutoCtrlFeed_SyncV3RodJob(job, now_ms);
-        break;
-      case AUTO_ACTION_EXECUTOR_SICK:
-        AutoCtrlFeed_SyncV3SickJob(job, now_ms);
-        break;
-      case AUTO_ACTION_EXECUTOR_NONE:
-      default:
-        AutoActionScheduler_Finish(&auto_action_scheduler, job,
-                                   AUTO_ACTION_JOB_FAILED,
-                                   PC_AUTO_ACTION_FAILURE_SETUP, now_ms);
-        break;
-    }
-  }
-
-  AutoActionJob_t *next = AutoActionScheduler_NextStartable(
-      &auto_action_scheduler, AutoCtrlFeed_V3ExternallyOwnedResources(),
-      AutoCtrlFeed_V3UnavailableExecutorMask(), now_ms);
-  if (next != NULL) {
-    (void)AutoCtrlFeed_StartV3Job(next, now_ms);
-  }
-}
-
-static void AutoCtrlFeed_PublishAutoActionV3(uint32_t now_ms) {
-  PC_AutoActionV3Feedback_t feedback = {0};
-  feedback.generation = auto_action_scheduler.generation;
-  feedback.capacity = PC_AUTO_ACTION_V3_JOB_CAPACITY;
-  for (uint8_t i = 0u; i < AUTO_ACTION_SCHEDULER_CAPACITY; ++i) {
-    const AutoActionJob_t *job = &auto_action_scheduler.jobs[i];
-    if (!job->allocated) {
-      continue;
-    }
-    PC_AutoActionV3JobFeedback_t *out = &feedback.jobs[feedback.count++];
-    out->request_id = job->request_id;
-    out->job_id = job->job_id;
-    out->failure_mask = job->failure_mask;
-    out->action = job->action;
-    out->state = job->state;
-    out->owned_resource_mask = job->owned_resource_mask;
-    out->waiting_resource_mask = job->waiting_resource_mask;
-    out->running_segment_mask = job->running_segment_mask;
-    out->completed_segment_mask = job->completed_segment_mask;
-    out->failed_segment_mask = job->failed_segment_mask;
-    out->blocked_reason = job->blocked_reason;
-    out->reject_reason = job->reject_reason;
-  }
-  (void)MrlinkPc_PublishFeedback(PC_FEEDBACK_AUTO_ACTION_V3, &feedback);
-
-  if ((int32_t)(auto_action_v3_reject_until_ms - now_ms) <= 0) {
-    memset(&auto_action_v3_reject, 0, sizeof(auto_action_v3_reject));
-  }
-  (void)MrlinkPc_PublishFeedback(PC_FEEDBACK_AUTO_ACTION_V3_REJECT,
-                                 &auto_action_v3_reject);
-}
-
-static bool AutoCtrlFeed_AutoOreWaitingReleaseGate(void) {
-  if (!auto_ore_inited || !AutoOre_IsBusy(&auto_ore_ctrl) ||
-      !AutoOre_IsUpperFinished(&auto_ore_ctrl)) {
-    return false;
-  }
-  return auto_ore_ctrl.action == AUTO_ORE_ACTION_RELEASE_STEP1 ||
-         auto_ore_ctrl.action == AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP1 ||
-         auto_ore_ctrl.action == AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT_STEP1;
-}
-
-static void AutoCtrlFeed_SyncJobFromFeedback(
-    const PC_AutoActionFeedback_t *feedback, uint32_t now_ms) {
-  if (feedback == NULL) {
-    return;
-  }
-  /* V3 owns multi-job bookkeeping. Do not synthesize a legacy/V2 foreground
-   * job from aggregate controller busy flags while V3 jobs are active. */
-  if (AutoCtrlFeed_V3HasNonterminalJobs()) {
-    return;
-  }
-  if (!auto_action_job.active && feedback->busy != 0u &&
-      feedback->action != PC_AUTO_ACTION_NONE) {
-    AutoCtrlFeed_BeginLegacyJob((PC_AutoAction_t)feedback->action, now_ms);
-  }
-  if (!auto_action_job.active ||
-      AutoCtrlFeed_JobStateIsTerminal(auto_action_job.feedback.state)) {
-    return;
-  }
-
-  auto_action_job.feedback.completed_mask |= feedback->segment_finished_mask;
-  const PC_AutoAction_t job_action =
-      (PC_AutoAction_t)auto_action_job.feedback.action;
-  const bool report_real_result =
-      AutoCtrlFeed_ActionReportsRealResult(job_action);
-  if (auto_ore_inited && AutoCtrlFeed_IsOreAction(job_action)) {
-    auto_action_job.feedback.completed_mask |=
-        AutoOre_GetCompletedSegmentMask(&auto_ore_ctrl);
-    if (report_real_result) {
-      auto_action_job.feedback.failed_mask |=
-          AutoOre_GetFailedSegmentMask(&auto_ore_ctrl);
-      auto_action_job.feedback.failure_mask |=
-          AutoOre_GetFailureMask(&auto_ore_ctrl);
-    }
-    auto_action_job.feedback.failed_mask &=
-        (uint8_t)~auto_action_job.feedback.completed_mask;
-    auto_action_job.feedback.active_node = AutoOre_GetStepIndex(&auto_ore_ctrl);
-  } else if (AutoCtrlFeed_IsStepAction(
-                 (PC_AutoAction_t)auto_action_job.feedback.action)) {
-    auto_action_job.feedback.active_node = AutoCtrl_GetStepIndex(&auto_ctrl);
-  }
-
-  if (feedback->busy != 0u) {
-    if (auto_action_job.feedback.state != PC_AUTO_ACTION_JOB_ABORTING) {
-      auto_action_job.feedback.state = AutoCtrlFeed_AutoOreWaitingReleaseGate()
-                                           ? PC_AUTO_ACTION_JOB_WAIT_GATE
-                                           : PC_AUTO_ACTION_JOB_RUNNING;
-    }
-    if (auto_action_job.feedback.state == PC_AUTO_ACTION_JOB_WAIT_GATE) {
-      auto_action_job.feedback.running_mask = 0u;
-    } else {
-      uint8_t running_mask = 0u;
-      if (auto_ore_inited) {
-        running_mask = AutoOre_GetRunningSegmentMask(&auto_ore_ctrl);
-      }
-      if (running_mask == 0u) {
-        running_mask = (uint8_t)(auto_action_job.feedback.required_mask &
-                                 ~auto_action_job.feedback.completed_mask &
-                                 ~auto_action_job.feedback.failed_mask);
-      }
-      auto_action_job.feedback.running_mask = running_mask;
-    }
-    return;
-  }
-
-  if (feedback->finished == 0u) {
-    return;
-  }
-
-  auto_action_job.feedback.running_mask = 0u;
-  auto_action_job.feedback.failure_mask |= feedback->failure_mask;
-  auto_action_job.feedback.failed_mask |=
-      AutoCtrlFeed_FailureSegmentMask(feedback->failure_mask);
-  auto_action_job.feedback.failed_mask &=
-      (uint8_t)~auto_action_job.feedback.completed_mask;
-  const AutoOre_Result_t ore_result =
-      (auto_ore_inited && AutoCtrlFeed_IsOreAction(job_action))
-          ? AutoOre_GetResult(&auto_ore_ctrl)
-          : AUTO_ORE_RESULT_NONE;
-  if ((feedback->failure_mask & PC_AUTO_ACTION_FAILURE_ABORTED) != 0u ||
-      (report_real_result && ore_result == AUTO_ORE_RESULT_ABORTED) ||
-      auto_action_job.feedback.state == PC_AUTO_ACTION_JOB_ABORTING) {
-    auto_action_job.feedback.state = PC_AUTO_ACTION_JOB_ABORTED;
-  } else if (report_real_result && ore_result == AUTO_ORE_RESULT_FAIL) {
-    if (auto_action_job.feedback.failure_mask == 0u) {
-      auto_action_job.feedback.failure_mask =
-          AutoCtrlFeed_OreFailureMask(auto_ore_last_action);
-    }
-    auto_action_job.feedback.state = PC_AUTO_ACTION_JOB_FAILED;
-  } else if (feedback->result == PC_AUTO_ACTION_RESULT_SUCCESS) {
-    if (!report_real_result) {
-      /* Normalize the intentionally synthetic success into a self-consistent
-       * public Job result.  The executor has already reached its terminal
-       * state at this point; this does not complete an action early. */
-      auto_action_job.feedback.completed_mask |=
-          auto_action_job.feedback.required_mask;
-      auto_action_job.feedback.failed_mask = 0u;
-      auto_action_job.feedback.failure_mask = 0u;
-      auto_action_job.feedback.state = PC_AUTO_ACTION_JOB_SUCCEEDED;
-    } else {
-      const uint8_t missing_mask =
-          (uint8_t)(auto_action_job.feedback.required_mask &
-                    ~auto_action_job.feedback.completed_mask);
-      if (missing_mask == 0u) {
-        auto_action_job.feedback.state = PC_AUTO_ACTION_JOB_SUCCEEDED;
-      } else {
-        auto_action_job.feedback.failed_mask |= missing_mask;
-        auto_action_job.feedback.failure_mask |=
-            PC_AUTO_ACTION_FAILURE_SETUP;
-        auto_action_job.feedback.state = PC_AUTO_ACTION_JOB_FAILED;
-      }
-    }
-  } else {
-    auto_action_job.feedback.state = PC_AUTO_ACTION_JOB_FAILED;
-  }
-}
-
 static void AutoCtrlFeed_PublishAutoActionSnapshot(
     PC_AutoActionFeedback_t *feedback) {
   if (feedback == NULL) {
     return;
   }
-  const uint32_t now_ms = BSP_TIME_Get_ms();
-  AutoCtrlFeed_SyncJobFromFeedback(feedback, now_ms);
-  if (auto_action_job.active) {
-    feedback->segment_finished_mask =
-        auto_action_job.feedback.completed_mask;
-    if (feedback->finished != 0u &&
-        (auto_action_job.feedback.state == PC_AUTO_ACTION_JOB_FAILED ||
-         auto_action_job.feedback.state == PC_AUTO_ACTION_JOB_ABORTED)) {
-      feedback->result = PC_AUTO_ACTION_RESULT_FAIL;
-      feedback->failure_mask = auto_action_job.feedback.failure_mask;
-    }
-  }
-
   AutoCtrlFeed_UpdateLightEffectFromAutoActionFeedback(feedback);
   (void)MrlinkPc_PublishFeedback(PC_FEEDBACK_AUTO_ACTION, feedback);
-
-  const PC_AutoActionV2Feedback_t *v2_feedback =
-      auto_action_job.active ? &auto_action_job.feedback : NULL;
-  if ((int32_t)(auto_action_v2_reject_until_ms - now_ms) > 0) {
-    v2_feedback = &auto_action_v2_reject;
-  }
-  PC_AutoActionV2Feedback_t idle_feedback = {0};
-  (void)MrlinkPc_PublishFeedback(
-      PC_FEEDBACK_AUTO_ACTION_V2,
-      (v2_feedback != NULL) ? v2_feedback : &idle_feedback);
 }
 
 static bool AutoCtrlFeed_StartRodSpearheadAction(
     AutoRodSpearhead_Action_t action) {
-  if (Task_AutoSickCorrectIsBusy() ||
-      (auto_ctrl_inited && AutoCtrl_IsBusy(&auto_ctrl)) ||
-      (auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl))) {
+  if (AutoCtrlFeed_AnyAutoActionBusy()) {
     return false;
-  }
-
-  if (auto_rod_spearhead_inited &&
-      AutoRodSpearhead_IsBusy(&auto_rod_spearhead_ctrl)) {
-    const AutoRodSpearhead_Action_t running_action =
-        AutoRodSpearhead_GetAction(&auto_rod_spearhead_ctrl);
-    if (running_action == action) {
-      AutoCtrlFeed_RememberRodSpearheadAction(running_action);
-      return true;
-    }
-    AutoRodSpearhead_Abort(&auto_rod_spearhead_ctrl);
   }
 
   bool result = false;
@@ -3653,7 +2180,6 @@ void Task_auto_ctrl(void *argument) {
 
   AutoCtrl_Init(&auto_ctrl);
   auto_ctrl_inited = true;
-  AutoActionScheduler_Init(&auto_action_scheduler);
   photo_transfer_inited = PhotoTransfer_Init() == DEVICE_OK;
   AutoCtrlFeed_InitAutoOre();
   AutoCtrlFeed_InitAutoRodSpearhead();
@@ -3743,18 +2269,12 @@ void Task_auto_ctrl(void *argument) {
       AutoCtrlFeed_UpdateYawRateCommand();
 
       AutoCtrl_Update(&auto_ctrl, now_ms);
-      AutoCtrlFeed_ProcessAutoActionV2(now_ms);
       (void)AutoCtrlFeed_HandleAutoOreDebugRequest(now_ms);
       const bool update_auto_ore_debug = AutoCtrlFeed_DebugPeriodicDue(now_ms);
       AutoCtrlFeed_UpdateAutoOre(now_ms, update_auto_ore_debug);
-      AutoCtrlFeed_TryPendingReleaseStep2(now_ms);
-      AutoCtrlFeed_TryPendingAutoAction();
       AutoCtrlFeed_UpdateAutoRodSpearhead(now_ms, update_auto_ore_debug);
       AutoCtrlFeed_UpdateAutoSickCorrect(now_ms, update_auto_ore_debug);
-      AutoCtrlFeed_ProcessAutoActionV3(now_ms);
-      AutoCtrlFeed_UpdateAutoActionV3(now_ms);
       AutoCtrlFeed_PublishAutoActionFeedback();
-      AutoCtrlFeed_PublishAutoActionV3(now_ms);
 
       if (MrlinkPc_GetState() != NULL) {
         PC_StepFeedback_t step_feedback = {0};

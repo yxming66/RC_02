@@ -1679,6 +1679,19 @@ static void AutoOre_FinishSuccess(AutoOre_t *ctrl) {
   ctrl->step_ctrl_active = false;
 }
 
+static void AutoOre_FinishReleaseStep1Success(AutoOre_t *ctrl) {
+  ctrl->fused_step_done = true;
+  ctrl->fused_store_done = true;
+  ctrl->state = AUTO_ORE_STATE_SUCCESS;
+  ctrl->result = AUTO_ORE_RESULT_SUCCESS;
+  ctrl->fault = AUTO_ORE_FAULT_NONE;
+  ctrl->failure_mask = AUTO_ORE_FAILURE_NONE;
+  ctrl->action = AUTO_ORE_ACTION_NONE;
+  ctrl->active_position = AUTO_ORE_POSITION_NONE;
+  ctrl->step_ctrl_active = false;
+  ctrl->step_ctrl_started = false;
+}
+
 static bool AutoOre_WaitAll(AutoOre_t *ctrl, uint32_t now_ms) {
   if (ctrl->feedback.arm_at_target && ctrl->feedback.ore_store_all_at_target) {
     AutoOre_NextStep(ctrl);
@@ -2003,9 +2016,7 @@ static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
             return;
           }
           if (AutoOre_ActionIsReleaseStep1(ctrl->action)) {
-            ctrl->fused_step_done = true;
-            ctrl->fused_store_done = true;
-            AutoOre_CommandChassisZeroVector(ctrl);
+            AutoOre_FinishReleaseStep1Success(ctrl);
             return;
           }
           AutoOre_NextStep(ctrl);
@@ -2038,9 +2049,7 @@ static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
             return;
           }
           if (AutoOre_ActionIsReleaseStep1(ctrl->action)) {
-            ctrl->fused_step_done = true;
-            ctrl->fused_store_done = true;
-            AutoOre_CommandChassisZeroVector(ctrl);
+            AutoOre_FinishReleaseStep1Success(ctrl);
             return;
           }
           AutoOre_NextStep(ctrl);
@@ -4263,36 +4272,6 @@ bool AutoOre_StartReleaseIrLiftDetectStep1(AutoOre_t *ctrl, uint32_t now_ms) {
 bool AutoOre_StartReleaseIrLiftDetectStep2(AutoOre_t *ctrl, uint32_t now_ms) {
   return AutoOre_Start(ctrl, AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT_STEP2,
                        now_ms);
-}
-
-bool AutoOre_ContinueReleaseStep2(AutoOre_t *ctrl,
-                                  AutoOre_Action_t step2_action,
-                                  uint32_t now_ms) {
-  if (ctrl == 0 || ctrl->state != AUTO_ORE_STATE_RUNNING ||
-      !ctrl->fused_store_done) {
-    return false;
-  }
-
-  const bool action_matches =
-      (ctrl->action == AUTO_ORE_ACTION_RELEASE_STEP1 &&
-       step2_action == AUTO_ORE_ACTION_RELEASE_STEP2) ||
-      (ctrl->action == AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP1 &&
-       step2_action == AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP2) ||
-      (ctrl->action == AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT_STEP1 &&
-       step2_action == AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT_STEP2);
-  if (!action_matches) {
-    return false;
-  }
-
-  ctrl->action = step2_action;
-  ctrl->step_index = 2u;
-  ctrl->step_phase = 0u;
-  ctrl->step_entered = false;
-  ctrl->step_condition_met = false;
-  ctrl->step_condition_time_ms = now_ms;
-  ctrl->step_enter_time_ms = now_ms;
-  ctrl->fused_store_done = false;
-  return true;
 }
 
 bool AutoOre_StartChamber(AutoOre_t *ctrl, uint32_t now_ms) {

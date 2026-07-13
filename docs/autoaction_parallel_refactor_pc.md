@@ -1,321 +1,248 @@
-# AutoAction 并行调度与上位机接入规范
+# AutoAction 单动作调用与整体反馈规范
 
-固件状态：RC02 V3 接口已冻结
+本文档定义 PC 调用 RC02 AutoAction 的唯一现行方式。PC 只负责选择一个 action、等待该 action 的整体终态，并在终态后决定下一步；动作内部步骤、并行分支、模块命令和资源变化均不属于 PC 协议。
 
-调度容量：4 个 Job
+## 1. 核心规则
 
-兼容性：V1/V2 线格式保留；新增 V3，不允许 V2 与 V3 活动事务混用
+1. PC 只使用 `PC_CMD_AUTO_ACTION = 0x16`，payload 为 1 字节 `<B action>`。
+2. STM32 只使用 `PC_FEEDBACK_AUTO_ACTION = 0x96`，payload 为 4 字节 `<BBBB>`：`action, busy, finished, result`。
+3. 任意时刻最多运行一个 AutoAction。动作运行中不接受另一个普通 action，不排队，也不提前准备下一动作。
+4. 普通动作、融合动作、普通台阶、`STEP1` 和 `STEP2` 都是独立的整体 action。
+5. PC 只以 `0x96` 的整体终态判断完成，不使用内部步骤、模块反馈或机构到位状态替代整体结果。
+6. `busy=1` 期间保持自动命令路由和该动作的完整资源租约；只有底层真正进入 `SUCCESS`、`FAIL` 或 `ABORTED` 后才释放。
+7. AutoOre 内部融合动作可以并行执行多个分支，但内部并行不向 PC 暴露，任何局部分支完成都不能触发下一动作或允许 PC 提前接管模块。
 
-## 1. 固件调度模型
+## 2. 调用命令 `0x16`
 
-RC02 不再使用“一个 AutoAction 占用整车”的模型。V3 将动作提交为固定容量 Job，并按物理资源进行仲裁：
+payload：
 
-```text
-SUBMIT
-  -> QUEUED
-  -> WAIT_RESOURCE / WAIT_EXECUTOR
-  -> STARTING
-  -> RUNNING / WAIT_GATE
-  -> SUCCEEDED / FAILED / CANCELLED
-  -> ACK 后释放 Job 表项
+```python
+AUTO_ACTION_CMD = struct.Struct("<B")
 ```
 
-节点启动时必须一次性获得全部初始资源。若任何资源冲突，Job 保持 `WAIT_RESOURCE`，并且不持有任何部分资源，因此不存在 hold-and-wait 型循环死锁。
+| action | 含义 |
+|---:|---|
+| `0` | 清除接收 latch，为后续触发重新布防 |
+| `1` | 中止当前 AutoAction |
+| `2~38` | 启动对应整体 action |
 
-同一执行器同一时间只运行一个 Job；不同执行器在资源和命令路由兼容时可以并行。调度器不使用堆内存，Job 表固定为 4 项。
+一键动作是边沿触发命令，不是连续 setpoint。同一个非零 action 连续发送只触发一次；再次调用相同 action 前必须先发送 `action=0`。
 
-## 2. 资源位
+推荐所有正常调用都使用统一序列：
 
-| bit | 掩码 | 资源 |
+```text
+发送 action=0
+发送目标 action
+等待相同 action 的整体终态
+读取 result
+```
+
+动作已经 `busy=1` 时，PC 不得发送另一个普通 action。需要停止当前动作时发送 `action=1`，随后等待 `busy=0`；资源不会在中止命令到达瞬间释放，而是在底层进入真实中止终态后释放。
+
+## 3. 整体反馈 `0x96`
+
+payload 固定为 4 字节：
+
+```python
+AUTO_ACTION_FEEDBACK = struct.Struct("<BBBB")
+# action, busy, finished, result
+```
+
+| 偏移 | 字段 | 含义 |
+|---:|---|---|
+| 0 | `action` | 当前运行或最近结束的 action |
+| 1 | `busy` | `1=整体动作正在运行`，`0=当前无动作运行` |
+| 2 | `finished` | `1=已有整体终态`，`0=无可用整体终态` |
+| 3 | `result` | 仅 `finished=1` 有效；`0=SUCCESS`，`1=FAIL` |
+
+状态解释：
+
+| `busy` | `finished` | PC 解释 |
 |---:|---:|---|
-| 0 | `0x01` | CHASSIS，底盘 |
-| 1 | `0x02` | POLE，撑杆/台阶机构 |
-| 2 | `0x04` | ARM，简易机械臂 |
-| 3 | `0x08` | STORE，存矿机构 |
-| 4 | `0x10` | ROD，取矛头机构 |
-| 5 | `0x20` | SHARED_VALVE，共享气阀 |
+| `0` | `0` | 空闲且当前没有可消费的整体结果 |
+| `1` | `0` | action 正在运行；继续等待，不启动下一动作 |
+| `0` | `1` | action 已进入整体终态；读取 `result` |
 
-共享气阀在 V3 中按独占资源处理。等待 Job 不会通过“相同气阀状态”绕过互斥。
+正常调用必须同时满足以下条件才算完成：
 
-资源优先级：
-
-```text
-安全/急停
-  > 持有资源租约的自动 Job
-  > 新鲜的 PC 命令
-  > 遥控器命令
-  > 安全保持/Relax
+```python
+done = feedback.action == expected_action and not feedback.busy and feedback.finished
 ```
 
-租约和实际命令通过双缓冲快照发布。资源已经保留、但该周期尚无具体目标命令时，命令中心输出安全保持，PC 不会穿透租约。
+`busy=1` 时必须忽略 `result`。PC 不得根据底盘停止、Pole 到位、Arm 到位、矿仓状态变化或融合动作某一内部支路完成来提前生成成功。
 
-## 3. 已实现的并行场景
+## 4. 单动作互斥
 
-| 场景 | 固件行为 |
+RC02 对 PC 暴露的是单 active action 模型：
+
+```text
+IDLE
+  -> 接受一个 action
+  -> RUNNING（拒绝其他普通 action）
+  -> 底层真实 SUCCESS / FAIL / ABORTED
+  -> 发布整体终态并释放资源
+  -> PC 可调用下一 action
+```
+
+因此：
+
+- PC 不维护并行动作集合。
+- PC 不提交等待队列。
+- PC 不因两个动作使用不同机构而同时调用它们。
+- PC 不在融合台阶分支提前完成时启动导航、普通台阶、取矿或存矿动作。
+- PC 不在普通取矿推进结束但 Arm 仍运动时提前接管底盘或其他被租约覆盖的模块。
+
+## 5. 自动路由与资源租约
+
+每个 action 启动时确定运行所需的完整资源集合。动作 `busy=1` 的整个期间，资源集合和自动路由持续有效，不因以下情况缩减：
+
+- 内部 step index 改变；
+- 某个融合分支完成；
+- 某个模块当前周期没有新目标；
+- 底盘暂时停止；
+- Arm 已完成交矿但矿仓仍在收尾；
+- 普通台阶机构已经到达某个中间姿态。
+
+PC 可以继续周期发送心跳、底盘和其他连续控制帧以保持链路与最新目标，但这些帧不能穿透当前 action 的资源租约。只有收到整体终态后，PC 才能认为自动路由结束并接管相关模块。
+
+安全/急停逻辑仍高于自动路由；安全中止同样必须等待底层进入真实终态后，整体反馈才清除 `busy`。
+
+## 6. 融合动作
+
+融合取矿、存矿和上下台阶动作对 PC 是一个 action。固件内部可以同时推进取矿、存矿和台阶分支，但必须满足整个动作的底层结束条件后才发布 `finished=1`。
+
+PC 不可见也不可使用以下内部信息：
+
+- 哪个融合分支正在运行；
+- 哪个分支先完成；
+- 某个机构是否已暂时空闲；
+- 内部步骤索引或局部成功状态；
+- 某个模块是否可以被下一动作复用。
+
+即使台阶分支先完成，只要取矿或存矿分支尚未到真实终态，`0x96` 仍保持 `busy=1, finished=0`，完整资源租约不释放。
+
+## 7. 结果兼容策略
+
+固件内部始终区分真实 `SUCCESS`、`FAIL` 和 `ABORTED`。wire 只发送 `result=0/1`，并延续当前兼容策略：
+
+- `RELEASE_STEP1`、`RELEASE_LIFT_DETECT_STEP1`、`ROD_SPEARHEAD_STEP1`、`ROD_SPEARHEAD_STEP2`、`ROD_DOCK_WAIT` 报告真实失败，底层失败或中止时 PC 收到 `result=1`。
+- 其余动作只在底层真正进入终态后，允许将底层失败或中止映射为 synthetic success，即 PC 收到 `result=0`。
+- synthetic success 只改变 PC 可见结果，不得提前设置 `finished=1`，也不得提前释放资源。
+
+PC 若需要确认矿物实际位置，应在整体终态后结合 `0x95` 占矿反馈做业务校验；不能把兼容成功解释为所有物理目标必然达成。
+
+## 8. `STEP1` 与 `STEP2`
+
+放矿分步动作采用两个独立 action：
+
+| 第一阶段 | 第二阶段 |
 |---|---|
-| 融合动作起步时 Arm/Pole 尚在准备 | CHASSIS 立即按 `precontact_vx_mps` 前进；若有效 PE13/photo1 在 Arm 取矿目标稳定前触发，则锁存保护停车，Arm 达到位置、速度和稳定时间条件后自动恢复前进 |
-| 融合台阶先完成，上层仍在取矿/存矿 | 释放 CHASSIS、POLE；等待的纯台阶 Job 可以自动启动；也可由 PC 跑航点 |
-| 普通取矿推进完成，机械臂仍在抬升 | 仅释放 CHASSIS；PC 可跑航点，POLE 仍由当前 Job 持有 |
-| 取矿存矿自动后退完成 | 释放 CHASSIS、POLE；ARM/STORE/VALVE 继续运行 |
-| 回收地面矿后退完成 | 释放 CHASSIS；ARM/STORE/VALVE 继续运行；POLE 由该 Job 持续保持前/后 `0.8 rad` 目标，直到动作终态才释放 |
-| 纯 STORE 与纯台阶同时提交 | 分别使用上层资源和 CHASSIS/POLE，可并行运行 |
-| 两个 Job 需要同一资源 | 后提交者进入 WAIT_RESOURCE，持有资源为 0 |
-| 两个 Job 使用同一执行器 | 后提交者等待 EXECUTOR |
+| `34 RELEASE_STEP1` | `35 RELEASE_STEP2` |
+| `36 RELEASE_LIFT_DETECT_STEP1` | `37 RELEASE_LIFT_DETECT_STEP2` |
 
-ROD 与 STEP/SICK 当前按命令路由不兼容处理，不并行启动。AutoOre 上层动作与 STEP/SICK 在资源释放后可以并行。
+规则：
 
-## 4. PC 底盘连续发送要求
+1. PC 调用 `STEP1` 并等待该 action 的 `busy=0 && finished=1`。
+2. `STEP1` 完成观察后立即进入自己的整体终态，不继续占用 AutoAction 运行槽。
+3. `STEP1` 终态保留 Arm 持矿状态，便于 PC 根据 `0x95.release_grid_has_ore` 决策。
+4. 如果目标格可放，PC 对 `STEP2` 发起一次新的独立调用：先发 `action=0`，再发对应 `STEP2`。
+5. 如果目标格不可放，PC 不调用 `STEP2`，可重新规划目标格或执行其他安全流程。
 
-上位机在 AutoAction 运行期间仍须持续发送 `PC_CMD_CHASSIS (0x10)`：
+两个阶段之间没有续接命令、等待门或隐式事务。`STEP2` 的成功与失败只属于其自身 action。
 
-```python
-CHASSIS_CMD = struct.Struct("<fff")  # vx, vy, wz，12 字节小端
-```
+## 9. action 38 红外三层放矿
 
-- 推荐 20–50 Hz；
-- 最近 200 ms 没有底盘帧时，底盘 PC 命令失效并进入 Relax；
-- 心跳超时为 500 ms；心跳不能替代底盘帧新鲜度；
-- Job 持有 CHASSIS 时，PC 帧仍会接收和更新，但不会覆盖自动命令；
-- Job 释放 CHASSIS 后，在一次 AutoOre 发布加下一次 RC 仲裁内切回最新 PC 命令，当前周期通常不超过 7 ms。
-
-推荐结构：
-
-```python
-while pc_control_enabled:
-    send_heartbeat()
-    vx, vy, wz = waypoint_controller.update()
-    send_chassis(vx, vy, wz)       # AutoAction 运行期间也发送
-    consume_auto_action_v3()
-```
-
-## 5. V3 命令
-
-Topic：`PC_CMD_AUTO_ACTION_V3 = 0x24`
-
-Payload：8 字节，小端 packed
-
-```python
-AUTO_ACTION_V3_CMD = struct.Struct("<HHBBBB")
-# request_id, job_id, operation, action, gate_id, flags
-```
-
-### 5.1 operation
-
-| 名称 | 值 | 字段要求 |
-|---|---:|---|
-| NONE | 0 | 不发送 |
-| SUBMIT | 1 | `request_id != 0`，`job_id = 0`，设置 `action` |
-| CANCEL | 2 | 设置目标 `job_id`；建议同时带原 `request_id` |
-| CONTINUE | 3 | 两段式放矿使用；设置 `job_id` 和 `gate_id` |
-| ACK | 4 | Job 终态保存完成后释放表项 |
-| QUERY | 5 | 检查 `job_id` 是否仍存在；完整状态本来就周期上报 |
-
-同一 `request_id + action` 的 SUBMIT 是幂等重发，返回已有 Job，不会重复启动。同一 `request_id` 携带不同 action 会通过拒绝反馈报告 `REQUEST_CONFLICT`。
-
-Job 到达终态后仍占用一个 Job 表项，但不占用物理资源。上位机必须在保存终态后发送 ACK，否则 4 个未 ACK 终态会占满队列。
-
-## 6. V3 全量反馈
-
-Topic：`PC_FEEDBACK_AUTO_ACTION_V3 = 0x9F`
-
-Payload：固定 64 字节，小端 packed，一帧包含全部 4 个 Job 槽位
-
-```python
-V3_HEADER = struct.Struct("<HBB")
-# generation, count, capacity
-
-V3_JOB = struct.Struct("<HHHBBBBBBBBB")
-# request_id, job_id, failure_mask,
-# action, state, owned_resource_mask, waiting_resource_mask,
-# running_segment_mask, completed_segment_mask, failed_segment_mask,
-# blocked_reason, reject_reason
-
-assert V3_HEADER.size == 4
-assert V3_JOB.size == 15
-assert V3_HEADER.size + 4 * V3_JOB.size == 64
-```
-
-解析时只使用前 `count` 个 Job；其余槽位为零。`generation` 在调度状态改变时递增，允许上位机识别新快照。
-
-```python
-def parse_v3(payload: bytes):
-    generation, count, capacity = V3_HEADER.unpack_from(payload, 0)
-    assert capacity == 4
-    jobs = []
-    offset = V3_HEADER.size
-    for index in range(capacity):
-        fields = V3_JOB.unpack_from(payload, offset)
-        offset += V3_JOB.size
-        if index < count:
-            jobs.append(fields)
-    return generation, jobs
-```
-
-### 6.1 Job state
-
-| 状态 | 值 | 是否终态 |
-|---|---:|---|
-| FREE | 0 | — |
-| QUEUED | 1 | 否 |
-| WAIT_RESOURCE | 2 | 否 |
-| STARTING | 3 | 否 |
-| RUNNING | 4 | 否 |
-| WAIT_GATE | 5 | 否 |
-| CANCEL_REQUESTED | 6 | 否 |
-| SUCCEEDED | 7 | 是 |
-| FAILED | 8 | 是 |
-| CANCELLED | 9 | 是 |
-| REJECTED | 10 | 是 |
-
-### 6.2 blocked_reason
-
-| 原因 | 值 |
-|---|---:|
-| NONE | 0 |
-| RESOURCE | 1 |
-| EXECUTOR | 2 |
-| DEPENDENCY | 3 |
-| MOTION_CONSTRAINT | 4 |
-| SENSOR | 5 |
-| EXTERNAL_GATE | 6 |
-
-`waiting_resource_mask` 只在资源冲突时有效。等待 Job 的 `owned_resource_mask` 必须为 0；若不是 0，应视为固件异常。
-
-### 6.3 分支位
-
-| bit | 掩码 | 含义 |
-|---:|---:|---|
-| 0 | `0x01` | PICK / ARM 交矿侧 |
-| 1 | `0x02` | STORE |
-| 2 | `0x04` | STEP / 底盘台阶侧 |
-
-Job 可以保持 RUNNING，同时 `completed_segment_mask.STEP = 1`。此时表示台阶资源已经归还，但其他分支尚未结束。
-
-低位存矿包含平台收尾颠动。平台完成配置次数的快速上/下往返并回到 `STANDBY` 后，才设置 `completed_segment_mask.STORE`；颠动期间 Job 和 STORE 分支仍为运行中。高位存矿不执行该阶段。
-
-### 6.4 终态与“仅上报成功”策略
-
-资源释放、`completed_segment_mask` 某一位置位，都不代表整个 Job 已结束。RC02 只有在对应底层执行器真正进入 `SUCCESS`、`FAIL` 或 `ABORTED` 后，才会生成 Job 终态。因此，普通取矿释放 CHASSIS、融合动作释放 CHASSIS/POLE 后，Job 仍保持 `RUNNING`，上层机构继续执行到自己的状态机终点。
-
-为了兼容既有比赛流程，部分动作故意不向 PC 暴露内部失败。底层状态机仍正常运行到终态；仅在生成 PC 终态反馈时进行映射：
-
-| 动作 | 底层 FAIL 时 PC 看到 |
-|---|---|
-| `RELEASE_STEP1`、`RELEASE_LIFT_DETECT_STEP1` | `FAILED`，保留真实 `failure_mask` |
-| `ROD_SPEARHEAD_STEP1`、`ROD_SPEARHEAD_STEP2`、`ROD_DOCK_WAIT` | `FAILED`，保留真实 `failure_mask` |
-| 其他可提交动作 | `SUCCEEDED`，`failure_mask=0`、`failed_segment_mask=0`，并补齐 required segment |
-
-以下情况不参与“仅上报成功”映射：
-
-- V3 显式 `CANCEL`、遥控器退出 PC 控制页、PC 心跳失效，或底层执行器进入 `ABORTED`：返回 `CANCELLED`。动作 38 使用 V3 `CANCEL` 中止并解除锁定；
-- 请求非法、队列满、状态不允许：返回 reject；
-- Job 尚未成功启动执行器：返回 `FAILED/START_FAILED` 或 reject，不能伪造为已正常执行成功。
-
-因此上位机不能把底盘资源释放当作 AutoAction 成功；必须以该 `job_id` 的终态为准。
-
-## 7. V3 拒绝反馈
-
-Topic：`PC_FEEDBACK_AUTO_ACTION_V3_REJECT = 0xA1`
-
-Payload：8 字节，小端 packed
-
-```python
-AUTO_ACTION_V3_REJECT = struct.Struct("<HHBBBB")
-# request_id, job_id, operation, action, reject_reason, reserved
-```
-
-拒绝反馈保持约 500 ms，之后清零。
-
-| reason | 值 |
-|---|---:|
-| NONE | 0 |
-| INVALID_REQUEST | 1 |
-| INVALID_ACTION | 2 |
-| QUEUE_FULL | 3 |
-| REQUEST_CONFLICT | 4 |
-| JOB_NOT_FOUND | 5 |
-| INVALID_STATE | 6 |
-| START_FAILED | 7 |
-
-资源暂时繁忙不会产生拒绝，而是接受 Job 并进入 WAIT_RESOURCE。
-
-## 8. 典型时序
-
-### 8.1 融合动作后排队纯台阶
+`38 RELEASE_IR_LIFT_DETECT` 是一个持续等待红外协同的整体 action：
 
 ```text
-PC                  RC02 scheduler              Executors
- | SUBMIT fused            |                         |
- |------------------------>| start AutoOre          |
- | SUBMIT next step        | WAIT_RESOURCE          |
- |------------------------>| owned=0, wait=CHASSIS|POLE
- |                         |                         |
- |                         | fused STEP done         |
- |                         | release CHASSIS|POLE    |
- |                         | start queued step ----->| AutoCtrl
- |<------------------------| snapshot: both RUNNING |
- |                         | AutoOre upper + step    |
+PC: action=0 -> action=38
+RC02: 准备 Pole / 矿仓 / Arm，保持 busy=1
+R1: 红外 3 -> RC02 执行一次放矿循环
+RC02: 循环完成后回等待位，继续 busy=1
+R1: 可再次发送红外 3，执行下一次放矿循环
+R1: 红外 4 -> RC02 正常收尾并进入整体终态
 ```
 
-### 8.2 PC 航点接管
+详细规则：
 
-```text
-AutoOre owns CHASSIS     -> 自动底盘命令胜出，PC 仍持续发送
-AutoOre releases CHASSIS -> 最新且小于 200 ms 的 PC 命令自动胜出
-AutoOre upper continues  -> ARM/STORE/VALVE 仍由原 Job 控制
+- action 38 必须通过 `0x16 action=38` 启动。
+- 动作运行期间持续持有 CHASSIS、POLE、ARM、STORE、ROD 和共享气路等完整资源，并保持自动路由。
+- 固件先展开 Pole，必要时从矿仓上膛，再让 Arm 到 `WAIT_RELEASE_ORE`。平台、Arm 和 Pole 全部准备完成后才接受新的红外命令 `3`。
+- 机构就绪前到达的红外命令 `3` 不会延后补触发；R1 必须在就绪后重新发送。
+- 每个有效红外命令 `3` 执行一次完整放矿循环。循环完成后 Arm 回到等待位，`busy` 继续为 1，资源不释放。
+- action 38 忽略目标格前方光电/SICK 有无矿结果，是否执行放矿由红外命令 `3` 决定。
+- 红外命令 `4` 启动正常结束流程；Arm 回到 `STANDBY` 且底层真正成功后，才发布整体终态并释放资源。
+- PC 要中止时发送 `0x16 action=1`。在底层进入 `ABORTED` 前，`busy=1` 且资源保持不变。
+
+`0x9A` 只用于观察红外帧的有效性、新鲜度和最近命令；action 38 是否结束必须以 `0x96` 整体反馈为准。
+
+## 10. PC 参考伪代码
+
+```python
+import struct
+import time
+
+CMD_AUTO_ACTION = 0x16
+FEEDBACK_AUTO_ACTION = 0x96
+AUTO_ACTION_CMD = struct.Struct("<B")
+AUTO_ACTION_FEEDBACK = struct.Struct("<BBBB")
+
+
+def send_auto_action(send_frame, action: int) -> None:
+    send_frame(CMD_AUTO_ACTION, AUTO_ACTION_CMD.pack(action))
+
+
+def call_auto_action(send_frame, wait_feedback, action: int, timeout_s: float):
+    send_auto_action(send_frame, 0)
+    send_auto_action(send_frame, action)
+
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        payload = wait_feedback(FEEDBACK_AUTO_ACTION, deadline)
+        current_action, busy, finished, result = AUTO_ACTION_FEEDBACK.unpack(payload)
+
+        if current_action == action and not busy and finished:
+            return result == 0
+
+    raise TimeoutError(f"auto action {action} did not reach terminal state")
+
+
+def abort_auto_action(send_frame, wait_feedback, timeout_s: float) -> None:
+    send_auto_action(send_frame, 1)
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        payload = wait_feedback(FEEDBACK_AUTO_ACTION, deadline)
+        _, busy, _, _ = AUTO_ACTION_FEEDBACK.unpack(payload)
+        if not busy:
+            return
+    raise TimeoutError("auto action abort did not reach terminal state")
 ```
 
-## 9. CANCEL、急停与掉线
+调用方必须串行执行 `call_auto_action()`，不得为多个 action 并发创建等待任务。超时是 PC 的通信/业务保护，不代表可以直接启动下一动作；超时后应继续查询整体反馈，必要时发送 `action=1` 并等待 `busy=0`。
 
-- CANCEL queued/waiting Job：直接进入 CANCELLED，不影响其他执行器；
-- CANCEL running Job：只中止该 Job 对应的执行器，然后释放其全部资源；
-- RC 离开 PC 控制页、遥控器离线、PC 心跳失效：所有非终态 V3 Job 转入取消流程；
-- 安全输出优先级始终高于 V3；
-- CANCELLED、FAILED、SUCCEEDED 都需要 ACK；
-- 全局安全切换不会让等待 Job 在后台重新启动。
+## 11. 迁移说明
 
-## 10. V1/V2 兼容规则
+旧的多事务命令、全量状态快照、拒绝反馈、请求编号、动作编号、资源掩码、分段完成位、等待队列和外层资源并行机制均已删除，不能再作为当前协议使用。
 
-V1/V2 原线格式未修改，便于旧工具和单 Job 调试继续使用。但生产上位机应迁移到 V3。
+上位机迁移步骤：
 
-- V3 存在非终态 Job 时，V2 START 返回 BUSY；
-- V2 存在非终态事务时，V3 SUBMIT 返回 INVALID_STATE；
-- 不要使用 V1 提交动作、V3 查询状态的混合方式；
-- V2 仍只有一个前台 Job，不提供多 Job 并行语义。
-- PC 使用 V3 提交唯一的动作 38 后，RC02 自动建立三层放矿锁。动作 38 持有全部底盘和上层资源，在 `WAIT_RELEASE_ORE` 无限等待红外命令 `A5 03`，并忽略目标格光电检测；完成释放后回该等待位并保持 RUNNING。红外命令 `A5 04` 解除锁定并让 Arm 回 `STANDBY`，到位后返回 `SUCCEEDED`；需要中止时使用 V3 `CANCEL`。
-
-## 11. 安全与实车限制
-
-当前固件完成了资源互斥、命令路由和失效保护，但机械臂展开时的底盘速度包络仍应由上位机航点控制器限制。第一轮实车联调建议：
-
-```text
-|vx|, |vy| <= 0.3 m/s
-|wz|       <= 0.5 rad/s
-```
-
-这是联调建议，不是固件硬限制。确认机械空间无干涉后再根据机械设计放宽。
+1. 删除多事务提交、查询、续接、取消和确认逻辑。
+2. 删除并行动作容器、资源冲突等待和终态表项管理。
+3. 将所有动作统一改为 `0x16` 单字节调用。
+4. 将反馈解析统一改为 `0x96` 的 4 字节 `<BBBB>`。
+5. 删除分段完成驱动的提前导航、提前接管和下一动作预启动。
+6. 将分步放矿改为两个独立 action，各自完整调用并等待终态。
+7. 将 action 38 的中止改为发送 `0x16 action=1`，正常结束仍由红外命令 `4` 驱动。
 
 ## 12. 联调验收清单
 
-- [ ] V3 SUBMIT 后能在 0x9F 快照中找到相同 request_id，并获得 job_id；
-- [ ] 相同 request_id 重发不会重复启动；
-- [ ] 资源冲突 Job 显示 WAIT_RESOURCE、owned=0、waiting_resource 正确；
-- [ ] 融合 STEP 完成后，等待纯台阶自动进入 RUNNING；
-- [ ] 前一个 AutoOre 上层分支与新 AutoCtrl 台阶同时运行；
-- [ ] 普通取矿进入抬升后，PC 航点能接管 CHASSIS；
-- [ ] 停发 CHASSIS 超过 200 ms 后不会恢复旧速度；
-- [ ] CANCEL queued Job 不会中止正在运行的同类执行器；
-- [ ] CANCEL running Job 只影响目标执行器；
-- [ ] 心跳超时或 RC 切出 PC 页后，所有等待和运行 Job 均被取消；
-- [ ] 终态 ACK 后对应 Job 从快照消失；
-- [ ] 4 个未 ACK Job 占满后，新 SUBMIT 收到 QUEUE_FULL；
-
-## 13. 固件代码索引
-
-- 固定容量调度器：`User/module/autoCtrlAPI/core/auto_action_scheduler.h/.c`
-- 调度器主机测试：`User/module/autoCtrlAPI/core/tests/auto_action_scheduler_test.c`
-- V3 执行器接入：`User/task/auto_ctrl_feed.c`
-- AutoOre 租约与双缓冲快照：`User/module/autoCtrlAPI/ore_store/auto_ore_store.h/.c`
-- 按资源命令仲裁：`User/module/rc_cmd_center/rc_cmd_center_app.cpp`
-- MRLink topic 与 packed 结构：`User/module/mrlink_pc_comm/mrlink_pc_comm.h`
-- MRLink 类型尺寸断言：`User/module/mrlink_pc_comm/pc_messages.hpp`
+- [ ] `0x16` payload 严格为 1 字节。
+- [ ] `0x96` payload 严格为 4 字节 `<BBBB>`。
+- [ ] 同 action 未先发送 `0` 时不会重复触发。
+- [ ] 任一 action `busy=1` 时不会启动或排队另一个普通 action。
+- [ ] 融合动作任一内部分支提前完成时仍保持 `busy=1` 和完整资源租约。
+- [ ] PC 只在相同 action 的 `busy=0 && finished=1` 后启动下一动作。
+- [ ] `STEP1` 独立结束并保持 Arm 持矿；`STEP2` 通过新的调用独立启动。
+- [ ] action 38 收到红外 `3` 后可完成放矿循环并继续保持 `busy=1`。
+- [ ] action 38 只有红外 `4` 正常结束，或 `action=1` 中止后，才清除 `busy` 并释放资源。
+- [ ] PC 不使用模块命令、机构到位或占矿变化替代整体终态。
