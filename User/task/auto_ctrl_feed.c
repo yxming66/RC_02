@@ -3693,6 +3693,10 @@ void Task_auto_ctrl(void *argument) {
       feedback.sick_front_right_cm = -1.0f;
 
       feedback.photo_transfer_valid = photo_transfer_snapshot.valid;
+      feedback.pe13_photo1_triggered = false;
+      feedback.pe9_photo2_triggered = false;
+      feedback.pa2_photo3_triggered = false;
+      feedback.pa0_photo4_triggered = false;
       if (feedback.photo_transfer_valid) {
         feedback.pe13_photo1_triggered =
             AutoCtrlFeed_ReadPhotoTransferBit(PHOTO_TRANSFER_BIT_PHOTO1_FRONT);

@@ -205,6 +205,30 @@ static void AutoOre_PausePhoto1Latch(AutoOre_t *ctrl, uint32_t now_ms) {
   }
 }
 
+static void AutoOre_ResetFusedPickPhoto1Latch(AutoOre_t *ctrl) {
+  ctrl->fused_pick_photo1_stable_trigger_seen = false;
+  ctrl->fused_pick_photo1_stable_release_latched = false;
+  ctrl->fused_pick_photo1_triggered_since_ms = 0u;
+  ctrl->fused_pick_photo1_released_since_ms = 0u;
+}
+
+static void AutoOre_PauseFusedPickPhoto1Latch(AutoOre_t *ctrl,
+                                              uint32_t now_ms) {
+  if (ctrl == 0) {
+    return;
+  }
+  if (!ctrl->fused_pick_photo1_stable_trigger_seen) {
+    if (ctrl->fused_pick_photo1_triggered_since_ms != 0u) {
+      ctrl->fused_pick_photo1_triggered_since_ms = now_ms;
+    }
+    return;
+  }
+  if (!ctrl->fused_pick_photo1_stable_release_latched &&
+      ctrl->fused_pick_photo1_released_since_ms != 0u) {
+    ctrl->fused_pick_photo1_released_since_ms = now_ms;
+  }
+}
+
 static void AutoOre_ResetPhoto2Latch(AutoOre_t *ctrl) {
   ctrl->fused_photo2_stable_trigger_seen = false;
   ctrl->fused_photo2_stable_release_latched = false;
@@ -1043,7 +1067,7 @@ static bool AutoOre_FusedPhoto1ProtectsUnstableArm(
   /* Protect only on a stable photo event armed by a low level in this action.
    * A stale high level present when action 27/29 starts must not pin chassis
    * while the Arm is moving to its pick target. */
-  if (ctrl->fused_photo1_stable_trigger_seen) {
+  if (ctrl->fused_pick_photo1_stable_trigger_seen) {
     ctrl->fused_photo1_arm_protection_latched = true;
   }
   return ctrl->fused_photo1_arm_protection_latched;
@@ -2600,31 +2624,65 @@ static bool AutoOre_FusedTemplateStartsAtHeldPoleTarget(
          template_id == AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD;
 }
 
-/* photo1 belongs to the fused pick handoff: it confirms that the ore has
- * cleared the arm-side sensor and the arm may lift.  It is not a descend
- * stair-edge input. */
+static void AutoOre_UpdateFusedPickPhoto1Latch(AutoOre_t *ctrl,
+                                               uint32_t now_ms) {
+  if (ctrl == 0 || !AutoOre_ActionIsFused(ctrl->action) ||
+      ctrl->pick_lift_confirmed) {
+    return;
+  }
+  if (!ctrl->feedback.photo_transfer_valid) {
+    AutoOre_PauseFusedPickPhoto1Latch(ctrl, now_ms);
+    return;
+  }
+
+  switch (AutoOre_FusedStepTemplateId(ctrl)) {
+    case AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD:
+    case AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD:
+      if (!ctrl->feedback.pe13_photo1_triggered) {
+        ctrl->fused_pick_photo1_stable_release_latched = true;
+        ctrl->fused_pick_photo1_triggered_since_ms = 0u;
+        return;
+      }
+      if (!ctrl->fused_pick_photo1_stable_release_latched) {
+        return;
+      }
+      (void)AutoOre_LatchPhotoStableTriggered(
+          ctrl->feedback.pe13_photo1_triggered,
+          &ctrl->fused_pick_photo1_stable_trigger_seen,
+          &ctrl->fused_pick_photo1_triggered_since_ms, now_ms);
+      return;
+    case AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD:
+    case AUTO_CTRL_TEMPLATE_DESCEND_400_HEAD:
+      (void)AutoOre_LatchPhotoStableFalling(
+          ctrl->feedback.pe13_photo1_triggered,
+          &ctrl->fused_pick_photo1_stable_trigger_seen,
+          &ctrl->fused_pick_photo1_stable_release_latched,
+          &ctrl->fused_pick_photo1_triggered_since_ms,
+          &ctrl->fused_pick_photo1_released_since_ms, now_ms);
+      return;
+    case AUTO_CTRL_TEMPLATE_NONE:
+    default:
+      return;
+  }
+}
+
 static bool AutoOre_FusedArmLiftPhotoReached(AutoOre_t *ctrl,
                                              uint32_t now_ms) {
   if (ctrl == 0) {
     return false;
   }
   if (!ctrl->feedback.photo_transfer_valid) {
-    AutoOre_PausePhoto1Latch(ctrl, now_ms);
+    AutoOre_PauseFusedPickPhoto1Latch(ctrl, now_ms);
     return false;
   }
 
   switch (AutoOre_FusedStepTemplateId(ctrl)) {
     case AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD:
     case AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD:
-      return ctrl->fused_photo1_stable_trigger_seen;
+      return ctrl->fused_pick_photo1_stable_trigger_seen;
     case AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD:
     case AUTO_CTRL_TEMPLATE_DESCEND_400_HEAD:
-      return AutoOre_LatchPhotoStableFalling(
-          ctrl->feedback.pe13_photo1_triggered,
-          &ctrl->fused_photo1_stable_trigger_seen,
-          &ctrl->fused_photo1_stable_release_latched,
-          &ctrl->fused_photo1_triggered_since_ms,
-          &ctrl->fused_photo1_released_since_ms, now_ms);
+      return ctrl->fused_pick_photo1_stable_release_latched;
     default:
       return false;
   }
@@ -4068,6 +4126,7 @@ static bool AutoOre_StartResolved(AutoOre_t *ctrl, AutoOre_Action_t action,
   ctrl->prealign_target_yaw_rad = 0.0f;
   ctrl->prealign_yaw_error_rad = 0.0f;
   ctrl->fused_arm_photo_since_ms = 0u;
+  AutoOre_ResetFusedPickPhoto1Latch(ctrl);
   ctrl->fused_photo1_stable_trigger_seen = false;
   ctrl->fused_photo1_stable_release_latched = false;
   ctrl->fused_photo1_arm_protection_latched = false;
@@ -4332,6 +4391,7 @@ void AutoOre_Update(AutoOre_t *ctrl, const AutoOre_Feedback_t *feedback,
     ctrl->release_ir_finish_count_at_start =
         ctrl->feedback.release_lift_ir_finish_count;
   }
+  AutoOre_UpdateFusedPickPhoto1Latch(ctrl, now_ms);
   AutoOre_UpdateFusedAscendPhoto1Latch(ctrl, now_ms);
   AutoOre_UpdateFusedDescendPhoto2Latch(ctrl, now_ms);
   if ((!AutoOre_ActionIsPick(ctrl->action) ||

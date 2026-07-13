@@ -347,6 +347,10 @@ typedef struct {
   float wheel_delta_rad;
   float target_wheel_delta_rad;
   uint32_t fused_arm_photo_since_ms;
+  bool fused_pick_photo1_stable_trigger_seen;
+  bool fused_pick_photo1_stable_release_latched;
+  uint32_t fused_pick_photo1_triggered_since_ms;
+  uint32_t fused_pick_photo1_released_since_ms;
   bool fused_photo1_stable_trigger_seen;
   bool fused_photo1_stable_release_latched;
   bool fused_photo1_arm_protection_latched;
