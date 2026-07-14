@@ -10,6 +10,9 @@ typedef struct {
   volatile uint16_t rx_len;
   volatile bool rx_complete_pending;
   volatile bool error_pending;
+  volatile bool ack_tx_busy;
+  volatile uint8_t ack_pending_count;
+  uint8_t ack_tx_byte;
   bool frame_head_pending;
 } IrDock_Channel_t;
 
@@ -19,6 +22,69 @@ static IrDock_Channel_t ir_dock_channel[IR_DOCK_SOURCE_COUNT] = {
 };
 
 static bool IrDock_IsClawOpenFreshInternal(uint32_t now_ms);
+
+static void IrDock_UpdateAckPendingDebug(IrDock_Source_t source) {
+  uint16_t total = 0u;
+  for (uint8_t i = 0u; i < IR_DOCK_SOURCE_COUNT; ++i) {
+    const uint8_t pending = __atomic_load_n(
+        &ir_dock_channel[i].ack_pending_count, __ATOMIC_ACQUIRE);
+    g_ir_dock_debug.channel[i].ack_pending_count = pending;
+    total += pending;
+  }
+  g_ir_dock_debug.ack_pending_count =
+      (uint8_t)((total > UINT8_MAX) ? UINT8_MAX : total);
+  (void)source;
+}
+
+static void IrDock_QueueAck(IrDock_Source_t source) {
+  IrDock_Channel_t *channel = &ir_dock_channel[source];
+  uint8_t pending = __atomic_load_n(&channel->ack_pending_count,
+                                    __ATOMIC_ACQUIRE);
+  while (pending != UINT8_MAX) {
+    const uint8_t next = (uint8_t)(pending + 1u);
+    if (__atomic_compare_exchange_n(&channel->ack_pending_count, &pending,
+                                    next, true, __ATOMIC_ACQ_REL,
+                                    __ATOMIC_ACQUIRE)) {
+      g_ir_dock_debug.channel[source].ack_queued_count++;
+      g_ir_dock_debug.ack_queued_count++;
+      IrDock_UpdateAckPendingDebug(source);
+      return;
+    }
+  }
+
+  g_ir_dock_debug.channel[source].ack_drop_count++;
+  g_ir_dock_debug.ack_drop_count++;
+}
+
+static void IrDock_TxComplete(IrDock_Source_t source) {
+  IrDock_Channel_t *channel = &ir_dock_channel[source];
+  uint8_t pending = __atomic_load_n(&channel->ack_pending_count,
+                                    __ATOMIC_ACQUIRE);
+  while (pending > 0u) {
+    const uint8_t next = (uint8_t)(pending - 1u);
+    if (__atomic_compare_exchange_n(&channel->ack_pending_count, &pending,
+                                    next, true, __ATOMIC_ACQ_REL,
+                                    __ATOMIC_ACQUIRE)) {
+      break;
+    }
+  }
+  __atomic_store_n(&channel->ack_tx_busy, false, __ATOMIC_RELEASE);
+  g_ir_dock_debug.channel[source].tx_busy = false;
+  g_ir_dock_debug.channel[source].last_ack_tx_byte = channel->ack_tx_byte;
+  g_ir_dock_debug.channel[source].ack_tx_count++;
+  g_ir_dock_debug.last_ack_tx_source = (uint8_t)source;
+  g_ir_dock_debug.last_ack_tx_byte = channel->ack_tx_byte;
+  g_ir_dock_debug.ack_tx_count++;
+  IrDock_UpdateAckPendingDebug(source);
+}
+
+static void IrDock_Uart8TxCompleteCallback(void) {
+  IrDock_TxComplete(IR_DOCK_SOURCE_UART8);
+}
+
+static void IrDock_Uart7TxCompleteCallback(void) {
+  IrDock_TxComplete(IR_DOCK_SOURCE_UART7);
+}
 
 static void IrDock_RxEvent(IrDock_Source_t source, uint16_t size) {
   if (size > IR_DOCK_RX_BUFFER_SIZE) {
@@ -36,8 +102,17 @@ static void IrDock_RxComplete(IrDock_Source_t source) {
 }
 
 static void IrDock_Error(IrDock_Source_t source) {
+  IrDock_Channel_t *channel = &ir_dock_channel[source];
   ir_dock_channel[source].error_pending = true;
   g_ir_dock_debug.channel[source].rx_busy = false;
+  UART_HandleTypeDef *huart = BSP_UART_GetHandle(channel->uart);
+  if (__atomic_load_n(&channel->ack_tx_busy, __ATOMIC_ACQUIRE) &&
+      (huart == NULL || huart->gState == HAL_UART_STATE_READY)) {
+    __atomic_store_n(&channel->ack_tx_busy, false, __ATOMIC_RELEASE);
+    g_ir_dock_debug.channel[source].tx_busy = false;
+    g_ir_dock_debug.channel[source].ack_tx_error_count++;
+    g_ir_dock_debug.ack_tx_error_count++;
+  }
 }
 
 static void IrDock_Uart8RxEventCallback(uint16_t size) {
@@ -62,6 +137,33 @@ static void IrDock_Uart8ErrorCallback(void) {
 
 static void IrDock_Uart7ErrorCallback(void) {
   IrDock_Error(IR_DOCK_SOURCE_UART7);
+}
+
+static bool IrDock_TrySendAck(IrDock_Source_t source) {
+  IrDock_Channel_t *channel = &ir_dock_channel[source];
+  if (__atomic_load_n(&channel->ack_pending_count, __ATOMIC_ACQUIRE) == 0u) {
+    return false;
+  }
+
+  bool expected = false;
+  if (!__atomic_compare_exchange_n(&channel->ack_tx_busy, &expected, true,
+                                   false, __ATOMIC_ACQ_REL,
+                                   __ATOMIC_ACQUIRE)) {
+    return false;
+  }
+
+  channel->ack_tx_byte = IR_DOCK_ACK_BYTE;
+  g_ir_dock_debug.channel[source].tx_busy = true;
+  if (BSP_UART_Transmit(channel->uart, &channel->ack_tx_byte, 1u, false) ==
+      HAL_OK) {
+    return true;
+  }
+
+  __atomic_store_n(&channel->ack_tx_busy, false, __ATOMIC_RELEASE);
+  g_ir_dock_debug.channel[source].tx_busy = false;
+  g_ir_dock_debug.channel[source].ack_tx_error_count++;
+  g_ir_dock_debug.ack_tx_error_count++;
+  return false;
 }
 
 static bool IrDock_CommandIsValid(uint8_t command) {
@@ -168,6 +270,8 @@ static void IrDock_ParseProtocolFrame(IrDock_Source_t source, uint8_t command,
   default:
     break;
   }
+
+  IrDock_QueueAck(source);
 }
 
 static void IrDock_ParseRxBytes(IrDock_Source_t source, const uint8_t *rx_buf,
@@ -263,12 +367,16 @@ static bool IrDock_TryStartReceive(IrDock_Source_t source, uint32_t now_ms) {
 void IrDock_Init(uint32_t now_ms) {
   (void)BSP_UART_RegisterCallback(BSP_UART_IR, BSP_UART_RX_CPLT_CB,
                                   IrDock_Uart8RxCompleteCallback);
+  (void)BSP_UART_RegisterCallback(BSP_UART_IR, BSP_UART_TX_CPLT_CB,
+                                  IrDock_Uart8TxCompleteCallback);
   (void)BSP_UART_RegisterRxEventCallback(BSP_UART_IR,
                                          IrDock_Uart8RxEventCallback);
   (void)BSP_UART_RegisterCallback(BSP_UART_IR, BSP_UART_ERROR_CB,
                                   IrDock_Uart8ErrorCallback);
   (void)BSP_UART_RegisterCallback(BSP_UART_IR_AUX, BSP_UART_RX_CPLT_CB,
                                   IrDock_Uart7RxCompleteCallback);
+  (void)BSP_UART_RegisterCallback(BSP_UART_IR_AUX, BSP_UART_TX_CPLT_CB,
+                                  IrDock_Uart7TxCompleteCallback);
   (void)BSP_UART_RegisterRxEventCallback(BSP_UART_IR_AUX,
                                          IrDock_Uart7RxEventCallback);
   (void)BSP_UART_RegisterCallback(BSP_UART_IR_AUX, BSP_UART_ERROR_CB,
@@ -277,13 +385,17 @@ void IrDock_Init(uint32_t now_ms) {
   g_ir_dock_debug.inited = true;
   g_ir_dock_debug.online = false;
   g_ir_dock_debug.rx_busy = false;
+  g_ir_dock_debug.tx_busy = false;
   g_ir_dock_debug.dock_complete_fresh = false;
   g_ir_dock_debug.zone3_action_locked = false;
   g_ir_dock_debug.claw_open = false;
   g_ir_dock_debug.release_abort_latched = false;
   g_ir_dock_debug.last_rx_source = IR_DOCK_SOURCE_NONE;
+  g_ir_dock_debug.last_ack_tx_source = IR_DOCK_SOURCE_NONE;
   g_ir_dock_debug.last_rx_status = (uint8_t)IR_DOCK_STATUS_IDLE;
   g_ir_dock_debug.last_rx_raw_byte = 0u;
+  g_ir_dock_debug.last_ack_tx_byte = 0u;
+  g_ir_dock_debug.ack_pending_count = 0u;
   g_ir_dock_debug.last_dock_complete_cmd = 0u;
   g_ir_dock_debug.last_zone3_action_cmd = IR_DOCK_ZONE3_ACTION_CMD_NONE;
   g_ir_dock_debug.last_claw_open_cmd = IR_DOCK_CLAW_OPEN_WAIT;
@@ -296,12 +408,18 @@ void IrDock_Init(uint32_t now_ms) {
     channel->rx_len = 0u;
     channel->rx_complete_pending = false;
     channel->error_pending = false;
+    channel->ack_tx_busy = false;
+    channel->ack_pending_count = 0u;
+    channel->ack_tx_byte = IR_DOCK_ACK_BYTE;
     channel->frame_head_pending = false;
     channel_debug->inited = true;
     channel_debug->online = false;
     channel_debug->rx_busy = false;
+    channel_debug->tx_busy = false;
     channel_debug->last_rx_status = (uint8_t)IR_DOCK_STATUS_IDLE;
     channel_debug->last_rx_raw_byte = 0u;
+    channel_debug->last_ack_tx_byte = 0u;
+    channel_debug->ack_pending_count = 0u;
     channel_debug->last_rx_len = 0u;
     channel_debug->last_rx_start_ms = now_ms;
     channel_debug->last_rx_raw_ms = 0u;
@@ -335,6 +453,7 @@ void IrDock_Process(uint32_t now_ms) {
 
   IrDock_HandlePending(now_ms);
   bool any_rx_busy = false;
+  bool any_tx_busy = false;
   bool any_online = false;
   for (uint8_t source = 0u; source < IR_DOCK_SOURCE_COUNT; ++source) {
     volatile IrDock_ChannelDebug_t *channel_debug =
@@ -356,7 +475,9 @@ void IrDock_Process(uint32_t now_ms) {
                                 IR_DOCK_ONLINE_TIMEOUT_MS;
     any_online = any_online || channel_debug->online;
     (void)IrDock_TryStartReceive((IrDock_Source_t)source, now_ms);
+    (void)IrDock_TrySendAck((IrDock_Source_t)source);
     any_rx_busy = any_rx_busy || channel_debug->rx_busy;
+    any_tx_busy = any_tx_busy || channel_debug->tx_busy;
   }
   g_ir_dock_debug.last_rx_raw_age_ms =
       (g_ir_dock_debug.last_rx_raw_ms == 0u)
@@ -369,6 +490,7 @@ void IrDock_Process(uint32_t now_ms) {
   g_ir_dock_debug.dock_complete_fresh = IrDock_IsDockCompleteFresh(now_ms);
   g_ir_dock_debug.claw_open = IrDock_IsClawOpenFreshInternal(now_ms);
   g_ir_dock_debug.rx_busy = any_rx_busy;
+  g_ir_dock_debug.tx_busy = any_tx_busy;
   g_ir_dock_debug.online = any_online;
 }
 
