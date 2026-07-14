@@ -548,7 +548,7 @@ Config_RobotParam_t robot_config = {
         /* Step1/Step2 共用搜索起点；目标 24.618rad 低于平台 24.7rad 行程上限。 */
         .contact_search_start_offset_rad = 1.6f,
         .contact_search_distance_rad = 5.6f,
-        .contact_search_velocity_rad_s = 5.0f,
+        .contact_search_velocity_rad_s = 10.0f,
         /* torque_current 当前由平台电机输出侧 torque_nm 填充，需按实车波形继续标定。 */
         .contact_torque_threshold_nm = 0.6f,
         .contact_velocity_threshold_rad_s = 0.15f,

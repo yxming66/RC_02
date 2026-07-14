@@ -693,8 +693,11 @@ static uint16_t AutoCtrlFeed_OreActionFailureMask(AutoOre_Action_t action) {
     case AUTO_ORE_ACTION_RELEASE_LIFT_DETECT:
     case AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT:
     case AUTO_ORE_ACTION_RELEASE_STEP1:
+    case AUTO_ORE_ACTION_RELEASE_STEP2:
     case AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP1:
+    case AUTO_ORE_ACTION_RELEASE_LIFT_DETECT_STEP2:
     case AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT_STEP1:
+    case AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT_STEP2:
       return PC_AUTO_ACTION_FAILURE_RELEASE_ORE;
     case AUTO_ORE_ACTION_CHAMBER:
       return PC_AUTO_ACTION_FAILURE_CHAMBER;
@@ -729,8 +732,18 @@ static uint16_t AutoCtrlFeed_OreFailureMask(AutoOre_Action_t action) {
 
 static bool AutoCtrlFeed_OreActionReportsRealResult(
     PC_AutoAction_t action) {
-  return action == PC_AUTO_ACTION_RELEASE_STEP1 ||
-         action == PC_AUTO_ACTION_RELEASE_LIFT_DETECT_STEP1;
+  switch (action) {
+    case PC_AUTO_ACTION_RELEASE:
+    case PC_AUTO_ACTION_RELEASE_LIFT_DETECT:
+    case PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT:
+    case PC_AUTO_ACTION_RELEASE_STEP1:
+    case PC_AUTO_ACTION_RELEASE_STEP2:
+    case PC_AUTO_ACTION_RELEASE_LIFT_DETECT_STEP1:
+    case PC_AUTO_ACTION_RELEASE_LIFT_DETECT_STEP2:
+      return true;
+    default:
+      return false;
+  }
 }
 
 static uint16_t AutoCtrlFeed_RodFailureMask(PC_AutoAction_t action) {
@@ -761,9 +774,9 @@ static void AutoCtrlFeed_SetFeedbackFail(PC_AutoActionFeedback_t *feedback,
 
 static void AutoCtrlFeed_SetFeedbackRealFail(
     PC_AutoActionFeedback_t *feedback, uint16_t failure_mask) {
-  (void)failure_mask;
   feedback->finished = 1u;
   feedback->result = (uint8_t)PC_AUTO_ACTION_RESULT_FAIL;
+  feedback->failure_mask = failure_mask;
 }
 
 static bool AutoCtrlFeed_StartOreAction(AutoOre_Action_t action) {

@@ -442,7 +442,7 @@ payload 固定为 8 字节，Python unpack 格式为 `<BBBBHBB`。
 
 1. `busy=1 && finished=0` 表示 `action` 正在整体执行。此期间自动路由和完整资源租约持续有效，PC 不得启动下一动作或提前接管该动作涉及的模块。
 2. `busy=0 && finished=1` 才表示该 action 的底层执行器已真正进入 `SUCCESS`、`FAIL` 或 `ABORTED` 终态，资源随后才可释放。模块反馈、内部步骤或融合分支提前结束都不能替代此条件。
-3. `RELEASE_STEP1`、`RELEASE_LIFT_DETECT_STEP1`、`ROD_SPEARHEAD_STEP1`、`ROD_SPEARHEAD_STEP2`、`ROD_DOCK_WAIT` 报告真实结果；真实失败或中止时 `result=1`。
+3. 所有放矿类动作（`RELEASE`、`RELEASE_LIFT_DETECT`、`RELEASE_IR_LIFT_DETECT` 及对应 `STEP1/STEP2`）、`ROD_SPEARHEAD_STEP1`、`ROD_SPEARHEAD_STEP2`、`ROD_DOCK_WAIT` 报告真实结果；真实失败或中止时 `result=1`，并填写 `failure_mask`。无矿导致的启动失败不得映射为成功。
 4. 其他动作延续兼容策略：底层真实 `FAIL` 或 `ABORTED` 后才允许映射为 `result=0` 的 synthetic success。映射只改变 PC 看到的结果，不会提前结束动作或提前释放资源。
 5. `action` 始终表示当前运行或最近结束的一键动作；空闲且从未执行过时为 `PC_AUTO_ACTION_NONE`。
 6. 普通动作、融合动作、普通台阶、`STEP1`、`STEP2` 均只发布整体结果。PC 不得根据动作内部并行、执行阶段或模块命令推断完成。

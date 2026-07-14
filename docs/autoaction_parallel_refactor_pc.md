@@ -125,7 +125,7 @@ PC 不可见也不可使用以下内部信息：
 
 固件内部始终区分真实 `SUCCESS`、`FAIL` 和 `ABORTED`。wire 只发送 `result=0/1`，并延续当前兼容策略：
 
-- `RELEASE_STEP1`、`RELEASE_LIFT_DETECT_STEP1`、`ROD_SPEARHEAD_STEP1`、`ROD_SPEARHEAD_STEP2`、`ROD_DOCK_WAIT` 报告真实失败，底层失败或中止时 PC 收到 `result=1`。
+- 所有放矿类动作（完整动作及对应 `STEP1/STEP2`）、`ROD_SPEARHEAD_STEP1`、`ROD_SPEARHEAD_STEP2`、`ROD_DOCK_WAIT` 报告真实失败，底层失败或中止时 PC 收到 `result=1` 和对应 `failure_mask`；无矿导致的启动失败不得映射为成功。
 - 其余动作只在底层真正进入终态后，允许将底层失败或中止映射为 synthetic success，即 PC 收到 `result=0`。
 - synthetic success 只改变 PC 可见结果，不得提前设置 `finished=1`，也不得提前释放资源。
 
