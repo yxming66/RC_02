@@ -17,6 +17,7 @@ typedef struct {
 #define AUTO_CTRL_ASCEND_200_PHOTO_RECORD_LIFT_RAD (3.5f)
 #define AUTO_CTRL_ASCEND_400_PHOTO_RECORD_LIFT_RAD (7.0f)
 #define AUTO_CTRL_ASCEND_200_REAR_RETRACT_DELAY_MS (50u)
+#define AUTO_CTRL_ASCEND_400_REAR_RETRACT_DELAY_MS (50u)
 #define AUTO_CTRL_DESCEND_PHOTO_RECORD_LIFT_RAD (2.5f)
 
 typedef enum {
@@ -158,6 +159,17 @@ static void AutoCtrlTemplate_SetStep(auto_ctrl_t *ctrl, uint8_t step_index) {
 
 static void AutoCtrlTemplate_NextStep(auto_ctrl_t *ctrl) {
   AutoCtrlTemplate_SetStep(ctrl, (uint8_t)(ctrl->template_ctx.step_index + 1u));
+}
+
+static bool AutoCtrlTemplate_AscendRearRetractDelayElapsed(
+    auto_ctrl_t *ctrl, uint32_t now_ms, uint32_t delay_ms) {
+  if (!ctrl->template_ctx.ascend_rear_retract_delay_started) {
+    ctrl->template_ctx.ascend_rear_retract_delay_started = true;
+    ctrl->template_ctx.ascend_rear_retract_delay_start_ms = now_ms;
+  }
+  return (uint32_t)(now_ms -
+                    ctrl->template_ctx.ascend_rear_retract_delay_start_ms) >=
+         delay_ms;
 }
 
 static bool AutoCtrlTemplate_IsYawAligned(const auto_ctrl_t *ctrl) {
@@ -969,6 +981,19 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
           AutoCtrlTemplate_LatchRearPhotoStable(ctrl, now_ms)) {
         AutoCtrlTemplate_DebugMarkPhotoEvent(
             ctrl, now_ms, AUTO_CTRL_TEMPLATE_DEBUG_PHOTO_ASCEND_REAR);
+        if (!AutoCtrlTemplate_AscendRearRetractDelayElapsed(
+                ctrl, now_ms,
+                AUTO_CTRL_ASCEND_400_REAR_RETRACT_DELAY_MS)) {
+          AutoCtrlPrimitive_ApplyPrealignWithMove(
+              ctrl, param->mid_move_speed, 0.0f);
+          AutoCtrlTemplate_CommandPoleProfile(
+              ctrl, pole.front_retract[0], pole.front_retract[1],
+              param->pole_front_retract_speed,
+              param->pole_rear_extend_speed,
+              AUTO_CTRL_POLE_PROFILE_FRONT_RETRACT,
+              AUTO_CTRL_POLE_PROFILE_REAR_EXTEND);
+          return false;
+        }
         AutoCtrlTemplate_CommandChassisZeroVector(ctrl);
         AutoCtrlTemplate_CommandPoleProfile(
             ctrl, pole.all_retract[0], pole.all_retract[1],
@@ -1023,32 +1048,35 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
       }
       AutoCtrlTemplate_DebugMarkPhotoEvent(
           ctrl, now_ms, AUTO_CTRL_TEMPLATE_DEBUG_PHOTO_ASCEND_REAR);
-      if (!use_400mm) {
-        if (!ctrl->template_ctx.ascend_rear_retract_delay_started) {
-          ctrl->template_ctx.ascend_rear_retract_delay_started = true;
-          ctrl->template_ctx.ascend_rear_retract_delay_start_ms = now_ms;
-        }
-        if ((now_ms -
-             ctrl->template_ctx.ascend_rear_retract_delay_start_ms) <
-            AUTO_CTRL_ASCEND_200_REAR_RETRACT_DELAY_MS) {
-          AutoCtrlPrimitive_ApplyPrealignWithMove(
-              ctrl, param->rear_retract_move_speed, 0.0f);
-          AutoCtrlTemplate_CommandPoleProfile(
-              ctrl, pole.front_retract[0], pole.front_retract[1],
-              param->pole_front_retract_speed, param->pole_rear_extend_speed,
-              AUTO_CTRL_POLE_PROFILE_FRONT_RETRACT,
-              AUTO_CTRL_POLE_PROFILE_REAR_EXTEND);
-          return false;
-        }
+      const uint32_t rear_retract_delay_ms =
+          use_400mm ? AUTO_CTRL_ASCEND_400_REAR_RETRACT_DELAY_MS
+                    : AUTO_CTRL_ASCEND_200_REAR_RETRACT_DELAY_MS;
+      if (!AutoCtrlTemplate_AscendRearRetractDelayElapsed(
+              ctrl, now_ms, rear_retract_delay_ms)) {
+        AutoCtrlPrimitive_ApplyPrealignWithMove(
+            ctrl, param->rear_retract_move_speed, 0.0f);
         AutoCtrlTemplate_CommandPoleProfile(
-            ctrl, pole.all_retract[0], pole.all_retract[1],
-            param->pole_front_retract_speed, param->pole_rear_retract_speed,
+            ctrl, pole.front_retract[0], pole.front_retract[1],
+            param->pole_front_retract_speed, param->pole_rear_extend_speed,
             AUTO_CTRL_POLE_PROFILE_FRONT_RETRACT,
-            AUTO_CTRL_POLE_PROFILE_REAR_RETRACT);
-        AutoCtrlTemplate_DebugMarkPoleCommand(
-            ctrl, now_ms, AUTO_CTRL_TEMPLATE_DEBUG_POLE_AFTER_PHOTO);
+            AUTO_CTRL_POLE_PROFILE_REAR_EXTEND);
+        return false;
       }
-      AutoCtrlTemplate_NextStep(ctrl);
+      if (use_400mm) {
+        AutoCtrlTemplate_CommandChassisZeroVector(ctrl);
+      }
+      AutoCtrlTemplate_CommandPoleProfile(
+          ctrl, pole.all_retract[0], pole.all_retract[1],
+          param->pole_front_retract_speed, param->pole_rear_retract_speed,
+          AUTO_CTRL_POLE_PROFILE_FRONT_RETRACT,
+          AUTO_CTRL_POLE_PROFILE_REAR_RETRACT);
+      AutoCtrlTemplate_DebugMarkPoleCommand(
+          ctrl, now_ms, AUTO_CTRL_TEMPLATE_DEBUG_POLE_AFTER_PHOTO);
+      if (use_400mm) {
+        AutoCtrlTemplate_SetStep(ctrl, 5u);
+      } else {
+        AutoCtrlTemplate_NextStep(ctrl);
+      }
       return false;
 
     case 5: /* 停车并四杆全收，等待四杆到位�?*/

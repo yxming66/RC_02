@@ -244,7 +244,7 @@ Config_RobotParam_t robot_config = {
                 /* 平台等待矛头对接位置 */ 
                 [ORE_STORE_TRANSFORM_SPEARHEAD_DOCK_WAIT] = 0.183727468f,
                 /* 取矛头平台预设位 */
-                [ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP] = 22.6083613//23.2407284f//22.3003597f,
+                [ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP] = 22.2083613//23.2407284f//22.3003597f,
             },
         },
         .fixed_ore_cylinder = {    
@@ -256,7 +256,7 @@ Config_RobotParam_t robot_config = {
         .joint1_motor_param = {
             .can = BSP_CAN_3,
             .motor_id = 127,
-            .host_id = 0xff,
+            .host_id = 0xff, 
             .module = MOTOR_LZ_RSO3,
             .reverse = true,
             .mode = MOTOR_LZ_MODE_MOTION,
@@ -539,16 +539,17 @@ Config_RobotParam_t robot_config = {
     .auto_rod_spearhead_param = {
         /* One-key spearhead action timing; rod_param is filled during init. */
         .open_delay_ms = 20u,
-        .grab_high_delay_ms = 150u,
-        .detect_grip_delay_ms = 150u,
-        .detect_pose_delay_ms = 450u,
-        .detect_success_hold_ms = 50u,
+        .grab_high_delay_ms = 250u,
+        .detect_grip_delay_ms = 300u,
+        .detect_pose_delay_ms = 600u,
+        .detect_success_hold_ms = 200u,
         /* 取矛头 step1/step2 等待平台到取矛头位的移动超时；动作 15 对接等待本身不超时。 */
         .dock_wait_delay_ms = 10000u,
         /* 等待对接时 transform 的目标点；实际角度在 ore_store_param.preset.transform_position_rad 中标定。 */
         .dock_wait_transform = ORE_STORE_TRANSFORM_SPEARHEAD_DOCK_WAIT,
         .use_photo_check = true,
-        .photo_check_ms = 250u,
+        .photo_check_ms = 150u,
+        .photo_timeout_ms = 1500u,
     },
     /* 模块参数：自动台阶/自动控制 auto_ctrl_param，台阶模板和 SICK 校正参数。 */
     .auto_ctrl_param = {
@@ -686,18 +687,18 @@ Config_RobotParam_t robot_config = {
             .final_photo_sprint_ms = 100u,       /* 末尾光电触发后继续冲刺时间，单位 ms。 */
             .final_move_wheel_delta_rad = 0.0f, /* 0 表示该模板继续按时间切步。 */
             /* 400mm伸出：约0.67s完成10.7rad行程，末端提前约2.02rad制动。 */
-            .pole_all_extend_speed = 30.0f,
+            .pole_all_extend_speed = 18.0f,
             .pole_front_extend_speed = 22.0f,   /* 前杆伸出目标跟随速度，单位 rad/s。 */
-            .pole_front_retract_speed = 60.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
+            .pole_front_retract_speed = 50.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
             .pole_rear_extend_speed = 22.0f,    /* 后杆伸出目标跟随速度，单位 rad/s。 */
-            .pole_rear_retract_speed = 60.0f,   /* 后杆回收目标跟随速度，单位 rad/s。 */
-            .pole_all_extend_accel = 250.0f,
+            .pole_rear_retract_speed = 50.0f,   /* 后杆回收目标跟随速度，单位 rad/s。 */
+            .pole_all_extend_accel = 200.0f,
             .pole_all_retract_speed = 30.0f,
             .pole_all_retract_accel = 120.0f,
             .pole_front_extend_accel = 250.0f,
-            .pole_front_retract_accel = 800.0f,
+            .pole_front_retract_accel = 600.0f,
             .pole_rear_extend_accel = 250.0f,
-            .pole_rear_retract_accel = 800.0f,
+            .pole_rear_retract_accel = 600.0f,
             .front_photo_timeout_ms = 5000u,    /* 等待前光电触发/下降沿超时，单位 ms。 */
             .rear_photo_timeout_ms = 10000u,     /* 等待后光电触发/下降沿超时，单位 ms。 */
         },

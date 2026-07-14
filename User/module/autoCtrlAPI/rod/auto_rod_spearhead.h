@@ -53,7 +53,8 @@ typedef struct {
   uint32_t dock_wait_delay_ms; /* 取矛头移动到位超时；不限制 DOCK_WAIT 信号等待。 */
   OreStore_TransformPoint_t dock_wait_transform;
   bool use_photo_check;
-  uint32_t photo_check_ms;
+  uint32_t photo_check_ms; /* 光电连续触发稳定确认时间。 */
+  uint32_t photo_timeout_ms; /* 进入检测步骤后的总等待超时。 */
 } AutoRodSpearhead_Params_t;
 
 typedef struct {
