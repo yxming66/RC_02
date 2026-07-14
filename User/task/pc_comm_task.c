@@ -177,6 +177,12 @@ static bool PcComm_AnyAutoActionBusy(void) {
            Task_AutoRodSpearheadIsBusy() || Task_AutoSickCorrectIsBusy();
 }
 
+static bool PcComm_RcAllowsPcAutoAction(void) {
+    return !dr16.header.online ||
+           (dr16.data.sw_l == DR16_SW_UP &&
+            dr16.data.sw_r == DR16_SW_UP);
+}
+
 static bool PcComm_ProcessAutoActionCommand(void) {
     const PC_AutoActionCMD_t *cmd = MrlinkPc_GetAutoActionCMD();
     if (cmd == NULL) {
@@ -187,6 +193,17 @@ static bool PcComm_ProcessAutoActionCommand(void) {
     g_pc_comm_debug.auto_action_mapped_request = (uint8_t)request;
     if (request == AUTO_ORE_DEBUG_REQUEST_NONE) {
         g_pc_comm_debug.auto_action_invalid_count++;
+        MrlinkPc_ClearAutoActionCommand();
+        return false;
+    }
+
+    /* An online RC has hard takeover priority.  Reject/rearm a PC action
+     * outside the physical UP-UP PC page so a later identical command can be
+     * accepted after the operator explicitly returns to that page. */
+    if (request != AUTO_ORE_DEBUG_REQUEST_ABORT &&
+        !PcComm_RcAllowsPcAutoAction()) {
+        s_auto_action_control_latched = false;
+        MrlinkPc_RearmAutoActionCommand(cmd->action);
         MrlinkPc_ClearAutoActionCommand();
         return false;
     }

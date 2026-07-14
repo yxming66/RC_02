@@ -247,6 +247,10 @@ static bool auto_ore_was_busy = false;
 #ifndef RC_PC_POLE_ACCEL_LIMIT_RAD_S2
 #define RC_PC_POLE_ACCEL_LIMIT_RAD_S2 (120.0f)
 #endif
+
+#ifndef RC_AUTO_ROD_STEP2_POLE_TARGET_LIFT_RAD
+#define RC_AUTO_ROD_STEP2_POLE_TARGET_LIFT_RAD (0.8f)
+#endif
 static bool auto_rod_spearhead_was_busy = false;
 static bool auto_sick_correct_was_busy = false;
 static bool auto_rod_spearhead_hold_after_finish = false;
@@ -1164,20 +1168,40 @@ static bool Rc_IsAnyAutoActionBusy(void) {
          Task_AutoRodSpearheadIsBusy() || Task_AutoSickCorrectIsBusy();
 }
 
+static bool Rc_ShouldAbortAutoActionOnMidMidReturn(void) {
+  if (!dr16.header.online || !Rc_IsAnyAutoActionBusy() ||
+      last_sw_l == DR16_SW_ERR || last_sw_r == DR16_SW_ERR) {
+    return false;
+  }
+
+  const bool now_mid_mid = dr16.data.sw_l == DR16_SW_MID &&
+                           dr16.data.sw_r == DR16_SW_MID;
+  const bool was_mid_mid = last_sw_l == DR16_SW_MID &&
+                           last_sw_r == DR16_SW_MID;
+  return now_mid_mid && !was_mid_mid;
+}
+
 static bool Rc_ShouldExitPcAutoActionBySwitch(void) {
   return dr16.header.online && Rc_IsAnyAutoActionBusy() &&
          last_sw_l == DR16_SW_UP && last_sw_r == DR16_SW_UP &&
          (dr16.data.sw_l != DR16_SW_UP || dr16.data.sw_r != DR16_SW_UP);
 }
 
+static bool Rc_RemoteOverridesPcAutoAction(void) {
+  return dr16.header.online && Task_PcCommHasAutoActionControlLatch() &&
+         (dr16.data.sw_l != DR16_SW_UP ||
+          dr16.data.sw_r != DR16_SW_UP);
+}
+
 static bool Rc_ShouldUsePcCommand(void) {
   if (!MrlinkPc_IsPCControlMode()) {
     return false;
   }
-  return Task_PcCommHasAutoActionControlLatch() ||
-         (dr16.header.online &&
-          dr16.data.sw_l == DR16_SW_UP &&
-          dr16.data.sw_r == DR16_SW_UP);
+  if (dr16.header.online) {
+    return dr16.data.sw_l == DR16_SW_UP &&
+           dr16.data.sw_r == DR16_SW_UP;
+  }
+  return Task_PcCommHasAutoActionControlLatch();
 }
 
 static bool rc_pc_retry_was_active = false;
@@ -1354,18 +1378,26 @@ static void Rc_AbortAutoCtrlIfBusy(void) {
 }
 
 static void Rc_AbortAutoActionsBySwitch(void) {
-  if (dr16.header.online &&
-      last_sw_l == DR16_SW_UP && last_sw_r == DR16_SW_UP &&
-      (dr16.data.sw_l != DR16_SW_UP || dr16.data.sw_r != DR16_SW_UP)) {
+  const bool mid_mid_return = Rc_ShouldAbortAutoActionOnMidMidReturn();
+  const bool remote_pc_override = Rc_RemoteOverridesPcAutoAction();
+  const bool exit_pc_page =
+      dr16.header.online && last_sw_l == DR16_SW_UP &&
+      last_sw_r == DR16_SW_UP &&
+      (dr16.data.sw_l != DR16_SW_UP || dr16.data.sw_r != DR16_SW_UP);
+  if (exit_pc_page || mid_mid_return || remote_pc_override) {
     Task_PcCommClearAutoActionControlLatch();
   }
 
   if (!Rc_ShouldExitAutoActionBySwitch() &&
-      !Rc_ShouldExitPcAutoActionBySwitch()) {
+      !Rc_ShouldExitPcAutoActionBySwitch() && !mid_mid_return &&
+      !remote_pc_override) {
     return;
   }
 
   g_auto_ore_debug.force_output_enable = false;
+  /* Cancel a PC request that has been dispatched but not consumed by the
+   * AutoCtrl task yet; otherwise it could restart just after this takeover. */
+  g_auto_ore_debug.request = AUTO_ORE_DEBUG_REQUEST_ABORT;
 
   if (auto_ctrl_inited && AutoCtrl_IsBusy(&auto_ctrl)) {
     Rc_LatchAutoCtrlCurrentTargets();
@@ -1976,7 +2008,10 @@ struct RcPoleAutoSickCorrectRoute {
 
 struct RcPoleAutoRodRoute {
   bool operator()(const RcRuntimeInput &, cmd::Context &, Pole_CMD_t &out) const {
-    Rc_SetPoleAutoTarget(0.0f, 0.0f);
+    const float target = Task_AutoRodSpearheadIsPickupStep2()
+                             ? RC_AUTO_ROD_STEP2_POLE_TARGET_LIFT_RAD
+                             : 0.0f;
+    Rc_SetPoleAutoTarget(target, target);
     out = pole_cmd;
     return true;
   }
@@ -2302,7 +2337,8 @@ static void Rc_ConfigureCmdCenter(void) {
               .when<RcPlanIn<RC_CMD_PLAN_POLE_REAR> >()
               .priority(cmd::Priority::Manual),
           cmd::from<RcRuntimeInput, RcPolePcRoute>()
-              .when<RcPlanIn<RC_CMD_PLAN_PC> >()
+              .when<RcPlanIn<RC_CMD_PLAN_PC,
+                             RC_CMD_PLAN_PC_AUTO_ROD> >()
               .priority(cmd::Priority::Remote),
           cmd::from<RcRuntimeInput, RcPoleAutoCtrlRoute>()
               .when<RcPlanIn<RC_CMD_PLAN_AUTO_CTRL_OUTPUT,
@@ -2315,8 +2351,7 @@ static void Rc_ConfigureCmdCenter(void) {
               .when<RcPlanIn<RC_CMD_PLAN_AUTO_SICK_CORRECT_OUTPUT> >()
               .priority(cmd::Priority::CriticalAuto),                 
           cmd::from<RcRuntimeInput, RcPoleAutoRodRoute>()
-              .when<RcPlanIn<RC_CMD_PLAN_AUTO_ROD_OUTPUT,
-                 RC_CMD_PLAN_PC_AUTO_ROD> >()
+              .when<RcPlanIn<RC_CMD_PLAN_AUTO_ROD_OUTPUT> >()
               .priority(cmd::Priority::Auto),
           cmd::from<RcRuntimeInput, RcPoleFallbackKeepRoute>() 
               .when<RcPlanIn<RC_CMD_PLAN_AUTO_STANDBY,

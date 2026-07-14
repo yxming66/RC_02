@@ -289,14 +289,6 @@ typedef struct {
     volatile float auto_rod_spearhead_rod_cmd_target_angle_rad;
     volatile bool auto_rod_spearhead_ore_store_cmd_valid;
     volatile float auto_rod_spearhead_ore_store_cmd_platform_rad;
-    volatile bool auto_rod_spearhead_platform_online;
-    volatile bool auto_rod_spearhead_platform_homed;
-    volatile float auto_rod_spearhead_platform_position_rad;
-    volatile float auto_rod_spearhead_platform_velocity_rad_s;
-    volatile float auto_rod_spearhead_platform_torque_nm;
-    volatile bool auto_rod_spearhead_contact_condition_active;
-    volatile bool auto_rod_spearhead_contact_position_valid;
-    volatile float auto_rod_spearhead_contact_position_rad;
     volatile bool auto_sick_correct_busy;
     volatile AutoSickCorrect_State_t auto_sick_correct_state;
     volatile AutoSickCorrect_Result_t auto_sick_correct_result;

@@ -32,8 +32,6 @@ typedef enum {
   AUTO_ROD_SPEARHEAD_FAULT_INVALID_PARAM,
   AUTO_ROD_SPEARHEAD_FAULT_ABORTED,
   AUTO_ROD_SPEARHEAD_FAULT_NO_SPEARHEAD,
-  AUTO_ROD_SPEARHEAD_FAULT_SENSOR_INVALID,
-  AUTO_ROD_SPEARHEAD_FAULT_CONTACT_NOT_FOUND,
 } AutoRodSpearhead_Fault_t;
 
 typedef enum {
@@ -53,14 +51,6 @@ typedef struct {
   uint32_t detect_pose_delay_ms;
   uint32_t detect_success_hold_ms;
   uint32_t dock_wait_delay_ms; /* 取矛头移动到位超时；不限制 DOCK_WAIT 信号等待。 */
-  float contact_search_start_offset_rad;
-  float contact_search_distance_rad;
-  float contact_search_velocity_rad_s;
-  float contact_torque_threshold_nm;
-  float contact_velocity_threshold_rad_s;
-  float contact_min_descend_rad;
-  uint32_t contact_stable_ms;
-  uint32_t contact_search_timeout_ms;
   OreStore_TransformPoint_t dock_wait_transform;
   bool use_photo_check;
   uint32_t photo_check_ms;
@@ -73,10 +63,6 @@ typedef struct {
   bool ore_store_at_target;
   bool ore_store_position_valid;
   float ore_store_platform_position_rad;
-  float ore_store_platform_velocity_rad_s;
-  float ore_store_platform_torque_nm;
-  bool ore_store_platform_online;
-  bool ore_store_platform_homed;
   bool dock_complete_received;
   uint32_t dock_complete_rx_ms;
 } AutoRodSpearhead_Feedback_t;
@@ -95,12 +81,6 @@ typedef struct {
   bool dock_complete_latched;
   bool dock_wait_local_ready;
   uint32_t dock_wait_ready_time_ms;
-  bool contact_search_started;
-  float contact_search_start_position_rad;
-  bool contact_condition_active;
-  uint32_t contact_condition_start_time_ms;
-  bool contact_position_valid;
-  float contact_position_rad;
   bool rod_cmd_valid;
   RodNew_CMD_t rod_cmd;
   bool ore_store_cmd_valid;
