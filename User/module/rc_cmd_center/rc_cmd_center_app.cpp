@@ -160,6 +160,7 @@ typedef enum {
   RC_CMD_PLAN_AUTO_ROD_OUTPUT,
   RC_CMD_PLAN_PC_AUTO_ROD,
   RC_CMD_PLAN_AUTO_SICK_CORRECT_OUTPUT,
+  RC_CMD_PLAN_PC_CHASSIS_AUTO_ORE,
 } RcCommandPlan_t;
 
 typedef struct {
@@ -240,11 +241,11 @@ static bool auto_ctrl_was_busy = false;
 static bool auto_ore_was_busy = false;
 
 #ifndef RC_PC_POLE_SPEED_LIMIT_RAD_S
-#define RC_PC_POLE_SPEED_LIMIT_RAD_S (10.0f)
+#define RC_PC_POLE_SPEED_LIMIT_RAD_S (12.0f)
 #endif
 
 #ifndef RC_PC_POLE_ACCEL_LIMIT_RAD_S2
-#define RC_PC_POLE_ACCEL_LIMIT_RAD_S2 (0.0f)
+#define RC_PC_POLE_ACCEL_LIMIT_RAD_S2 (120.0f)
 #endif
 static bool auto_rod_spearhead_was_busy = false;
 static bool auto_sick_correct_was_busy = false;
@@ -738,19 +739,24 @@ static bool Rc_SetPolePcCommand(bool require_received_cmd) {
   pole_cmd.auto_target_enable[1] = (pole_cmd.mode == POLE_MODE_ACTIVE);
   pole_cmd.auto_target_lift[0] = pc_pole_cmd->lift[0];
   pole_cmd.auto_target_lift[1] = pc_pole_cmd->lift[1];
-  if (g_rc_control_debug.pc_pole_speed_limit_rad_s == 0.0f) {
-    g_rc_control_debug.pc_pole_speed_limit_rad_s =
-        RC_PC_POLE_SPEED_LIMIT_RAD_S;
-  }
-  if (g_rc_control_debug.pc_pole_accel_limit_rad_s == 0.0f) {
-    g_rc_control_debug.pc_pole_accel_limit_rad_s =
-        RC_PC_POLE_ACCEL_LIMIT_RAD_S2;
-  }
-  pole_cmd.auto_lift_speed[0] = g_rc_control_debug.pc_pole_speed_limit_rad_s;
-  pole_cmd.auto_lift_speed[1] = g_rc_control_debug.pc_pole_speed_limit_rad_s;
-  pole_cmd.auto_lift_accel[0] = g_rc_control_debug.pc_pole_accel_limit_rad_s;
-  pole_cmd.auto_lift_accel[1] = g_rc_control_debug.pc_pole_accel_limit_rad_s;
-  pole_cmd.disable_lift_accel = pole_cmd.auto_lift_accel[0] <= 0.0f;
+  const Config_RobotParam_t *robot_param = Config_GetRobotParam();
+  const float pc_pole_speed =
+      (robot_param != NULL &&
+       robot_param->pole_param.preset.ore_release_speed > 0.0f)
+          ? robot_param->pole_param.preset.ore_release_speed
+          : RC_PC_POLE_SPEED_LIMIT_RAD_S;
+  const float pc_pole_accel =
+      (robot_param != NULL &&
+       robot_param->pole_param.preset.ore_release_accel > 0.0f)
+          ? robot_param->pole_param.preset.ore_release_accel
+          : RC_PC_POLE_ACCEL_LIMIT_RAD_S2;
+  pole_cmd.auto_lift_speed[0] = pc_pole_speed;
+  pole_cmd.auto_lift_speed[1] = pc_pole_speed;
+  pole_cmd.auto_lift_accel[0] = pc_pole_accel;
+  pole_cmd.auto_lift_accel[1] = pc_pole_accel;
+  pole_cmd.disable_lift_accel = false;
+  g_rc_control_debug.pc_pole_speed_limit_rad_s = pc_pole_speed;
+  g_rc_control_debug.pc_pole_accel_limit_rad_s = pc_pole_accel;
   g_rc_control_debug.pc_pole_cmd_front_lift_rad = pc_pole_cmd->lift[0];
   g_rc_control_debug.pc_pole_cmd_rear_lift_rad = pc_pole_cmd->lift[1];
   return true;
@@ -1165,9 +1171,13 @@ static bool Rc_ShouldExitPcAutoActionBySwitch(void) {
 }
 
 static bool Rc_ShouldUsePcCommand(void) {
-  return MrlinkPc_IsPCControlMode() &&
-         dr16.data.sw_l == DR16_SW_UP &&
-         dr16.data.sw_r == DR16_SW_UP;
+  if (!MrlinkPc_IsPCControlMode()) {
+    return false;
+  }
+  return Task_PcCommHasAutoActionControlLatch() ||
+         (dr16.header.online &&
+          dr16.data.sw_l == DR16_SW_UP &&
+          dr16.data.sw_r == DR16_SW_UP);
 }
 
 static bool rc_pc_retry_was_active = false;
@@ -1233,8 +1243,13 @@ static RcBehavior_t Rc_SelectMappedBehavior(void) {
   size_t map_count = 0u;
   const RcSwitchBehaviorMap_t *map = Rc_GetBehaviorMap(&map_count);
 
+  if (Rc_ShouldUsePcCommand() &&
+      Task_PcCommHasAutoActionControlLatch()) {
+    return RC_BEHAVIOR_PC;
+  }
+
   if (!dr16.header.online) {
-    return RC_BEHAVIOR_SAFE;
+    return Rc_ShouldUsePcCommand() ? RC_BEHAVIOR_PC : RC_BEHAVIOR_SAFE;
   }
 
   for (size_t index = 0u; index < map_count; ++index) {
@@ -1339,6 +1354,12 @@ static void Rc_AbortAutoCtrlIfBusy(void) {
 }
 
 static void Rc_AbortAutoActionsBySwitch(void) {
+  if (dr16.header.online &&
+      last_sw_l == DR16_SW_UP && last_sw_r == DR16_SW_UP &&
+      (dr16.data.sw_l != DR16_SW_UP || dr16.data.sw_r != DR16_SW_UP)) {
+    Task_PcCommClearAutoActionControlLatch();
+  }
+
   if (!Rc_ShouldExitAutoActionBySwitch() &&
       !Rc_ShouldExitPcAutoActionBySwitch()) {
     return;
@@ -1418,7 +1439,8 @@ static void Rc_PublishCommandsAndDebug(bool update_debug) {
   if (pole_cmd.mode == POLE_MODE_ACTIVE &&
       (rc_current_plan == RC_CMD_PLAN_AUTO_CTRL_OUTPUT ||
        rc_current_plan == RC_CMD_PLAN_PC_AUTO_CTRL ||
-       rc_current_plan == RC_CMD_PLAN_AUTO_ORE_OUTPUT)) {
+       rc_current_plan == RC_CMD_PLAN_AUTO_ORE_OUTPUT ||
+       rc_current_plan == RC_CMD_PLAN_PC_CHASSIS_AUTO_ORE)) {
     g_auto_ore_debug.step_pole_publish_time_ms = publish_ms;
     g_auto_ore_debug.step_pole_cmd_to_publish_ms =
         (g_auto_ore_debug.step_pole_cmd_time_ms != 0u)
@@ -1589,6 +1611,8 @@ template <uint8_t ResourceMask>
 struct RcAutoOreOwnsResource {
   bool operator()(const cmd::Context &) const {
     return auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl) &&
+           !(ResourceMask == AUTO_ORE_RESOURCE_CHASSIS &&
+             rc_current_plan == RC_CMD_PLAN_PC_CHASSIS_AUTO_ORE) &&
            (auto_ore_output_snapshot.owned_resource_mask & ResourceMask) != 0u;
   }
 };
@@ -1655,6 +1679,12 @@ static RcCommandPlan_t Rc_SelectCommandPlan(RcBehavior_t behavior) {
       g_rc_control_debug.ore_store_active = true;
       g_rc_control_debug.arm_simple_active = true;
       g_auto_ore_debug.force_output_count++;
+      if (auto_ore_ctrl.action == AUTO_ORE_ACTION_RELEASE &&
+          Task_PcCommHasAutoActionControlLatch() &&
+          Rc_ShouldUsePcCommand()) {
+        g_pc_command_source = PC_COMMAND_SOURCE_PC;
+        return RC_CMD_PLAN_PC_CHASSIS_AUTO_ORE;
+      }
       return RC_CMD_PLAN_AUTO_ORE_OUTPUT;
     }
   }
@@ -1695,6 +1725,12 @@ static RcCommandPlan_t Rc_SelectCommandPlan(RcBehavior_t behavior) {
   if (auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl)) {
     g_rc_control_debug.ore_store_active = true;
     g_rc_control_debug.arm_simple_active = true;
+    if (auto_ore_ctrl.action == AUTO_ORE_ACTION_RELEASE &&
+        Task_PcCommHasAutoActionControlLatch() &&
+        Rc_ShouldUsePcCommand()) {
+      g_pc_command_source = PC_COMMAND_SOURCE_PC;
+      return RC_CMD_PLAN_PC_CHASSIS_AUTO_ORE;
+    }
     return RC_CMD_PLAN_AUTO_ORE_OUTPUT;
   }
 
@@ -2222,7 +2258,8 @@ static void Rc_ConfigureCmdCenter(void) {
               .priority(cmd::Priority::Manual),
           cmd::from<RcRuntimeInput, RcChassisPcRoute>()
               .when<RcPlanIn<RC_CMD_PLAN_PC,
-                 RC_CMD_PLAN_PC_AUTO_ROD> >()
+                     RC_CMD_PLAN_PC_AUTO_ROD,
+                     RC_CMD_PLAN_PC_CHASSIS_AUTO_ORE> >()
               .priority(cmd::Priority::Remote),
           cmd::from<RcRuntimeInput, RcChassisAutoCtrlRoute>()
               .when<RcPlanIn<RC_CMD_PLAN_AUTO_CTRL_OUTPUT,
@@ -2242,7 +2279,8 @@ static void Rc_ConfigureCmdCenter(void) {
                              RC_CMD_PLAN_ORE_STORE,
                              RC_CMD_PLAN_ROD_NEW,
                              RC_CMD_PLAN_AUTO_ORE_STANDBY,
-                             RC_CMD_PLAN_AUTO_ORE_OUTPUT> >()
+                             RC_CMD_PLAN_AUTO_ORE_OUTPUT,
+                             RC_CMD_PLAN_PC_CHASSIS_AUTO_ORE> >()
               .priority(cmd::Priority::Fallback),
           cmd::from<RcRuntimeInput, RcChassisHoldRoute>()
               .when<RcPlanIn<RC_CMD_PLAN_AUTO_ROD_OUTPUT> >()
@@ -2286,7 +2324,8 @@ static void Rc_ConfigureCmdCenter(void) {
                              RC_CMD_PLAN_ORE_STORE,
                              RC_CMD_PLAN_ROD_NEW,
                  RC_CMD_PLAN_AUTO_ORE_STANDBY,
-                             RC_CMD_PLAN_AUTO_ORE_OUTPUT> >()
+                             RC_CMD_PLAN_AUTO_ORE_OUTPUT,
+                             RC_CMD_PLAN_PC_CHASSIS_AUTO_ORE> >()
               .priority(cmd::Priority::Fallback));
 
   rc_cmd_center
@@ -2314,6 +2353,7 @@ static void Rc_ConfigureCmdCenter(void) {
                              RC_CMD_PLAN_ROD_NEW,
                              RC_CMD_PLAN_AUTO_ORE_STANDBY,
                              RC_CMD_PLAN_AUTO_ORE_OUTPUT,
+                             RC_CMD_PLAN_PC_CHASSIS_AUTO_ORE,
                              RC_CMD_PLAN_AUTO_CTRL_OUTPUT,
                              RC_CMD_PLAN_PC_AUTO_CTRL,
                              RC_CMD_PLAN_AUTO_ROD_OUTPUT,
@@ -2350,6 +2390,7 @@ static void Rc_ConfigureCmdCenter(void) {
                              RC_CMD_PLAN_ROD_NEW,
                              RC_CMD_PLAN_AUTO_ORE_STANDBY,
                              RC_CMD_PLAN_AUTO_ORE_OUTPUT,
+                             RC_CMD_PLAN_PC_CHASSIS_AUTO_ORE,
                              RC_CMD_PLAN_AUTO_CTRL_OUTPUT,
                              RC_CMD_PLAN_PC_AUTO_CTRL,
                              RC_CMD_PLAN_AUTO_SICK_CORRECT_OUTPUT> >()
@@ -2382,6 +2423,7 @@ static void Rc_ConfigureCmdCenter(void) {
                              RC_CMD_PLAN_AUTO_CTRL_OUTPUT,
                              RC_CMD_PLAN_PC_AUTO_CTRL,
                              RC_CMD_PLAN_AUTO_ORE_OUTPUT,
+                             RC_CMD_PLAN_PC_CHASSIS_AUTO_ORE,
                              RC_CMD_PLAN_AUTO_SICK_CORRECT_OUTPUT> >()
               .priority(cmd::Priority::Fallback));
 

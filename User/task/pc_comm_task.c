@@ -39,6 +39,7 @@ static uint32_t s_ir_ore_last_frame_rx_count = 0u;
 static bool s_ir_ore_feedback_started = false;
 static bool s_sick_front_ore_last_in_region = false;
 static uint32_t s_sick_front_ore_stable_since_ms = 0u;
+static volatile bool s_auto_action_control_latched = false;
 static const uint8_t s_feedback_cmds[] = {
     PC_FEEDBACK_HEARTBEAT,
     PC_FEEDBACK_AUTO_ACTION,
@@ -200,6 +201,9 @@ static bool PcComm_ProcessAutoActionCommand(void) {
     if (request != AUTO_ORE_DEBUG_REQUEST_ABORT) {
         AutoCtrl_SetYawSource(&auto_ctrl, AUTO_CTRL_YAW_SOURCE_PC);
         AutoCtrl_SetYawZeroOffset(&auto_ctrl, 0.0f);
+        s_auto_action_control_latched = true;
+    } else {
+        s_auto_action_control_latched = false;
     }
     g_auto_ore_debug.request = request;
     g_pc_comm_debug.auto_action_last_dispatched = cmd->action;
@@ -731,6 +735,9 @@ void Task_PcCommStep(void) {
     uint32_t now = BSP_TIME_Get_ms();
 
     MrlinkPc_CommProcess(now);
+    if (!MrlinkPc_IsPCControlMode()) {
+        s_auto_action_control_latched = false;
+    }
     PcComm_ProcessIrOreAckCommand(now);
     PcComm_UpdateCameraYawCommand(now);
 
@@ -745,6 +752,14 @@ void Task_PcCommStep(void) {
 
     task_runtime.heartbeat.pc_comm++;
     Task_ProfilerLoopEnd(TASK_PROFILE_PC_COMM, profile_start_us);
+}
+
+bool Task_PcCommHasAutoActionControlLatch(void) {
+    return s_auto_action_control_latched;
+}
+
+void Task_PcCommClearAutoActionControlLatch(void) {
+    s_auto_action_control_latched = false;
 }
 
 void Task_pc_comm(void *argument) {

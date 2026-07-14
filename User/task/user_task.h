@@ -554,6 +554,8 @@ bool Task_RodNewInitOnce(void);
 void Task_RodNewStep(void);
 bool Task_PcCommInitOnce(void);
 void Task_PcCommStep(void);
+bool Task_PcCommHasAutoActionControlLatch(void);
+void Task_PcCommClearAutoActionControlLatch(void);
 bool Task_SickInitOnce(void);
 void Task_SickStep(void);
 

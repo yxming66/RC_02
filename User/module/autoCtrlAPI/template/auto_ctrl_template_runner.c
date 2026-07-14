@@ -16,7 +16,7 @@ typedef struct {
  * commanded Pole pose passes the normal at-target debounce. */
 #define AUTO_CTRL_ASCEND_200_PHOTO_RECORD_LIFT_RAD (3.5f)
 #define AUTO_CTRL_ASCEND_400_PHOTO_RECORD_LIFT_RAD (7.0f)
-#define AUTO_CTRL_ASCEND_200_REAR_RETRACT_DELAY_MS (10u)
+#define AUTO_CTRL_ASCEND_200_REAR_RETRACT_DELAY_MS (50u)
 #define AUTO_CTRL_DESCEND_PHOTO_RECORD_LIFT_RAD (2.5f)
 
 typedef enum {
