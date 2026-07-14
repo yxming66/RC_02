@@ -1520,6 +1520,13 @@ static void AutoOre_FailInvalidOccupancy(AutoOre_t *ctrl) {
   ctrl->fault = AUTO_ORE_FAULT_INVALID_OCCUPANCY;
 }
 
+static void AutoOre_FailOccupancySensorInvalid(AutoOre_t *ctrl) {
+  AutoOre_AddFailureMask(ctrl, AUTO_ORE_FAILURE_SETUP);
+  ctrl->state = AUTO_ORE_STATE_FAIL;
+  ctrl->result = AUTO_ORE_RESULT_FAIL;
+  ctrl->fault = AUTO_ORE_FAULT_SENSOR_INVALID;
+}
+
 static void AutoOre_FailSetupInvalidParam(AutoOre_t *ctrl) {
   AutoOre_AddFailureMask(ctrl, AUTO_ORE_FAILURE_SETUP);
   AutoOre_FailInvalidParam(ctrl);
@@ -1556,7 +1563,23 @@ static bool AutoOre_IsPositionValid(AutoOre_Position_t position) {
          position == AUTO_ORE_POSITION_ARM;
 }
 
+static bool AutoOre_FeedbackOccupancyValid(const AutoOre_t *ctrl) {
+  if (ctrl == 0) {
+    return false;
+  }
+#if AUTO_ORE_LOW_OCCUPANCY_SOURCE == AUTO_ORE_OCCUPANCY_SOURCE_PHOTOELECTRIC_VALUE || \
+    AUTO_ORE_HIGH_OCCUPANCY_SOURCE == AUTO_ORE_OCCUPANCY_SOURCE_PHOTOELECTRIC_VALUE || \
+    AUTO_ORE_ARM_OCCUPANCY_SOURCE == AUTO_ORE_OCCUPANCY_SOURCE_PHOTOELECTRIC_VALUE
+  return ctrl->feedback.photo_transfer_valid;
+#else
+  return true;
+#endif
+}
+
 static void AutoOre_ApplyFeedbackOccupancy(AutoOre_t *ctrl) {
+  if (!AutoOre_FeedbackOccupancyValid(ctrl)) {
+    return;
+  }
 #if AUTO_ORE_LOW_OCCUPANCY_SOURCE == AUTO_ORE_OCCUPANCY_SOURCE_PHOTOELECTRIC_VALUE
   ctrl->occupancy.transform_low_has_ore =
       ctrl->feedback.photoelectric_occupancy.transform_low_has_ore;
@@ -4158,6 +4181,10 @@ static bool AutoOre_Start(AutoOre_t *ctrl, AutoOre_Action_t action,
   }
   ctrl->failure_mask = AUTO_ORE_FAILURE_NONE;
   ctrl->fault = AUTO_ORE_FAULT_NONE;
+  if (!AutoOre_FeedbackOccupancyValid(ctrl)) {
+    AutoOre_FailOccupancySensorInvalid(ctrl);
+    return false;
+  }
   AutoOre_ApplyFeedbackOccupancy(ctrl);
   AutoOre_Position_t position = AUTO_ORE_POSITION_NONE;
   if (action == AUTO_ORE_ACTION_STORE) {
@@ -4210,6 +4237,10 @@ bool AutoOre_StartStoreAtPosition(AutoOre_t *ctrl,
   }
   ctrl->failure_mask = AUTO_ORE_FAILURE_NONE;
   ctrl->fault = AUTO_ORE_FAULT_NONE;
+  if (!AutoOre_FeedbackOccupancyValid(ctrl)) {
+    AutoOre_FailOccupancySensorInvalid(ctrl);
+    return false;
+  }
   AutoOre_ApplyFeedbackOccupancy(ctrl);
   return AutoOre_StartResolved(ctrl, AUTO_ORE_ACTION_STORE, position, false,
                                now_ms);

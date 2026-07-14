@@ -190,6 +190,9 @@ typedef struct {
     volatile bool checkphoto_orehigh_triggered;
     volatile bool checkphoto_release_grid_triggered;
     volatile bool photo_transfer_valid;
+    volatile bool photo_transfer_inited;
+    volatile int8_t photo_transfer_last_init_result;
+    volatile uint32_t photo_transfer_init_attempt_count;
     volatile bool photo1_front_triggered;
     volatile bool photo2_third_last_triggered;
     volatile bool photo3_second_last_triggered;

@@ -56,6 +56,7 @@ static uint8_t auto_ore_light_last_fail_action = PC_AUTO_ACTION_NONE;
 static uint8_t auto_ore_light_last_success_action = PC_AUTO_ACTION_NONE;
 static PhotoTransfer_Snapshot_t photo_transfer_snapshot = {0};
 static bool photo_transfer_inited = false;
+static uint32_t photo_transfer_last_init_attempt_ms = 0u;
 /* Atomic cross-task view: 0=invalid, 1=valid/clear, 2=valid/triggered. */
 static volatile uint8_t ore_high_photo_state = 0u;
 
@@ -186,6 +187,22 @@ static bool AutoCtrlFeed_ReadPhotoTransferBit(PhotoTransfer_Bit_t bit) {
   return PhotoTransfer_IsBitTriggered(&photo_transfer_snapshot, bit);
 }
 
+static void AutoCtrlFeed_TryInitPhotoTransfer(uint32_t now_ms) {
+  if (photo_transfer_inited ||
+      (photo_transfer_last_init_attempt_ms != 0u &&
+       (now_ms - photo_transfer_last_init_attempt_ms) < 1000u)) {
+    return;
+  }
+
+  photo_transfer_last_init_attempt_ms = now_ms;
+  const int8_t init_result = PhotoTransfer_Init();
+  g_auto_ore_debug.photo_transfer_init_attempt_count++;
+  g_auto_ore_debug.photo_transfer_last_init_result = init_result;
+  photo_transfer_inited =
+      init_result == DEVICE_OK || init_result == DEVICE_ERR_INITED;
+  g_auto_ore_debug.photo_transfer_inited = photo_transfer_inited;
+}
+
 static bool AutoCtrlFeed_ReadRodSpearheadPhoto(void) {
   return AutoCtrlFeed_ReadPhotoTransferBit(PHOTO_TRANSFER_BIT_SPEARHEAD);
 }
@@ -214,6 +231,25 @@ static bool AutoCtrlFeed_ReadArmOrePhoto(void) {
 
 static bool AutoCtrlFeed_ReadReleaseGridOrePhoto(void) {
   return AutoCtrlFeed_ReadPhotoTransferBit(PHOTO_TRANSFER_BIT_RELEASE_GRID_ORE);
+}
+
+static void AutoCtrlFeed_SyncAutoOrePhotoOccupancy(void) {
+  if (!auto_ore_inited) {
+    return;
+  }
+
+  auto_ore_ctrl.feedback.photo_transfer_valid =
+      photo_transfer_snapshot.valid;
+  if (!photo_transfer_snapshot.valid) {
+    return;
+  }
+
+  auto_ore_ctrl.feedback.photoelectric_occupancy.transform_low_has_ore =
+      AutoCtrlFeed_ReadOreLowPhoto();
+  auto_ore_ctrl.feedback.photoelectric_occupancy.transform_high_has_ore =
+      AutoCtrlFeed_ReadOreHighPhoto();
+  auto_ore_ctrl.feedback.photoelectric_occupancy.arm_has_ore =
+      AutoCtrlFeed_ReadArmOrePhoto();
 }
 
 static void AutoCtrlFeed_UpdatePhotoTransferDebugFast(
@@ -1825,6 +1861,8 @@ static bool AutoCtrlFeed_HandleAutoOreDebugRequest(uint32_t now_ms) {
     return false;
   }
 
+  AutoCtrlFeed_SyncAutoOrePhotoOccupancy();
+
   g_auto_ore_debug.request = AUTO_ORE_DEBUG_REQUEST_NONE;
   g_auto_ore_debug.last_request = request;
   g_auto_ore_debug.request_count++;
@@ -2215,7 +2253,7 @@ void Task_auto_ctrl(void *argument) {
 
   AutoCtrl_Init(&auto_ctrl);
   auto_ctrl_inited = true;
-  photo_transfer_inited = PhotoTransfer_Init() == DEVICE_OK;
+  AutoCtrlFeed_TryInitPhotoTransfer(BSP_TIME_Get_ms());
   AutoCtrlFeed_InitAutoOre();
   AutoCtrlFeed_InitAutoRodSpearhead();
   AutoCtrlFeed_InitAutoSickCorrect();
@@ -2230,6 +2268,7 @@ void Task_auto_ctrl(void *argument) {
 
     if (auto_ctrl_inited) {
       now_ms = BSP_TIME_Get_ms();
+      AutoCtrlFeed_TryInitPhotoTransfer(now_ms);
       if (photo_transfer_inited) {
         PhotoTransfer_Update(now_ms);
         photo_transfer_snapshot = PhotoTransfer_GetSnapshot(now_ms);
