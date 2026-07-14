@@ -564,6 +564,18 @@ typedef struct {
     uint32_t rx_rod_new_count;         /* 收到取矛头机构命令次数 */
     uint32_t rx_ore_store_count;       /* 收到矿仓命令次数 */
     uint32_t rx_auto_action_count;     /* 收到一键动作命令次数 */
+    uint8_t auto_action_normalized;    /* 最近一次一键动作归一化后的 action */
+    uint8_t auto_action_latch;         /* 当前一键动作接收去重 latch */
+    uint8_t auto_action_pending;       /* 当前等待 pc_comm_task 消费的 action */
+    uint8_t auto_action_last_queued;   /* 最近一次成功写入 pending 的 action */
+    uint32_t auto_action_queue_count;  /* 一键动作成功写入 pending 次数 */
+    uint32_t auto_action_duplicate_count; /* 因与 latch 相同而忽略的帧数 */
+    uint32_t auto_action_rearm_count;  /* 固件主动解除一键动作 latch 次数 */
+    uint8_t auto_action_mapped_request; /* pc_comm_task 最近映射出的调试请求 */
+    uint8_t auto_action_last_dispatched; /* 最近一次投递到自动任务的 action */
+    uint32_t auto_action_dispatch_count; /* 成功投递到自动任务次数 */
+    uint32_t auto_action_busy_defer_count; /* 因已有请求/动作忙而保留 pending 次数 */
+    uint32_t auto_action_invalid_count; /* 因 action 无法映射而清除的次数 */
     uint32_t rx_camera_yaw_count;      /* 收到相机云台 yaw 命令次数 */
     uint32_t rx_abstract_position_count; /* 收到抽象位置命令次数 */
     uint32_t rx_step_count;            /* 收到自动台阶命令次数 */

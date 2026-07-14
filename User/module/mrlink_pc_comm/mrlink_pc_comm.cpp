@@ -276,15 +276,22 @@ void OnAutoAction(const wire::AutoActionCmd &cmd) {
       cmd.action == 0x38u
           ? static_cast<uint8_t>(PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT)
           : cmd.action;
+  g_pc_comm_debug.auto_action_normalized = action;
   if (action == PC_AUTO_ACTION_NONE) {
     __atomic_store_n(&s_auto_action_rx_latch,
                      static_cast<uint8_t>(PC_AUTO_ACTION_NONE),
                      __ATOMIC_RELEASE);
-    s_state.cmd.auto_action.action = PC_AUTO_ACTION_NONE;
   } else if (__atomic_exchange_n(&s_auto_action_rx_latch, action,
                                  __ATOMIC_ACQ_REL) != action) {
     s_state.cmd.auto_action.action = action;
+    g_pc_comm_debug.auto_action_last_queued = action;
+    g_pc_comm_debug.auto_action_queue_count++;
+  } else {
+    g_pc_comm_debug.auto_action_duplicate_count++;
   }
+  g_pc_comm_debug.auto_action_latch =
+      __atomic_load_n(&s_auto_action_rx_latch, __ATOMIC_ACQUIRE);
+  g_pc_comm_debug.auto_action_pending = s_state.cmd.auto_action.action;
   MarkRxFrame(PC_CMD_AUTO_ACTION, sizeof(cmd), MRLINK_OK);
   TouchOnline(PC_CMD_AUTO_ACTION);
 }
@@ -696,6 +703,9 @@ extern "C" void MrlinkPc_DebugUpdate(void) {
   g_pc_comm_debug.last_recv_time = s_state.last_recv_time;
   g_pc_comm_debug.recv_count = s_state.recv_count;
   g_pc_comm_debug.error_count = s_state.error_count;
+  g_pc_comm_debug.auto_action_latch =
+      __atomic_load_n(&s_auto_action_rx_latch, __ATOMIC_ACQUIRE);
+  g_pc_comm_debug.auto_action_pending = s_state.cmd.auto_action.action;
   g_pc_comm_debug.rx_irq_count = MrLink_Channel_GetRxIrqCount(s_bus.Channel());
   g_pc_comm_debug.rx_irq_byte_count =
       MrLink_Channel_GetRxIrqByteCount(s_bus.Channel());
@@ -1025,10 +1035,12 @@ extern "C" void MrlinkPc_ClearAutoActionCommand(void) {
 
 extern "C" void MrlinkPc_RearmAutoActionCommand(uint8_t action) {
   uint8_t expected = action;
-  (void)__atomic_compare_exchange_n(
+  if (__atomic_compare_exchange_n(
       &s_auto_action_rx_latch, &expected,
       static_cast<uint8_t>(PC_AUTO_ACTION_NONE), false, __ATOMIC_ACQ_REL,
-      __ATOMIC_ACQUIRE);
+      __ATOMIC_ACQUIRE)) {
+    g_pc_comm_debug.auto_action_rearm_count++;
+  }
 }
 
 extern "C" void MrlinkPc_ClearIrOreAckCommand(void) {

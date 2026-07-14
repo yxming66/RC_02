@@ -175,8 +175,8 @@ Config_RobotParam_t robot_config = {
             .step_400_descend_front_retract = {0.15f, 10.7f},
             /* 400mm 下台阶四杆全收位。 */
             .step_400_descend_all_retract = {0.15f, 0.15f},
-            /* 一键放矿撑杆目标位；与 PC 放矿期间持续下发的 10.5 rad 保持一致。 */
-            .ore_release_target = {10.5f, 10.5f},
+            /* 一键放矿撑杆目标位；与 PC 放矿期间持续下发的 10.7 rad 保持一致。 */
+            .ore_release_target = {10.7f, 10.7f},
             .ore_release_speed = 20.0f,
             .ore_release_accel = 120.0f,
         },
@@ -437,7 +437,7 @@ Config_RobotParam_t robot_config = {
             .fetch_neg_200_chassis_move_ms = 1000u,
             /* 回收地面矿：前进最长等待、前 SICK 触发后续行、静止吸附和后退时间。 */
             .recover_chassis_forward_ms = 5000u, /* 前 SICK 未触发时的安全超时。 */
-            .recover_front_sick_delay_ms = 150u,  /* 前 SICK 达阈值后继续前进时间。 */
+            .recover_front_sick_delay_ms = 200u,  /* 前 SICK 达阈值后继续前进时间。 */
             .recover_suction_settle_ms = 50u,
             .recover_chassis_retreat_ms = 500u,
             /* 融合取矿/存矿/上台阶动作延时；0 使用代码默认值。 */
@@ -469,8 +469,8 @@ Config_RobotParam_t robot_config = {
         /* 回收地面矿动作全程保持的 Pole 自动目标：[0]前组，[1]后组，单位 rad。 */
         .recover_pole_target_lift_rad = {0.8f, 0.8f},
         /* 回收地面矿时底盘低速前进/后退速度，单位 m/s。 */
-        .recover_chassis_forward_vx_mps = 0.5f,
-        .recover_chassis_retreat_vx_mps = 1.0f,
+        .recover_chassis_forward_vx_mps = 0.25f,
+        .recover_chassis_retreat_vx_mps = 0.5f,
         /* 低位存矿完成后，transform 从高位 LIFT 回低位 STANDBY 的旧梯形速度规划；三段速度未配置时兜底使用。 */
         .store_low_return_velocity_rad_s = 30.0f,
         .store_low_return_accel_rad_s2 = 60.0f,

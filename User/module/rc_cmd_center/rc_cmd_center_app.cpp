@@ -202,6 +202,18 @@ typedef struct {
   volatile float pc_pole_accel_limit_rad_s;
   volatile float pc_pole_cmd_front_lift_rad;
   volatile float pc_pole_cmd_rear_lift_rad;
+  volatile uint8_t command_plan;
+  volatile uint8_t pole_published_mode;
+  volatile uint8_t pole_published_auto_target_mask;
+  volatile float pole_published_front_lift_rad;
+  volatile float pole_published_rear_lift_rad;
+  volatile uint32_t pole_publish_count;
+  volatile uint32_t auto_ore_finish_publish_count;
+  volatile uint8_t auto_ore_finish_plan;
+  volatile uint8_t auto_ore_finish_pole_mode;
+  volatile uint8_t auto_ore_finish_auto_target_mask;
+  volatile float auto_ore_finish_front_lift_rad;
+  volatile float auto_ore_finish_rear_lift_rad;
 } RcControlDebug_t;
 
 volatile RcControlDebug_t g_rc_control_debug = {};
@@ -709,9 +721,6 @@ static void Rc_SetPoleAuto(float left_target, float right_target) {
 }
 
 static bool Rc_SetPolePcCommand(bool require_received_cmd) {
-  if (!MrlinkPc_IsPCControlMode()) {
-    return false;
-  }
   if (require_received_cmd && !MrlinkPc_HasPoleCMD()) {
     return false;
   }
@@ -1378,6 +1387,30 @@ static void Rc_HandleBehaviorEvents(RcBehavior_t behavior) {
 
 static void Rc_PublishCommandsAndDebug(bool update_debug) {
   const uint32_t publish_ms = BSP_TIME_Get_ms();
+  const uint8_t pole_auto_target_mask =
+    (pole_cmd.auto_target_enable[0] ? 1u : 0u) |
+    (pole_cmd.auto_target_enable[1] ? 2u : 0u);
+  g_rc_control_debug.command_plan = (uint8_t)rc_current_plan;
+  g_rc_control_debug.pole_published_mode = (uint8_t)pole_cmd.mode;
+  g_rc_control_debug.pole_published_auto_target_mask =
+    pole_auto_target_mask;
+  g_rc_control_debug.pole_published_front_lift_rad =
+    pole_cmd.auto_target_lift[0];
+  g_rc_control_debug.pole_published_rear_lift_rad =
+    pole_cmd.auto_target_lift[1];
+  g_rc_control_debug.pole_publish_count++;
+  if (auto_ore_was_busy &&
+    (!auto_ore_inited || !AutoOre_IsBusy(&auto_ore_ctrl))) {
+  g_rc_control_debug.auto_ore_finish_publish_count++;
+  g_rc_control_debug.auto_ore_finish_plan = (uint8_t)rc_current_plan;
+  g_rc_control_debug.auto_ore_finish_pole_mode = (uint8_t)pole_cmd.mode;
+  g_rc_control_debug.auto_ore_finish_auto_target_mask =
+    pole_auto_target_mask;
+  g_rc_control_debug.auto_ore_finish_front_lift_rad =
+    pole_cmd.auto_target_lift[0];
+  g_rc_control_debug.auto_ore_finish_rear_lift_rad =
+    pole_cmd.auto_target_lift[1];
+  }
   (void)LatestSlot_Write(&task_runtime.latest.chassis_cmd.slot, &chassis_cmd,
                          sizeof(chassis_cmd));
   (void)LatestSlot_Write(&task_runtime.latest.pole_cmd.slot, &pole_cmd,
@@ -2242,7 +2275,7 @@ static void Rc_ConfigureCmdCenter(void) {
               .priority(cmd::Priority::CriticalAuto),
           cmd::from<RcRuntimeInput, RcPoleAutoSickCorrectRoute>()
               .when<RcPlanIn<RC_CMD_PLAN_AUTO_SICK_CORRECT_OUTPUT> >()
-              .priority(cmd::Priority::CriticalAuto),
+              .priority(cmd::Priority::CriticalAuto),                 
           cmd::from<RcRuntimeInput, RcPoleAutoRodRoute>()
               .when<RcPlanIn<RC_CMD_PLAN_AUTO_ROD_OUTPUT,
                  RC_CMD_PLAN_PC_AUTO_ROD> >()

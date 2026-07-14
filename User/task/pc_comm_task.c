@@ -183,7 +183,9 @@ static bool PcComm_ProcessAutoActionCommand(void) {
     }
 
     const AutoOre_DebugRequest_t request = PcComm_MapAutoAction(cmd->action);
+    g_pc_comm_debug.auto_action_mapped_request = (uint8_t)request;
     if (request == AUTO_ORE_DEBUG_REQUEST_NONE) {
+        g_pc_comm_debug.auto_action_invalid_count++;
         MrlinkPc_ClearAutoActionCommand();
         return false;
     }
@@ -191,6 +193,7 @@ static bool PcComm_ProcessAutoActionCommand(void) {
     if (request != AUTO_ORE_DEBUG_REQUEST_ABORT &&
         (g_auto_ore_debug.request != AUTO_ORE_DEBUG_REQUEST_NONE ||
          PcComm_AnyAutoActionBusy())) {
+        g_pc_comm_debug.auto_action_busy_defer_count++;
         return true;
     }
 
@@ -199,6 +202,8 @@ static bool PcComm_ProcessAutoActionCommand(void) {
         AutoCtrl_SetYawZeroOffset(&auto_ctrl, 0.0f);
     }
     g_auto_ore_debug.request = request;
+    g_pc_comm_debug.auto_action_last_dispatched = cmd->action;
+    g_pc_comm_debug.auto_action_dispatch_count++;
     MrlinkPc_ClearAutoActionCommand();
     return true;
 }

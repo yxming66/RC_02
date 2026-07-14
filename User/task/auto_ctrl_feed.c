@@ -1250,8 +1250,9 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms, bool update_debug) {
   }
     const bool auto_ore_was_running =
       auto_ore_ctrl.state == AUTO_ORE_STATE_RUNNING;
+    const AutoOre_Action_t finished_action = auto_ore_ctrl.action;
     const bool zone3_ir_release_was_running = auto_ore_was_running &&
-      auto_ore_ctrl.action == AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT;
+      finished_action == AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT;
   AutoOre_Update(&auto_ore_ctrl, &auto_ore_feedback, now_ms);
     if (auto_ore_was_running &&
       auto_ore_ctrl.state != AUTO_ORE_STATE_RUNNING) {
@@ -1261,8 +1262,17 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms, bool update_debug) {
   if (zone3_ir_release_was_running &&
       auto_ore_ctrl.state != AUTO_ORE_STATE_RUNNING) {
     IrDock_EndZone3Action();
-    MrlinkPc_RearmAutoActionCommand(
-        (uint8_t)PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT);
+  }
+  if (auto_ore_was_running &&
+      auto_ore_ctrl.state != AUTO_ORE_STATE_RUNNING) {
+    if (finished_action == AUTO_ORE_ACTION_RELEASE_LIFT_DETECT) {
+      MrlinkPc_RearmAutoActionCommand(
+          (uint8_t)PC_AUTO_ACTION_RELEASE_LIFT_DETECT);
+    } else if (finished_action ==
+               AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT) {
+      MrlinkPc_RearmAutoActionCommand(
+          (uint8_t)PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT);
+    }
   }
 
   if (auto_ore_ctrl.state != AUTO_ORE_STATE_RUNNING) {
@@ -1781,6 +1791,9 @@ bool Task_AutoStepStartDescend400Head(void) {
 }
 
 void Task_AutoOreAbort(void) {
+  const bool lift_detect_release_was_running =
+      auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl) &&
+      auto_ore_ctrl.action == AUTO_ORE_ACTION_RELEASE_LIFT_DETECT;
   const bool zone3_ir_release_was_running =
       auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl) &&
       auto_ore_ctrl.action == AUTO_ORE_ACTION_RELEASE_IR_LIFT_DETECT;
@@ -1795,7 +1808,10 @@ void Task_AutoOreAbort(void) {
   if (IrDock_IsZone3ActionLocked()) {
     IrDock_EndZone3Action();
   }
-  if (zone3_ir_release_was_running) {
+  if (lift_detect_release_was_running) {
+    MrlinkPc_RearmAutoActionCommand(
+        (uint8_t)PC_AUTO_ACTION_RELEASE_LIFT_DETECT);
+  } else if (zone3_ir_release_was_running) {
     MrlinkPc_RearmAutoActionCommand(
         (uint8_t)PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT);
   }
@@ -1816,9 +1832,9 @@ static bool AutoCtrlFeed_HandleAutoOreDebugRequest(uint32_t now_ms) {
   if (request != AUTO_ORE_DEBUG_REQUEST_ABORT &&
       AutoCtrlFeed_AnyAutoActionBusy()) {
     g_auto_ore_debug.last_result = false;
-    if (request == AUTO_ORE_DEBUG_REQUEST_RELEASE_IR_LIFT_DETECT) {
-      MrlinkPc_RearmAutoActionCommand(
-          (uint8_t)PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT);
+    if (request == AUTO_ORE_DEBUG_REQUEST_RELEASE_LIFT_DETECT ||
+        request == AUTO_ORE_DEBUG_REQUEST_RELEASE_IR_LIFT_DETECT) {
+      MrlinkPc_RearmAutoActionCommand((uint8_t)request);
     }
     return false;
   }
@@ -1943,9 +1959,9 @@ static bool AutoCtrlFeed_HandleAutoOreDebugRequest(uint32_t now_ms) {
 
   g_auto_ore_debug.last_result = result;
   if (!result &&
-      request == AUTO_ORE_DEBUG_REQUEST_RELEASE_IR_LIFT_DETECT) {
-    MrlinkPc_RearmAutoActionCommand(
-        (uint8_t)PC_AUTO_ACTION_RELEASE_IR_LIFT_DETECT);
+      (request == AUTO_ORE_DEBUG_REQUEST_RELEASE_LIFT_DETECT ||
+       request == AUTO_ORE_DEBUG_REQUEST_RELEASE_IR_LIFT_DETECT)) {
+    MrlinkPc_RearmAutoActionCommand((uint8_t)request);
   }
   if (result) {
     g_auto_ore_debug.accept_count++;
