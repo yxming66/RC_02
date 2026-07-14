@@ -543,8 +543,19 @@ Config_RobotParam_t robot_config = {
         .detect_grip_delay_ms = 150u,
         .detect_pose_delay_ms = 450u,
         .detect_success_hold_ms = 50u,
-        /* 取矛头 step1/step2 等待平台到取矛头位的移动超时；动作 15 对接等待本身不超时。 */
+        /* 取矛头等待舵机放平和平台到搜索起点的超时；动作 15 对接等待本身不超时。 */
         .dock_wait_delay_ms = 10000u,
+        /* 首次标定采用低速、低冲击参数；实车观察扭矩波形后再逐步提速。 */
+        .contact_search_start_offset_rad = 1.0f,
+        .contact_search_distance_rad = 3.0f,
+        .contact_search_velocity_rad_s = 0.8f,
+        /* torque_current 当前由平台电机输出侧 torque_nm 填充，需按实车波形继续标定。 */
+        .contact_torque_threshold_nm = 1.2f,
+        .contact_velocity_threshold_rad_s = 0.15f,
+        .contact_min_descend_rad = 0.2f,
+        .contact_stable_ms = 120u,
+        /* 0.8rad/s × 3.5s < 3rad，避免无接触时停在搜索终点后误判堵转。 */
+        .contact_search_timeout_ms = 3500u,
         /* 等待对接时 transform 的目标点；实际角度在 ore_store_param.preset.transform_position_rad 中标定。 */
         .dock_wait_transform = ORE_STORE_TRANSFORM_SPEARHEAD_DOCK_WAIT,
         .use_photo_check = true,

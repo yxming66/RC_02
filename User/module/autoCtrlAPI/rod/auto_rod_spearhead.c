@@ -1,5 +1,6 @@
 #include "module/autoCtrlAPI/rod/auto_rod_spearhead.h"
 
+#include <math.h>
 #include <string.h>
 
 #define AUTO_ROD_SPEARHEAD_DEFAULT_OPEN_DELAY_MS (20u)
@@ -10,7 +11,78 @@
 #define AUTO_ROD_SPEARHEAD_DEFAULT_PHOTO_CHECK_MS (1000u)
 #define AUTO_ROD_SPEARHEAD_DOCK_WAIT_POSE_DELAY_MS (300u)
 #define AUTO_ROD_SPEARHEAD_DOCK_WAIT_STANDBY_THRESHOLD_RAD (18.0f)
-#define AUTO_ROD_SPEARHEAD_STEP1_PICKUP_OFFSET_RAD (1.0f)
+#define AUTO_ROD_SPEARHEAD_DEFAULT_CONTACT_START_OFFSET_RAD (1.0f)
+#define AUTO_ROD_SPEARHEAD_DEFAULT_CONTACT_SEARCH_DISTANCE_RAD (3.0f)
+#define AUTO_ROD_SPEARHEAD_DEFAULT_CONTACT_SEARCH_VELOCITY_RAD_S (0.8f)
+#define AUTO_ROD_SPEARHEAD_DEFAULT_CONTACT_TORQUE_THRESHOLD_NM (1.2f)
+#define AUTO_ROD_SPEARHEAD_DEFAULT_CONTACT_VELOCITY_THRESHOLD_RAD_S (0.15f)
+#define AUTO_ROD_SPEARHEAD_DEFAULT_CONTACT_MIN_DESCEND_RAD (0.2f)
+#define AUTO_ROD_SPEARHEAD_DEFAULT_CONTACT_STABLE_MS (120u)
+#define AUTO_ROD_SPEARHEAD_DEFAULT_CONTACT_SEARCH_TIMEOUT_MS (3500u)
+
+static float AutoRodSpearhead_AbsFloat(float value) {
+  return value >= 0.0f ? value : -value;
+}
+
+static float AutoRodSpearhead_PositiveOr(float value, float fallback) {
+  return isfinite(value) && value > 0.0f ? value : fallback;
+}
+
+static float AutoRodSpearhead_ContactStartOffsetRad(
+    const AutoRodSpearhead_t *ctrl) {
+  return AutoRodSpearhead_PositiveOr(
+      ctrl->param.contact_search_start_offset_rad,
+      AUTO_ROD_SPEARHEAD_DEFAULT_CONTACT_START_OFFSET_RAD);
+}
+
+static float AutoRodSpearhead_ContactSearchDistanceRad(
+    const AutoRodSpearhead_t *ctrl) {
+  return AutoRodSpearhead_PositiveOr(
+      ctrl->param.contact_search_distance_rad,
+      AUTO_ROD_SPEARHEAD_DEFAULT_CONTACT_SEARCH_DISTANCE_RAD);
+}
+
+static float AutoRodSpearhead_ContactSearchVelocityRadS(
+    const AutoRodSpearhead_t *ctrl) {
+  return AutoRodSpearhead_PositiveOr(
+      ctrl->param.contact_search_velocity_rad_s,
+      AUTO_ROD_SPEARHEAD_DEFAULT_CONTACT_SEARCH_VELOCITY_RAD_S);
+}
+
+static float AutoRodSpearhead_ContactTorqueThresholdNm(
+    const AutoRodSpearhead_t *ctrl) {
+  return AutoRodSpearhead_PositiveOr(
+      ctrl->param.contact_torque_threshold_nm,
+      AUTO_ROD_SPEARHEAD_DEFAULT_CONTACT_TORQUE_THRESHOLD_NM);
+}
+
+static float AutoRodSpearhead_ContactVelocityThresholdRadS(
+    const AutoRodSpearhead_t *ctrl) {
+  return AutoRodSpearhead_PositiveOr(
+      ctrl->param.contact_velocity_threshold_rad_s,
+      AUTO_ROD_SPEARHEAD_DEFAULT_CONTACT_VELOCITY_THRESHOLD_RAD_S);
+}
+
+static float AutoRodSpearhead_ContactMinDescendRad(
+    const AutoRodSpearhead_t *ctrl) {
+  return AutoRodSpearhead_PositiveOr(
+      ctrl->param.contact_min_descend_rad,
+      AUTO_ROD_SPEARHEAD_DEFAULT_CONTACT_MIN_DESCEND_RAD);
+}
+
+static uint32_t AutoRodSpearhead_ContactStableMs(
+    const AutoRodSpearhead_t *ctrl) {
+  return ctrl->param.contact_stable_ms > 0u
+             ? ctrl->param.contact_stable_ms
+             : AUTO_ROD_SPEARHEAD_DEFAULT_CONTACT_STABLE_MS;
+}
+
+static uint32_t AutoRodSpearhead_ContactSearchTimeoutMs(
+    const AutoRodSpearhead_t *ctrl) {
+  return ctrl->param.contact_search_timeout_ms > 0u
+             ? ctrl->param.contact_search_timeout_ms
+             : AUTO_ROD_SPEARHEAD_DEFAULT_CONTACT_SEARCH_TIMEOUT_MS;
+}
 
 static uint32_t AutoRodSpearhead_OpenDelayMs(
     const AutoRodSpearhead_t *ctrl) {
@@ -159,6 +231,53 @@ static bool AutoRodSpearhead_CommandOreStoreOffset(
   return true;
 }
 
+static float AutoRodSpearhead_ContactSearchStartRad(
+    const AutoRodSpearhead_t *ctrl) {
+  return ctrl->param.ore_store_param
+             ->preset.transform_position_rad[
+                 ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP] +
+         AutoRodSpearhead_ContactStartOffsetRad(ctrl);
+}
+
+static float AutoRodSpearhead_ContactSearchTargetRad(
+    const AutoRodSpearhead_t *ctrl) {
+  return AutoRodSpearhead_ContactSearchStartRad(ctrl) -
+         AutoRodSpearhead_ContactSearchDistanceRad(ctrl);
+}
+
+static bool AutoRodSpearhead_CommandContactSearchStart(
+    AutoRodSpearhead_t *ctrl) {
+  return AutoRodSpearhead_CommandOreStoreOffset(
+      ctrl, ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP, false,
+      AutoRodSpearhead_ContactStartOffsetRad(ctrl));
+}
+
+static bool AutoRodSpearhead_CommandContactSearch(
+    AutoRodSpearhead_t *ctrl) {
+  if (!AutoRodSpearhead_CommandOreStore(
+          ctrl, ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP, false)) {
+    return false;
+  }
+  ctrl->ore_store_cmd.platform_target_rad =
+      AutoRodSpearhead_ContactSearchTargetRad(ctrl);
+  ctrl->ore_store_cmd.platform_velocity_rad_s =
+      AutoRodSpearhead_ContactSearchVelocityRadS(ctrl);
+  return true;
+}
+
+static bool AutoRodSpearhead_CommandContactHold(
+    AutoRodSpearhead_t *ctrl) {
+  if (!ctrl->contact_position_valid ||
+      !AutoRodSpearhead_CommandOreStore(
+          ctrl, ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP, false)) {
+    return false;
+  }
+  ctrl->ore_store_cmd.platform_target_rad = ctrl->contact_position_rad;
+  ctrl->ore_store_cmd.platform_velocity_rad_s =
+      AutoRodSpearhead_ContactSearchVelocityRadS(ctrl);
+  return true;
+}
+
 static void AutoRodSpearhead_ClearOutputs(AutoRodSpearhead_t *ctrl) {
   ctrl->rod_cmd_valid = false;
   ctrl->ore_store_cmd_valid = false;
@@ -198,6 +317,82 @@ static void AutoRodSpearhead_FinishTimeout(AutoRodSpearhead_t *ctrl) {
   ctrl->result = AUTO_ROD_SPEARHEAD_RESULT_FAIL;
   ctrl->fault = AUTO_ROD_SPEARHEAD_FAULT_TIMEOUT;
   AutoRodSpearhead_ClearOutputs(ctrl);
+}
+
+static void AutoRodSpearhead_FinishSensorInvalid(
+    AutoRodSpearhead_t *ctrl) {
+  ctrl->state = AUTO_ROD_SPEARHEAD_STATE_FAIL;
+  ctrl->result = AUTO_ROD_SPEARHEAD_RESULT_FAIL;
+  ctrl->fault = AUTO_ROD_SPEARHEAD_FAULT_SENSOR_INVALID;
+  AutoRodSpearhead_ClearOutputs(ctrl);
+}
+
+static void AutoRodSpearhead_FinishContactNotFound(
+    AutoRodSpearhead_t *ctrl) {
+  ctrl->state = AUTO_ROD_SPEARHEAD_STATE_FAIL;
+  ctrl->result = AUTO_ROD_SPEARHEAD_RESULT_FAIL;
+  ctrl->fault = AUTO_ROD_SPEARHEAD_FAULT_CONTACT_NOT_FOUND;
+  AutoRodSpearhead_ClearOutputs(ctrl);
+}
+
+static bool AutoRodSpearhead_ContactFeedbackValid(
+    const AutoRodSpearhead_Feedback_t *feedback) {
+  return feedback != 0 && feedback->ore_store_position_valid &&
+         feedback->ore_store_platform_online &&
+         feedback->ore_store_platform_homed &&
+         isfinite(feedback->ore_store_platform_position_rad) &&
+         isfinite(feedback->ore_store_platform_velocity_rad_s) &&
+         isfinite(feedback->ore_store_platform_torque_nm);
+}
+
+static bool AutoRodSpearhead_UpdateContactDetection(
+    AutoRodSpearhead_t *ctrl,
+    const AutoRodSpearhead_Feedback_t *feedback,
+    uint32_t now_ms) {
+  if (!AutoRodSpearhead_ContactFeedbackValid(feedback)) {
+    AutoRodSpearhead_FinishSensorInvalid(ctrl);
+    return false;
+  }
+
+  if (!ctrl->contact_search_started) {
+    ctrl->contact_search_started = true;
+    ctrl->contact_search_start_position_rad =
+        feedback->ore_store_platform_position_rad;
+    ctrl->contact_condition_active = false;
+    ctrl->contact_condition_start_time_ms = now_ms;
+  }
+
+  const float descended_rad =
+      ctrl->contact_search_start_position_rad -
+      feedback->ore_store_platform_position_rad;
+  const bool contact_condition =
+      descended_rad >= AutoRodSpearhead_ContactMinDescendRad(ctrl) &&
+      AutoRodSpearhead_AbsFloat(
+          feedback->ore_store_platform_torque_nm) >=
+          AutoRodSpearhead_ContactTorqueThresholdNm(ctrl) &&
+      AutoRodSpearhead_AbsFloat(
+          feedback->ore_store_platform_velocity_rad_s) <=
+          AutoRodSpearhead_ContactVelocityThresholdRadS(ctrl);
+  if (!contact_condition) {
+    ctrl->contact_condition_active = false;
+    ctrl->contact_condition_start_time_ms = now_ms;
+    return false;
+  }
+
+  if (!ctrl->contact_condition_active) {
+    ctrl->contact_condition_active = true;
+    ctrl->contact_condition_start_time_ms = now_ms;
+    return false;
+  }
+
+  if ((now_ms - ctrl->contact_condition_start_time_ms) <
+      AutoRodSpearhead_ContactStableMs(ctrl)) {
+    return false;
+  }
+
+  ctrl->contact_position_rad = feedback->ore_store_platform_position_rad;
+  ctrl->contact_position_valid = true;
+  return true;
 }
 
 void AutoRodSpearhead_Init(AutoRodSpearhead_t *ctrl,
@@ -240,6 +435,12 @@ static bool AutoRodSpearhead_StartAction(AutoRodSpearhead_t *ctrl,
   ctrl->dock_complete_latched = false;
   ctrl->dock_wait_local_ready = false;
   ctrl->dock_wait_ready_time_ms = 0u;
+  ctrl->contact_search_started = false;
+  ctrl->contact_search_start_position_rad = 0.0f;
+  ctrl->contact_condition_active = false;
+  ctrl->contact_condition_start_time_ms = now_ms;
+  ctrl->contact_position_valid = false;
+  ctrl->contact_position_rad = 0.0f;
   AutoRodSpearhead_ClearOutputs(ctrl);
   return true;
 }
@@ -278,16 +479,18 @@ static void AutoRodSpearhead_RunPickupStep1(
     uint32_t now_ms) {
   const bool ore_store_at_target =
       feedback != 0 && feedback->ore_store_at_target;
+  const bool rod_at_target = feedback != 0 && feedback->rod_at_target;
 
   switch (ctrl->step_index) {
     case 0:
       AutoRodSpearhead_EnterStep(ctrl, now_ms);
-      if (!AutoRodSpearhead_CommandOreStoreOffset(
-              ctrl, ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP, false,
-              AUTO_ROD_SPEARHEAD_STEP1_PICKUP_OFFSET_RAD)) {
+      if (!AutoRodSpearhead_CommandRod(ctrl, ROD_NEW_POSE_STANDBY,
+                                       ROD_NEW_GRIP_RELEASE)) {
         return;
       }
-      if (ore_store_at_target) {
+      if (rod_at_target &&
+          AutoRodSpearhead_StepElapsed(ctrl, now_ms) >=
+              AutoRodSpearhead_OpenDelayMs(ctrl)) {
         AutoRodSpearhead_NextStep(ctrl);
         return;
       }
@@ -298,16 +501,18 @@ static void AutoRodSpearhead_RunPickupStep1(
       return;
     case 1:
       AutoRodSpearhead_EnterStep(ctrl, now_ms);
-      if (!AutoRodSpearhead_CommandOreStoreOffset(
-              ctrl, ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP, false,
-              AUTO_ROD_SPEARHEAD_STEP1_PICKUP_OFFSET_RAD) ||
+      if (!AutoRodSpearhead_CommandContactSearchStart(ctrl) ||
           !AutoRodSpearhead_CommandRod(ctrl, ROD_NEW_POSE_STANDBY,
                                        ROD_NEW_GRIP_RELEASE)) {
         return;
       }
-      if (AutoRodSpearhead_StepElapsed(ctrl, now_ms) >=
-          AutoRodSpearhead_DetectPoseDelayMs(ctrl)) {
+      if (ore_store_at_target) {
         AutoRodSpearhead_FinishSuccess(ctrl);
+        return;
+      }
+      if (AutoRodSpearhead_StepElapsed(ctrl, now_ms) >=
+          AutoRodSpearhead_DockWaitDelayMs(ctrl)) {
+        AutoRodSpearhead_FinishTimeout(ctrl);
       }
       return;
     default:
@@ -324,12 +529,29 @@ static void AutoRodSpearhead_RunPickupStep2(
       feedback != 0 && feedback->rod_photo_triggered;
   const bool ore_store_at_target =
       feedback != 0 && feedback->ore_store_at_target;
+  const bool rod_at_target = feedback != 0 && feedback->rod_at_target;
 
   switch (ctrl->step_index) {
     case 0:
       AutoRodSpearhead_EnterStep(ctrl, now_ms);
-      if (!AutoRodSpearhead_CommandOreStore(
-              ctrl, ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP, false) ||
+      if (!AutoRodSpearhead_CommandRod(ctrl, ROD_NEW_POSE_STANDBY,
+                                       ROD_NEW_GRIP_RELEASE)) {
+        return;
+      }
+      if (rod_at_target &&
+          AutoRodSpearhead_StepElapsed(ctrl, now_ms) >=
+              AutoRodSpearhead_OpenDelayMs(ctrl)) {
+        AutoRodSpearhead_NextStep(ctrl);
+        return;
+      }
+      if (AutoRodSpearhead_StepElapsed(ctrl, now_ms) >=
+          AutoRodSpearhead_DockWaitDelayMs(ctrl)) {
+        AutoRodSpearhead_FinishTimeout(ctrl);
+      }
+      return;
+    case 1:
+      AutoRodSpearhead_EnterStep(ctrl, now_ms);
+      if (!AutoRodSpearhead_CommandContactSearchStart(ctrl) ||
           !AutoRodSpearhead_CommandRod(ctrl, ROD_NEW_POSE_STANDBY,
                                        ROD_NEW_GRIP_RELEASE)) {
         return;
@@ -343,36 +565,45 @@ static void AutoRodSpearhead_RunPickupStep2(
         AutoRodSpearhead_FinishTimeout(ctrl);
       }
       return;
-    case 1:
+    case 2:
       AutoRodSpearhead_EnterStep(ctrl, now_ms);
-      if (!AutoRodSpearhead_CommandOreStore(
-              ctrl, ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP, false) ||
+      if (!AutoRodSpearhead_CommandContactSearch(ctrl) ||
           !AutoRodSpearhead_CommandRod(ctrl, ROD_NEW_POSE_STANDBY,
                                        ROD_NEW_GRIP_RELEASE)) {
         return;
       }
-      if (AutoRodSpearhead_StepElapsed(ctrl, now_ms) >=
-          AutoRodSpearhead_DetectGripDelayMs(ctrl)) {
+      if (AutoRodSpearhead_UpdateContactDetection(ctrl, feedback, now_ms)) {
+        if (!AutoRodSpearhead_CommandContactHold(ctrl)) {
+          return;
+        }
         AutoRodSpearhead_NextStep(ctrl);
+        return;
+      }
+      if (ctrl->state != AUTO_ROD_SPEARHEAD_STATE_RUNNING) {
+        return;
+      }
+      if (AutoRodSpearhead_StepElapsed(ctrl, now_ms) >=
+          AutoRodSpearhead_ContactSearchTimeoutMs(ctrl)) {
+        AutoRodSpearhead_FinishContactNotFound(ctrl);
       }
       return;
-    case 2:
+    case 3:
       AutoRodSpearhead_EnterStep(ctrl, now_ms);
-      if (!AutoRodSpearhead_CommandOreStore(
-              ctrl, ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP, false) ||
+      if (!AutoRodSpearhead_CommandContactHold(ctrl) ||
           !AutoRodSpearhead_CommandRod(ctrl, ROD_NEW_POSE_STANDBY,
                                        ROD_NEW_GRIP_GRAB)) {
         return;
       }
       if (AutoRodSpearhead_StepElapsed(ctrl, now_ms) >=
-          AutoRodSpearhead_GrabHighDelayMs(ctrl)) {
+              AutoRodSpearhead_DetectGripDelayMs(ctrl) &&
+          AutoRodSpearhead_StepElapsed(ctrl, now_ms) >=
+              AutoRodSpearhead_GrabHighDelayMs(ctrl)) {
         AutoRodSpearhead_NextStep(ctrl);
       }
       return;
-    case 3:
+    case 4:
       AutoRodSpearhead_EnterStep(ctrl, now_ms);
-      if (!AutoRodSpearhead_CommandOreStore(
-              ctrl, ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP, false) ||
+      if (!AutoRodSpearhead_CommandContactHold(ctrl) ||
           !AutoRodSpearhead_CommandRod(ctrl, ROD_NEW_POSE_DETECT,
                                        ROD_NEW_GRIP_GRAB)) {
         return;
@@ -385,10 +616,9 @@ static void AutoRodSpearhead_RunPickupStep2(
         AutoRodSpearhead_NextStep(ctrl);
       }
       return;
-    case 4:
+    case 5:
       AutoRodSpearhead_EnterStep(ctrl, now_ms);
-      if (!AutoRodSpearhead_CommandOreStore(
-              ctrl, ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP, false) ||
+      if (!AutoRodSpearhead_CommandContactHold(ctrl) ||
           !AutoRodSpearhead_CommandRod(ctrl, ROD_NEW_POSE_DETECT,
                                        ROD_NEW_GRIP_GRAB)) {
         return;
@@ -417,10 +647,9 @@ static void AutoRodSpearhead_RunPickupStep2(
       }
       AutoRodSpearhead_NextStep(ctrl);
       return;
-    case 5:
+    case 6:
       AutoRodSpearhead_EnterStep(ctrl, now_ms);
-      if (!AutoRodSpearhead_CommandOreStore(
-              ctrl, ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP, false) ||
+      if (!AutoRodSpearhead_CommandContactHold(ctrl) ||
           !AutoRodSpearhead_CommandRod(ctrl, ROD_NEW_POSE_GRAB_HIGH,
                                        ROD_NEW_GRIP_GRAB)) {
         return;
@@ -440,118 +669,7 @@ static void AutoRodSpearhead_RunPickup(
     AutoRodSpearhead_t *ctrl,
     const AutoRodSpearhead_Feedback_t *feedback,
     uint32_t now_ms) {
-  const bool rod_photo_triggered =
-      feedback != 0 && feedback->rod_photo_triggered;
-  const bool ore_store_at_target =
-      feedback != 0 && feedback->ore_store_at_target;
-
-  switch (ctrl->step_index) {
-    case 0:
-      AutoRodSpearhead_EnterStep(ctrl, now_ms);
-      if (!AutoRodSpearhead_CommandOreStore(
-              ctrl, ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP, false)) {
-        return;
-      }
-      if (ore_store_at_target) {
-        AutoRodSpearhead_NextStep(ctrl);
-        return;
-      }
-      if (AutoRodSpearhead_StepElapsed(ctrl, now_ms) >=
-          AutoRodSpearhead_DockWaitDelayMs(ctrl)) {
-        AutoRodSpearhead_FinishTimeout(ctrl);
-      }
-      return;
-    case 1:
-      AutoRodSpearhead_EnterStep(ctrl, now_ms);
-      if (!AutoRodSpearhead_CommandOreStore(
-              ctrl, ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP, false) ||
-          !AutoRodSpearhead_CommandRod(ctrl, ROD_NEW_POSE_STANDBY,
-                                       ROD_NEW_GRIP_RELEASE)) {
-        return;
-      }
-      if (AutoRodSpearhead_StepElapsed(ctrl, now_ms) >=
-          AutoRodSpearhead_OpenDelayMs(ctrl)) {
-        AutoRodSpearhead_NextStep(ctrl);
-      }
-      return;
-    case 2:
-      AutoRodSpearhead_EnterStep(ctrl, now_ms);
-      if (!AutoRodSpearhead_CommandOreStore(
-              ctrl, ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP, false) ||
-          !AutoRodSpearhead_CommandRod(ctrl, ROD_NEW_POSE_DOCK_WAIT,
-                                       ROD_NEW_GRIP_GRAB)) {
-        return;
-      }
-      if (AutoRodSpearhead_StepElapsed(ctrl, now_ms) >=
-          AutoRodSpearhead_DetectGripDelayMs(ctrl)) {
-        AutoRodSpearhead_NextStep(ctrl);
-      }
-      return;
-    case 3:
-      AutoRodSpearhead_EnterStep(ctrl, now_ms);
-      if (!AutoRodSpearhead_CommandOreStore(
-              ctrl, ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP, false) ||
-          !AutoRodSpearhead_CommandRod(ctrl, ROD_NEW_POSE_DETECT,
-                                       ROD_NEW_GRIP_GRAB)) {
-        return;
-      }
-      if (AutoRodSpearhead_StepElapsed(ctrl, now_ms) >=
-          AutoRodSpearhead_DetectPoseDelayMs(ctrl)) {
-        ctrl->photo_stable_started = false;
-        ctrl->photo_stable_state = false;
-        ctrl->photo_stable_start_time_ms = now_ms;
-        AutoRodSpearhead_NextStep(ctrl);
-      }
-      return;
-    case 4:
-      AutoRodSpearhead_EnterStep(ctrl, now_ms);
-      if (!AutoRodSpearhead_CommandOreStore(
-              ctrl, ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP, false) ||
-          !AutoRodSpearhead_CommandRod(ctrl, ROD_NEW_POSE_DETECT,
-                                       ROD_NEW_GRIP_GRAB)) {
-        return;
-      }
-      if (!ctrl->param.use_photo_check) {
-        AutoRodSpearhead_NextStep(ctrl);
-        return;
-      }
-      if (!rod_photo_triggered) {
-        ctrl->photo_stable_started = false;
-        ctrl->photo_stable_state = false;
-        ctrl->photo_stable_start_time_ms = now_ms;
-        if (AutoRodSpearhead_StepElapsed(ctrl, now_ms) >=
-            AutoRodSpearhead_PhotoCheckMs(ctrl)) {
-          AutoRodSpearhead_FinishNoSpearhead(ctrl);
-        }
-        return;
-      }
-      if (!AutoRodSpearhead_PhotoStateStable(ctrl, rod_photo_triggered,
-                                             now_ms)) {
-        if (AutoRodSpearhead_StepElapsed(ctrl, now_ms) >=
-            AutoRodSpearhead_PhotoCheckMs(ctrl)) {
-          AutoRodSpearhead_FinishNoSpearhead(ctrl);
-        }
-        return;
-      }
-      AutoRodSpearhead_NextStep(ctrl);
-      return;
-    case 5:
-      AutoRodSpearhead_EnterStep(ctrl, now_ms);
-      if (!AutoRodSpearhead_CommandOreStore(
-              ctrl, ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP, false) ||
-          !AutoRodSpearhead_CommandRod(ctrl, ROD_NEW_POSE_GRAB_HIGH,
-                                       ROD_NEW_GRIP_GRAB)) {
-        return;
-      }
-      if (AutoRodSpearhead_StepElapsed(ctrl, now_ms) >=
-          AutoRodSpearhead_DetectSuccessHoldMs(ctrl)) {
-        AutoRodSpearhead_FinishSuccess(ctrl);
-      }
-      return;
-    default:
-      AutoRodSpearhead_FinishSuccess(ctrl);
-      return;
-  }
+  AutoRodSpearhead_RunPickupStep2(ctrl, feedback, now_ms);
 }
 
 static void AutoRodSpearhead_RunDockWait(

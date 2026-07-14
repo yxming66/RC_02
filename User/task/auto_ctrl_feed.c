@@ -1555,6 +1555,10 @@ static void AutoCtrlFeed_UpdateAutoRodSpearhead(uint32_t now_ms,
       .ore_store_at_target = false,
       .ore_store_position_valid = false,
       .ore_store_platform_position_rad = 0.0f,
+      .ore_store_platform_velocity_rad_s = 0.0f,
+      .ore_store_platform_torque_nm = 0.0f,
+      .ore_store_platform_online = false,
+      .ore_store_platform_homed = false,
       .dock_complete_received = dock_complete_rx_ms > 0u,
       .dock_complete_rx_ms = dock_complete_rx_ms,
   };
@@ -1568,9 +1572,19 @@ static void AutoCtrlFeed_UpdateAutoRodSpearhead(uint32_t now_ms,
       AutoRodSpearhead_GetOreStoreCommand(&auto_rod_spearhead_ctrl);
   const OreStore_Feedback_t *ore_store_fb = Task_OreStoreGetFeedback();
   if (ore_store_fb != NULL) {
-    feedback.ore_store_position_valid = true;
+    feedback.ore_store_platform_online =
+      ore_store_fb->online[ORE_STORE_AXIS_PLATFORM];
+    feedback.ore_store_platform_homed =
+      ore_store_fb->homed[ORE_STORE_AXIS_PLATFORM];
+    feedback.ore_store_position_valid =
+      feedback.ore_store_platform_online &&
+      feedback.ore_store_platform_homed;
     feedback.ore_store_platform_position_rad =
         ore_store_fb->position_rad[ORE_STORE_AXIS_PLATFORM];
+    feedback.ore_store_platform_velocity_rad_s =
+      ore_store_fb->velocity_rad_s[ORE_STORE_AXIS_PLATFORM];
+    feedback.ore_store_platform_torque_nm =
+      ore_store_fb->motor[ORE_STORE_AXIS_PLATFORM].torque_current;
   }
   if (auto_rod_ore_store_cmd != NULL) {
     feedback.ore_store_at_target = AutoCtrlFeed_OreStoreAtCommandTarget(
@@ -1612,6 +1626,22 @@ static void AutoCtrlFeed_UpdateAutoRodSpearhead(uint32_t now_ms,
       auto_rod_spearhead_ctrl.ore_store_cmd_valid;
   g_auto_ore_debug.auto_rod_spearhead_ore_store_cmd_platform_rad =
       auto_rod_spearhead_ctrl.ore_store_cmd.platform_target_rad;
+  g_auto_ore_debug.auto_rod_spearhead_platform_online =
+      feedback.ore_store_platform_online;
+  g_auto_ore_debug.auto_rod_spearhead_platform_homed =
+      feedback.ore_store_platform_homed;
+  g_auto_ore_debug.auto_rod_spearhead_platform_position_rad =
+      feedback.ore_store_platform_position_rad;
+  g_auto_ore_debug.auto_rod_spearhead_platform_velocity_rad_s =
+      feedback.ore_store_platform_velocity_rad_s;
+  g_auto_ore_debug.auto_rod_spearhead_platform_torque_nm =
+      feedback.ore_store_platform_torque_nm;
+  g_auto_ore_debug.auto_rod_spearhead_contact_condition_active =
+      auto_rod_spearhead_ctrl.contact_condition_active;
+  g_auto_ore_debug.auto_rod_spearhead_contact_position_valid =
+      auto_rod_spearhead_ctrl.contact_position_valid;
+  g_auto_ore_debug.auto_rod_spearhead_contact_position_rad =
+      auto_rod_spearhead_ctrl.contact_position_rad;
   g_auto_ore_debug.ir_dock_complete_fresh = feedback.dock_complete_received;
   g_auto_ore_debug.ir_dock_last_rx_status = g_ir_dock_debug.last_rx_status;
   g_auto_ore_debug.ir_dock_last_rx_age_ms = g_ir_dock_debug.last_complete_age_ms;
