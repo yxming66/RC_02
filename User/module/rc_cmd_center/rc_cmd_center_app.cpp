@@ -205,6 +205,9 @@ typedef struct {
   volatile float pc_pole_cmd_front_lift_rad;
   volatile float pc_pole_cmd_rear_lift_rad;
   volatile uint32_t pc_pole_hold_fallback_count;
+  volatile uint32_t pc_auto_action_pending_pole_hold_count;
+  volatile uint32_t auto_ore_snapshot_read_retry_count;
+  volatile uint32_t auto_ore_snapshot_read_fail_count;
   volatile uint8_t command_plan;
   volatile uint8_t pole_published_mode;
   volatile uint8_t pole_published_auto_target_mask;
@@ -216,6 +219,7 @@ typedef struct {
   volatile float pole_published_rear_accel_rad_s2;
   volatile bool pole_published_disable_lift_accel;
   volatile uint32_t auto_ore_pole_hold_fallback_count;
+  volatile uint32_t auto_ore_pole_bypass_reject_count;
   volatile uint32_t pole_publish_count;
   volatile uint32_t auto_ore_finish_publish_count;
   volatile uint8_t auto_ore_finish_plan;
@@ -1742,9 +1746,40 @@ static void Rc_RefreshAutoOreOutputSnapshot(void) {
   }
 
   AutoOre_OutputSnapshot_t snapshot;
-  if (AutoOre_ReadOutputSnapshot(&auto_ore_ctrl, &snapshot)) {
-    auto_ore_output_snapshot = snapshot;
+  for (uint8_t attempt = 0u; attempt < 3u; ++attempt) {
+    if (AutoOre_ReadOutputSnapshot(&auto_ore_ctrl, &snapshot)) {
+      auto_ore_output_snapshot = snapshot;
+      if (attempt > 0u) {
+        g_rc_control_debug.auto_ore_snapshot_read_retry_count += attempt;
+      }
+      return;
+    }
   }
+  g_rc_control_debug.auto_ore_snapshot_read_fail_count++;
+}
+
+static bool Rc_AutoOreActionUsesFusedStep(void) {
+  switch (auto_ore_ctrl.action) {
+    case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD:
+    case AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD:
+    case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD:
+    case AUTO_ORE_ACTION_STEP_DROP_STORE_ASCEND_200_HEAD:
+    case AUTO_ORE_ACTION_STEP_DROP_STORE_DESCEND_200_HEAD:
+    case AUTO_ORE_ACTION_STEP_DROP_STORE_ASCEND_400_HEAD:
+      return true;
+    default:
+      return false;
+  }
+}
+
+static bool Rc_PoleCommandBypassesTargetLimit(const Pole_CMD_t &cmd) {
+  for (uint8_t side = 0u; side < 2u; ++side) {
+    if (cmd.auto_target_enable[side] && cmd.auto_lift_speed[side] == 0.0f &&
+        cmd.auto_lift_accel[side] == 0.0f) {
+      return true;
+    }
+  }
+  return false;
 }
 
 static RcCommandPlan_t Rc_SelectCommandPlan(RcBehavior_t behavior) {
@@ -1976,6 +2011,12 @@ struct RcPoleKeepRoute {
 
 struct RcPoleFallbackKeepRoute {
   bool operator()(cmd::Context &, Pole_CMD_t &out) const {
+    if (auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl) &&
+        Rc_AutoOreActionUsesFusedStep() &&
+        Task_PoleMainGetHoldCommand(&out)) {
+      g_rc_control_debug.auto_ore_pole_hold_fallback_count++;
+      return true;
+    }
     Rc_ApplyPoleChResControlForCurrentPlan();
     out = pole_cmd;
     return true;
@@ -2011,7 +2052,10 @@ struct RcPoleRearRoute {
 
 struct RcPolePcRoute {
   bool operator()(const RcRuntimeInput &, cmd::Context &, Pole_CMD_t &out) const {
-    if (Rc_SetPolePcCommand(true)) {
+    if (g_auto_ore_debug.request != AUTO_ORE_DEBUG_REQUEST_NONE &&
+        Task_PoleMainGetHoldCommand(&out)) {
+      g_rc_control_debug.pc_auto_action_pending_pole_hold_count++;
+    } else if (Rc_SetPolePcCommand(true)) {
       out = pole_cmd;
     } else if (Task_PoleMainGetHoldCommand(&out)) {
       g_rc_control_debug.pc_pole_hold_fallback_count++;
@@ -2038,7 +2082,14 @@ struct RcPoleAutoOreRoute {
   bool operator()(const RcRuntimeInput &, cmd::Context &, Pole_CMD_t &out) const {
     if ((auto_ore_output_snapshot.valid_resource_mask &
          AUTO_ORE_RESOURCE_POLE) != 0u) {
-      out = auto_ore_output_snapshot.pole_cmd;
+      if (Rc_AutoOreActionUsesFusedStep() &&
+          Rc_PoleCommandBypassesTargetLimit(
+              auto_ore_output_snapshot.pole_cmd) &&
+          Task_PoleMainGetHoldCommand(&out)) {
+        g_rc_control_debug.auto_ore_pole_bypass_reject_count++;
+      } else {
+        out = auto_ore_output_snapshot.pole_cmd;
+      }
     } else if ((auto_ore_output_snapshot.owned_resource_mask &
                 AUTO_ORE_RESOURCE_POLE) != 0u &&
                Task_PoleMainGetHoldCommand(&out)) {

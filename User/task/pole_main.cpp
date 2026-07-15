@@ -282,6 +282,15 @@ extern "C" void Task_pole_main(void *argument) {
         pole_cmd.auto_target_enable[side] &&
         pole_cmd.auto_lift_speed[side] == 0.0f &&
         pole_cmd.auto_lift_accel[side] == 0.0f;
+        const float bypass_delta =
+          pole_cmd.auto_target_lift[side] -
+          pole.debug.tracked_target_lift[side];
+        if (g_pole_pid_debug.target_limit_bypassed[side] &&
+          std::fabs(bypass_delta) > 0.01f) {
+        g_pole_pid_debug.dangerous_target_limit_bypass_count[side]++;
+        g_pole_pid_debug.dangerous_target_limit_bypass_delta_rad[side] =
+          bypass_delta;
+        }
     }
     g_pole_pid_debug.received_disable_lift_accel =
       pole_cmd.disable_lift_accel;
@@ -306,6 +315,14 @@ extern "C" void Task_pole_main(void *argument) {
         pole.debug.tracked_target_lift[side];
       g_pole_pid_debug.tracked_target_velocity_rad_s[side] =
         pole.debug.tracked_target_velocity[side];
+    }
+    for (uint8_t motor = 0u; motor < POLE_SUPPORT_MOTOR_NUM; motor++) {
+      g_pole_pid_debug.brake_velocity_limit_active[motor] =
+        pole.debug.brake_velocity_limit_active[motor];
+      g_pole_pid_debug.brake_velocity_limit_rpm[motor] =
+        pole.debug.brake_velocity_limit_rpm[motor];
+      g_pole_pid_debug.position_velocity_target_rpm[motor] =
+        pole.debug.position_velocity_target_rpm[motor];
     }
     Pole_Output(&pole);
 

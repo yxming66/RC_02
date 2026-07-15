@@ -395,10 +395,15 @@ typedef struct {
     volatile float received_accel_limit_rad_s2[2];
     volatile bool received_disable_lift_accel;
     volatile bool target_limit_bypassed[2];
+    volatile uint32_t dangerous_target_limit_bypass_count[2];
+    volatile float dangerous_target_limit_bypass_delta_rad[2];
     volatile float effective_accel_limit_rad_s2[2];
     volatile float final_target_lift_rad[2];
     volatile float tracked_target_lift_rad[2];
     volatile float tracked_target_velocity_rad_s[2];
+    volatile uint8_t brake_velocity_limit_active[POLE_SUPPORT_MOTOR_NUM];
+    volatile float brake_velocity_limit_rpm[POLE_SUPPORT_MOTOR_NUM];
+    volatile float position_velocity_target_rpm[POLE_SUPPORT_MOTOR_NUM];
 } PolePidDebugControl_t;
 
 /* 任务运行时结构体 */

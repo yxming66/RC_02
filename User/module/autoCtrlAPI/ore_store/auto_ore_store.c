@@ -1314,6 +1314,9 @@ static bool AutoOre_CommandPoleTarget(AutoOre_t *ctrl,
   ctrl->pole_cmd.auto_lift_accel[1] = 0.0f;
   ctrl->pole_cmd.disable_lift_accel = false;
   ctrl->pole_cmd_valid = true;
+  if (AutoOre_ActionIsFused(ctrl->action)) {
+    AutoOre_EnsureFusedPoleCommandLimits(ctrl);
+  }
   return true;
 }
 
@@ -2695,10 +2698,12 @@ static void AutoOre_EnsureFusedPoleCommandLimits(AutoOre_t *ctrl) {
                        : template_param->pole_rear_retract_accel;
     }
 
-    if (ctrl->pole_cmd.auto_lift_speed[side] <= 0.0f) {
+    if (!isfinite(ctrl->pole_cmd.auto_lift_speed[side]) ||
+        ctrl->pole_cmd.auto_lift_speed[side] <= 0.0f) {
       ctrl->pole_cmd.auto_lift_speed[side] = fallback_speed;
     }
-    if (ctrl->pole_cmd.auto_lift_accel[side] == 0.0f) {
+    if (!isfinite(ctrl->pole_cmd.auto_lift_accel[side]) ||
+        ctrl->pole_cmd.auto_lift_accel[side] <= 0.0f) {
       ctrl->pole_cmd.auto_lift_accel[side] = fallback_accel;
     }
   }
