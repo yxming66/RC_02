@@ -147,16 +147,16 @@ Config_RobotParam_t robot_config = {
         },
         .preset = {
             /* 200mm 上台阶四杆全伸位；一键取矿 PICK_POS_200 也使用该撑杆高度。 */
-            .step_200_all_extend = {5.60490055f, 5.60490055f},
+            .step_200_all_extend = {5.65490055f, 5.65490055f},
             /* 200mm 上台阶前杆收回、后杆保持支撑位。 */
-            .step_200_front_retract = {0.1f, 5.60490055f},
+            .step_200_front_retract = {0.2f, 5.65490055f},
             /* 200mm 上台阶四杆全收位。 */
-            .step_200_all_retract = {0.1f, 0.1f},
+            .step_200_all_retract = {0.2f, 0.2f},
             /* 200mm 上台阶小抬升位；一键取矿 PICK_NEG_200 使用该撑杆高度。 */
             .step_200_small = {5.60490055f, 5.60490055f},
             /* 400mm 上台阶四杆全伸位；一键取矿 PICK_POS_400 也使用该撑杆高度。 */
             .step_400_all_extend = {10.8f, 10.8f},
-            /* 400mm 上台阶前杆收回、后杆保持支撑位。 */
+            /* 400mm 上台阶前杆收回、后杆保持支撑位。 */  
             .step_400_front_retract = {0.05f, 10.8f},
             /* 400mm 上台阶四杆全收位。 */
             .step_400_all_retract = {0.05f, 0.05f},
@@ -172,9 +172,9 @@ Config_RobotParam_t robot_config = {
             /* 400mm 下台阶四杆全伸位。 */
             .step_400_descend_all_extend = {10.75f, 10.75f},
             /* 400mm 下台阶前杆收回、后杆保持支撑位。         */
-            .step_400_descend_front_retract = {0.15f, 10.75f},
+            .step_400_descend_front_retract = {0.08f, 10.75f},
             /* 400mm 下台阶四杆全收位。 */
-            .step_400_descend_all_retract = {0.15f, 0.15f},
+            .step_400_descend_all_retract = {0.08f, 0.08f},
             /* 一键放矿撑杆目标位*/
             .ore_release_target = {10.6f, 10.6f},
             .ore_release_speed = 10.0f,
@@ -747,7 +747,7 @@ Config_RobotParam_t robot_config = {
             .pole_rear_extend_accel = 700.0f,
             .pole_rear_retract_accel = 30.0f,
             .pole_extend_landing_zone_rad = 0.08f,
-            .pole_extend_landing_speed = 10.0f,
+            .pole_extend_landing_speed = 15.0f,
             .front_photo_timeout_ms = 5000u,    /* step4 等待 PE13/photo1 下降沿超时，单位 ms。 */
             .rear_photo_timeout_ms = 5000u,     /* step1 等待 PA2/photo3 下降沿超时，单位 ms。 */
             .pole_extend_move_speed = 1.0f,    /* step6 四杆全伸安全通过 vx，单位 m/s。 */
@@ -779,20 +779,20 @@ Config_RobotParam_t robot_config = {
             .second_photo_retract_move_speed = 0.35f, /* step7 第二个下降沿后保持全伸安全离开 vx，单位 m/s。 */
             .final_move_speed = 0.8f,          /* 收尾离开台阶备用 vx，单位 m/s。 */
             .final_move_ms = 250u,             /* 收尾离开台阶持续时间，单位 ms。 */
-            .pole_front_extend_speed =  20.0f,   /* 400mm伸出速度，单位 rad/s。 */
-            .pole_front_retract_speed = 30.0f,  /* 400mm回收速度，单位 rad/s。 */
-            .pole_rear_extend_speed  =  20.0f,   /* 400mm伸出速度，单位 rad/s。 */
-            .pole_rear_retract_speed =  30.0f,   /* 400mm回收速度，单位 rad/s。 */
+            .pole_front_extend_speed =  15.0f,   /* 400mm伸出速度，单位 rad/s。 */
+            .pole_front_retract_speed = 25.0f,  /* 400mm回收速度，单位 rad/s。 */
+            .pole_rear_extend_speed  =  15.0f,   /* 400mm伸出速度，单位 rad/s。 */
+            .pole_rear_retract_speed =  25.0f,   /* 400mm回收速度，单位 rad/s。 */
             .pole_all_extend_speed = 30.0f,
-            .pole_all_extend_accel = 200.0f,
+            .pole_all_extend_accel = 150.0f,
             .pole_all_retract_speed = 30.0f,
-            .pole_all_retract_accel = 120.0f,
-            .pole_front_extend_accel = 200.0f,    
-            .pole_front_retract_accel = 120.0f,
-            .pole_rear_extend_accel = 200.0f,
-            .pole_rear_retract_accel = 120.0f,
+            .pole_all_retract_accel = 150.0f,
+            .pole_front_extend_accel = 150.0f,    
+            .pole_front_retract_accel = 150.0f,
+            .pole_rear_extend_accel = 150.0f,
+            .pole_rear_retract_accel = 150.0f,
             .pole_extend_landing_zone_rad = 0.08f, /* 前/后 Pole 伸出最后 0.1 rad 进入低速落地段。 */
-            .pole_extend_landing_speed = 10.0f,   /* 末段伸出速度，单位 rad/s。 */
+            .pole_extend_landing_speed = 15.0f,   /* 末段伸出速度，单位 rad/s。 */
             .front_photo_timeout_ms = 5000u,    /* 等待前光电触发/下降沿超时，单位 ms。 */
             .rear_photo_timeout_ms = 5000u,     /* 等待后光电触发/下降沿超时，单位 ms。 */
             .pole_extend_move_speed = 0.7f,    /* step6 四杆全伸安全通过 vx，单位 m/s。 */

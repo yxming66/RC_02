@@ -1156,8 +1156,18 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
       }
       return false;
 
-    case 7: /* 模板完成�?*/
-      return true;
+    case 7: /* 停车并保持四杆全收，全部到位后模板完成。 */
+      AutoCtrlTemplate_CommandChassisZeroVector(ctrl);
+      AutoCtrlTemplate_CommandPoleProfile(
+        ctrl, pole.all_retract[0], pole.all_retract[1],
+        param->pole_front_retract_speed, param->pole_rear_retract_speed,
+        use_400mm ? AUTO_CTRL_POLE_PROFILE_ALL_RETRACT
+          : AUTO_CTRL_POLE_PROFILE_FRONT_RETRACT,
+        use_400mm ? AUTO_CTRL_POLE_PROFILE_ALL_RETRACT
+          : AUTO_CTRL_POLE_PROFILE_REAR_RETRACT);
+      AutoCtrlTemplate_DebugMarkPoleCommand(
+        ctrl, now_ms, AUTO_CTRL_TEMPLATE_DEBUG_POLE_AFTER_PHOTO);
+      return ctrl->feedback.pole_all_at_target;
 
     default:
       ctrl->fault = AUTO_CTRL_FAULT_TEMPLATE_UNSUPPORTED;
@@ -1413,8 +1423,16 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
       }
       return false;
 
-    case 8: /* 模板完成�?*/
-      return true;
+    case 8: /* 停车并保持四杆全伸，全部到位后模板完成。 */
+      AutoCtrlTemplate_CommandChassisZeroVector(ctrl);
+      AutoCtrlTemplate_CommandPoleProfileWithLanding(
+          ctrl, param, pole.all_extend[0], pole.all_extend[1],
+          param->pole_front_extend_speed, param->pole_rear_extend_speed,
+          AUTO_CTRL_POLE_PROFILE_FRONT_EXTEND,
+          AUTO_CTRL_POLE_PROFILE_REAR_EXTEND, true, true);
+      AutoCtrlTemplate_DebugMarkPoleCommand(
+          ctrl, now_ms, AUTO_CTRL_TEMPLATE_DEBUG_POLE_AFTER_PHOTO);
+      return ctrl->feedback.pole_all_at_target;
 
     default:
       ctrl->fault = AUTO_CTRL_FAULT_TEMPLATE_UNSUPPORTED;
