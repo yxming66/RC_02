@@ -242,7 +242,7 @@ Config_RobotParam_t robot_config = {
                 /* 平台抬升位/满行程位，用于  低位存矿或低位上膛交接。 */
                 [ORE_STORE_TRANSFORM_LIFT] = 18.4731674f,
                 /* 平台等待矛头对接位置 */ 
-                [ORE_STORE_TRANSFORM_SPEARHEAD_DOCK_WAIT] = 0.183727468f,
+                [ORE_STORE_TRANSFORM_SPEARHEAD_DOCK_WAIT] = 0.0f,//0.183727468f,
                 /* 取矛头平台预设位 */
                 [ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP] = 22.2083613//23.2407284f//22.3003597f,
             },
@@ -390,26 +390,26 @@ Config_RobotParam_t robot_config = {
             .chamber_standby = {.joint1_max_vel_rad_s = 8.0f, .joint2_max_vel_rad_s = 4.0f},
             /* pick_*：一键取矿流程，standby=取矿前/后待机位，place=伸到取矿位，fetch=底盘前进取矿时保持取矿位。 */
             .pick_standby = {
-                .joint1_max_vel_rad_s = 5.0f,
-                .joint2_max_vel_rad_s = 4.0f,
+                .joint1_max_vel_rad_s = 3.0f,
+                .joint2_max_vel_rad_s = 2.0f,
                 .joint1_max_accel_rad_s2 = 25.0f,
                 .joint2_max_accel_rad_s2 = 50.0f,
             },
             .pick_place = {
-                .joint1_max_vel_rad_s = 8.0f,
-                .joint2_max_vel_rad_s = 6.0f,
+                .joint1_max_vel_rad_s = 6.0f,
+                .joint2_max_vel_rad_s = 4.0f,
                 .joint1_max_accel_rad_s2 = 30.0f,
                 .joint2_max_accel_rad_s2 = 60.0f,
             },
             .pick_fetch = {
-                .joint1_max_vel_rad_s = 6.5f,
-                .joint2_max_vel_rad_s = 6.0f,
+                .joint1_max_vel_rad_s = 4.5f,
+                .joint2_max_vel_rad_s = 4.0f,
                 .joint1_max_accel_rad_s2 = 30.0f,
                 .joint2_max_accel_rad_s2 = 60.0f,
             },
             .pick_lift_detect = {
-                .joint1_max_vel_rad_s = 8.0f,
-                .joint2_max_vel_rad_s = 6.0f,
+                .joint1_max_vel_rad_s = 6.0f,
+                .joint2_max_vel_rad_s = 4.0f,
                 .joint1_max_accel_rad_s2 = 30.0f,
                 .joint2_max_accel_rad_s2 = 60.0f,
             },
@@ -642,7 +642,7 @@ Config_RobotParam_t robot_config = {
             .final_photo_sprint_ms = 50u,       /* 末尾光电触发后继续冲刺时间，单位 ms。 */
             .final_move_wheel_delta_rad = 0.0f, /* 编码器门控的收尾离开轮转角阈值，单位 rad；>0 优先按角度切步，<=0 使用 final_move_ms。 */
             /* 200mm全伸：快速建立速度，并在目标前按120rad/s^2主动制动。 */
-            .pole_all_extend_speed = 22.0f,
+            .pole_all_extend_speed = 15.0f,
             .pole_front_extend_speed = 22.0f,   /* 前杆伸出目标跟随速度，单位 rad/s。 */
             .pole_front_retract_speed = 50.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
             .pole_rear_extend_speed = 22.0f,    /* 后杆伸出目标跟随速度，单位 rad/s。 */
@@ -687,7 +687,7 @@ Config_RobotParam_t robot_config = {
             .final_photo_sprint_ms = 100u,       /* 末尾光电触发后继续冲刺时间，单位 ms。 */
             .final_move_wheel_delta_rad = 0.0f, /* 0 表示该模板继续按时间切步。 */
             /* 400mm伸出：约0.67s完成10.7rad行程，末端提前约2.02rad制动。 */
-            .pole_all_extend_speed = 18.0f,
+            .pole_all_extend_speed = 15.0f,
             .pole_front_extend_speed = 22.0f,   /* 前杆伸出目标跟随速度，单位 rad/s。 */
             .pole_front_retract_speed = 50.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
             .pole_rear_extend_speed = 22.0f,    /* 后杆伸出目标跟随速度，单位 rad/s。 */
@@ -729,7 +729,7 @@ Config_RobotParam_t robot_config = {
             .rear_retract_move_speed = 0.3f,   /* step1 等待 PA2/photo3 下降沿的慢速 vx，单位 m/s。 */
             .rear_retract_move_ms = 150u,      /* step3 第二次固定快跑持续时间，单位 ms。 */
             .rear_retract_move_wheel_delta_rad = 8.66f, /* step3 第二次固定快跑轮转角阈值，单位 rad；0 表示按时间切步。 */
-            .second_photo_retract_move_speed = 0.6f, /* step7 第二个下降沿后保持全伸离开 vx，单位 m/s。 */
+            .second_photo_retract_move_speed = 0.3f, /* step7 第二个下降沿后保持全伸离开 vx，单位 m/s。 */
             .final_move_speed = 0.0f,          /* step7 离开 vx 的备用值；second_photo_retract_move_speed <= 0 时使用。 */
             .final_move_ms = 150u,              /* step7 保持全伸离开持续时间，单位 ms。 */
 
@@ -746,8 +746,8 @@ Config_RobotParam_t robot_config = {
             .pole_front_retract_accel = 30.0f,
             .pole_rear_extend_accel = 700.0f,
             .pole_rear_retract_accel = 30.0f,
-            .pole_extend_landing_zone_rad = 0.15f,
-            .pole_extend_landing_speed = 5.0f,
+            .pole_extend_landing_zone_rad = 0.1f,
+            .pole_extend_landing_speed = 10.0f,
             .front_photo_timeout_ms = 5000u,    /* step4 等待 PE13/photo1 下降沿超时，单位 ms。 */
             .rear_photo_timeout_ms = 5000u,     /* step1 等待 PA2/photo3 下降沿超时，单位 ms。 */
             .pole_extend_move_speed = 1.5f,    /* step6 四杆全伸行走 vx，单位 m/s。 */
@@ -777,19 +777,19 @@ Config_RobotParam_t robot_config = {
             .rear_retract_move_ms = 250u,       /* 后杆动作后继续移动时间，单位 ms。 */
             .rear_retract_move_wheel_delta_rad = 8.66f, /* 后杆动作后继续移动轮转角阈值，单位 rad；0 表示按时间切步。 */
             .second_photo_retract_move_speed = 0.50f, /* step7 第二个下降沿后保持全伸离开 vx，单位 m/s。 */
-            .final_move_speed = 0.8f,          /* 收尾离开台阶 vx，单位 m/s。 */
+            .final_move_speed = 1.2f,          /* 收尾离开台阶 vx，单位 m/s。 */
             .final_move_ms = 250u,             /* 收尾离开台阶持续时间，单位 ms。 */
-            .pole_front_extend_speed =  40.0f,   /* 400mm伸出速度，单位 rad/s。 */
+            .pole_front_extend_speed =  20.0f,   /* 400mm伸出速度，单位 rad/s。 */
             .pole_front_retract_speed = 30.0f,  /* 400mm回收速度，单位 rad/s。 */
-            .pole_rear_extend_speed  =  40.0f,   /* 400mm伸出速度，单位 rad/s。 */
+            .pole_rear_extend_speed  =  20.0f,   /* 400mm伸出速度，单位 rad/s。 */
             .pole_rear_retract_speed =  30.0f,   /* 400mm回收速度，单位 rad/s。 */
             .pole_all_extend_speed = 30.0f,
-            .pole_all_extend_accel = 250.0f,
+            .pole_all_extend_accel = 200.0f,
             .pole_all_retract_speed = 30.0f,
             .pole_all_retract_accel = 120.0f,
-            .pole_front_extend_accel = 400.0f,    
+            .pole_front_extend_accel = 200.0f,    
             .pole_front_retract_accel = 120.0f,
-            .pole_rear_extend_accel = 400.0f,
+            .pole_rear_extend_accel = 200.0f,
             .pole_rear_retract_accel = 120.0f,
             .pole_extend_landing_zone_rad = 0.1f, /* 前/后 Pole 伸出最后 0.1 rad 进入低速落地段。 */
             .pole_extend_landing_speed = 10.0f,   /* 末段伸出速度，单位 rad/s。 */

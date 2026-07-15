@@ -295,7 +295,9 @@ static void AutoRodSpearhead_RunPickupStep1(
       AutoRodSpearhead_EnterStep(ctrl, now_ms);
       if (!AutoRodSpearhead_CommandOreStoreOffset(
               ctrl, ORE_STORE_TRANSFORM_SPEARHEAD_PICKUP, false,
-              AUTO_ROD_SPEARHEAD_STEP1_PICKUP_OFFSET_RAD)) {
+              AUTO_ROD_SPEARHEAD_STEP1_PICKUP_OFFSET_RAD) ||
+          !AutoRodSpearhead_CommandRod(ctrl, ROD_NEW_POSE_STANDBY,
+                                       ROD_NEW_GRIP_RELEASE)) {
         return;
       }
       if (ore_store_at_target) {
