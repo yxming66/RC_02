@@ -687,12 +687,12 @@ Config_RobotParam_t robot_config = {
             .final_photo_sprint_ms = 100u,       /* 末尾光电触发后继续冲刺时间，单位 ms。 */
             .final_move_wheel_delta_rad = 0.0f, /* 0 表示该模板继续按时间切步。 */
             /* 400mm伸出：约0.67s完成10.7rad行程，末端提前约2.02rad制动。 */
-            .pole_all_extend_speed = 20.0f,
+            .pole_all_extend_speed = 25.0f,
             .pole_front_extend_speed = 22.0f,   /* 前杆伸出目标跟随速度，单位 rad/s。 */
             .pole_front_retract_speed = 50.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
             .pole_rear_extend_speed = 22.0f,    /* 后杆伸出目标跟随速度，单位 rad/s。 */
             .pole_rear_retract_speed = 50.0f,   /* 后杆回收目标跟随速度，单位 rad/s。 */
-            .pole_all_extend_accel = 250.0f,
+            .pole_all_extend_accel = 400.0f,
             .pole_all_retract_speed = 30.0f,
             .pole_all_retract_accel = 120.0f,
             .pole_front_extend_accel = 250.0f,

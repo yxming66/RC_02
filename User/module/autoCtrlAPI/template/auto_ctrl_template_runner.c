@@ -16,6 +16,7 @@ typedef struct {
  * commanded Pole pose passes the normal at-target debounce. */
 #define AUTO_CTRL_ASCEND_200_PHOTO_RECORD_LIFT_RAD (3.5f)
 #define AUTO_CTRL_ASCEND_400_PHOTO_RECORD_LIFT_RAD (7.0f)
+#define AUTO_CTRL_ASCEND_400_FRONT_RETRACT_DELAY_MS (100u)
 #define AUTO_CTRL_ASCEND_200_REAR_RETRACT_DELAY_MS (20u)
 #define AUTO_CTRL_ASCEND_400_REAR_RETRACT_DELAY_MS (100u)
 #define AUTO_CTRL_DESCEND_PHOTO_RECORD_LIFT_RAD (2.5f)
@@ -145,6 +146,8 @@ static void AutoCtrlTemplate_SetStep(auto_ctrl_t *ctrl, uint8_t step_index) {
   ctrl->template_ctx.pole_target_seen_not_ready = false;
   ctrl->template_ctx.photo_stop_entered = false;
   ctrl->template_ctx.photo_stop_enter_time_ms = 0u;
+  ctrl->template_ctx.ascend_front_retract_delay_started = false;
+  ctrl->template_ctx.ascend_front_retract_delay_start_ms = 0u;
   ctrl->template_ctx.ascend_rear_retract_delay_started = false;
   ctrl->template_ctx.ascend_rear_retract_delay_start_ms = 0u;
   ctrl->template_ctx.final_photo_sprint_started = false;
@@ -159,6 +162,17 @@ static void AutoCtrlTemplate_SetStep(auto_ctrl_t *ctrl, uint8_t step_index) {
 
 static void AutoCtrlTemplate_NextStep(auto_ctrl_t *ctrl) {
   AutoCtrlTemplate_SetStep(ctrl, (uint8_t)(ctrl->template_ctx.step_index + 1u));
+}
+
+static bool AutoCtrlTemplate_AscendFrontRetractDelayElapsed(
+    auto_ctrl_t *ctrl, uint32_t now_ms, uint32_t delay_ms) {
+  if (!ctrl->template_ctx.ascend_front_retract_delay_started) {
+    ctrl->template_ctx.ascend_front_retract_delay_started = true;
+    ctrl->template_ctx.ascend_front_retract_delay_start_ms = now_ms;
+  }
+  return (uint32_t)(now_ms -
+                    ctrl->template_ctx.ascend_front_retract_delay_start_ms) >=
+         delay_ms;
 }
 
 static bool AutoCtrlTemplate_AscendRearRetractDelayElapsed(
@@ -941,6 +955,18 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
       }
       AutoCtrlTemplate_DebugMarkPhotoEvent(
           ctrl, now_ms, AUTO_CTRL_TEMPLATE_DEBUG_PHOTO_ASCEND_FRONT);
+      if (use_400mm &&
+          !AutoCtrlTemplate_AscendFrontRetractDelayElapsed(
+              ctrl, now_ms, AUTO_CTRL_ASCEND_400_FRONT_RETRACT_DELAY_MS)) {
+        AutoCtrlPrimitive_ApplyPrealignWithMove(
+            ctrl, param->pole_extend_move_speed, 0.0f);
+        AutoCtrlTemplate_CommandPoleProfile(
+            ctrl, pole.all_extend[0], pole.all_extend[1],
+            param->pole_front_extend_speed, param->pole_rear_extend_speed,
+            AUTO_CTRL_POLE_PROFILE_FRONT_EXTEND,
+            AUTO_CTRL_POLE_PROFILE_REAR_EXTEND);
+        return false;
+      }
       AutoCtrlTemplate_NextStep(ctrl);
       return false;
 

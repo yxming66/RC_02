@@ -21,6 +21,7 @@ extern "C" {
 
 #define IR_DOCK_FRAME_HEAD (0xA5u)
 #define IR_DOCK_FRAME_SIZE (2u)
+#define IR_DOCK_ACK_BYTE (0x5Au)
 #define IR_DOCK_CMD_ONLINE (0x01u)
 #define IR_DOCK_CMD_DOCK_COMPLETE (0x02u)
 #define IR_DOCK_CMD_RELEASE_ALLOW (0x03u)
@@ -54,8 +55,11 @@ typedef struct {
   volatile bool inited;
   volatile bool online;
   volatile bool rx_busy;
+  volatile bool tx_busy;
   volatile uint8_t last_rx_status;
   volatile uint8_t last_rx_raw_byte;
+  volatile uint8_t last_ack_tx_byte;
+  volatile uint8_t ack_pending_count;
   volatile uint8_t last_rx_len;
   volatile uint8_t last_rx_raw_len;
   volatile uint8_t last_rx_raw_data[IR_DOCK_RX_BUFFER_SIZE];
@@ -69,6 +73,10 @@ typedef struct {
   volatile uint32_t rx_count;
   volatile uint32_t online_rx_count;
   volatile uint32_t protocol_frame_rx_count;
+  volatile uint32_t ack_queued_count;
+  volatile uint32_t ack_tx_count;
+  volatile uint32_t ack_tx_error_count;
+  volatile uint32_t ack_drop_count;
   volatile uint32_t invalid_rx_count;
   volatile uint32_t error_count;
 } IrDock_ChannelDebug_t;
@@ -77,13 +85,17 @@ typedef struct {
   volatile bool inited;
   volatile bool online;
   volatile bool rx_busy;
+  volatile bool tx_busy;
   volatile bool dock_complete_fresh;
   volatile bool zone3_action_locked;
   volatile bool claw_open;
   volatile bool release_abort_latched;
   volatile uint8_t last_rx_source;
+  volatile uint8_t last_ack_tx_source;
   volatile uint8_t last_rx_status;
   volatile uint8_t last_rx_raw_byte;
+  volatile uint8_t last_ack_tx_byte;
+  volatile uint8_t ack_pending_count;
   volatile uint8_t last_dock_complete_cmd;
   volatile uint8_t last_zone3_action_cmd;
   volatile uint8_t last_claw_open_cmd;
@@ -110,6 +122,10 @@ typedef struct {
   volatile uint32_t claw_open_rx_count;
   volatile uint32_t claw_open_abort_rx_count;
   volatile uint32_t protocol_frame_rx_count;
+  volatile uint32_t ack_queued_count;
+  volatile uint32_t ack_tx_count;
+  volatile uint32_t ack_tx_error_count;
+  volatile uint32_t ack_drop_count;
   volatile uint32_t crc_error_count;
   volatile uint32_t invalid_rx_count;
   volatile uint32_t error_count;
