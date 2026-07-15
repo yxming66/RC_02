@@ -42,8 +42,8 @@
 #define AUTO_ORE_DEFAULT_FUSED_PHOTO1_LIFT_DELAY_MS (200u)
 #define AUTO_ORE_FUSED_STEP_PHOTO_STABLE_MS (20u)
 #define AUTO_ORE_DEFAULT_PICK_STORE_FORWARD_TIMEOUT_MS (3000u)
-#define AUTO_ORE_DEFAULT_PICK_STORE_PHOTO1_FORWARD_DELAY_MS (500u)
-#define AUTO_ORE_DEFAULT_PICK_STORE_PHOTO1_RETREAT_DELAY_MS (500u)
+#define AUTO_ORE_DEFAULT_PICK_STORE_PHOTO1_FORWARD_DELAY_MS (150u)
+#define AUTO_ORE_DEFAULT_PICK_STORE_PHOTO1_RETREAT_DELAY_MS (150u)
 #define AUTO_ORE_DEFAULT_PICK_STORE_FORWARD_VX_MPS (0.25f)
 #define AUTO_ORE_DEFAULT_PICK_STORE_RETREAT_VX_MPS (0.5f)
 #define AUTO_ORE_PICK_STORE_FINISH_POLE_TARGET_RAD (0.8f)
@@ -3805,14 +3805,14 @@ static void AutoOre_RunPickStoreFused(AutoOre_t *ctrl, uint32_t now_ms) {
         AutoOre_FailPickInvalidParam(ctrl);
         return;
       }
-            AutoOre_CommandChassisMove(ctrl, AutoOre_PickStoreForwardVxMps(ctrl));
+          AutoOre_CommandChassisMove(ctrl, AutoOre_PickStoreForwardVxMps(ctrl));
       if (AutoOre_WaitLatchedConditionThenDelay(
               ctrl, now_ms, AutoOre_PickPhoto1LiftReached(ctrl, now_ms),
               AutoOre_PickStorePhoto1ForwardDelayMs(ctrl))) {
         AutoOre_NextStep(ctrl);
-            } else if (!ctrl->step_condition_met &&
-           AutoOre_StepElapsed(ctrl, now_ms) >=
-               AutoOre_PickStoreForwardTimeoutMs(ctrl)) {
+          } else if (!ctrl->step_condition_met &&
+               AutoOre_StepElapsed(ctrl, now_ms) >=
+                 AutoOre_PickStoreForwardTimeoutMs(ctrl)) {
         AutoOre_CommandChassisHold(ctrl);
         AutoOre_AddFailureMask(ctrl, AUTO_ORE_FAILURE_PICK_ORE);
         ctrl->state = AUTO_ORE_STATE_FAIL;

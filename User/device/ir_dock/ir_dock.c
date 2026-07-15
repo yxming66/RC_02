@@ -4,16 +4,24 @@
 
 #include "bsp/uart.h"
 
+typedef enum {
+  IR_DOCK_RX_IDLE = 0u,
+  IR_DOCK_RX_ACTIVE,
+  IR_DOCK_RX_PENDING,
+  IR_DOCK_RX_ERROR,
+} IrDock_RxState_t;
+
 typedef struct {
   BSP_UART_t uart;
   uint8_t rx_buf[IR_DOCK_RX_BUFFER_SIZE];
   volatile uint16_t rx_len;
-  volatile bool rx_complete_pending;
-  volatile bool error_pending;
+  volatile uint8_t rx_state;
   volatile bool ack_tx_busy;
   volatile uint8_t ack_pending_count;
   uint8_t ack_tx_byte;
   bool frame_head_pending;
+  uint16_t last_dma_received_len;
+  uint32_t last_dma_progress_ms;
 } IrDock_Channel_t;
 
 static IrDock_Channel_t ir_dock_channel[IR_DOCK_SOURCE_COUNT] = {
@@ -90,20 +98,28 @@ static void IrDock_RxEvent(IrDock_Source_t source, uint16_t size) {
     size = IR_DOCK_RX_BUFFER_SIZE;
   }
   ir_dock_channel[source].rx_len = size;
-  ir_dock_channel[source].rx_complete_pending = true;
+  __atomic_store_n(&ir_dock_channel[source].rx_state,
+                   IR_DOCK_RX_PENDING, __ATOMIC_RELEASE);
   g_ir_dock_debug.channel[source].rx_busy = false;
 }
 
 static void IrDock_RxComplete(IrDock_Source_t source) {
   ir_dock_channel[source].rx_len = IR_DOCK_RX_BUFFER_SIZE;
-  ir_dock_channel[source].rx_complete_pending = true;
+  __atomic_store_n(&ir_dock_channel[source].rx_state,
+                   IR_DOCK_RX_PENDING, __ATOMIC_RELEASE);
   g_ir_dock_debug.channel[source].rx_busy = false;
 }
 
 static void IrDock_Error(IrDock_Source_t source) {
   IrDock_Channel_t *channel = &ir_dock_channel[source];
-  channel->error_pending = true;
-  g_ir_dock_debug.channel[source].rx_busy = false;
+  uint8_t expected_state = IR_DOCK_RX_ACTIVE;
+  if (__atomic_compare_exchange_n(
+          &channel->rx_state, &expected_state, IR_DOCK_RX_ERROR, false,
+          __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) {
+    g_ir_dock_debug.channel[source].rx_busy = false;
+    g_ir_dock_debug.channel[source].error_count++;
+    g_ir_dock_debug.error_count++;
+  }
   UART_HandleTypeDef *huart = BSP_UART_GetHandle(channel->uart);
   if (__atomic_load_n(&channel->ack_tx_busy, __ATOMIC_ACQUIRE) &&
       (huart == NULL || huart->gState == HAL_UART_STATE_READY)) {
@@ -317,20 +333,13 @@ static void IrDock_ParseRxBytes(IrDock_Source_t source, const uint8_t *rx_buf,
 static void IrDock_HandlePending(uint32_t now_ms) {
   for (uint8_t source = 0u; source < IR_DOCK_SOURCE_COUNT; ++source) {
     IrDock_Channel_t *channel = &ir_dock_channel[source];
-    volatile IrDock_ChannelDebug_t *channel_debug =
-      &g_ir_dock_debug.channel[source];
-    if (channel->rx_complete_pending) {
-      channel->rx_complete_pending = false;
+    if (__atomic_load_n(&channel->rx_state, __ATOMIC_ACQUIRE) ==
+        IR_DOCK_RX_PENDING) {
       IrDock_ParseRxBytes((IrDock_Source_t)source, channel->rx_buf,
                           channel->rx_len, now_ms);
       channel->rx_len = 0u;
-    }
-
-    if (channel->error_pending) {
-      channel->error_pending = false;
-      channel->frame_head_pending = false;
-      channel_debug->error_count++;
-      g_ir_dock_debug.error_count++;
+      __atomic_store_n(&channel->rx_state, IR_DOCK_RX_IDLE,
+                       __ATOMIC_RELEASE);
     }
   }
 }
@@ -339,7 +348,10 @@ static bool IrDock_TryStartReceive(IrDock_Source_t source, uint32_t now_ms) {
   IrDock_Channel_t *channel = &ir_dock_channel[source];
   volatile IrDock_ChannelDebug_t *channel_debug =
       &g_ir_dock_debug.channel[source];
-  if (channel_debug->rx_busy) {
+  uint8_t expected_state = IR_DOCK_RX_IDLE;
+  if (!__atomic_compare_exchange_n(
+          &channel->rx_state, &expected_state, IR_DOCK_RX_ACTIVE, false,
+          __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) {
     return false;
   }
 
@@ -353,7 +365,11 @@ static bool IrDock_TryStartReceive(IrDock_Source_t source, uint32_t now_ms) {
   if (BSP_UART_ReceiveToIdle(channel->uart, channel->rx_buf,
                              IR_DOCK_RX_BUFFER_SIZE, true) == HAL_OK) {
     channel_debug->last_rx_start_ms = now_ms;
-    channel_debug->rx_busy = true;
+    channel->last_dma_received_len = 0u;
+    channel->last_dma_progress_ms = now_ms;
+    channel_debug->rx_busy =
+        __atomic_load_n(&channel->rx_state, __ATOMIC_ACQUIRE) ==
+        IR_DOCK_RX_ACTIVE;
     return true;
   }
 
@@ -361,6 +377,7 @@ static bool IrDock_TryStartReceive(IrDock_Source_t source, uint32_t now_ms) {
   g_ir_dock_debug.rx_start_fail_count++;
   channel_debug->error_count++;
   g_ir_dock_debug.error_count++;
+  __atomic_store_n(&channel->rx_state, IR_DOCK_RX_IDLE, __ATOMIC_RELEASE);
   return false;
 }
 
@@ -371,28 +388,60 @@ static bool IrDock_HalReceiveActive(const IrDock_Channel_t *channel) {
          huart->hdmarx->State == HAL_DMA_STATE_BUSY;
 }
 
+static uint16_t IrDock_DmaReceivedLength(const IrDock_Channel_t *channel) {
+  UART_HandleTypeDef *huart = BSP_UART_GetHandle(channel->uart);
+  if (huart == NULL || huart->hdmarx == NULL) {
+    return 0u;
+  }
+
+  const uint32_t remaining = __HAL_DMA_GET_COUNTER(huart->hdmarx);
+  if (remaining > IR_DOCK_RX_BUFFER_SIZE) {
+    return 0u;
+  }
+  return (uint16_t)(IR_DOCK_RX_BUFFER_SIZE - remaining);
+}
+
 static bool IrDock_ShouldRecoverReceive(IrDock_Source_t source,
                                         uint32_t now_ms) {
   IrDock_Channel_t *channel = &ir_dock_channel[source];
-  volatile IrDock_ChannelDebug_t *channel_debug =
-      &g_ir_dock_debug.channel[source];
-  if (!channel_debug->rx_busy) {
+  const uint8_t rx_state =
+      __atomic_load_n(&channel->rx_state, __ATOMIC_ACQUIRE);
+  if (rx_state == IR_DOCK_RX_ERROR) {
+    return true;
+  }
+  if (rx_state != IR_DOCK_RX_ACTIVE) {
     return false;
   }
   if (!IrDock_HalReceiveActive(channel)) {
     return true;
   }
-  return channel_debug->protocol_frame_rx_count > 0u &&
-         channel_debug->last_online_age_ms >
-             IR_DOCK_RX_RECOVER_TIMEOUT_MS &&
-         (now_ms - channel_debug->last_rx_start_ms) >
-             IR_DOCK_RX_RECOVER_TIMEOUT_MS;
+  UART_HandleTypeDef *huart = BSP_UART_GetHandle(channel->uart);
+  if (huart != NULL && huart->ErrorCode != HAL_UART_ERROR_NONE) {
+    return true;
+  }
+
+  const uint16_t received_len = IrDock_DmaReceivedLength(channel);
+  if (received_len != channel->last_dma_received_len) {
+    channel->last_dma_received_len = received_len;
+    channel->last_dma_progress_ms = now_ms;
+    return false;
+  }
+
+  return received_len > 0u &&
+         (now_ms - channel->last_dma_progress_ms) >=
+             IR_DOCK_RX_PARTIAL_STALL_TIMEOUT_MS;
 }
 
-static void IrDock_RecoverReceive(IrDock_Source_t source) {
+static void IrDock_RecoverReceive(IrDock_Source_t source, uint32_t now_ms) {
   IrDock_Channel_t *channel = &ir_dock_channel[source];
   volatile IrDock_ChannelDebug_t *channel_debug =
       &g_ir_dock_debug.channel[source];
+  const uint8_t rx_state =
+      __atomic_load_n(&channel->rx_state, __ATOMIC_ACQUIRE);
+  const bool receive_was_pending =
+      rx_state == IR_DOCK_RX_ACTIVE || rx_state == IR_DOCK_RX_ERROR;
+  const uint16_t recovered_len =
+      receive_was_pending ? IrDock_DmaReceivedLength(channel) : 0u;
   UART_HandleTypeDef *huart = BSP_UART_GetHandle(channel->uart);
   if (huart != NULL) {
     (void)HAL_UART_AbortReceive(huart);
@@ -402,10 +451,16 @@ static void IrDock_RecoverReceive(IrDock_Source_t source) {
     huart->ErrorCode = HAL_UART_ERROR_NONE;
   }
 
+  if (recovered_len > 0u) {
+    IrDock_ParseRxBytes(source, channel->rx_buf, recovered_len, now_ms);
+  } else {
+    channel->frame_head_pending = false;
+  }
+
   channel->rx_len = 0u;
-  channel->rx_complete_pending = false;
-  channel->error_pending = false;
-  channel->frame_head_pending = false;
+  channel->last_dma_received_len = 0u;
+  channel->last_dma_progress_ms = now_ms;
+  __atomic_store_n(&channel->rx_state, IR_DOCK_RX_IDLE, __ATOMIC_RELEASE);
   channel_debug->rx_busy = false;
   channel_debug->rx_recover_count++;
   g_ir_dock_debug.rx_recover_count++;
@@ -453,12 +508,13 @@ void IrDock_Init(uint32_t now_ms) {
     volatile IrDock_ChannelDebug_t *channel_debug =
       &g_ir_dock_debug.channel[source];
     channel->rx_len = 0u;
-    channel->rx_complete_pending = false;
-    channel->error_pending = false;
+    channel->rx_state = IR_DOCK_RX_IDLE;
     channel->ack_tx_busy = false;
     channel->ack_pending_count = 0u;
     channel->ack_tx_byte = IR_DOCK_ACK_BYTE;
     channel->frame_head_pending = false;
+    channel->last_dma_received_len = 0u;
+    channel->last_dma_progress_ms = now_ms;
     channel_debug->inited = true;
     channel_debug->online = false;
     channel_debug->rx_busy = false;
@@ -522,11 +578,12 @@ void IrDock_Process(uint32_t now_ms) {
                                 IR_DOCK_ONLINE_TIMEOUT_MS;
     any_online = any_online || channel_debug->online;
     if (IrDock_ShouldRecoverReceive((IrDock_Source_t)source, now_ms)) {
-      IrDock_RecoverReceive((IrDock_Source_t)source);
+      IrDock_RecoverReceive((IrDock_Source_t)source, now_ms);
     }
-    if (!channel_debug->rx_busy &&
+    if (__atomic_load_n(&ir_dock_channel[source].rx_state,
+                        __ATOMIC_ACQUIRE) == IR_DOCK_RX_IDLE &&
         !IrDock_TryStartReceive((IrDock_Source_t)source, now_ms)) {
-      IrDock_RecoverReceive((IrDock_Source_t)source);
+      IrDock_RecoverReceive((IrDock_Source_t)source, now_ms);
       (void)IrDock_TryStartReceive((IrDock_Source_t)source, now_ms);
     }
     (void)IrDock_TrySendAck((IrDock_Source_t)source);
