@@ -1550,13 +1550,18 @@ static void AutoCtrlFeed_UpdateAutoRodSpearhead(uint32_t now_ms,
     return;
   }
 
+  bool dock_complete_received = false;
   uint32_t dock_complete_rx_ms = 0u;
-  if (IrDock_IsDockCompleteFresh(now_ms)) {
+  if (g_ir_dock_debug.complete_rx_count > 0u) {
+    dock_complete_received = true;
     dock_complete_rx_ms = g_ir_dock_debug.last_complete_rx_ms;
   }
   if (MrlinkPc_IsR2Ready()) {
     const uint32_t r2_ready_tick_ms = MrlinkPc_GetR2ReadyStateTickMs();
-    if (r2_ready_tick_ms > dock_complete_rx_ms) {
+    if (!dock_complete_received ||
+        (now_ms - r2_ready_tick_ms) <
+            (now_ms - dock_complete_rx_ms)) {
+      dock_complete_received = true;
       dock_complete_rx_ms = r2_ready_tick_ms;
     }
   }
@@ -1568,7 +1573,7 @@ static void AutoCtrlFeed_UpdateAutoRodSpearhead(uint32_t now_ms,
       .ore_store_at_target = false,
       .ore_store_position_valid = false,
       .ore_store_platform_position_rad = 0.0f,
-      .dock_complete_received = dock_complete_rx_ms > 0u,
+      .dock_complete_received = dock_complete_received,
       .dock_complete_rx_ms = dock_complete_rx_ms,
   };
   const RodNew_Feedback_t *rod_fb = Task_RodNewGetFeedback();

@@ -13,6 +13,11 @@
 #define AUTO_ROD_SPEARHEAD_DOCK_WAIT_STANDBY_THRESHOLD_RAD (18.0f)
 #define AUTO_ROD_SPEARHEAD_STEP1_PICKUP_OFFSET_RAD (1.0f)
 
+static bool AutoRodSpearhead_TimeAtOrAfter(uint32_t event_time_ms,
+                                           uint32_t reference_time_ms) {
+  return (int32_t)(event_time_ms - reference_time_ms) >= 0;
+}
+
 static uint32_t AutoRodSpearhead_OpenDelayMs(
     const AutoRodSpearhead_t *ctrl) {
   return ctrl->param.open_delay_ms > 0u
@@ -610,8 +615,9 @@ static void AutoRodSpearhead_RunDockWait(
           ctrl->dock_wait_ready_time_ms = now_ms;
         }
         if (feedback->dock_complete_received &&
-            feedback->dock_complete_rx_ms >=
-                ctrl->dock_wait_ready_time_ms) {
+            AutoRodSpearhead_TimeAtOrAfter(
+                feedback->dock_complete_rx_ms,
+                ctrl->dock_wait_ready_time_ms)) {
           ctrl->dock_complete_latched = true;
         }
       }
