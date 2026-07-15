@@ -779,7 +779,8 @@ extern "C" const PC_PoleCMD_t *MrlinkPc_GetPoleCMD(void) {
 }
 
 extern "C" bool MrlinkPc_HasPoleCMD(void) {
-  return s_pole_cmd_received;
+  return IsRecentCommand(s_pole_cmd_received, s_pole_cmd_tick,
+                         BSP_TIME_Get_ms());
 }
 
 extern "C" const PC_ArmCMD_t *MrlinkPc_GetArmCMD(void) {

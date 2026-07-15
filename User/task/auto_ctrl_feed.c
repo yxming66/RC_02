@@ -1510,6 +1510,16 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms, bool update_debug) {
       auto_ore_ctrl.pole_cmd.auto_target_lift[0];
   g_auto_ore_debug.pole_cmd_rear_lift_rad =
       auto_ore_ctrl.pole_cmd.auto_target_lift[1];
+    g_auto_ore_debug.pole_cmd_front_speed_rad_s =
+      auto_ore_ctrl.pole_cmd.auto_lift_speed[0];
+    g_auto_ore_debug.pole_cmd_rear_speed_rad_s =
+      auto_ore_ctrl.pole_cmd.auto_lift_speed[1];
+    g_auto_ore_debug.pole_cmd_front_accel_rad_s2 =
+      auto_ore_ctrl.pole_cmd.auto_lift_accel[0];
+    g_auto_ore_debug.pole_cmd_rear_accel_rad_s2 =
+      auto_ore_ctrl.pole_cmd.auto_lift_accel[1];
+    g_auto_ore_debug.pole_cmd_disable_lift_accel =
+      auto_ore_ctrl.pole_cmd.disable_lift_accel;
   g_auto_ore_debug.chassis_cmd_vx_mps =
       auto_ore_ctrl.chassis_cmd.ctrl_vec.vx;
     g_auto_ore_debug.release_lift_sick_index =
@@ -1616,6 +1626,12 @@ static void AutoCtrlFeed_UpdateAutoRodSpearhead(uint32_t now_ms,
   g_auto_ore_debug.auto_rod_spearhead_rod_at_target = feedback.rod_at_target;
   g_auto_ore_debug.auto_rod_spearhead_ore_store_at_target =
       feedback.ore_store_at_target;
+    g_auto_ore_debug.auto_rod_spearhead_dock_complete_latched =
+      auto_rod_spearhead_ctrl.dock_complete_latched;
+    g_auto_ore_debug.auto_rod_spearhead_dock_wait_local_ready =
+      auto_rod_spearhead_ctrl.dock_wait_local_ready;
+    g_auto_ore_debug.auto_rod_spearhead_dock_wait_start_time_ms =
+      auto_rod_spearhead_ctrl.dock_wait_start_time_ms;
   g_auto_ore_debug.auto_rod_spearhead_photo_stable_state =
       auto_rod_spearhead_ctrl.photo_stable_state;
   g_auto_ore_debug.auto_rod_spearhead_rod_cmd_valid =

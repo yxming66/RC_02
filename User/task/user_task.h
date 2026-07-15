@@ -242,6 +242,11 @@ typedef struct {
     volatile float ore_store_platform_error_rad;
     volatile float pole_cmd_front_lift_rad;
     volatile float pole_cmd_rear_lift_rad;
+    volatile float pole_cmd_front_speed_rad_s;
+    volatile float pole_cmd_rear_speed_rad_s;
+    volatile float pole_cmd_front_accel_rad_s2;
+    volatile float pole_cmd_rear_accel_rad_s2;
+    volatile bool pole_cmd_disable_lift_accel;
     volatile float pole_setpoint_front_lift_rad;
     volatile float pole_setpoint_rear_lift_rad;
     volatile uint8_t pole_setpoint_source;
@@ -282,6 +287,9 @@ typedef struct {
     volatile uint8_t auto_rod_spearhead_step_index;
     volatile bool auto_rod_spearhead_rod_at_target;
     volatile bool auto_rod_spearhead_ore_store_at_target;
+    volatile bool auto_rod_spearhead_dock_complete_latched;
+    volatile bool auto_rod_spearhead_dock_wait_local_ready;
+    volatile uint32_t auto_rod_spearhead_dock_wait_start_time_ms;
     volatile bool auto_rod_spearhead_photo_stable_state;
     volatile bool auto_rod_spearhead_rod_cmd_valid;
     volatile RodNew_Pose_t auto_rod_spearhead_rod_cmd_pose;
@@ -380,6 +388,17 @@ typedef struct {
     volatile float vel_out_limit;
     volatile float vel_d_cutoff_freq;
     volatile float vel_range;
+    volatile uint8_t received_mode;
+    volatile uint8_t received_auto_target_mask;
+    volatile float received_target_lift_rad[2];
+    volatile float received_speed_limit_rad_s[2];
+    volatile float received_accel_limit_rad_s2[2];
+    volatile bool received_disable_lift_accel;
+    volatile bool target_limit_bypassed[2];
+    volatile float effective_accel_limit_rad_s2[2];
+    volatile float final_target_lift_rad[2];
+    volatile float tracked_target_lift_rad[2];
+    volatile float tracked_target_velocity_rad_s[2];
 } PolePidDebugControl_t;
 
 /* 任务运行时结构体 */

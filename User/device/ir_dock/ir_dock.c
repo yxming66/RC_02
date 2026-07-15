@@ -357,9 +357,58 @@ static bool IrDock_TryStartReceive(IrDock_Source_t source, uint32_t now_ms) {
     return true;
   }
 
+  channel_debug->rx_start_fail_count++;
+  g_ir_dock_debug.rx_start_fail_count++;
   channel_debug->error_count++;
   g_ir_dock_debug.error_count++;
   return false;
+}
+
+static bool IrDock_HalReceiveActive(const IrDock_Channel_t *channel) {
+  UART_HandleTypeDef *huart = BSP_UART_GetHandle(channel->uart);
+  return huart != NULL && huart->hdmarx != NULL &&
+         huart->RxState == HAL_UART_STATE_BUSY_RX &&
+         huart->hdmarx->State == HAL_DMA_STATE_BUSY;
+}
+
+static bool IrDock_ShouldRecoverReceive(IrDock_Source_t source,
+                                        uint32_t now_ms) {
+  IrDock_Channel_t *channel = &ir_dock_channel[source];
+  volatile IrDock_ChannelDebug_t *channel_debug =
+      &g_ir_dock_debug.channel[source];
+  if (!channel_debug->rx_busy) {
+    return false;
+  }
+  if (!IrDock_HalReceiveActive(channel)) {
+    return true;
+  }
+  return channel_debug->protocol_frame_rx_count > 0u &&
+         channel_debug->last_online_age_ms >
+             IR_DOCK_RX_RECOVER_TIMEOUT_MS &&
+         (now_ms - channel_debug->last_rx_start_ms) >
+             IR_DOCK_RX_RECOVER_TIMEOUT_MS;
+}
+
+static void IrDock_RecoverReceive(IrDock_Source_t source) {
+  IrDock_Channel_t *channel = &ir_dock_channel[source];
+  volatile IrDock_ChannelDebug_t *channel_debug =
+      &g_ir_dock_debug.channel[source];
+  UART_HandleTypeDef *huart = BSP_UART_GetHandle(channel->uart);
+  if (huart != NULL) {
+    (void)HAL_UART_AbortReceive(huart);
+    __HAL_UART_CLEAR_FLAG(huart, UART_CLEAR_PEF | UART_CLEAR_FEF |
+                                     UART_CLEAR_NEF | UART_CLEAR_OREF |
+                                     UART_CLEAR_IDLEF);
+    huart->ErrorCode = HAL_UART_ERROR_NONE;
+  }
+
+  channel->rx_len = 0u;
+  channel->rx_complete_pending = false;
+  channel->error_pending = false;
+  channel->frame_head_pending = false;
+  channel_debug->rx_busy = false;
+  channel_debug->rx_recover_count++;
+  g_ir_dock_debug.rx_recover_count++;
 }
 
 void IrDock_Init(uint32_t now_ms) {
@@ -472,7 +521,14 @@ void IrDock_Process(uint32_t now_ms) {
                             channel_debug->last_online_age_ms <=
                                 IR_DOCK_ONLINE_TIMEOUT_MS;
     any_online = any_online || channel_debug->online;
-    (void)IrDock_TryStartReceive((IrDock_Source_t)source, now_ms);
+    if (IrDock_ShouldRecoverReceive((IrDock_Source_t)source, now_ms)) {
+      IrDock_RecoverReceive((IrDock_Source_t)source);
+    }
+    if (!channel_debug->rx_busy &&
+        !IrDock_TryStartReceive((IrDock_Source_t)source, now_ms)) {
+      IrDock_RecoverReceive((IrDock_Source_t)source);
+      (void)IrDock_TryStartReceive((IrDock_Source_t)source, now_ms);
+    }
     (void)IrDock_TrySendAck((IrDock_Source_t)source);
     any_rx_busy = any_rx_busy || channel_debug->rx_busy;
     any_tx_busy = any_tx_busy || channel_debug->tx_busy;

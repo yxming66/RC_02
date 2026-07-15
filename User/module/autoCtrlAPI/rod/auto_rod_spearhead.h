@@ -80,8 +80,8 @@ typedef struct {
   bool photo_stable_state;
   uint32_t photo_stable_start_time_ms;
   bool dock_complete_latched;
+  uint32_t dock_wait_start_time_ms;
   bool dock_wait_local_ready;
-  uint32_t dock_wait_ready_time_ms;
   bool rod_cmd_valid;
   RodNew_CMD_t rod_cmd;
   bool ore_store_cmd_valid;

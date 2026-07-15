@@ -267,6 +267,24 @@ extern "C" void Task_pole_main(void *argument) {
     (void)LatestSlot_ReadIfUpdated(
       &task_runtime.latest.pole_cmd.slot, &pole_cmd, sizeof(pole_cmd),
       &task_runtime.latest.pole_cmd.read_seq);
+    g_pole_pid_debug.received_mode = static_cast<uint8_t>(pole_cmd.mode);
+    g_pole_pid_debug.received_auto_target_mask =
+      (pole_cmd.auto_target_enable[0] ? 1u : 0u) |
+      (pole_cmd.auto_target_enable[1] ? 2u : 0u);
+    for (uint8_t side = 0u; side < 2u; side++) {
+      g_pole_pid_debug.received_target_lift_rad[side] =
+        pole_cmd.auto_target_lift[side];
+      g_pole_pid_debug.received_speed_limit_rad_s[side] =
+        pole_cmd.auto_lift_speed[side];
+      g_pole_pid_debug.received_accel_limit_rad_s2[side] =
+        pole_cmd.auto_lift_accel[side];
+      g_pole_pid_debug.target_limit_bypassed[side] =
+        pole_cmd.auto_target_enable[side] &&
+        pole_cmd.auto_lift_speed[side] == 0.0f &&
+        pole_cmd.auto_lift_accel[side] == 0.0f;
+    }
+    g_pole_pid_debug.received_disable_lift_accel =
+      pole_cmd.disable_lift_accel;
     Pole_UpdateFeedback(&pole);
 
     const uint32_t now_ms = BSP_TIME_Get_ms();
@@ -279,6 +297,16 @@ extern "C" void Task_pole_main(void *argument) {
       PolePidDebugUpdate(cfg);
     }
     Pole_Control(&pole, &pole_cmd, now_ms);
+    for (uint8_t side = 0u; side < 2u; side++) {
+      g_pole_pid_debug.effective_accel_limit_rad_s2[side] =
+        pole.setpoint.lift_accel[side];
+      g_pole_pid_debug.final_target_lift_rad[side] =
+        pole.debug.final_target_lift[side];
+      g_pole_pid_debug.tracked_target_lift_rad[side] =
+        pole.debug.tracked_target_lift[side];
+      g_pole_pid_debug.tracked_target_velocity_rad_s[side] =
+        pole.debug.tracked_target_velocity[side];
+    }
     Pole_Output(&pole);
 
     if (PolePeriodicDue(now_ms, &last_pc_feedback_ms,

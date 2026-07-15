@@ -204,11 +204,18 @@ typedef struct {
   volatile float pc_pole_accel_limit_rad_s;
   volatile float pc_pole_cmd_front_lift_rad;
   volatile float pc_pole_cmd_rear_lift_rad;
+  volatile uint32_t pc_pole_hold_fallback_count;
   volatile uint8_t command_plan;
   volatile uint8_t pole_published_mode;
   volatile uint8_t pole_published_auto_target_mask;
   volatile float pole_published_front_lift_rad;
   volatile float pole_published_rear_lift_rad;
+  volatile float pole_published_front_speed_rad_s;
+  volatile float pole_published_rear_speed_rad_s;
+  volatile float pole_published_front_accel_rad_s2;
+  volatile float pole_published_rear_accel_rad_s2;
+  volatile bool pole_published_disable_lift_accel;
+  volatile uint32_t auto_ore_pole_hold_fallback_count;
   volatile uint32_t pole_publish_count;
   volatile uint32_t auto_ore_finish_publish_count;
   volatile uint8_t auto_ore_finish_plan;
@@ -906,6 +913,18 @@ static void Rc_LatchRodCurrentTarget(void) {
   rod_target_angle_latched_rad = rod_cmd.target_angle_rad;
 }
 
+static bool Rc_AutoRodSuccessMustHoldGrip(void) {
+  if (AutoRodSpearhead_GetResult(&auto_rod_spearhead_ctrl) !=
+      AUTO_ROD_SPEARHEAD_RESULT_SUCCESS) {
+    return false;
+  }
+
+  const AutoRodSpearhead_Action_t action =
+      AutoRodSpearhead_GetAction(&auto_rod_spearhead_ctrl);
+  return action == AUTO_ROD_SPEARHEAD_ACTION_PICKUP ||
+         action == AUTO_ROD_SPEARHEAD_ACTION_PICKUP_STEP2;
+}
+
 static void Rc_LatchHoldTargetsAfterSafe(void) {
   /*
    * SAFE intentionally relaxes Arm/Pole.  Their normal fallback routes keep
@@ -948,6 +967,10 @@ static void Rc_LatchFinishedAutoTargets(void) {
     } else {
       Rc_LatchOreStoreCurrentTarget();
       Rc_LatchRodCurrentTarget();
+      if (Rc_AutoRodSuccessMustHoldGrip()) {
+        rod_cmd.grip = ROD_NEW_GRIP_GRAB;
+        rod_grip_latched = ROD_NEW_GRIP_GRAB;
+      }
       auto_rod_spearhead_hold_after_finish = true;
     }
   }
@@ -1465,6 +1488,16 @@ static void Rc_PublishCommandsAndDebug(bool update_debug) {
     pole_cmd.auto_target_lift[0];
   g_rc_control_debug.pole_published_rear_lift_rad =
     pole_cmd.auto_target_lift[1];
+  g_rc_control_debug.pole_published_front_speed_rad_s =
+    pole_cmd.auto_lift_speed[0];
+  g_rc_control_debug.pole_published_rear_speed_rad_s =
+    pole_cmd.auto_lift_speed[1];
+  g_rc_control_debug.pole_published_front_accel_rad_s2 =
+    pole_cmd.auto_lift_accel[0];
+  g_rc_control_debug.pole_published_rear_accel_rad_s2 =
+    pole_cmd.auto_lift_accel[1];
+  g_rc_control_debug.pole_published_disable_lift_accel =
+    pole_cmd.disable_lift_accel;
   g_rc_control_debug.pole_publish_count++;
   if (auto_ore_was_busy &&
     (!auto_ore_inited || !AutoOre_IsBusy(&auto_ore_ctrl))) {
@@ -1978,8 +2011,13 @@ struct RcPoleRearRoute {
 
 struct RcPolePcRoute {
   bool operator()(const RcRuntimeInput &, cmd::Context &, Pole_CMD_t &out) const {
-    (void)Rc_SetPolePcCommand(false);
-    out = pole_cmd;
+    if (Rc_SetPolePcCommand(true)) {
+      out = pole_cmd;
+    } else if (Task_PoleMainGetHoldCommand(&out)) {
+      g_rc_control_debug.pc_pole_hold_fallback_count++;
+    } else {
+      out = pole_cmd;
+    }
     return true;
   }
 };
@@ -2001,6 +2039,10 @@ struct RcPoleAutoOreRoute {
     if ((auto_ore_output_snapshot.valid_resource_mask &
          AUTO_ORE_RESOURCE_POLE) != 0u) {
       out = auto_ore_output_snapshot.pole_cmd;
+    } else if ((auto_ore_output_snapshot.owned_resource_mask &
+                AUTO_ORE_RESOURCE_POLE) != 0u &&
+               Task_PoleMainGetHoldCommand(&out)) {
+      g_rc_control_debug.auto_ore_pole_hold_fallback_count++;
     } else {
       out = pole_cmd;
     }

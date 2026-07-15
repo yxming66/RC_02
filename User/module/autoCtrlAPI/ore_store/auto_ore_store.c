@@ -1138,6 +1138,9 @@ static void AutoOre_ClearOutputs(AutoOre_t *ctrl) {
   ctrl->chassis_cmd_valid = false;
 }
 
+static bool AutoOre_ActionIsFused(AutoOre_Action_t action);
+static void AutoOre_EnsureFusedPoleCommandLimits(AutoOre_t *ctrl);
+
 static uint8_t AutoOre_BuildOwnedResourceMask(const AutoOre_t *ctrl) {
   if (ctrl == 0 || ctrl->state != AUTO_ORE_STATE_RUNNING) {
     return AUTO_ORE_RESOURCE_NONE;
@@ -1162,6 +1165,10 @@ static uint8_t AutoOre_BuildOwnedResourceMask(const AutoOre_t *ctrl) {
 static void AutoOre_PublishOutputSnapshot(AutoOre_t *ctrl) {
   if (ctrl == 0) {
     return;
+  }
+
+  if (ctrl->pole_cmd_valid && AutoOre_ActionIsFused(ctrl->action)) {
+    AutoOre_EnsureFusedPoleCommandLimits(ctrl);
   }
 
   const uint8_t current = (uint8_t)(ctrl->output_snapshot_index & 1u);
@@ -1334,12 +1341,19 @@ static void AutoOre_ApplyPoleCommandLimitsFromTemplate(
     return;
   }
 
-  ctrl->pole_cmd.auto_lift_speed[0] = template_param->pole_all_extend_speed;
-  ctrl->pole_cmd.auto_lift_speed[1] = template_param->pole_all_extend_speed;
-  ctrl->pole_cmd.auto_lift_accel[0] = template_param->pole_all_extend_accel;
-  ctrl->pole_cmd.auto_lift_accel[1] = template_param->pole_all_extend_accel;
+  const bool both_retract =
+      ctrl->pole_cmd.auto_target_lift[0] < ctrl->feedback.pole_front_lift_rad &&
+      ctrl->pole_cmd.auto_target_lift[1] < ctrl->feedback.pole_rear_lift_rad;
+  const float speed = both_retract ? template_param->pole_all_retract_speed
+                                   : template_param->pole_all_extend_speed;
+  const float accel = both_retract ? template_param->pole_all_retract_accel
+                                   : template_param->pole_all_extend_accel;
+  ctrl->pole_cmd.auto_lift_speed[0] = speed;
+  ctrl->pole_cmd.auto_lift_speed[1] = speed;
+  ctrl->pole_cmd.auto_lift_accel[0] = accel;
+  ctrl->pole_cmd.auto_lift_accel[1] = accel;
   ctrl->pole_cmd.disable_lift_accel =
-      template_param->pole_all_extend_accel < 0.0f;
+      accel < 0.0f;
 }
 
 static bool AutoOre_CommandReleasePoleTarget(AutoOre_t *ctrl) {
@@ -2632,6 +2646,68 @@ static const AutoCtrl_TemplateParam_t *AutoOre_FusedStepTemplateParam(
   }
 }
 
+static void AutoOre_EnsureFusedPoleCommandLimits(AutoOre_t *ctrl) {
+  if (ctrl == 0 || !ctrl->pole_cmd_valid ||
+      ctrl->pole_cmd.mode != POLE_MODE_ACTIVE) {
+    return;
+  }
+
+  const AutoCtrl_TemplateParam_t *template_param =
+      AutoOre_FusedStepTemplateParam(ctrl);
+  if (template_param == 0) {
+    return;
+  }
+
+  const float front_error = ctrl->pole_cmd.auto_target_lift[0] -
+                            ctrl->feedback.pole_front_lift_rad;
+  const float rear_error = ctrl->pole_cmd.auto_target_lift[1] -
+                           ctrl->feedback.pole_rear_lift_rad;
+  const bool both_extend = front_error > 0.0f && rear_error > 0.0f;
+  const bool both_retract = front_error < 0.0f && rear_error < 0.0f;
+
+  for (uint8_t side = 0u; side < 2u; ++side) {
+    if (!ctrl->pole_cmd.auto_target_enable[side]) {
+      continue;
+    }
+
+    const float error = (side == 0u) ? front_error : rear_error;
+    float fallback_speed = 0.0f;
+    float fallback_accel = 0.0f;
+    if (both_extend) {
+      fallback_speed = template_param->pole_all_extend_speed;
+      fallback_accel = template_param->pole_all_extend_accel;
+    } else if (both_retract) {
+      fallback_speed = template_param->pole_all_retract_speed;
+      fallback_accel = template_param->pole_all_retract_accel;
+    } else if (error >= 0.0f) {
+      fallback_speed =
+          (side == 0u) ? template_param->pole_front_extend_speed
+                       : template_param->pole_rear_extend_speed;
+      fallback_accel =
+          (side == 0u) ? template_param->pole_front_extend_accel
+                       : template_param->pole_rear_extend_accel;
+    } else {
+      fallback_speed =
+          (side == 0u) ? template_param->pole_front_retract_speed
+                       : template_param->pole_rear_retract_speed;
+      fallback_accel =
+          (side == 0u) ? template_param->pole_front_retract_accel
+                       : template_param->pole_rear_retract_accel;
+    }
+
+    if (ctrl->pole_cmd.auto_lift_speed[side] <= 0.0f) {
+      ctrl->pole_cmd.auto_lift_speed[side] = fallback_speed;
+    }
+    if (ctrl->pole_cmd.auto_lift_accel[side] == 0.0f) {
+      ctrl->pole_cmd.auto_lift_accel[side] = fallback_accel;
+    }
+  }
+
+  ctrl->pole_cmd.disable_lift_accel =
+      ctrl->pole_cmd.auto_lift_accel[0] < 0.0f ||
+      ctrl->pole_cmd.auto_lift_accel[1] < 0.0f;
+}
+
 static bool AutoOre_CommandFusedStepStartPoleTarget(AutoOre_t *ctrl) {
   if (!AutoOre_CommandPoleTarget(ctrl,
                                  AutoOre_FusedStepStartPoleTarget(ctrl))) {
@@ -3314,6 +3390,7 @@ static bool AutoOre_CopyStepCtrlOutputs(AutoOre_t *ctrl,
 
   ctrl->pole_cmd = ctrl->step_ctrl.pole_cmd;
   ctrl->pole_cmd_valid = ctrl->step_ctrl.pole_cmd.mode != POLE_MODE_RELAX;
+  AutoOre_EnsureFusedPoleCommandLimits(ctrl);
   return true;
 }
 

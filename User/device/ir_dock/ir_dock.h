@@ -19,6 +19,10 @@ extern "C" {
 #define IR_DOCK_RX_BUFFER_SIZE (16u)
 #endif
 
+#ifndef IR_DOCK_RX_RECOVER_TIMEOUT_MS
+#define IR_DOCK_RX_RECOVER_TIMEOUT_MS (2000u)
+#endif
+
 #define IR_DOCK_FRAME_HEAD (0xA5u)
 #define IR_DOCK_FRAME_SIZE (2u)
 #define IR_DOCK_ACK_BYTE (0x5Au)
@@ -77,6 +81,8 @@ typedef struct {
   volatile uint32_t ack_tx_count;
   volatile uint32_t ack_tx_error_count;
   volatile uint32_t ack_drop_count;
+  volatile uint32_t rx_recover_count;
+  volatile uint32_t rx_start_fail_count;
   volatile uint32_t invalid_rx_count;
   volatile uint32_t error_count;
 } IrDock_ChannelDebug_t;
@@ -126,6 +132,8 @@ typedef struct {
   volatile uint32_t ack_tx_count;
   volatile uint32_t ack_tx_error_count;
   volatile uint32_t ack_drop_count;
+  volatile uint32_t rx_recover_count;
+  volatile uint32_t rx_start_fail_count;
   volatile uint32_t crc_error_count;
   volatile uint32_t invalid_rx_count;
   volatile uint32_t error_count;

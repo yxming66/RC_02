@@ -254,8 +254,8 @@ static bool AutoRodSpearhead_StartAction(AutoRodSpearhead_t *ctrl,
   ctrl->photo_stable_state = false;
   ctrl->photo_stable_start_time_ms = now_ms;
   ctrl->dock_complete_latched = false;
+  ctrl->dock_wait_start_time_ms = now_ms;
   ctrl->dock_wait_local_ready = false;
-  ctrl->dock_wait_ready_time_ms = 0u;
   AutoRodSpearhead_ClearOutputs(ctrl);
   return true;
 }
@@ -572,6 +572,11 @@ static void AutoRodSpearhead_RunDockWait(
       feedback == 0 || !feedback->ore_store_position_valid ||
       feedback->ore_store_platform_position_rad >
           AUTO_ROD_SPEARHEAD_DOCK_WAIT_STANDBY_THRESHOLD_RAD;
+  if (feedback != 0 && feedback->dock_complete_received &&
+      AutoRodSpearhead_TimeAtOrAfter(feedback->dock_complete_rx_ms,
+                                     ctrl->dock_wait_start_time_ms)) {
+    ctrl->dock_complete_latched = true;
+  }
 
   switch (ctrl->step_index) {
     case 0:
@@ -608,20 +613,12 @@ static void AutoRodSpearhead_RunDockWait(
           feedback->rod_dock_wait_at_target;
       if (!local_ready) {
         ctrl->dock_wait_local_ready = false;
-        ctrl->dock_wait_ready_time_ms = 0u;
       } else {
         if (!ctrl->dock_wait_local_ready) {
           ctrl->dock_wait_local_ready = true;
-          ctrl->dock_wait_ready_time_ms = now_ms;
-        }
-        if (feedback->dock_complete_received &&
-            AutoRodSpearhead_TimeAtOrAfter(
-                feedback->dock_complete_rx_ms,
-                ctrl->dock_wait_ready_time_ms)) {
-          ctrl->dock_complete_latched = true;
         }
       }
-      if (ctrl->dock_complete_latched) {
+      if (ctrl->dock_wait_local_ready && ctrl->dock_complete_latched) {
         AutoRodSpearhead_NextStep(ctrl);
         return;
       }
