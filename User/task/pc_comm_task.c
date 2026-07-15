@@ -398,13 +398,13 @@ static bool PcComm_AppendStartMatchFrame(uint16_t *tx_len) {
     return true;
 }
 
-static bool PcComm_AppendRetryFrame(uint16_t *tx_len) {
+static bool PcComm_AppendRetryRegion2Frame(uint16_t *tx_len) {
     if (tx_len == NULL || *tx_len >= sizeof(s_tx_buf) ||
-        !MrlinkPc_HasRetryRequest()) {
+        !MrlinkPc_HasRetryRegion2Request()) {
         return false;
     }
 
-    const uint16_t frame_len = MrlinkPc_BuildRetryFrame(
+    const uint16_t frame_len = MrlinkPc_BuildRetryRegion2Frame(
         &s_tx_buf[*tx_len], (uint16_t)(sizeof(s_tx_buf) - *tx_len));
     if (frame_len == 0u) {
         return false;
@@ -661,8 +661,9 @@ static bool PcComm_TransmitFeedback(void) {
     if (start_match_pending) {
         frame_count++;
     }
-    const bool retry_pending = PcComm_AppendRetryFrame(&tx_len);
-    if (retry_pending) {
+    const bool retry_region_2_pending =
+        PcComm_AppendRetryRegion2Frame(&tx_len);
+    if (retry_region_2_pending) {
         frame_count++;
     }
 
@@ -693,8 +694,8 @@ static bool PcComm_TransmitFeedback(void) {
             if (start_match_pending) {
                 MrlinkPc_ClearStartMatchRequest();
             }
-            if (retry_pending) {
-                MrlinkPc_ClearRetryRequest();
+            if (retry_region_2_pending) {
+                MrlinkPc_ClearRetryRegion2Request();
             }
         }
         PcComm_DebugRecordTx(s_tx_buf, tx_len, frame_count, tx_result);

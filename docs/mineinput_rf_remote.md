@@ -23,6 +23,10 @@ void RF_Remote_OnKfsFrame(uint8_t side, const uint8_t cells[12],
 void RF_Remote_OnRetryFrame(uint8_t mode, uint8_t msg_id);
 ```
 
+当前业务层将 `mode=1` 转换为 PC_COMM 开始比赛/一区重试命令 `0x02`，
+将 `mode=2` 转换为二区重试命令 `0x08`；两者 payload 均为 `1`。
+其它合法模式仍会正常 ACK，但不会进入 PC_COMM 一次性命令发送队列。
+
 业务暂时无法接收新命令时调用 `RF_Remote_SetBusy(true)`，驱动会回复
 `STATUS=0x01` 且不触发业务回调；恢复后调用 `RF_Remote_SetBusy(false)`。
 

@@ -1230,7 +1230,7 @@ static void Rc_UpdatePcRetryRequest(void) {
 
   const bool retry_active = dr16.data.ch_l_x > RC_PC_RETRY_CH_L_X_THRESHOLD;
   if (retry_active && !rc_pc_retry_was_active) {
-    (void)MrlinkPc_RequestRetry(1u);
+    (void)MrlinkPc_RequestRetryRegion2();
   }
   rc_pc_retry_was_active = retry_active;
 }

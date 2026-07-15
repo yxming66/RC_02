@@ -163,6 +163,7 @@ static bool RF_Remote_ValidateRetry(const uint8_t *frame) {
   return frame[3u] != 0u && frame[4u] >= 1u && frame[4u] <= 12u;
 }
 
+
 static bool RF_Remote_IsDuplicate(uint8_t command, uint8_t msg_id,
                                   uint64_t now_us) {
   return latest_valid && rf_remote_debug.latest.command == command &&
