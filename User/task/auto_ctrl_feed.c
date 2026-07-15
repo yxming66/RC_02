@@ -597,6 +597,23 @@ static bool AutoCtrlFeed_IsStepAction(PC_AutoAction_t action) {
   return AutoCtrlFeed_MapStepTemplate(action) != AUTO_CTRL_TEMPLATE_NONE;
 }
 
+static PC_AutoAction_t AutoCtrlFeed_MapRunningStepAction(
+    auto_ctrl_template_e template_id) {
+  switch (template_id) {
+    case AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD:
+      return PC_AUTO_ACTION_STEP_ASCEND_200_HEAD;
+    case AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD:
+      return PC_AUTO_ACTION_STEP_DESCEND_200_HEAD;
+    case AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD:
+      return PC_AUTO_ACTION_STEP_ASCEND_400_HEAD;
+    case AUTO_CTRL_TEMPLATE_DESCEND_400_HEAD:
+      return PC_AUTO_ACTION_STEP_DESCEND_400_HEAD;
+    case AUTO_CTRL_TEMPLATE_NONE:
+    default:
+      return PC_AUTO_ACTION_NONE;
+  }
+}
+
 static bool AutoCtrlFeed_IsFusedOreAction(AutoOre_Action_t action) {
   switch (action) {
     case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD:
@@ -973,6 +990,7 @@ static bool AutoCtrlFeed_StartSickCorrectAction(
 
 static void AutoCtrlFeed_PublishAutoActionFeedback(void) {
   PC_AutoActionFeedback_t pc_feedback = {0};
+  const bool step_busy = auto_ctrl_inited && AutoCtrl_IsBusy(&auto_ctrl);
   const bool ore_busy = auto_ore_inited && AutoOre_IsBusy(&auto_ore_ctrl);
   const bool rod_busy = auto_rod_spearhead_inited &&
                         AutoRodSpearhead_IsBusy(&auto_rod_spearhead_ctrl);
@@ -993,15 +1011,15 @@ static void AutoCtrlFeed_PublishAutoActionFeedback(void) {
         AutoSickCorrect_GetAction(&auto_sick_correct_ctrl));
   }
 
-  if (auto_ctrl_inited && AutoCtrl_IsBusy(&auto_ctrl) &&
-      AutoCtrlFeed_IsStepAction(auto_action_last_action)) {
-    pc_feedback.busy = 1u;
-    pc_feedback.action = (uint8_t)auto_action_last_action;
-    AutoCtrlFeed_PublishAutoActionSnapshot(&pc_feedback);
-    return;
+  if (step_busy) {
+    const PC_AutoAction_t step_action = AutoCtrlFeed_MapRunningStepAction(
+        AutoCtrl_GetTemplate(&auto_ctrl));
+    if (step_action != PC_AUTO_ACTION_NONE) {
+      auto_action_last_action = step_action;
+    }
   }
 
-  pc_feedback.busy = (ore_busy || rod_busy || sick_busy) ? 1u : 0u;
+  pc_feedback.busy = (step_busy || ore_busy || rod_busy || sick_busy) ? 1u : 0u;
   pc_feedback.action = (uint8_t)auto_action_last_action;
 
   if (pc_feedback.busy != 0u || auto_action_last_action == PC_AUTO_ACTION_NONE) {

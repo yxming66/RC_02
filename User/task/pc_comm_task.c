@@ -759,13 +759,19 @@ void Task_PcCommStep(void) {
     PcComm_ProcessIrOreAckCommand(now);
     PcComm_UpdateCameraYawCommand(now);
 
-    if ((now - s_pc_comm_last_tx_tick) >= PC_COMM_TX_PERIOD_MS) {
-        (void)PcComm_TransmitFeedback();
-        s_pc_comm_last_tx_tick = now;
-    }
-
     if (MrlinkPc_IsPCControlMode()) {
         (void)PcComm_ProcessAutoActionCommand();
+    }
+
+    /* Do not send the cached idle AutoAction frame in the same cycle that a
+     * new request is handed to the 500 Hz auto-control task.  That task will
+     * consume the request and publish busy=1 before the next PC cycle. */
+    const bool auto_action_dispatch_pending =
+        g_auto_ore_debug.request != AUTO_ORE_DEBUG_REQUEST_NONE;
+    if (!auto_action_dispatch_pending &&
+        (now - s_pc_comm_last_tx_tick) >= PC_COMM_TX_PERIOD_MS) {
+        (void)PcComm_TransmitFeedback();
+        s_pc_comm_last_tx_tick = now;
     }
 
     task_runtime.heartbeat.pc_comm++;
