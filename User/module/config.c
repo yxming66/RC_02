@@ -440,6 +440,10 @@ Config_RobotParam_t robot_config = {
             .recover_front_sick_delay_ms = 500u,  /* 前 SICK 达阈值后继续前进时间。 */
             .recover_suction_settle_ms = 50u,
             .recover_chassis_retreat_ms = 500u,
+            /* 动作 9/10/11：前进等待光电1的安全超时，以及光电1有效沿后的前进/后退续行时间。 */
+            .pick_store_chassis_forward_timeout_ms = 3000u,
+            .pick_store_photo1_forward_delay_ms = 150u,
+            .pick_store_photo1_retreat_delay_ms = 150u,
             /* 融合取矿/存矿/上台阶动作延时；0 使用代码默认值。 */
             .fused_prealign_stable_ms = 120u,          /* 融合动作 yaw 对正后稳定等待时间，单位 ms。 */
             .fused_pick_precontact_timeout_ms = 500u,  /* 融合取矿低速靠近兜底超时，避免光电条件未命中时长时间卡住。 */
@@ -471,6 +475,9 @@ Config_RobotParam_t robot_config = {
         /* 回收地面矿时底盘低速前进/后退速度，单位 m/s。 */
         .recover_chassis_forward_vx_mps = 0.25f,
         .recover_chassis_retreat_vx_mps = 0.5f,
+        /* 动作 9/10/11 专用：取矿前进和并行存矿后退速度。 */
+        .pick_store_chassis_forward_vx_mps = 0.25f,
+        .pick_store_chassis_retreat_vx_mps = 0.5f,
         /* 低位存矿完成后，transform 从高位 LIFT 回低位 STANDBY 的旧梯形速度规划；三段速度未配置时兜底使用。 */
         .store_low_return_velocity_rad_s = 35.0f,
         .store_low_return_accel_rad_s2 = 60.0f,

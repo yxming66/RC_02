@@ -41,8 +41,11 @@
 #define AUTO_ORE_DEFAULT_FUSED_ARM_PHOTO_STABLE_MS (120u)
 #define AUTO_ORE_DEFAULT_FUSED_PHOTO1_LIFT_DELAY_MS (200u)
 #define AUTO_ORE_FUSED_STEP_PHOTO_STABLE_MS (20u)
-#define AUTO_ORE_PICK_STORE_FETCH_PHOTO_DELAY_MS (100u)
-#define AUTO_ORE_PICK_STORE_RETREAT_PHOTO_DELAY_MS (100u)
+#define AUTO_ORE_DEFAULT_PICK_STORE_FORWARD_TIMEOUT_MS (3000u)
+#define AUTO_ORE_DEFAULT_PICK_STORE_PHOTO1_FORWARD_DELAY_MS (500u)
+#define AUTO_ORE_DEFAULT_PICK_STORE_PHOTO1_RETREAT_DELAY_MS (500u)
+#define AUTO_ORE_DEFAULT_PICK_STORE_FORWARD_VX_MPS (0.25f)
+#define AUTO_ORE_DEFAULT_PICK_STORE_RETREAT_VX_MPS (0.5f)
 #define AUTO_ORE_PICK_STORE_FINISH_POLE_TARGET_RAD (0.8f)
 #define AUTO_ORE_PICK_STORE_FINISH_POLE_THRESHOLD_RAD (1.5f)
 #define AUTO_ORE_FUSED_HEAD_ASCEND_FRONT_RETRACT_STEP_INDEX (2u)
@@ -806,6 +809,38 @@ static float AutoOre_FetchChassisVxMps(const AutoOre_t *ctrl) {
              : AUTO_ORE_DEFAULT_FETCH_CHASSIS_VX_MPS;
 }
 
+static uint32_t AutoOre_PickStoreForwardTimeoutMs(const AutoOre_t *ctrl) {
+  return AutoOre_TimingValue(
+      ctrl->param.timing.pick_store_chassis_forward_timeout_ms,
+      AUTO_ORE_DEFAULT_PICK_STORE_FORWARD_TIMEOUT_MS);
+}
+
+static uint32_t AutoOre_PickStorePhoto1ForwardDelayMs(
+    const AutoOre_t *ctrl) {
+  return AutoOre_TimingValue(
+      ctrl->param.timing.pick_store_photo1_forward_delay_ms,
+      AUTO_ORE_DEFAULT_PICK_STORE_PHOTO1_FORWARD_DELAY_MS);
+}
+
+static uint32_t AutoOre_PickStorePhoto1RetreatDelayMs(
+    const AutoOre_t *ctrl) {
+  return AutoOre_TimingValue(
+      ctrl->param.timing.pick_store_photo1_retreat_delay_ms,
+      AUTO_ORE_DEFAULT_PICK_STORE_PHOTO1_RETREAT_DELAY_MS);
+}
+
+static float AutoOre_PickStoreForwardVxMps(const AutoOre_t *ctrl) {
+  return (ctrl != 0 && ctrl->param.pick_store_chassis_forward_vx_mps > 0.0f)
+             ? ctrl->param.pick_store_chassis_forward_vx_mps
+             : AUTO_ORE_DEFAULT_PICK_STORE_FORWARD_VX_MPS;
+}
+
+static float AutoOre_PickStoreRetreatVxMps(const AutoOre_t *ctrl) {
+  return (ctrl != 0 && ctrl->param.pick_store_chassis_retreat_vx_mps > 0.0f)
+             ? ctrl->param.pick_store_chassis_retreat_vx_mps
+             : AUTO_ORE_DEFAULT_PICK_STORE_RETREAT_VX_MPS;
+}
+
 static uint32_t AutoOre_RecoverForwardMs(const AutoOre_t *ctrl) {
   return AutoOre_TimingValue(ctrl->param.timing.recover_chassis_forward_ms,
                              AutoOre_TimingValue(
@@ -1167,7 +1202,9 @@ static void AutoOre_PublishOutputSnapshot(AutoOre_t *ctrl) {
     return;
   }
 
-  if (ctrl->pole_cmd_valid && AutoOre_ActionIsFused(ctrl->action)) {
+  if (ctrl->pole_cmd_valid &&
+      (AutoOre_ActionIsFused(ctrl->action) ||
+       AutoOre_ActionIsPickStoreFused(ctrl->action))) {
     AutoOre_EnsureFusedPoleCommandLimits(ctrl);
   }
 
@@ -1314,7 +1351,8 @@ static bool AutoOre_CommandPoleTarget(AutoOre_t *ctrl,
   ctrl->pole_cmd.auto_lift_accel[1] = 0.0f;
   ctrl->pole_cmd.disable_lift_accel = false;
   ctrl->pole_cmd_valid = true;
-  if (AutoOre_ActionIsFused(ctrl->action)) {
+  if (AutoOre_ActionIsFused(ctrl->action) ||
+      AutoOre_ActionIsPickStoreFused(ctrl->action)) {
     AutoOre_EnsureFusedPoleCommandLimits(ctrl);
   }
   return true;
@@ -2570,8 +2608,16 @@ static const AutoOre_FusedParam_t *AutoOre_FusedParam(const AutoOre_t *ctrl) {
 }
 
 static const float *AutoOre_PickPoleTarget(const AutoOre_t *ctrl) {
+  static const float pick_store_neg_200_target[2] = {
+      AUTO_ORE_PICK_STORE_FINISH_POLE_TARGET_RAD,
+      AUTO_ORE_PICK_STORE_FINISH_POLE_TARGET_RAD,
+  };
+
   if (ctrl == 0 || ctrl->param.pole_param == 0) {
     return 0;
+  }
+  if (ctrl->action == AUTO_ORE_ACTION_PICK_STORE_NEG_200) {
+    return pick_store_neg_200_target;
   }
   switch (AutoOre_PickStoreFusedPickAction(ctrl->action)) {
     case AUTO_ORE_ACTION_PICK_POS_400:
@@ -2630,8 +2676,18 @@ static const float *AutoOre_FusedStepStartPoleTarget(const AutoOre_t *ctrl) {
 static const AutoCtrl_TemplateParam_t *AutoOre_FusedStepTemplateParam(
     const AutoOre_t *ctrl) {
   const Config_RobotParam_t *robot_param = Config_GetRobotParam();
-  if (robot_param == 0) {
+  if (ctrl == 0 || robot_param == 0) {
     return 0;
+  }
+
+  switch (ctrl->action) {
+    case AUTO_ORE_ACTION_PICK_STORE_POS_400:
+      return &robot_param->auto_ctrl_param.head_ascend_400;
+    case AUTO_ORE_ACTION_PICK_STORE_POS_200:
+    case AUTO_ORE_ACTION_PICK_STORE_NEG_200:
+      return &robot_param->auto_ctrl_param.head_ascend_200;
+    default:
+      break;
   }
 
   switch (AutoOre_FusedStepTemplateId(ctrl)) {
@@ -3013,7 +3069,7 @@ static bool AutoOre_PickStoreRetreatReady(AutoOre_t *ctrl, uint32_t now_ms) {
     return false;
   }
   return (now_ms - ctrl->fused_arm_photo_since_ms) >=
-         AUTO_ORE_PICK_STORE_RETREAT_PHOTO_DELAY_MS;
+      AutoOre_PickStorePhoto1RetreatDelayMs(ctrl);
 }
 
 static uint8_t AutoOre_FusedFastPickTemplateStartStepIndex(
@@ -3686,7 +3742,7 @@ static void AutoOre_RunPickStoreFusedParallel(AutoOre_t *ctrl,
 
   if (!ctrl->fused_step_done) {
     if (!AutoOre_PickStoreRetreatReady(ctrl, now_ms)) {
-      AutoOre_CommandChassisMove(ctrl, -AutoOre_FetchChassisVxMps(ctrl));
+      AutoOre_CommandChassisMove(ctrl, -AutoOre_PickStoreRetreatVxMps(ctrl));
     } else {
       ctrl->fused_step_done = true;
       AutoOre_ReleaseChassisCommand(ctrl);
@@ -3749,11 +3805,19 @@ static void AutoOre_RunPickStoreFused(AutoOre_t *ctrl, uint32_t now_ms) {
         AutoOre_FailPickInvalidParam(ctrl);
         return;
       }
-      AutoOre_CommandChassisMove(ctrl, AutoOre_FetchChassisVxMps(ctrl));
+            AutoOre_CommandChassisMove(ctrl, AutoOre_PickStoreForwardVxMps(ctrl));
       if (AutoOre_WaitLatchedConditionThenDelay(
               ctrl, now_ms, AutoOre_PickPhoto1LiftReached(ctrl, now_ms),
-              AUTO_ORE_PICK_STORE_FETCH_PHOTO_DELAY_MS)) {
+              AutoOre_PickStorePhoto1ForwardDelayMs(ctrl))) {
         AutoOre_NextStep(ctrl);
+            } else if (!ctrl->step_condition_met &&
+           AutoOre_StepElapsed(ctrl, now_ms) >=
+               AutoOre_PickStoreForwardTimeoutMs(ctrl)) {
+        AutoOre_CommandChassisHold(ctrl);
+        AutoOre_AddFailureMask(ctrl, AUTO_ORE_FAILURE_PICK_ORE);
+        ctrl->state = AUTO_ORE_STATE_FAIL;
+        ctrl->result = AUTO_ORE_RESULT_FAIL;
+        ctrl->fault = AUTO_ORE_FAULT_TIMEOUT;
       } else {
         (void)AutoOre_CheckTimeoutWithFailure(
             ctrl, now_ms, AUTO_ORE_FAILURE_PICK_ORE);

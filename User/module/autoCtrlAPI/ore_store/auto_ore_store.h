@@ -214,6 +214,9 @@ typedef struct {
   uint32_t recover_front_sick_delay_ms;
   uint32_t recover_suction_settle_ms;
   uint32_t recover_chassis_retreat_ms;
+  uint32_t pick_store_chassis_forward_timeout_ms;
+  uint32_t pick_store_photo1_forward_delay_ms;
+  uint32_t pick_store_photo1_retreat_delay_ms;
   uint32_t fused_prealign_stable_ms;
   uint32_t fused_pick_precontact_timeout_ms;
   uint32_t fused_pick_lift_detect_ms;
@@ -290,6 +293,8 @@ typedef struct {
   float recover_pole_target_lift_rad[2];
   float recover_chassis_forward_vx_mps;
   float recover_chassis_retreat_vx_mps;
+  float pick_store_chassis_forward_vx_mps;
+  float pick_store_chassis_retreat_vx_mps;
   float store_low_return_velocity_rad_s;
   float store_low_return_accel_rad_s2;
   float store_low_return_decel_rad_s2;

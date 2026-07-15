@@ -1760,6 +1760,9 @@ static void Rc_RefreshAutoOreOutputSnapshot(void) {
 
 static bool Rc_AutoOreActionUsesFusedStep(void) {
   switch (auto_ore_ctrl.action) {
+    case AUTO_ORE_ACTION_PICK_STORE_POS_400:
+    case AUTO_ORE_ACTION_PICK_STORE_POS_200:
+    case AUTO_ORE_ACTION_PICK_STORE_NEG_200:
     case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD:
     case AUTO_ORE_ACTION_STEP_PICK_STORE_DESCEND_200_HEAD:
     case AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_400_HEAD:
