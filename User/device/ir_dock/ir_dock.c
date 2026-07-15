@@ -270,8 +270,6 @@ static void IrDock_ParseProtocolFrame(IrDock_Source_t source, uint8_t command,
   default:
     break;
   }
-
-  IrDock_QueueAck(source);
 }
 
 static void IrDock_ParseRxBytes(IrDock_Source_t source, const uint8_t *rx_buf,

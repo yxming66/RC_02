@@ -147,7 +147,7 @@ UART_HandleTypeDef *BSP_UART_GetHandle(BSP_UART_t uart) {
       return &huart7;
     case BSP_UART_ORE:
       return &huart10;
-    default:
+    default: 
       return NULL;
   }
 }
