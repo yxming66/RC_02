@@ -238,6 +238,11 @@ static void AutoCtrlFeed_SyncAutoOrePhotoOccupancy(void) {
     return;
   }
 
+  const OreStore_Feedback_t *ore_store_feedback =
+      Task_OreStoreGetFeedback();
+  auto_ore_ctrl.feedback.ore_store_fixed_ore_cylinder_closed =
+      ore_store_feedback != NULL &&
+      ore_store_feedback->fixed_ore_cylinder_closed;
   auto_ore_ctrl.feedback.photo_transfer_valid =
       photo_transfer_snapshot.valid;
   if (!photo_transfer_snapshot.valid) {
@@ -1255,6 +1260,8 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms, bool update_debug) {
       AutoCtrlFeed_ReadReleaseGridOrePhoto();
   const bool spear_photo_triggered = AutoCtrlFeed_ReadRodSpearheadPhoto();
   const ArmSimple_Feedback_t *arm_fb = Task_ArmSimpleGetFeedback();
+  const bool ore_store_fixed_cylinder_closed =
+      ore_store_fb != NULL && ore_store_fb->fixed_ore_cylinder_closed;
   const Chassis_Feedback_t *chassis_feedback = Task_ChassisGetFeedback();
   const uint8_t release_lift_sick_index =
       (auto_ore_ctrl.param.release_lift_detect_sick_index <
@@ -1277,6 +1284,8 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms, bool update_debug) {
       .pa2_photo3_triggered = feedback.pa2_photo3_triggered,
       .pa0_photo4_triggered = feedback.pa0_photo4_triggered,
       .release_grid_has_ore = release_grid_photo_triggered,
+      .ore_store_fixed_ore_cylinder_closed =
+          ore_store_fixed_cylinder_closed,
       .yaw_source = AutoCtrl_GetYawSource(&auto_ctrl),
       .yaw_auto_rad = feedback.yaw_auto_rad,
       .lateral_velocity_cmd_mps = auto_ctrl.lateral_velocity_cmd_mps,

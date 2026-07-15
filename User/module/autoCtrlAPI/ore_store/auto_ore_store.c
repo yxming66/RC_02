@@ -1655,13 +1655,25 @@ static void AutoOre_ApplyFeedbackOccupancy(AutoOre_t *ctrl) {
   if (!AutoOre_FeedbackOccupancyValid(ctrl)) {
     return;
   }
-#if AUTO_ORE_LOW_OCCUPANCY_SOURCE == AUTO_ORE_OCCUPANCY_SOURCE_PHOTOELECTRIC_VALUE
-  ctrl->occupancy.transform_low_has_ore =
+
+  bool low_has_ore =
       ctrl->feedback.photoelectric_occupancy.transform_low_has_ore;
+  const bool high_has_ore =
+      ctrl->feedback.photoelectric_occupancy.transform_high_has_ore;
+
+  if (!low_has_ore && high_has_ore) {
+    low_has_ore = true;
+  }
+
+  if (ctrl->feedback.ore_store_fixed_ore_cylinder_closed) {
+    low_has_ore = true;
+  }
+#if AUTO_ORE_LOW_OCCUPANCY_SOURCE == AUTO_ORE_OCCUPANCY_SOURCE_PHOTOELECTRIC_VALUE
+  ctrl->occupancy.transform_low_has_ore = low_has_ore;
 #endif
 #if AUTO_ORE_HIGH_OCCUPANCY_SOURCE == AUTO_ORE_OCCUPANCY_SOURCE_PHOTOELECTRIC_VALUE
   ctrl->occupancy.transform_high_has_ore =
-      ctrl->feedback.photoelectric_occupancy.transform_high_has_ore;
+      high_has_ore || ctrl->feedback.ore_store_fixed_ore_cylinder_closed;
 #endif
 #if AUTO_ORE_ARM_OCCUPANCY_SOURCE == AUTO_ORE_OCCUPANCY_SOURCE_PHOTOELECTRIC_VALUE
   ctrl->occupancy.arm_has_ore = ctrl->feedback.photoelectric_occupancy.arm_has_ore;
