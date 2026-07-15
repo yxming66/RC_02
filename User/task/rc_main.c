@@ -22,6 +22,7 @@ DR16_t dr16;
 
 #if RC_MAIN_RF_REMOTE_ENABLE
 static volatile bool rc_remote_kfs_pending = false;
+static volatile bool rc_remote_reset_pending = false;
 static uint8_t rc_remote_kfs_side = 0u;
 static uint8_t rc_remote_kfs_msg_id = 0u;
 static uint8_t rc_remote_kfs_cells[ORE_INFO_POSITION_COUNT] = {0};
@@ -41,10 +42,26 @@ void RF_Remote_OnKfsFrame(uint8_t side,
 
 void RF_Remote_OnRetryFrame(uint8_t mode, uint8_t msg_id) {
   (void)msg_id;
-  if (mode == 1u) {
-    (void)MrlinkPc_RequestStartMatch(1u);
-  } else if (mode == 2u) {
-    (void)MrlinkPc_RequestRetryRegion2();
+  switch ((RF_Remote_Mode_t)mode) {
+    case RF_REMOTE_MODE_RELAX:
+      RcCmdCenterApp_SetRfBehavior(RC_CMD_CENTER_RF_BEHAVIOR_RELAX);
+      break;
+    case RF_REMOTE_MODE_LOCK:
+      RcCmdCenterApp_SetRfBehavior(RC_CMD_CENTER_RF_BEHAVIOR_LOCK);
+      break;
+    case RF_REMOTE_MODE_RESET:
+      rc_remote_reset_pending = true;
+      break;
+    case RF_REMOTE_MODE_START:
+    case RF_REMOTE_MODE_RETRY_REGION_1:
+    case RF_REMOTE_MODE_RETRY_REGION_3:
+      (void)MrlinkPc_RequestStartMatch(1u);
+      break;
+    case RF_REMOTE_MODE_RETRY_REGION_2:
+      (void)MrlinkPc_RequestRetryRegion2();
+      break;
+    default:
+      break;
   }
 }
 
@@ -91,6 +108,13 @@ static void RcMain_ServiceRemoteKfs(void) {
 
   rc_remote_kfs_pending = false;
   RcMain_ApplyRemoteKfs(BSP_TIME_Get_ms());
+}
+
+static void RcMain_ServiceRemoteReset(void) {
+  if (!rc_remote_reset_pending || RF_Remote_HasPendingAck()) return;
+
+  rc_remote_reset_pending = false;
+  RcCmdCenterApp_RequestReset();
 }
 #endif
 
@@ -157,6 +181,7 @@ void Task_rc_main(void *argument) {
 #if RC_MAIN_RF_REMOTE_ENABLE
     (void)RF_Remote_Poll(RC_MAIN_DR16_OFFLINE_TIMEOUT_US);
     RcMain_ServiceRemoteKfs();
+  RcMain_ServiceRemoteReset();
 #endif
 
     RcCmdCenterApp_Update(BSP_TIME_Get_ms());

@@ -174,6 +174,7 @@ typedef struct {
 typedef struct {
   volatile RcControlPage_t page;
   volatile bool reset_event;
+  volatile uint8_t rf_behavior;
   volatile bool auto_200_start_event;
   volatile bool auto_200_start_ok;
   volatile auto_ctrl_template_e auto_200_template;
@@ -259,6 +260,9 @@ static float rod_target_angle_latched_rad = 1.0f;
 static Suction_State_t arm_simple_suction_latched = SUCTION_OFF;
 static RcBehavior_t rc_current_behavior = RC_BEHAVIOR_SAFE;
 static RcCommandPlan_t rc_current_plan = RC_CMD_PLAN_SAFE;
+static volatile RcCmdCenterRfBehavior_t rc_rf_behavior =
+  RC_CMD_CENTER_RF_BEHAVIOR_NONE;
+static volatile bool rc_rf_reset_pending = false;
 static bool rc_cmd_center_configured = false;
 static uint32_t rc_debug_last_update_ms = 0u;
 
@@ -1267,6 +1271,13 @@ static RcBehavior_t Rc_SelectMappedBehavior(void) {
   size_t map_count = 0u;
   const RcSwitchBehaviorMap_t *map = Rc_GetBehaviorMap(&map_count);
 
+  if (rc_rf_behavior == RC_CMD_CENTER_RF_BEHAVIOR_RELAX) {
+    return RC_BEHAVIOR_SAFE;
+  }
+  if (rc_rf_behavior == RC_CMD_CENTER_RF_BEHAVIOR_LOCK) {
+    return RC_BEHAVIOR_DRIVE;
+  }
+
   if (Rc_ShouldUsePcCommand() &&
       Task_PcCommHasAutoActionControlLatch()) {
     return RC_BEHAVIOR_PC;
@@ -1363,9 +1374,12 @@ static void Rc_UpdateDebugSnapshot(void) {
 }
 
 static void Rc_HandleResetEvent(void) {
-  if (dr16.header.online && dr16.data.sw_l == DR16_SW_UP &&
+  const bool dr16_reset =
+      dr16.header.online && dr16.data.sw_l == DR16_SW_UP &&
       dr16.data.sw_r == DR16_SW_DOWN && last_sw_r != DR16_SW_DOWN &&
-      last_sw_r != DR16_SW_ERR) {
+      last_sw_r != DR16_SW_ERR;
+  if (dr16_reset || rc_rf_reset_pending) {
+    rc_rf_reset_pending = false;
     reset = true;
     g_rc_control_debug.reset_event = true;
   }
@@ -2468,9 +2482,24 @@ static void Rc_ConfigureCmdCenter(void) {
  
 /* Exported functions ------------------------------------------------------- */
 void RcCmdCenterApp_Init(void) {
+  rc_rf_behavior = RC_CMD_CENTER_RF_BEHAVIOR_NONE;
+  rc_rf_reset_pending = false;
   Rc_SetArmSimpleRelax();
   Rc_SetOreStoreRelax();
   Rc_ConfigureCmdCenter();
+}
+
+void RcCmdCenterApp_SetRfBehavior(RcCmdCenterRfBehavior_t behavior) {
+  if (behavior != RC_CMD_CENTER_RF_BEHAVIOR_RELAX &&
+      behavior != RC_CMD_CENTER_RF_BEHAVIOR_LOCK) {
+    return;
+  }
+  rc_rf_behavior = behavior;
+  g_rc_control_debug.rf_behavior = (uint8_t)behavior;
+}
+
+void RcCmdCenterApp_RequestReset(void) {
+  rc_rf_reset_pending = true;
 }
 
 void RcCmdCenterApp_Update(uint32_t now_ms) {

@@ -160,7 +160,20 @@ static bool RF_Remote_ValidateKfs(const uint8_t *frame) {
 }
 
 static bool RF_Remote_ValidateRetry(const uint8_t *frame) {
-  return frame[3u] != 0u && frame[4u] >= 1u && frame[4u] <= 12u;
+  if (frame[3u] == 0u) return false;
+
+  switch ((RF_Remote_Mode_t)frame[4u]) {
+    case RF_REMOTE_MODE_RELAX:
+    case RF_REMOTE_MODE_LOCK:
+    case RF_REMOTE_MODE_RESET:
+    case RF_REMOTE_MODE_START:
+    case RF_REMOTE_MODE_RETRY_REGION_1:
+    case RF_REMOTE_MODE_RETRY_REGION_2:
+    case RF_REMOTE_MODE_RETRY_REGION_3:
+      return true;
+    default:
+      return false;
+  }
 }
 
 
@@ -187,6 +200,7 @@ static void RF_Remote_SaveFrame(const uint8_t *frame, uint64_t now_us) {
   } else {
     latest.retry_mode = frame[4u];
     rf_remote_debug.stats.retry_frames++;
+    rf_remote_debug.stats.last_retry_mode = latest.retry_mode;
   }
 
   rf_remote_debug.latest = latest;
@@ -414,5 +428,7 @@ bool RF_Remote_GetLatest(RF_Remote_Frame_t *frame) {
 const volatile RF_Remote_Stats_t *RF_Remote_GetStats(void) {
   return &rf_remote_debug.stats;
 }
+
+bool RF_Remote_HasPendingAck(void) { return ack_pending; }
 
 void RF_Remote_SetBusy(bool busy) { receiver_busy = busy; }

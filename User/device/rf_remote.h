@@ -41,7 +41,17 @@ typedef enum {
 } RF_Remote_AckStatus_t;
 
 typedef enum {
-  RF_REMOTE_CELL_EMPTY = 0u,
+  RF_REMOTE_MODE_RELAX = 1u,
+  RF_REMOTE_MODE_LOCK = 2u,
+  RF_REMOTE_MODE_RESET = 3u,
+  RF_REMOTE_MODE_START = 4u,
+  RF_REMOTE_MODE_RETRY_REGION_1 = 7u,
+  RF_REMOTE_MODE_RETRY_REGION_2 = 8u,
+  RF_REMOTE_MODE_RETRY_REGION_3 = 9u,
+} RF_Remote_Mode_t;
+
+typedef enum {
+  RF_REMOTE_CELL_EMPT3Y = 0u,
   RF_REMOTE_CELL_R1 = 1u,
   RF_REMOTE_CELL_R2 = 2u,
   RF_REMOTE_CELL_FAKE = 3u,
@@ -73,6 +83,7 @@ typedef struct {
   volatile uint32_t ack_errors;
   volatile uint8_t last_command;
   volatile uint8_t last_msg_id;
+  volatile uint8_t last_retry_mode;
   volatile uint8_t last_ack_status;
   volatile uint64_t last_rx_time_us;
   volatile bool online;
@@ -93,6 +104,7 @@ int8_t RF_Remote_ParseData(void);
 int8_t RF_Remote_Poll(uint32_t offline_timeout_us);
 bool RF_Remote_GetLatest(RF_Remote_Frame_t *frame);
 const volatile RF_Remote_Stats_t *RF_Remote_GetStats(void);
+bool RF_Remote_HasPendingAck(void);
 void RF_Remote_SetBusy(bool busy);
 
 /* Override these weak callbacks in the business layer when required. */

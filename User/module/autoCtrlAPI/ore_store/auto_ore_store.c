@@ -43,6 +43,8 @@
 #define AUTO_ORE_FUSED_STEP_PHOTO_STABLE_MS (20u)
 #define AUTO_ORE_PICK_STORE_FETCH_PHOTO_DELAY_MS (100u)
 #define AUTO_ORE_PICK_STORE_RETREAT_PHOTO_DELAY_MS (100u)
+#define AUTO_ORE_PICK_STORE_FINISH_POLE_TARGET_RAD (0.8f)
+#define AUTO_ORE_PICK_STORE_FINISH_POLE_THRESHOLD_RAD (1.5f)
 #define AUTO_ORE_FUSED_HEAD_ASCEND_FRONT_RETRACT_STEP_INDEX (2u)
 #define AUTO_ORE_FUSED_HEAD_DESCEND_FIRST_EDGE_STEP_INDEX (1u)
 #define AUTO_ORE_FUSED_ARM_PHOTO_ENABLE_JOINT1_RAD (0.6981317f)
@@ -1306,6 +1308,24 @@ static bool AutoOre_CommandPoleTarget(AutoOre_t *ctrl,
   ctrl->pole_cmd.disable_lift_accel = false;
   ctrl->pole_cmd_valid = true;
   return true;
+}
+
+static bool AutoOre_CommandPickStoreFinishPoleTarget(AutoOre_t *ctrl) {
+  const float target_lift[2] = {
+      AUTO_ORE_PICK_STORE_FINISH_POLE_TARGET_RAD,
+      AUTO_ORE_PICK_STORE_FINISH_POLE_TARGET_RAD,
+  };
+  return AutoOre_CommandPoleTarget(ctrl, target_lift);
+}
+
+static bool AutoOre_PickStoreFinishPoleAtTarget(const AutoOre_t *ctrl) {
+  return ctrl != 0 &&
+         AutoOre_AbsFloat(ctrl->feedback.pole_front_lift_rad -
+                          AUTO_ORE_PICK_STORE_FINISH_POLE_TARGET_RAD) <=
+             AUTO_ORE_PICK_STORE_FINISH_POLE_THRESHOLD_RAD &&
+         AutoOre_AbsFloat(ctrl->feedback.pole_rear_lift_rad -
+                          AUTO_ORE_PICK_STORE_FINISH_POLE_TARGET_RAD) <=
+             AUTO_ORE_PICK_STORE_FINISH_POLE_THRESHOLD_RAD;
 }
 
 static void AutoOre_ApplyPoleCommandLimitsFromTemplate(
@@ -3684,7 +3704,24 @@ static void AutoOre_RunPickStoreFused(AutoOre_t *ctrl, uint32_t now_ms) {
       AutoOre_RunPickStoreFusedParallel(ctrl, now_ms);
       return;
     case 5:
-      AutoOre_FinishSuccess(ctrl);
+      AutoOre_EnterStep(ctrl, now_ms);
+      AutoOre_CommandChassisHold(ctrl);
+      if (!AutoOre_CommandPickStoreFinishPoleTarget(ctrl)) {
+        AutoOre_FailPickInvalidParam(ctrl);
+        return;
+      }
+      if (!ctrl->step_condition_met) {
+        ctrl->step_condition_met = true;
+        ctrl->step_condition_time_ms = now_ms;
+        return;
+      }
+      if (now_ms != ctrl->step_condition_time_ms &&
+          AutoOre_PickStoreFinishPoleAtTarget(ctrl)) {
+        AutoOre_FinishSuccess(ctrl);
+      } else {
+        (void)AutoOre_CheckTimeoutWithFailure(
+            ctrl, now_ms, AUTO_ORE_FAILURE_PICK_ORE);
+      }
       return;
     default:
       AutoOre_FinishSuccess(ctrl);
