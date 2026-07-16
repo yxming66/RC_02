@@ -493,7 +493,7 @@ Config_RobotParam_t robot_config = {
          */
         .store_low_shake_amplitude_rad = 3.0f,
         .store_low_shake_velocity_rad_s = 80.0f,
-        .store_low_shake_cycles = 2u,
+        .store_low_shake_cycles = 0u,
         /*
          * 融合动作轮转角阈值说明：
          * - *_wheel_delta_rad 使用四轮累计转角变化绝对值的平均值，单位 rad。
@@ -651,11 +651,11 @@ Config_RobotParam_t robot_config = {
             .mid_move_ms = 120u,               /* 中段角度门控兜底超时，单位 ms。 */
             .mid_move_wheel_delta_rad = 10.66f, /* 编码器门控的中段冲刺轮转角阈值，单位 rad；>0 优先按角度切步，<=0 使用 mid_move_ms。 */
             .timed_move_yaw_tolerance_rad = 0.35f, /* 中段移动切步 yaw 容差，约 10 deg。 */
-            .rear_retract_move_speed = 0.40f,   /* 等待后光电触发及触发后延时阶段的低速 vx，单位 m/s。 */
+            .rear_retract_move_speed = 0.35f,   /* 等待后光电触发及触发后延时阶段的低速 vx，单位 m/s。 */
             .rear_retract_timeout_ms = 5000u,   /* 后光电触发后，全收腿动作超时，单位 ms。 */
             .rear_retract_move_ms = 300u,       /* 后光电触发后，全收腿移动持续时间，单位 ms。 */
-            .second_photo_retract_move_speed = 0.40f, /* 后一个光电触发收腿时向头向移动 vx，单位 m/s。 */
-            .final_move_speed = 0.6f,          /* 收尾离开台阶 vx，单位 m/s。 */
+            .second_photo_retract_move_speed = 0.35f, /* 后一个光电触发收腿时向头向移动 vx，单位 m/s。 */
+            .final_move_speed = 1.2f,          /* 收尾离开台阶 vx，单位 m/s。 */
             .final_move_ms = 1200u,              /* 收尾离  开台阶角度门控兜底超时，单位 ms。 */
             .final_photo_sprint_ms = 50u,       /* 末尾光电触发后继续冲刺时间，单位 ms。 */
             .final_move_wheel_delta_rad = 0.0f, /* 编码器门控的收尾离开轮转角阈值，单位 rad；>0 优先按角度切步，<=0 使用 final_move_ms。 */
