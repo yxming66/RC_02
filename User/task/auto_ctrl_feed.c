@@ -1951,10 +1951,10 @@ static bool AutoCtrlFeed_HandleAutoOreDebugRequest(uint32_t now_ms) {
     return false;
   }
 
-  /* PC release may be dispatched immediately before another action becomes
-   * busy. Keep this request in the shared pending slot until the start can
-   * actually be attempted; an RC takeover still replaces it with ABORT. */
-  if (request == AUTO_ORE_DEBUG_REQUEST_RELEASE &&
+  /* PC dispatch and action start occur in different task updates.  Preserve
+   * every non-abort request if another action becomes busy in that window;
+   * consuming it here would produce neither motion nor terminal feedback. */
+  if (request != AUTO_ORE_DEBUG_REQUEST_ABORT &&
       AutoCtrlFeed_AnyAutoActionBusy()) {
     g_auto_ore_debug.last_result = false;
     return false;

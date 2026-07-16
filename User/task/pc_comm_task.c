@@ -197,15 +197,13 @@ static bool PcComm_ProcessAutoActionCommand(void) {
         return false;
     }
 
-    /* An online RC has hard takeover priority.  Reject/rearm a PC action
-     * outside the physical UP-UP PC page so a later identical command can be
-     * accepted after the operator explicitly returns to that page. */
+    /* An online RC has hard takeover priority.  Keep the PC transaction
+     * pending outside the physical UP-UP page instead of silently clearing
+     * it without execution or terminal feedback. */
     if (request != AUTO_ORE_DEBUG_REQUEST_ABORT &&
         !PcComm_RcAllowsPcAutoAction()) {
         s_auto_action_control_latched = false;
-        MrlinkPc_RearmAutoActionCommand(cmd->action);
-        MrlinkPc_ClearAutoActionCommand();
-        return false;
+        return true;
     }
 
     if (request != AUTO_ORE_DEBUG_REQUEST_ABORT &&

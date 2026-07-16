@@ -398,6 +398,7 @@ typedef struct {
   uint32_t release_lift_detect_time_ms;
   uint32_t release_grid_check_start_ms;
   uint32_t release_grid_check_last_ms;
+  uint32_t release_grid_ready_since_ms;
   uint8_t release_lift_sick_index;
   uint16_t release_lift_sick_adc_raw;
   uint16_t release_lift_sick_adc_threshold;

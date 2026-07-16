@@ -20,6 +20,7 @@
 #define AUTO_ORE_STORE_LOW_SHAKE_MAX_CYCLES (16u)
 #define AUTO_ORE_DEFAULT_RELEASE_WAIT_MS (50u)
 #define AUTO_ORE_RELEASE_GRID_CHECK_MS (500u)
+#define AUTO_ORE_RELEASE_GRID_READY_STABLE_MS (300u)
 #define AUTO_ORE_DEFAULT_RELEASE_LIFT_DETECT_TIMEOUT_MS (10000u)
 #define AUTO_ORE_DEFAULT_RELEASE_LIFT_DETECT_SETTLE_MS (500u)
 #define AUTO_ORE_DEFAULT_RELEASE_LIFT_DETECT_SICK_ADC_THRESHOLD (3200u)
@@ -501,6 +502,7 @@ static void AutoOre_ResetReleaseLiftObserver(AutoOre_t *ctrl) {
   ctrl->release_lift_detect_time_ms = 0u;
   ctrl->release_grid_check_start_ms = 0u;
   ctrl->release_grid_check_last_ms = 0u;
+  ctrl->release_grid_ready_since_ms = 0u;
   ctrl->release_lift_sick_index = AutoOre_ReleaseLiftDetectSickIndex(ctrl);
   ctrl->release_lift_sick_adc_raw = 0u;
   ctrl->release_lift_sick_adc_threshold =
@@ -2146,10 +2148,22 @@ static void AutoOre_RunReleaseArm(AutoOre_t *ctrl, uint32_t now_ms) {
         }
         return;
       }
-      const bool grid_check_done = arm_ready && AutoOre_ReleasePoleAtTarget(ctrl)
-                         ? AutoOre_UpdateReleaseGridCheck(
-                           ctrl, now_ms, ir_release)
-                                       : false;
+      const bool release_grid_pose_ready =
+          arm_ready && AutoOre_ReleasePoleAtTarget(ctrl);
+      if (!release_grid_pose_ready) {
+        ctrl->release_grid_ready_since_ms = 0u;
+      } else if (ctrl->release_grid_ready_since_ms == 0u) {
+        ctrl->release_grid_ready_since_ms = now_ms;
+      }
+      const bool release_grid_pose_stable =
+          release_grid_pose_ready &&
+          ctrl->release_grid_ready_since_ms != 0u &&
+          (now_ms - ctrl->release_grid_ready_since_ms) >=
+              AUTO_ORE_RELEASE_GRID_READY_STABLE_MS;
+      const bool grid_check_done =
+          release_grid_pose_stable
+              ? AutoOre_UpdateReleaseGridCheck(ctrl, now_ms, ir_release)
+              : false;
       if (!AutoOre_ActionUsesReleaseLiftDetect(ctrl->action)) {
         if (grid_check_done) {
           if (ctrl->release_grid_has_ore) {
