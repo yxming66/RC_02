@@ -251,6 +251,8 @@ typedef struct {
 typedef struct {
   auto_ctrl_template_e step_template;
   AutoOre_Action_t pick_action;
+  AutoOre_ArmSpeedLimit_t pick_place_arm_speed;
+  AutoOre_ArmSpeedLimit_t pick_fetch_arm_speed;
   float precontact_vx_mps;
   float precontact_wheel_delta_rad;
   uint32_t precontact_timeout_ms;

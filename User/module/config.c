@@ -126,7 +126,7 @@ Config_RobotParam_t robot_config = {
         .pid = {
             .support_pos_pid = {
                 .k = 40.0f,
-                .p = 20.0f,
+                .p = 25.0f,
                 .i = 0.0f,
                 .d = 0.0f,
                 .i_limit = 0.0f,
@@ -405,7 +405,7 @@ Config_RobotParam_t robot_config = {
                 .joint1_max_vel_rad_s = 4.5f,
                 .joint2_max_vel_rad_s = 4.0f,
                 .joint1_max_accel_rad_s2 = 30.0f,
-                .joint2_max_accel_rad_s2 = 30.0f,
+                .joint2_max_accel_rad_s2 = 60.0f,
             },
             .pick_lift_detect = {
                 .joint1_max_vel_rad_s = 6.0f,
@@ -440,20 +440,15 @@ Config_RobotParam_t robot_config = {
             .recover_front_sick_delay_ms = 500u,  /* 前 SICK 达阈值后继续前进时间。 */
             .recover_suction_settle_ms = 50u,
             .recover_chassis_retreat_ms = 500u,
-            /* 动作 9/10/11：前进等待光电1的安全超时，以及光电1有效沿后的前进/后退续行时间。 */
-            .pick_store_chassis_forward_timeout_ms = 3000u,
-            .pick_store_photo1_forward_delay_ms = 150u,
-            .pick_store_photo1_retreat_delay_ms = 150u,
             /* 融合取矿/存矿/上台阶动作延时；0 使用代码默认值。 */
             .fused_prealign_stable_ms = 120u,          /* 融合动作 yaw 对正后稳定等待时间，单位 ms。 */
             .fused_pick_precontact_timeout_ms = 500u,  /* 融合取矿低速靠近兜底超时，避免光电条件未命中时长时间卡住。 */
             .fused_pick_lift_detect_ms = 200u,         /* 融合取矿抬矿检测位到位后的确认延时，单位 ms。 */
             .fused_arm_photo_stable_ms = 120u,         /* 机械臂取矿传感器稳定确认时间，单位 ms。 */
-            .fused_photo1_lift_delay_ms = 250u,         /* 光电1有效沿确认后抬 Arm/开始并行存矿。 */
+            .fused_photo1_lift_delay_ms = 200u,         /* 光电1有效沿确认后立即抬 Arm/开始并行存矿。 */
         },
         /* 单个状态机 step 的超时时间，单位 ms。 */
         .default_step_timeout_ms = 5000u,
-
         /* 到位判定阈值：arm/ore_store/pole 分别使用的误差阈值，单位 rad。 */
         .arm_arrive_threshold_rad = 0.5f,
         .arm_arrive_velocity_threshold_rad_s = 0.25f,
@@ -476,9 +471,6 @@ Config_RobotParam_t robot_config = {
         /* 回收地面矿时底盘低速前进/后退速度，单位 m/s。 */
         .recover_chassis_forward_vx_mps = 0.25f,
         .recover_chassis_retreat_vx_mps = 0.5f,
-        /* 动作 9/10/11 专用：取矿前进和并行存矿后退速度。 */
-        .pick_store_chassis_forward_vx_mps = 0.25f,
-        .pick_store_chassis_retreat_vx_mps = 0.5f,
         /* 低位存矿完成后，transform 从高位 LIFT 回低位 STANDBY 的旧梯形速度规划；三段速度未配置时兜底使用。 */
         .store_low_return_velocity_rad_s = 35.0f,
         .store_low_return_accel_rad_s2 = 60.0f,
@@ -496,8 +488,8 @@ Config_RobotParam_t robot_config = {
          * 低位存矿收尾颠动：平台回到 STANDBY 后，向 LIFT 方向小幅快速往返。
          * cycles 为完整“上+下”次数，0 表示关闭；只作用于最终存入低位矿仓的流程。
          */
-        .store_low_shake_amplitude_rad = 2.0f,
-        .store_low_shake_velocity_rad_s = 50.0f,
+        .store_low_shake_amplitude_rad = 3.0f,
+        .store_low_shake_velocity_rad_s = 80.0f,
         .store_low_shake_cycles = 2u,
         /*
          * 融合动作轮转角阈值说明：
@@ -508,6 +500,18 @@ Config_RobotParam_t robot_config = {
         .fused_step_pick_store_ascend_200_head = {
             .step_template = AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD, /* 取矿存矿后执行的头向 200mm 上台阶模板。 */
             .pick_action = AUTO_ORE_ACTION_PICK_POS_200,         /* 融合动作取正 200mm 矿。 */
+            .pick_place_arm_speed = {                            /* 融合上 200 前往取矿位的专用柔和轨迹限制。 */
+                .joint1_max_vel_rad_s = 4.5f,
+                .joint2_max_vel_rad_s = 3.0f,
+                .joint1_max_accel_rad_s2 = 18.0f,
+                .joint2_max_accel_rad_s2 = 30.0f,
+            },
+            .pick_fetch_arm_speed = {                            /* 融合上 200 接触取矿阶段进一步降低冲击。 */
+                .joint1_max_vel_rad_s = 3.5f,
+                .joint2_max_vel_rad_s = 3.0f,
+                .joint1_max_accel_rad_s2 = 15.0f,
+                .joint2_max_accel_rad_s2 = 25.0f,
+            },
             .precontact_vx_mps = 0.20f,                          /* 取矿前低速靠近速度，单位 m/s。 */
             .precontact_wheel_delta_rad = 4.5f,                 /* 取矿前低速靠近轮转角阈值，单位 rad。 */
             .precontact_timeout_ms = 2500u,                      /* 光电未命中时快速进入抬矿检测兜底。 */
@@ -534,10 +538,10 @@ Config_RobotParam_t robot_config = {
         .fused_step_pick_store_ascend_400_head = {
             .step_template = AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD, /* 取矿存矿后执行的头向 400mm 上台阶模板。 */
             .pick_action = AUTO_ORE_ACTION_PICK_POS_400,         /* 融合动作取正 400mm 矿。 */
-            .precontact_vx_mps = 0.2f,                          /* 取矿前低速靠近速度，单位 m/s。 */
+            .precontact_vx_mps = 0.15f,                          /* 取矿前低速靠近速度，单位 m/s。 */
             .precontact_wheel_delta_rad = 4.5f,                 /* 取矿前低速靠近轮转角阈值，单位 rad。 */
             .precontact_timeout_ms = 2500u,                      /* 光电未命中时快速进入抬矿检测兜底。 */
-            .step_start_vx_mps = 0.2f,                          /* 存矿后进入台阶模板前的起步冲刺速度，单位 m/s。 */
+            .step_start_vx_mps = 0.15f,                          /* 存矿后进入台阶模板前的起步冲刺速度，单位 m/s。 */
             .step_start_wheel_delta_rad = 2.36f,                 /* 存矿后进入台阶模板前的起步冲刺轮转角阈值，单位 rad。 */
             .fast_pick_on_front_photo = true,                    /* true=前光电触发即认为取矿完成，跳过停顿抬矿检测并直接并行存矿/上台阶。 */
             .use_arm_photo_confirm = false,                      /* false=机械臂到位加延时确认，true=机械臂取矿传感器确认。 */
@@ -556,8 +560,9 @@ Config_RobotParam_t robot_config = {
         /* 等待对接时 transform 的目标点；实际角度在 ore_store_param.preset.transform_position_rad 中标定。 */
         .dock_wait_transform = ORE_STORE_TRANSFORM_SPEARHEAD_DOCK_WAIT,
         .use_photo_check = true,
-        .photo_check_ms = 150u,
-        .photo_timeout_ms = 1500u,
+        .photo_check_ms = 100u,
+        .photo_latch_delay_ms = 300u,
+        .photo_timeout_ms = 500u,
     },
     /* 模块参数：自动台阶/自动控制 auto_ctrl_param，台阶模板和 SICK 校正参数。 */
     .auto_ctrl_param = {
@@ -634,14 +639,16 @@ Config_RobotParam_t robot_config = {
              * - second_photo_retract_move_speed: 后光电触发后，全收腿时的前进速度。
              */ 
             .prealign_move_speed = 0.0f,        /* PREALIGN 对正阶段叠加 vx，单位 m/s。 */
-            .pole_extend_move_speed = 0.25f,    /* 撑杆伸出阶段 vx，单位 m/s。 */
-            .front_retract_move_speed = 0.35f,  /* 前杆动作阶段 vx，单位 m/s。 */
+            .first_photo_pole_delay_ms = 0u,   /* 光电1稳定触发后立即收前杆。 */
+            .second_photo_pole_delay_ms = 20u, /* 光电3稳定触发后延时收后杆。 */
+            .pole_extend_move_speed = 0.4f,    /* 撑杆伸出阶段 vx，单位 m/s。 */
+            .front_retract_move_speed = 0.4f,  /* 前杆动作阶段 vx，单位 m/s。 */
             .front_retract_timeout_ms = 5000u,  /* 前光电触发后，等待前杆收回到位超时，单位 ms。 */
             .mid_move_speed = 1.0f,             /* 前杆收回到位后的中段平移 vx，单位 m/s。 */
             .mid_move_ms = 120u,               /* 中段角度门控兜底超时，单位 ms。 */
             .mid_move_wheel_delta_rad = 10.66f, /* 编码器门控的中段冲刺轮转角阈值，单位 rad；>0 优先按角度切步，<=0 使用 mid_move_ms。 */
             .timed_move_yaw_tolerance_rad = 0.35f, /* 中段移动切步 yaw 容差，约 10 deg。 */
-            .rear_retract_move_speed = 0.50f,   /* 等待后光电触发及触发后延时阶段的低速 vx，单位 m/s。 */
+            .rear_retract_move_speed = 0.40f,   /* 等待后光电触发及触发后延时阶段的低速 vx，单位 m/s。 */
             .rear_retract_timeout_ms = 5000u,   /* 后光电触发后，全收腿动作超时，单位 ms。 */
             .rear_retract_move_ms = 300u,       /* 后光电触发后，全收腿移动持续时间，单位 ms。 */
             .second_photo_retract_move_speed = 0.40f, /* 后一个光电触发收腿时向头向移动 vx，单位 m/s。 */
@@ -651,17 +658,17 @@ Config_RobotParam_t robot_config = {
             .final_move_wheel_delta_rad = 0.0f, /* 编码器门控的收尾离开轮转角阈值，单位 rad；>0 优先按角度切步，<=0 使用 final_move_ms。 */
             /* 200mm全伸：快速建立速度，并在目标前按120rad/s^2主动制动。 */
             .pole_all_extend_speed = 15.0f,
-            .pole_front_extend_speed = 22.0f,   /* 前杆、    伸出目标跟随速度，单位 rad/s。 */
-            .pole_front_retract_speed = 50.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
+            .pole_front_extend_speed = 22.0f,   /* 前杆伸出目标跟随速度，单位 rad/s。 */
+            .pole_front_retract_speed = 0.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
             .pole_rear_extend_speed = 22.0f,    /* 后杆伸出目标跟随速度，单位 rad/s。 */
-            .pole_rear_retract_speed = 60.0f,   /* 后杆回收目标跟随速度，单位 rad/s。 */
+            .pole_rear_retract_speed = 0.0f,   /* 后杆回收目标跟随速度，单位 rad/s。 */
             .pole_all_extend_accel = 120.0f,
             .pole_all_retract_speed = 30.0f,
             .pole_all_retract_accel = 600.0f,
             .pole_front_extend_accel = 120.0f,
-            .pole_front_retract_accel = 1000.0f,
+            .pole_front_retract_accel = 0.0f,
             .pole_rear_extend_accel = 120.0f,
-            .pole_rear_retract_accel = 1500.0f,
+            .pole_rear_retract_accel = 0.0f,
             
             /* 当前模板撑杆加速度限幅，单位 rad/s^2。 */
             .front_photo_timeout_ms = 5000u,    /* 等待前光电触发/下降沿超时，单位 ms。 */
@@ -679,14 +686,16 @@ Config_RobotParam_t robot_config = {
              * - second_photo_retract_move_speed: 后光电触发后，全收腿时的前进速度。
              */
             .prealign_move_speed = 0.0f,       /* PREALIGN 对正阶段叠加 vx，单位 m/s。 */
-            .pole_extend_move_speed = 0.25f,    /* 撑杆伸出阶段 vx，单位 m/s。 */
-            .front_retract_move_speed = 0.3f,  /* 前杆动作阶段 vx，单位 m/s。 */
+            .first_photo_pole_delay_ms = 100u,  /* 光电1稳定触发后延时收前杆。 */
+            .second_photo_pole_delay_ms = 100u, /* 光电3稳定触发后延时收后杆。 */
+            .pole_extend_move_speed = 0.1f,    /* 撑杆伸出阶段 vx，单位 m/s。 */
+            .front_retract_move_speed = 0.2f,  /* 前杆动作阶段 vx，单位 m/s。 */
             .front_retract_timeout_ms = 5000u,  /* 前光电触发后，等待前杆收回到位超时，单位 ms。 */
             .mid_move_speed = 0.6f,             /* 前杆收回到位后的中段平移 vx，单位 m/s。 */
             .mid_move_ms = 250u,                /* 中段平移持续时间，单位 ms。 */
             .mid_move_wheel_delta_rad = 8.66f,   /* 0 表示该模板继续按时间切步。 */
             .timed_move_yaw_tolerance_rad = 0.35f, /* 中段定时移动切步 yaw 容差，约 10 deg。 */
-            .rear_retract_move_speed = 0.4f,   /* 等待后光电触发的低速 vx，单位 m/s。 */
+            .rear_retract_move_speed = 0.3f,   /* 等待后光电触发的低速 vx，单位 m/s。 */
             .rear_retract_timeout_ms = 5000u,   /* 后光电触发后，全收腿动作超时，单位 ms。 */
             .rear_retract_move_ms = 300u,       /* 后光电触发后，全收腿移动持续时间，单位 ms。 */
             .second_photo_retract_move_speed = 0.0f, /* 后一个光电触发收腿时向头向移动 vx，单位 m/s。*/
@@ -695,12 +704,12 @@ Config_RobotParam_t robot_config = {
             .final_photo_sprint_ms = 100u,       /* 末尾光电触发后继续冲刺时间，单位 ms。 */
             .final_move_wheel_delta_rad = 0.0f, /* 0 表示该模板继续按时间切步。 */
             /* 400mm伸出：约0.67s完成10.7rad行程，末端提前约2.02rad制动。 */
-            .pole_all_extend_speed = 15.0f,
+            .pole_all_extend_speed = 20.0f,
             .pole_front_extend_speed = 22.0f,   /* 前杆伸出目标跟随速度，单位 rad/s。 */
             .pole_front_retract_speed = 50.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
             .pole_rear_extend_speed = 22.0f,    /* 后杆伸出目标跟随速度，单位 rad/s。 */
             .pole_rear_retract_speed = 50.0f,   /* 后杆回收目标跟随速度，单位 rad/s。 */
-            .pole_all_extend_accel = 200.0f,
+            .pole_all_extend_accel = 250.0f,
             .pole_all_retract_speed = 30.0f,
             .pole_all_retract_accel = 120.0f,
             .pole_front_extend_accel = 250.0f,
@@ -713,7 +722,8 @@ Config_RobotParam_t robot_config = {
         /* 头向 / 下台阶 / 200mm 模板参数。 */
         /* 模块参数：头向下台阶 200mm head_descend_200。 */
         .head_descend_200 = {
-            .photo_stop_settle_ms = 0u,
+            .first_photo_pole_delay_ms = 0u,  /* 第一下降沿确认后立即伸前杆。 */
+            .second_photo_pole_delay_ms = 0u, /* 第二下降沿确认后立即伸后杆。 */
             .descend_start_pole_lift_threshold = 0.0f,
             /*
      
@@ -764,7 +774,8 @@ Config_RobotParam_t robot_config = {
         /* 头向 / 下台阶 / 400mm 模板参数。 */
         /* 模块参数：头向下台阶 400mm head_descend_400。 */
         .head_descend_400 = {
-            .photo_stop_settle_ms = 0u,
+            .first_photo_pole_delay_ms = 0u,  /* 第一下降沿确认后立即伸前杆。 */
+            .second_photo_pole_delay_ms = 0u, /* 第二下降沿确认后立即伸后杆。 */
             .descend_start_pole_lift_threshold = 0.0f,
             /*
              * 固定起步优化流程：
@@ -784,18 +795,18 @@ Config_RobotParam_t robot_config = {
             .rear_retract_move_speed = 0.15f,   /* step1 等待首个光电下降沿、伸前 Pole 前的安全 vx，单位 m/s。 */
             .rear_retract_move_ms = 250u,       /* 后杆动作后继续移动时间，单位 ms。 */
             .rear_retract_move_wheel_delta_rad = 8.66f, /* 后杆动作后继续移动轮转角阈值，单位 rad；0 表示按时间切步。 */
-            .second_photo_retract_move_speed = 0.6f, /* step7 第二个下降沿后保持全伸安全离开 vx，单位 m/s。 */
-            .final_move_speed = 0.6f,          /* 收尾离开台阶备用 vx，单位 m/s。 */
-            .final_move_ms = 400u,             /* 收尾离开台阶持续时间，单位 ms。 */
-            .pole_front_extend_speed =  25.0f,   /* 400mm伸出速度，单位 rad/s。 */
+            .second_photo_retract_move_speed = 0.35f, /* step7 第二个下降沿后保持全伸安全离开 vx，单位 m/s。 */
+            .final_move_speed = 0.8f,          /* 收尾离开台阶备用 vx，单位 m/s。 */
+            .final_move_ms = 250u,             /* 收尾离开台阶持续时间，单位 ms。 */
+            .pole_front_extend_speed =  20.0f,   /* 400mm伸出速度，单位 rad/s。 */
             .pole_front_retract_speed = 25.0f,  /* 400mm回收速度，单位 rad/s。 */
-            .pole_rear_extend_speed  =  25.0f,   /* 400mm伸出速度，单位 rad/s。 */
+            .pole_rear_extend_speed  =  20.0f,   /* 400mm伸出速度，单位 rad/s。 */
             .pole_rear_retract_speed =  25.0f,   /* 400mm回收速度，单位 rad/s。 */
             .pole_all_extend_speed = 30.0f,
-            .pole_all_extend_accel = 150.0f,
+            .pole_all_extend_accel = 250.0f,
             .pole_all_retract_speed = 30.0f,
             .pole_all_retract_accel = 150.0f,
-            .pole_front_extend_accel = 250.0f,    
+            .pole_front_extend_accel = 250.0f,
             .pole_front_retract_accel = 150.0f,
             .pole_rear_extend_accel = 250.0f,
             .pole_rear_retract_accel = 150.0f,
@@ -805,6 +816,145 @@ Config_RobotParam_t robot_config = {
             .rear_photo_timeout_ms = 5000u,     /* 等待后光电触发/下降沿超时，单位 ms。 */
             .pole_extend_move_speed = 0.7f,    /* step6 四杆全伸安全通过 vx，单位 m/s。 */
             .hold_ms = 100u,                    /* step6 四杆全伸行走持续时间，单位 ms。 */
+        },
+    },
+    /* 融合上下台阶专用参数；仅 AutoOre 内嵌的 step_ctrl 使用。 */
+    .auto_ctrl_fused_param = {
+        .head_ascend_200 = {
+            .prealign_move_speed = 0.0f,
+            .first_photo_pole_delay_ms = 0u,
+            .second_photo_pole_delay_ms = 50u,
+            .pole_extend_move_speed = 0.25f,
+            .front_retract_move_speed = 0.3f,
+            .front_retract_timeout_ms = 5000u,
+            .mid_move_speed = 1.0f,
+            .mid_move_ms = 120u,
+            .mid_move_wheel_delta_rad = 10.66f,
+            .timed_move_yaw_tolerance_rad = 0.35f,
+            .rear_retract_move_speed = 0.40f,
+            .rear_retract_timeout_ms = 5000u,
+            .rear_retract_move_ms = 300u,
+            .second_photo_retract_move_speed = 0.40f,
+            .final_move_speed = 0.6f,
+            .final_move_ms = 1200u,
+            .final_photo_sprint_ms = 50u,
+            .final_move_wheel_delta_rad = 0.0f,
+            .pole_all_extend_speed = 15.0f,
+            .pole_all_extend_accel = 120.0f,
+            .pole_all_retract_speed = 20.0f,
+            .pole_all_retract_accel = 300.0f,
+            .pole_front_extend_speed = 22.0f,
+            .pole_front_extend_accel = 120.0f,
+            .pole_front_retract_speed = 50.0f,   
+            .pole_front_retract_accel = 1000.0f,
+            .pole_rear_extend_speed = 22.0f,
+            .pole_rear_extend_accel = 120.0f,
+            .pole_rear_retract_speed = 60.0f,
+            .pole_rear_retract_accel = 1500.0f,
+            .front_photo_timeout_ms = 5000u,
+            .rear_photo_timeout_ms = 10000u,
+        },
+        .head_ascend_400 = {
+            .prealign_move_speed = 0.0f,
+            .first_photo_pole_delay_ms = 100u,
+            .second_photo_pole_delay_ms = 100u,
+            .pole_extend_move_speed = 0.2f,
+            .front_retract_move_speed = 0.2f,
+            .front_retract_timeout_ms = 5000u,
+            .mid_move_speed = 0.6f,
+            .mid_move_ms = 250u,
+            .mid_move_wheel_delta_rad = 8.66f,
+            .timed_move_yaw_tolerance_rad = 0.35f,
+            .rear_retract_move_speed = 0.3f,
+            .rear_retract_timeout_ms = 5000u,
+            .rear_retract_move_ms = 300u,
+            .second_photo_retract_move_speed = 0.0f,
+            .final_move_speed = 1.2f,
+            .final_move_ms = 1000u,
+            .final_photo_sprint_ms = 100u,
+            .final_move_wheel_delta_rad = 0.0f,
+            .pole_all_extend_speed = 15.0f,
+            .pole_all_extend_accel = 200.0f,
+            .pole_all_retract_speed = 30.0f,
+            .pole_all_retract_accel = 120.0f,
+            .pole_front_extend_speed = 22.0f,
+            .pole_front_extend_accel = 250.0f,
+            .pole_front_retract_speed = 40.0f,
+            .pole_front_retract_accel = 800.0f,
+            .pole_rear_extend_speed = 22.0f,
+            .pole_rear_extend_accel = 250.0f,
+            .pole_rear_retract_speed = 45.0f,
+            .pole_rear_retract_accel = 800.0f,
+            .front_photo_timeout_ms = 5000u,
+            .rear_photo_timeout_ms = 10000u,
+        },
+        .head_descend_200 = {
+            .prealign_move_speed = 0.2f,
+            .first_photo_pole_delay_ms = 0u,
+            .second_photo_pole_delay_ms = 0u,
+            .descend_start_pole_lift_threshold = 0.0f,
+            .front_retract_move_speed = 0.20f,
+            .mid_move_speed = 0.6f,
+            .mid_move_ms = 200u,
+            .timed_move_yaw_tolerance_rad = 0.35f,
+            .rear_retract_move_speed = 0.25f,
+            .rear_retract_move_ms = 150u,
+            .rear_retract_move_wheel_delta_rad = 8.66f,
+            .second_photo_retract_move_speed = 0.25f,
+            .final_move_speed = 0.0f,
+            .final_move_ms = 150u,
+            .pole_extend_move_speed = 1.0f,
+            .pole_all_extend_speed = 30.0f,
+            .pole_all_extend_accel = 250.0f,
+            .pole_all_retract_speed = 30.0f,
+            .pole_all_retract_accel = 250.0f,
+            .pole_front_extend_speed = 35.0f,
+            .pole_front_extend_accel = 800.0f,
+            .pole_front_retract_speed = 30.0f,
+            .pole_front_retract_accel = 30.0f,
+            .pole_rear_extend_speed = 35.0f,
+            .pole_rear_extend_accel = 800.0f,
+            .pole_rear_retract_speed = 30.0f,
+            .pole_rear_retract_accel = 30.0f,
+            .pole_extend_landing_zone_rad = 0.08f,
+            .pole_extend_landing_speed = 15.0f,
+            .front_photo_timeout_ms = 5000u,
+            .rear_photo_timeout_ms = 5000u,
+            .hold_ms = 50u,
+        },
+        .head_descend_400 = {
+            .prealign_move_speed = 0.10f,
+            .first_photo_pole_delay_ms = 0u,
+            .second_photo_pole_delay_ms = 0u,
+            .descend_start_pole_lift_threshold = 0.0f,
+            .front_retract_move_speed = 0.1f,
+            .mid_move_speed = 0.7f,
+            .mid_move_ms = 300u,
+            .timed_move_yaw_tolerance_rad = 0.35f,
+            .rear_retract_move_speed = 0.15f,
+            .rear_retract_move_ms = 250u,
+            .rear_retract_move_wheel_delta_rad = 8.66f,
+            .second_photo_retract_move_speed = 0.35f,
+            .final_move_speed = 0.8f,
+            .final_move_ms = 250u,
+            .pole_extend_move_speed = 0.7f,
+            .pole_all_extend_speed = 30.0f,
+            .pole_all_extend_accel = 150.0f,
+            .pole_all_retract_speed = 30.0f,
+            .pole_all_retract_accel = 150.0f,
+            .pole_front_extend_speed = 15.0f,
+            .pole_front_extend_accel = 150.0f,
+            .pole_front_retract_speed = 25.0f,
+            .pole_front_retract_accel = 150.0f,
+            .pole_rear_extend_speed = 15.0f,
+            .pole_rear_extend_accel = 150.0f,
+            .pole_rear_retract_speed = 25.0f,
+            .pole_rear_retract_accel = 150.0f,
+            .pole_extend_landing_zone_rad = 0.08f,
+            .pole_extend_landing_speed = 15.0f,
+            .front_photo_timeout_ms = 5000u,
+            .rear_photo_timeout_ms = 5000u,
+            .hold_ms = 100u,
         },
     },
     /* 模块参数：取矛头机构 rod_new_param，舵机、夹爪和到位参数。 */
@@ -858,4 +1008,37 @@ Config_RobotParam_t robot_config = {
 
 Config_RobotParam_t *Config_GetRobotParam(void) {
   return &robot_config;
+}
+
+const AutoCtrl_TemplateParam_t *Config_GetAutoCtrlTemplateParam(
+        auto_ctrl_template_e template_id, bool use_fused_params) {
+    if (use_fused_params) {
+        switch (template_id) {
+            case AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD:
+                return &robot_config.auto_ctrl_fused_param.head_ascend_200;
+            case AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD:
+                return &robot_config.auto_ctrl_fused_param.head_ascend_400;
+            case AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD:
+                return &robot_config.auto_ctrl_fused_param.head_descend_200;
+            case AUTO_CTRL_TEMPLATE_DESCEND_400_HEAD:
+                return &robot_config.auto_ctrl_fused_param.head_descend_400;
+            case AUTO_CTRL_TEMPLATE_NONE:
+            default:
+                return 0;
+        }
+    }
+
+    switch (template_id) {
+        case AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD:
+            return &robot_config.auto_ctrl_param.head_ascend_200;
+        case AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD:
+            return &robot_config.auto_ctrl_param.head_ascend_400;
+        case AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD:
+            return &robot_config.auto_ctrl_param.head_descend_200;
+        case AUTO_CTRL_TEMPLATE_DESCEND_400_HEAD:
+            return &robot_config.auto_ctrl_param.head_descend_400;
+        case AUTO_CTRL_TEMPLATE_NONE:
+        default:
+            return 0;
+    }
 }

@@ -16,9 +16,6 @@ typedef struct {
  * commanded Pole pose passes the normal at-target debounce. */
 #define AUTO_CTRL_ASCEND_200_PHOTO_RECORD_LIFT_RAD (3.5f)
 #define AUTO_CTRL_ASCEND_400_PHOTO_RECORD_LIFT_RAD (7.0f)
-#define AUTO_CTRL_ASCEND_400_FRONT_RETRACT_DELAY_MS (100u)
-#define AUTO_CTRL_ASCEND_200_REAR_RETRACT_DELAY_MS (50u)
-#define AUTO_CTRL_ASCEND_400_REAR_RETRACT_DELAY_MS (100u)
 #define AUTO_CTRL_DESCEND_PHOTO_RECORD_LIFT_RAD (2.5f)
 
 typedef enum {
@@ -303,27 +300,6 @@ static bool AutoCtrlTemplate_WheelDeltaMoveReady(
          AutoCtrlTemplate_IsTimedMoveYawAligned(ctrl, param);
 }
 
-static const AutoCtrl_TemplateParam_t *AutoCtrlTemplate_GetTemplateParam(
-    const Config_RobotParam_t *robot_param, auto_ctrl_template_e template_id) {
-  if (robot_param == 0) {
-    return 0;
-  }
-
-  switch (template_id) {
-    case AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD:
-      return &robot_param->auto_ctrl_param.head_ascend_200;
-    case AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD:
-      return &robot_param->auto_ctrl_param.head_ascend_400;
-    case AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD:
-      return &robot_param->auto_ctrl_param.head_descend_200;
-    case AUTO_CTRL_TEMPLATE_DESCEND_400_HEAD:
-      return &robot_param->auto_ctrl_param.head_descend_400;
-    case AUTO_CTRL_TEMPLATE_NONE:
-    default:
-      return 0;
-  }
-}
-
 static float AutoCtrlTemplate_ResolvePoleLiftAccel(
     const Config_RobotParam_t *robot_param,
     const AutoCtrl_TemplateParam_t *template_param,
@@ -437,7 +413,8 @@ static void AutoCtrlTemplate_CommandPoleProfile(
     auto_ctrl_pole_profile_e rear_profile) {
   const Config_RobotParam_t *robot_param = Config_GetRobotParam();
   const AutoCtrl_TemplateParam_t *template_param =
-      AutoCtrlTemplate_GetTemplateParam(robot_param, ctrl->template_id);
+      Config_GetAutoCtrlTemplateParam(ctrl->template_id,
+                      ctrl->use_fused_template_params);
   const float front_accel = AutoCtrlTemplate_ResolvePoleLiftAccel(
       robot_param, template_param, front_profile);
   const float rear_accel = AutoCtrlTemplate_ResolvePoleLiftAccel(
@@ -955,9 +932,8 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
       }
       AutoCtrlTemplate_DebugMarkPhotoEvent(
           ctrl, now_ms, AUTO_CTRL_TEMPLATE_DEBUG_PHOTO_ASCEND_FRONT);
-      if (use_400mm &&
-          !AutoCtrlTemplate_AscendFrontRetractDelayElapsed(
-              ctrl, now_ms, AUTO_CTRL_ASCEND_400_FRONT_RETRACT_DELAY_MS)) {
+        if (!AutoCtrlTemplate_AscendFrontRetractDelayElapsed(
+            ctrl, now_ms, param->first_photo_pole_delay_ms)) {
         AutoCtrlPrimitive_ApplyPrealignWithMove(
             ctrl, param->pole_extend_move_speed, 0.0f);
         AutoCtrlTemplate_CommandPoleProfile(
@@ -1008,8 +984,7 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
         AutoCtrlTemplate_DebugMarkPhotoEvent(
             ctrl, now_ms, AUTO_CTRL_TEMPLATE_DEBUG_PHOTO_ASCEND_REAR);
         if (!AutoCtrlTemplate_AscendRearRetractDelayElapsed(
-                ctrl, now_ms,
-                AUTO_CTRL_ASCEND_400_REAR_RETRACT_DELAY_MS)) {
+          ctrl, now_ms, param->second_photo_pole_delay_ms)) {
           AutoCtrlPrimitive_ApplyPrealignWithMove(
               ctrl, param->mid_move_speed, 0.0f);
           AutoCtrlTemplate_CommandPoleProfile(
@@ -1074,11 +1049,8 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
       }
       AutoCtrlTemplate_DebugMarkPhotoEvent(
           ctrl, now_ms, AUTO_CTRL_TEMPLATE_DEBUG_PHOTO_ASCEND_REAR);
-      const uint32_t rear_retract_delay_ms =
-          use_400mm ? AUTO_CTRL_ASCEND_400_REAR_RETRACT_DELAY_MS
-                    : AUTO_CTRL_ASCEND_200_REAR_RETRACT_DELAY_MS;
       if (!AutoCtrlTemplate_AscendRearRetractDelayElapsed(
-              ctrl, now_ms, rear_retract_delay_ms)) {
+              ctrl, now_ms, param->second_photo_pole_delay_ms)) {
         AutoCtrlPrimitive_ApplyPrealignWithMove(
             ctrl, param->rear_retract_move_speed, 0.0f);
         AutoCtrlTemplate_CommandPoleProfile(
@@ -1221,7 +1193,7 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
           ctrl, now_ms,
           AUTO_CTRL_TEMPLATE_DEBUG_PHOTO_DESCEND_FIRST_FALLING);
         if (AutoCtrlTemplate_CommandPhotoStopAndPole(
-            ctrl, now_ms, param->photo_stop_settle_ms, use_400mm,
+          ctrl, now_ms, param->first_photo_pole_delay_ms, use_400mm,
             use_400mm ? 0.0f : param->rear_retract_move_speed,
                 pole.all_retract[0], pole.all_retract[1],
                 param->pole_front_retract_speed,
@@ -1329,7 +1301,7 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
           ctrl, now_ms,
           AUTO_CTRL_TEMPLATE_DEBUG_PHOTO_DESCEND_SECOND_FALLING);
         if (AutoCtrlTemplate_CommandPhotoStopAndPole(
-            ctrl, now_ms, param->photo_stop_settle_ms, use_400mm,
+          ctrl, now_ms, param->second_photo_pole_delay_ms, use_400mm,
             use_400mm ? 0.0f : param->front_retract_move_speed,
                 pole.all_extend[0], pole.all_retract[1],
                 param->pole_front_extend_speed,
@@ -1443,33 +1415,49 @@ static bool AutoCtrlTemplate_RunHeadDescendOptimized(
 static bool AutoCtrlTemplate_RunHeadAscend200(
     auto_ctrl_t *ctrl, uint32_t now_ms,
     const Config_RobotParam_t *robot_param) {
+  const AutoCtrl_TemplateParam_t *param = Config_GetAutoCtrlTemplateParam(
+      AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD, ctrl->use_fused_template_params);
+  if (param == 0) {
+    return false;
+  }
   return AutoCtrlTemplate_RunHeadAscendOptimized(
-      ctrl, now_ms, robot_param,
-      &robot_param->auto_ctrl_param.head_ascend_200, false);
+      ctrl, now_ms, robot_param, param, false);
 }
 
 static bool AutoCtrlTemplate_RunHeadAscend400(
     auto_ctrl_t *ctrl, uint32_t now_ms,
     const Config_RobotParam_t *robot_param) {
+  const AutoCtrl_TemplateParam_t *param = Config_GetAutoCtrlTemplateParam(
+      AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD, ctrl->use_fused_template_params);
+  if (param == 0) {
+    return false;
+  }
   return AutoCtrlTemplate_RunHeadAscendOptimized(
-      ctrl, now_ms, robot_param,
-      &robot_param->auto_ctrl_param.head_ascend_400, true);
+      ctrl, now_ms, robot_param, param, true);
 }
 
 static bool AutoCtrlTemplate_RunHeadDescend200(
     auto_ctrl_t *ctrl, uint32_t now_ms,
     const Config_RobotParam_t *robot_param) {
+  const AutoCtrl_TemplateParam_t *param = Config_GetAutoCtrlTemplateParam(
+      AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD, ctrl->use_fused_template_params);
+  if (param == 0) {
+    return false;
+  }
   return AutoCtrlTemplate_RunHeadDescendOptimized(
-      ctrl, now_ms, robot_param,
-      &robot_param->auto_ctrl_param.head_descend_200, false);
+      ctrl, now_ms, robot_param, param, false);
 }
 
 static bool AutoCtrlTemplate_RunHeadDescend400(
     auto_ctrl_t *ctrl, uint32_t now_ms,
     const Config_RobotParam_t *robot_param) {
+  const AutoCtrl_TemplateParam_t *param = Config_GetAutoCtrlTemplateParam(
+      AUTO_CTRL_TEMPLATE_DESCEND_400_HEAD, ctrl->use_fused_template_params);
+  if (param == 0) {
+    return false;
+  }
   return AutoCtrlTemplate_RunHeadDescendOptimized(
-      ctrl, now_ms, robot_param,
-      &robot_param->auto_ctrl_param.head_descend_400, true);
+      ctrl, now_ms, robot_param, param, true);
 }
 
 bool AutoCtrlTemplate_Run(auto_ctrl_t *ctrl, uint32_t now_ms) {

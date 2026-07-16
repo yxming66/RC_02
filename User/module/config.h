@@ -16,6 +16,7 @@
 #include "module/rod_new.h"
 #include "module/camera_yaw.h"
 #include "module/arm_simple.h"
+#include "module/autoCtrlAPI/core/auto_ctrl_def.h"
 #include "module/autoCtrlAPI/ore_store/auto_ore_store.h"
 #include "module/autoCtrlAPI/rod/auto_rod_spearhead.h"
 #include "module/autoCtrlAPI/sick/auto_sick_correct.h"
@@ -44,7 +45,8 @@ typedef struct {
   float align_move_speed;        /* 上台阶/模板对正阶段 vx，单位 m/s。 */
   float pole_extend_move_speed;  /* 四杆全伸/支撑通过阶段 vx，单位 m/s。 */
   uint32_t pole_extend_settle_ms;/* 上台阶四杆全伸到位后的最小稳定时间，单位 ms。 */
-  uint32_t photo_stop_settle_ms; /* 下台阶光电触发停车后、伸杆前的保持时间，单位 ms。 */
+  uint32_t first_photo_pole_delay_ms;  /* 第一光电有效沿确认后到 Pole 伸/收动作的延时，单位 ms。 */
+  uint32_t second_photo_pole_delay_ms; /* 第二光电有效沿确认后到 Pole 伸/收动作的延时，单位 ms。 */
   float descend_start_pole_lift_threshold; /* 下台阶首次冲刺前的最小撑杆高度，单位 rad；<=0 禁用。 */
 
   float front_retract_move_speed;     /* 前侧动作或第二个边沿慢速捕获 vx，单位 m/s。 */
@@ -65,6 +67,7 @@ typedef struct {
   float final_move_speed;     /* 收尾离开速度，或第二光电后收尾 vx 的备用值，单位 m/s。 */
   uint32_t final_move_ms;     /* 收尾离开时间，单位 ms；角度阈值>0时作为兜底超时。 */
   uint32_t final_photo_sprint_ms; /* 上台阶末尾光电稳定触发后的额外冲刺时间，单位 ms；0 表示触发即结束。 */
+  uint32_t final_pole_wait_timeout_ms; /* 上台阶末段停车等待 Pole 到位的成功兜底时间，单位 ms；0 表示禁用。 */
   float final_move_wheel_delta_rad; /* 收尾离开轮转角阈值，单位 rad；>0 优先按角度切步，<=0 使用 final_move_ms 定时切步。 */
 
   /*
@@ -102,6 +105,13 @@ typedef struct {
 } AutoCtrl_Params_t;
 
 typedef struct {
+  AutoCtrl_TemplateParam_t head_ascend_200;
+  AutoCtrl_TemplateParam_t head_ascend_400;
+  AutoCtrl_TemplateParam_t head_descend_200;
+  AutoCtrl_TemplateParam_t head_descend_400;
+} AutoCtrl_FusedParams_t;
+
+typedef struct {
   Chassis_Params_t chassis_param;
   Pole_Params_t pole_param;
   OreStore_Params_t ore_store_param;
@@ -110,11 +120,14 @@ typedef struct {
   AutoOre_Params_t auto_ore_param;
   AutoRodSpearhead_Params_t auto_rod_spearhead_param;
   AutoCtrl_Params_t auto_ctrl_param;
+  AutoCtrl_FusedParams_t auto_ctrl_fused_param;
   RodNew_Params_t rod_new_param;
   CameraYaw_Params_t camera_yaw_param[CAMERA_YAW_NUM];
 } Config_RobotParam_t;
 
 Config_RobotParam_t *Config_GetRobotParam(void);
+const AutoCtrl_TemplateParam_t *Config_GetAutoCtrlTemplateParam(
+  auto_ctrl_template_e template_id, bool use_fused_params);
 
 #ifdef __cplusplus
 }

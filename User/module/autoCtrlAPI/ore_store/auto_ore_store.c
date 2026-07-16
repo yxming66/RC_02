@@ -2619,6 +2619,36 @@ static const AutoOre_FusedParam_t *AutoOre_FusedParam(const AutoOre_t *ctrl) {
   }
 }
 
+static float AutoOre_FusedArmLimitValue(float override_value,
+                                        float fallback_value) {
+  return override_value > 0.0f ? override_value : fallback_value;
+}
+
+static AutoOre_ArmSpeedLimit_t AutoOre_FusedArmSpeed(
+    const AutoOre_ArmSpeedLimit_t *override_speed,
+    const AutoOre_ArmSpeedLimit_t *fallback_speed) {
+  AutoOre_ArmSpeedLimit_t speed = {0};
+  if (fallback_speed == 0) {
+    return speed;
+  }
+  if (override_speed == 0) {
+    return *fallback_speed;
+  }
+  speed.joint1_max_vel_rad_s = AutoOre_FusedArmLimitValue(
+      override_speed->joint1_max_vel_rad_s,
+      fallback_speed->joint1_max_vel_rad_s);
+  speed.joint2_max_vel_rad_s = AutoOre_FusedArmLimitValue(
+      override_speed->joint2_max_vel_rad_s,
+      fallback_speed->joint2_max_vel_rad_s);
+  speed.joint1_max_accel_rad_s2 = AutoOre_FusedArmLimitValue(
+      override_speed->joint1_max_accel_rad_s2,
+      fallback_speed->joint1_max_accel_rad_s2);
+  speed.joint2_max_accel_rad_s2 = AutoOre_FusedArmLimitValue(
+      override_speed->joint2_max_accel_rad_s2,
+      fallback_speed->joint2_max_accel_rad_s2);
+  return speed;
+}
+
 static const float *AutoOre_PickPoleTarget(const AutoOre_t *ctrl) {
   static const float pick_store_neg_200_target[2] = {
       AUTO_ORE_PICK_STORE_FINISH_POLE_TARGET_RAD,
@@ -2687,34 +2717,24 @@ static const float *AutoOre_FusedStepStartPoleTarget(const AutoOre_t *ctrl) {
 
 static const AutoCtrl_TemplateParam_t *AutoOre_FusedStepTemplateParam(
     const AutoOre_t *ctrl) {
-  const Config_RobotParam_t *robot_param = Config_GetRobotParam();
-  if (ctrl == 0 || robot_param == 0) {
+  if (ctrl == 0) {
     return 0;
   }
 
   switch (ctrl->action) {
     case AUTO_ORE_ACTION_PICK_STORE_POS_400:
-      return &robot_param->auto_ctrl_param.head_ascend_400;
+      return Config_GetAutoCtrlTemplateParam(
+          AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD, true);
     case AUTO_ORE_ACTION_PICK_STORE_POS_200:
     case AUTO_ORE_ACTION_PICK_STORE_NEG_200:
-      return &robot_param->auto_ctrl_param.head_ascend_200;
+      return Config_GetAutoCtrlTemplateParam(
+          AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD, true);
     default:
       break;
   }
 
-  switch (AutoOre_FusedStepTemplateId(ctrl)) {
-    case AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD:
-      return &robot_param->auto_ctrl_param.head_ascend_200;
-    case AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD:
-      return &robot_param->auto_ctrl_param.head_ascend_400;
-    case AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD:
-      return &robot_param->auto_ctrl_param.head_descend_200;
-    case AUTO_CTRL_TEMPLATE_DESCEND_400_HEAD:
-      return &robot_param->auto_ctrl_param.head_descend_400;
-    case AUTO_CTRL_TEMPLATE_NONE:
-    default:
-      return 0;
-  }
+  return Config_GetAutoCtrlTemplateParam(
+      AutoOre_FusedStepTemplateId(ctrl), true);
 }
 
 static void AutoOre_EnsureFusedPoleCommandLimits(AutoOre_t *ctrl) {
@@ -3520,6 +3540,7 @@ static void AutoOre_RunFusedStepTemplate(AutoOre_t *ctrl, uint32_t now_ms) {
 
   if (!ctrl->step_ctrl_started) {
     AutoCtrl_Init(&ctrl->step_ctrl);
+    AutoCtrl_SetUseFusedTemplateParams(&ctrl->step_ctrl, true);
     const auto_ctrl_yaw_source_e yaw_source =
         (ctrl->feedback.yaw_source == AUTO_CTRL_YAW_SOURCE_PC)
             ? AUTO_CTRL_YAW_SOURCE_PC
@@ -3893,6 +3914,18 @@ static void AutoOre_RunStepPickStoreFused(AutoOre_t *ctrl, uint32_t now_ms) {
     AutoOre_FailSetupInvalidParam(ctrl);
     return;
   }
+  const bool use_fused_pick_arm_speed =
+      ctrl->action == AUTO_ORE_ACTION_STEP_PICK_STORE_ASCEND_200_HEAD;
+  const AutoOre_ArmSpeedLimit_t pick_place_arm_speed =
+      AutoOre_FusedArmSpeed(use_fused_pick_arm_speed
+                                ? &fused->pick_place_arm_speed
+                                : 0,
+                            &ctrl->param.arm_speed.pick_place);
+  const AutoOre_ArmSpeedLimit_t pick_fetch_arm_speed =
+      AutoOre_FusedArmSpeed(use_fused_pick_arm_speed
+                                ? &fused->pick_fetch_arm_speed
+                                : 0,
+                            &ctrl->param.arm_speed.pick_fetch);
 
   switch (ctrl->step_index) {
     case 0:
@@ -3900,7 +3933,7 @@ static void AutoOre_RunStepPickStoreFused(AutoOre_t *ctrl, uint32_t now_ms) {
       const bool fused_prealign_ready = AutoOre_RunPickPrealign(ctrl, now_ms);
       if (!AutoOre_CommandArm(ctrl, AutoOre_FusedPickArmPoint(ctrl),
                               SUCTION_ON,
-                              &ctrl->param.arm_speed.pick_place)) {
+                              &pick_place_arm_speed)) {
         AutoOre_FailPickInvalidParam(ctrl);
         return;
       }
@@ -3924,7 +3957,7 @@ static void AutoOre_RunStepPickStoreFused(AutoOre_t *ctrl, uint32_t now_ms) {
       AutoOre_EnterStep(ctrl, now_ms);
       if (!AutoOre_CommandArm(ctrl, AutoOre_FusedPickArmPoint(ctrl),
                               SUCTION_ON,
-                              &ctrl->param.arm_speed.pick_place)) {
+                              &pick_place_arm_speed)) {
         AutoOre_FailPickInvalidParam(ctrl);
         return;
       }
@@ -3939,7 +3972,7 @@ static void AutoOre_RunStepPickStoreFused(AutoOre_t *ctrl, uint32_t now_ms) {
       AutoOre_EnterStep(ctrl, now_ms);
       if (!AutoOre_CommandArm(ctrl, AutoOre_FusedPickArmPoint(ctrl),
                               SUCTION_ON,
-                              &ctrl->param.arm_speed.pick_place)) {
+                              &pick_place_arm_speed)) {
         AutoOre_FailPickInvalidParam(ctrl);
         return;
       }
@@ -3961,7 +3994,7 @@ static void AutoOre_RunStepPickStoreFused(AutoOre_t *ctrl, uint32_t now_ms) {
       AutoOre_EnterStep(ctrl, now_ms);
       if (!AutoOre_CommandArm(ctrl, AutoOre_FusedPickArmPoint(ctrl),
                               SUCTION_ON,
-                              &ctrl->param.arm_speed.pick_fetch)) {
+                              &pick_fetch_arm_speed)) {
         AutoOre_FailPickInvalidParam(ctrl);
         return;
       }

@@ -31,27 +31,6 @@
 #define AUTO_CTRL_SICK_ACCEPT_MAX_YAW_DIFF_RAD (1.57079632679f)
 
 /* 判断模板是否属于 200 跨越类（�?下都按跨越逻辑处理）�?*/
-static const AutoCtrl_TemplateParam_t *AutoCtrl_GetTemplateParams(
-    const Config_RobotParam_t *robot_param, auto_ctrl_template_e template_id) {
-  if (robot_param == 0) {
-    return 0;
-  }
-
-  switch (template_id) {
-    case AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD:
-      return &robot_param->auto_ctrl_param.head_ascend_200;
-    case AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD:
-      return &robot_param->auto_ctrl_param.head_ascend_400;
-    case AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD:
-      return &robot_param->auto_ctrl_param.head_descend_200;
-    case AUTO_CTRL_TEMPLATE_DESCEND_400_HEAD:
-      return &robot_param->auto_ctrl_param.head_descend_400;
-    case AUTO_CTRL_TEMPLATE_NONE:
-    default:
-      return 0;
-  }
-}
-
 static void AutoCtrl_CopyPoleTarget(float dst[2], const float src[2]) {
   if (dst == 0 || src == 0) {
     return;
@@ -77,15 +56,17 @@ static void AutoCtrl_ApplyDescendStartPoleThreshold(
 }
 
 static bool AutoCtrl_GetTemplateEntryPoleCommand(
-    const Config_RobotParam_t *robot_param, auto_ctrl_template_e template_id,
+    const auto_ctrl_t *ctrl, const Config_RobotParam_t *robot_param,
+    auto_ctrl_template_e template_id,
     float target[2], float speed[2], float accel[2], bool *disable_accel) {
-  if (robot_param == 0 || target == 0 || speed == 0 || accel == 0 ||
+  if (ctrl == 0 || robot_param == 0 || target == 0 || speed == 0 || accel == 0 ||
       disable_accel == 0) {
     return false;
   }
 
   const AutoCtrl_TemplateParam_t *template_param =
-      AutoCtrl_GetTemplateParams(robot_param, template_id);
+      Config_GetAutoCtrlTemplateParam(template_id,
+                      ctrl->use_fused_template_params);
   if (template_param == 0) {
     return false;
   }
@@ -97,10 +78,8 @@ static bool AutoCtrl_GetTemplateEntryPoleCommand(
     case AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD:
       AutoCtrl_CopyPoleTarget(target,
                               robot_param->pole_param.preset.step_200_all_extend);
-      speed[0] =
-          robot_param->auto_ctrl_param.head_ascend_200.pole_all_extend_speed;
-      speed[1] =
-          robot_param->auto_ctrl_param.head_ascend_200.pole_all_extend_speed;
+        speed[0] = template_param->pole_all_extend_speed;
+        speed[1] = template_param->pole_all_extend_speed;
       accel[0] = template_param->pole_all_extend_accel;
       accel[1] = template_param->pole_all_extend_accel;
       *disable_accel = accel[0] < 0.0f;
@@ -108,10 +87,8 @@ static bool AutoCtrl_GetTemplateEntryPoleCommand(
     case AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD:
       AutoCtrl_CopyPoleTarget(target,
                               robot_param->pole_param.preset.step_400_all_extend);
-      speed[0] =
-          robot_param->auto_ctrl_param.head_ascend_400.pole_all_extend_speed;
-      speed[1] =
-          robot_param->auto_ctrl_param.head_ascend_400.pole_all_extend_speed;
+        speed[0] = template_param->pole_all_extend_speed;
+        speed[1] = template_param->pole_all_extend_speed;
       accel[0] = template_param->pole_all_extend_accel;
       accel[1] = template_param->pole_all_extend_accel;
       *disable_accel = accel[0] < 0.0f;
@@ -123,11 +100,11 @@ static bool AutoCtrl_GetTemplateEntryPoleCommand(
       speed[0] =
           template_param->pole_all_retract_speed > 0.0f
               ? template_param->pole_all_retract_speed
-              : robot_param->auto_ctrl_param.head_descend_200.pole_front_retract_speed;
+              : template_param->pole_front_retract_speed;
       speed[1] =
           template_param->pole_all_retract_speed > 0.0f
               ? template_param->pole_all_retract_speed
-              : robot_param->auto_ctrl_param.head_descend_200.pole_rear_retract_speed;
+              : template_param->pole_rear_retract_speed;
       accel[0] = template_param->pole_all_retract_accel;
       accel[1] = template_param->pole_all_retract_accel;
       *disable_accel = accel[0] < 0.0f;
@@ -139,11 +116,11 @@ static bool AutoCtrl_GetTemplateEntryPoleCommand(
       speed[0] =
           template_param->pole_all_retract_speed > 0.0f
               ? template_param->pole_all_retract_speed
-              : robot_param->auto_ctrl_param.head_descend_400.pole_front_retract_speed;
+              : template_param->pole_front_retract_speed;
       speed[1] =
           template_param->pole_all_retract_speed > 0.0f
               ? template_param->pole_all_retract_speed
-              : robot_param->auto_ctrl_param.head_descend_400.pole_rear_retract_speed;
+              : template_param->pole_rear_retract_speed;
       accel[0] = template_param->pole_all_retract_accel;
       accel[1] = template_param->pole_all_retract_accel;
       *disable_accel = accel[0] < 0.0f;
@@ -339,8 +316,10 @@ void AutoCtrl_Init(auto_ctrl_t *ctrl) {
 void AutoCtrl_Reset(auto_ctrl_t *ctrl) {
   if (ctrl == 0) return;
   float yaw_zero = ctrl->yaw_zero_offset_rad;
+  const bool use_fused_params = ctrl->use_fused_template_params;
   AutoCtrl_Init(ctrl);
   ctrl->yaw_zero_offset_rad = yaw_zero;
+  ctrl->use_fused_template_params = use_fused_params;
 }
 
 /* 记录当前 raw yaw 为新的零点偏移�?*/
@@ -357,6 +336,12 @@ void AutoCtrl_SetYawSource(auto_ctrl_t *ctrl, auto_ctrl_yaw_source_e source) {
     source = AUTO_CTRL_YAW_SOURCE_STM32;
   }
   ctrl->yaw_source = source;
+}
+
+void AutoCtrl_SetUseFusedTemplateParams(auto_ctrl_t *ctrl,
+                                        bool use_fused_params) {
+  if (ctrl == 0) return;
+  ctrl->use_fused_template_params = use_fused_params;
 }
 
 /* 查询 yaw 来源�?*/
@@ -497,7 +482,8 @@ void AutoCtrl_Update(auto_ctrl_t *ctrl, uint32_t now_ms) {
       ctrl->yaw_error_rad = blended_yaw_error_rad;
 
       const AutoCtrl_TemplateParam_t *template_param =
-          AutoCtrl_GetTemplateParams(robot_param, ctrl->template_id);
+          Config_GetAutoCtrlTemplateParam(
+            ctrl->template_id, ctrl->use_fused_template_params);
       if (template_param != 0 && template_param->prealign_move_speed != 0.0f) {
         AutoCtrlPrimitive_ApplyPrealignWithForward(
             ctrl, template_param->prealign_move_speed);
@@ -510,7 +496,7 @@ void AutoCtrl_Update(auto_ctrl_t *ctrl, uint32_t now_ms) {
         float prealign_pole_accel[2] = {0.0f, 0.0f};
         bool prealign_pole_disable_accel = false;
         if (AutoCtrl_GetTemplateEntryPoleCommand(
-                robot_param, ctrl->template_id, prealign_pole_target,
+          ctrl, robot_param, ctrl->template_id, prealign_pole_target,
                 prealign_pole_speed, prealign_pole_accel,
                 &prealign_pole_disable_accel)) {
           AutoCtrlPrimitive_CommandPoleTargetWithSpeed(

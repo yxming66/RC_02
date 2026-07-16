@@ -17,27 +17,6 @@
 #define AUTO_CTRL_STM32_YAW_WZ_ENABLE (0u)
 #endif
 
-static const AutoCtrl_TemplateParam_t *AutoCtrlPrimitive_GetTemplateParams(
-    const Config_RobotParam_t *robot_param, auto_ctrl_template_e template_id) {
-  if (robot_param == nullptr) {
-    return nullptr;
-  }
-
-  switch (template_id) {
-    case AUTO_CTRL_TEMPLATE_ASCEND_200_HEAD:
-      return &robot_param->auto_ctrl_param.head_ascend_200;
-    case AUTO_CTRL_TEMPLATE_ASCEND_400_HEAD:
-      return &robot_param->auto_ctrl_param.head_ascend_400;
-    case AUTO_CTRL_TEMPLATE_DESCEND_200_HEAD:
-      return &robot_param->auto_ctrl_param.head_descend_200;
-    case AUTO_CTRL_TEMPLATE_DESCEND_400_HEAD:
-      return &robot_param->auto_ctrl_param.head_descend_400;
-    case AUTO_CTRL_TEMPLATE_NONE:
-    default:
-      return nullptr;
-  }
-}
-
 /* 底盘输出复位为 RELAX，避免上一周期残留控制量。 */
 void AutoCtrlPrimitive_ResetChassis(auto_ctrl_t *ctrl) {
   memset(&ctrl->chassis_cmd, 0, sizeof(ctrl->chassis_cmd));
@@ -143,7 +122,8 @@ void AutoCtrlPrimitive_CommandPoleTarget(auto_ctrl_t *ctrl, float front_target,
 
   const Config_RobotParam_t *robot_param = Config_GetRobotParam();
   const AutoCtrl_TemplateParam_t *template_param =
-      AutoCtrlPrimitive_GetTemplateParams(robot_param, ctrl->template_id);
+      Config_GetAutoCtrlTemplateParam(ctrl->template_id,
+                      ctrl->use_fused_template_params);
   const float default_speed =
       (robot_param != nullptr) ? robot_param->pole_param.limit.support_lift_speed
                                : 0.0f;

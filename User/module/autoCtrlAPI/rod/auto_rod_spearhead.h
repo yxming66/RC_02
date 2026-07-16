@@ -54,6 +54,7 @@ typedef struct {
   OreStore_TransformPoint_t dock_wait_transform;
   bool use_photo_check;
   uint32_t photo_check_ms; /* 光电连续触发稳定确认时间。 */
+  uint32_t photo_latch_delay_ms; /* 进入检测运动后开始锁存光电的延时。 */
   uint32_t photo_timeout_ms; /* 进入检测步骤后的总等待超时。 */
 } AutoRodSpearhead_Params_t;
 
@@ -79,6 +80,7 @@ typedef struct {
   bool photo_stable_started;
   bool photo_stable_state;
   uint32_t photo_stable_start_time_ms;
+  bool photo_trigger_latched;
   bool dock_complete_latched;
   uint32_t dock_wait_start_time_ms;
   bool dock_wait_local_ready;

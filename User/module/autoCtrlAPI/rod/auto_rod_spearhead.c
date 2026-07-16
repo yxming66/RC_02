@@ -8,6 +8,7 @@
 #define AUTO_ROD_SPEARHEAD_DEFAULT_DETECT_SUCCESS_HOLD_MS (500u)
 #define AUTO_ROD_SPEARHEAD_DEFAULT_DOCK_WAIT_DELAY_MS (500u)
 #define AUTO_ROD_SPEARHEAD_DEFAULT_PHOTO_CHECK_MS (1000u)
+#define AUTO_ROD_SPEARHEAD_DEFAULT_PHOTO_LATCH_DELAY_MS (300u)
 #define AUTO_ROD_SPEARHEAD_DEFAULT_PHOTO_TIMEOUT_MS (2000u)
 #define AUTO_ROD_SPEARHEAD_DOCK_WAIT_POSE_DELAY_MS (300u)
 #define AUTO_ROD_SPEARHEAD_DOCK_WAIT_STANDBY_THRESHOLD_RAD (18.0f)
@@ -75,6 +76,13 @@ static uint32_t AutoRodSpearhead_PhotoTimeoutMs(
           : AUTO_ROD_SPEARHEAD_DEFAULT_PHOTO_TIMEOUT_MS;
   const uint32_t stable_ms = AutoRodSpearhead_PhotoCheckMs(ctrl);
   return configured_timeout > stable_ms ? configured_timeout : stable_ms;
+}
+
+static uint32_t AutoRodSpearhead_PhotoLatchDelayMs(
+    const AutoRodSpearhead_t *ctrl) {
+  return ctrl->param.photo_latch_delay_ms > 0u
+             ? ctrl->param.photo_latch_delay_ms
+             : AUTO_ROD_SPEARHEAD_DEFAULT_PHOTO_LATCH_DELAY_MS;
 }
 
 static OreStore_TransformPoint_t AutoRodSpearhead_DockWaitTransform(
@@ -195,6 +203,23 @@ static bool AutoRodSpearhead_PhotoStateStable(AutoRodSpearhead_t *ctrl,
          AutoRodSpearhead_PhotoCheckMs(ctrl);
 }
 
+static bool AutoRodSpearhead_UpdatePhotoTriggerLatch(
+    AutoRodSpearhead_t *ctrl, bool photo_triggered, uint32_t now_ms) {
+  if (!ctrl->param.use_photo_check || ctrl->photo_trigger_latched) {
+    return ctrl->photo_trigger_latched;
+  }
+  if (!photo_triggered) {
+    ctrl->photo_stable_started = false;
+    ctrl->photo_stable_state = false;
+    ctrl->photo_stable_start_time_ms = now_ms;
+    return false;
+  }
+  if (AutoRodSpearhead_PhotoStateStable(ctrl, true, now_ms)) {
+    ctrl->photo_trigger_latched = true;
+  }
+  return ctrl->photo_trigger_latched;
+}
+
 static void AutoRodSpearhead_FinishSuccess(AutoRodSpearhead_t *ctrl) {
   ctrl->state = AUTO_ROD_SPEARHEAD_STATE_SUCCESS;
   ctrl->result = AUTO_ROD_SPEARHEAD_RESULT_SUCCESS;
@@ -253,6 +278,7 @@ static bool AutoRodSpearhead_StartAction(AutoRodSpearhead_t *ctrl,
   ctrl->photo_stable_started = false;
   ctrl->photo_stable_state = false;
   ctrl->photo_stable_start_time_ms = now_ms;
+  ctrl->photo_trigger_latched = false;
   ctrl->dock_complete_latched = false;
   ctrl->dock_wait_start_time_ms = now_ms;
   ctrl->dock_wait_local_ready = false;
@@ -396,10 +422,12 @@ static void AutoRodSpearhead_RunPickupStep2(
         return;
       }
       if (AutoRodSpearhead_StepElapsed(ctrl, now_ms) >=
+          AutoRodSpearhead_PhotoLatchDelayMs(ctrl)) {
+        (void)AutoRodSpearhead_UpdatePhotoTriggerLatch(
+            ctrl, rod_photo_triggered, now_ms);
+      }
+      if (AutoRodSpearhead_StepElapsed(ctrl, now_ms) >=
           AutoRodSpearhead_DetectPoseDelayMs(ctrl)) {
-        ctrl->photo_stable_started = false;
-        ctrl->photo_stable_state = false;
-        ctrl->photo_stable_start_time_ms = now_ms;
         AutoRodSpearhead_NextStep(ctrl);
       }
       return;
@@ -415,21 +443,15 @@ static void AutoRodSpearhead_RunPickupStep2(
         AutoRodSpearhead_NextStep(ctrl);
         return;
       }
-      if (!rod_photo_triggered) {
-        ctrl->photo_stable_started = false;
-        ctrl->photo_stable_state = false;
-        ctrl->photo_stable_start_time_ms = now_ms;
-        if (AutoRodSpearhead_StepElapsed(ctrl, now_ms) >=
-            AutoRodSpearhead_PhotoTimeoutMs(ctrl)) {
-          AutoRodSpearhead_FinishNoSpearhead(ctrl);
-        }
+      if (AutoRodSpearhead_UpdatePhotoTriggerLatch(
+              ctrl, rod_photo_triggered, now_ms)) {
+        AutoRodSpearhead_NextStep(ctrl);
         return;
       }
-      if (!AutoRodSpearhead_PhotoStateStable(ctrl, rod_photo_triggered,
-                                             now_ms)) {
-        return;
+      if (AutoRodSpearhead_StepElapsed(ctrl, now_ms) >=
+          AutoRodSpearhead_PhotoTimeoutMs(ctrl)) {
+        AutoRodSpearhead_FinishNoSpearhead(ctrl);
       }
-      AutoRodSpearhead_NextStep(ctrl);
       return;
     case 5:
       AutoRodSpearhead_EnterStep(ctrl, now_ms);
@@ -510,10 +532,12 @@ static void AutoRodSpearhead_RunPickup(
         return;
       }
       if (AutoRodSpearhead_StepElapsed(ctrl, now_ms) >=
+          AutoRodSpearhead_PhotoLatchDelayMs(ctrl)) {
+        (void)AutoRodSpearhead_UpdatePhotoTriggerLatch(
+            ctrl, rod_photo_triggered, now_ms);
+      }
+      if (AutoRodSpearhead_StepElapsed(ctrl, now_ms) >=
           AutoRodSpearhead_DetectPoseDelayMs(ctrl)) {
-        ctrl->photo_stable_started = false;
-        ctrl->photo_stable_state = false;
-        ctrl->photo_stable_start_time_ms = now_ms;
         AutoRodSpearhead_NextStep(ctrl);
       }
       return;
@@ -529,21 +553,15 @@ static void AutoRodSpearhead_RunPickup(
         AutoRodSpearhead_NextStep(ctrl);
         return;
       }
-      if (!rod_photo_triggered) {
-        ctrl->photo_stable_started = false;
-        ctrl->photo_stable_state = false;
-        ctrl->photo_stable_start_time_ms = now_ms;
-        if (AutoRodSpearhead_StepElapsed(ctrl, now_ms) >=
-            AutoRodSpearhead_PhotoTimeoutMs(ctrl)) {
-          AutoRodSpearhead_FinishNoSpearhead(ctrl);
-        }
+      if (AutoRodSpearhead_UpdatePhotoTriggerLatch(
+              ctrl, rod_photo_triggered, now_ms)) {
+        AutoRodSpearhead_NextStep(ctrl);
         return;
       }
-      if (!AutoRodSpearhead_PhotoStateStable(ctrl, rod_photo_triggered,
-                                             now_ms)) {
-        return;
+      if (AutoRodSpearhead_StepElapsed(ctrl, now_ms) >=
+          AutoRodSpearhead_PhotoTimeoutMs(ctrl)) {
+        AutoRodSpearhead_FinishNoSpearhead(ctrl);
       }
-      AutoRodSpearhead_NextStep(ctrl);
       return;
     case 5:
       AutoRodSpearhead_EnterStep(ctrl, now_ms);
