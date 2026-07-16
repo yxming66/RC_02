@@ -653,7 +653,7 @@ Config_RobotParam_t robot_config = {
             .rear_retract_move_ms = 300u,       /* 后光电触发后，全收腿移动持续时间，单位 ms。 */
             .second_photo_retract_move_speed = 0.40f, /* 后一个光电触发收腿时向头向移动 vx，单位 m/s。 */
             .final_move_speed = 0.6f,          /* 收尾离开台阶 vx，单位 m/s。 */
-            .final_move_ms = 1200u,              /* 收尾离开台阶角度门控兜底超时，单位 ms。 */
+            .final_move_ms = 1200u,              /* 收尾离  开台阶角度门控兜底超时，单位 ms。 */
             .final_photo_sprint_ms = 50u,       /* 末尾光电触发后继续冲刺时间，单位 ms。 */
             .final_move_wheel_delta_rad = 0.0f, /* 编码器门控的收尾离开轮转角阈值，单位 rad；>0 优先按角度切步，<=0 使用 final_move_ms。 */
             /* 200mm全伸：快速建立速度，并在目标前按120rad/s^2主动制动。 */
@@ -704,7 +704,7 @@ Config_RobotParam_t robot_config = {
             .final_photo_sprint_ms = 100u,       /* 末尾光电触发后继续冲刺时间，单位 ms。 */
             .final_move_wheel_delta_rad = 0.0f, /* 0 表示该模板继续按时间切步。 */
             /* 400mm伸出：约0.67s完成10.7rad行程，末端提前约2.02rad制动。 */
-            .pole_all_extend_speed = 20.0f,
+            .pole_all_extend_speed = 18.0f,
             .pole_front_extend_speed = 22.0f,   /* 前杆伸出目标跟随速度，单位 rad/s。 */
             .pole_front_retract_speed = 50.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
             .pole_rear_extend_speed = 22.0f,    /* 后杆伸出目标跟随速度，单位 rad/s。 */
@@ -861,7 +861,7 @@ Config_RobotParam_t robot_config = {
             .pole_extend_move_speed = 0.2f,
             .front_retract_move_speed = 0.2f,
             .front_retract_timeout_ms = 5000u,
-            .mid_move_speed = 0.6f,
+            .mid_move_speed = 0.4f,
             .mid_move_ms = 250u,
             .mid_move_wheel_delta_rad = 8.66f,
             .timed_move_yaw_tolerance_rad = 0.35f,
@@ -873,8 +873,8 @@ Config_RobotParam_t robot_config = {
             .final_move_ms = 1000u,
             .final_photo_sprint_ms = 100u,
             .final_move_wheel_delta_rad = 0.0f,
-            .pole_all_extend_speed = 15.0f,
-            .pole_all_extend_accel = 200.0f,
+            .pole_all_extend_speed = 18.0f,
+            .pole_all_extend_accel = 250.0f,
             .pole_all_retract_speed = 30.0f,
             .pole_all_retract_accel = 120.0f,
             .pole_front_extend_speed = 22.0f,

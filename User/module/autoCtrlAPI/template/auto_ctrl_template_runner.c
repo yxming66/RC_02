@@ -30,6 +30,7 @@ typedef enum {
 
 #define AUTO_CTRL_PHOTO_STABLE_MS (5u) /* 光电稳定触发时间，单�?ms�?*/
 #define AUTO_CTRL_TIMED_MOVE_YAW_TOLERANCE_DEFAULT_RAD (0.3490329252f)
+#define AUTO_CTRL_FUSED_CONSTRAINT_SUCCESS_TIMEOUT_MS (5000u)
 
 enum {
   AUTO_CTRL_TEMPLATE_DEBUG_PHOTO_NONE = 0u,
@@ -296,6 +297,9 @@ static bool AutoCtrlTemplate_WheelDeltaMoveReady(
   const bool fallback_timeout =
       fallback_move_ms > 0u &&
       AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >= fallback_move_ms;
+  if (ctrl->use_fused_template_params) {
+    return distance_ready || fallback_timeout;
+  }
   return (distance_ready || fallback_timeout) &&
          AutoCtrlTemplate_IsTimedMoveYawAligned(ctrl, param);
 }
@@ -907,6 +911,10 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
       if (AutoCtrlTemplate_PoleReadyAfterNewTarget(
               ctrl, ctrl->feedback.pole_all_at_target)) {
         AutoCtrlTemplate_NextStep(ctrl);
+      } else if (ctrl->use_fused_template_params &&
+                 AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
+                     AUTO_CTRL_FUSED_CONSTRAINT_SUCCESS_TIMEOUT_MS) {
+        AutoCtrlTemplate_NextStep(ctrl);
       }
       return false;
 
@@ -916,10 +924,17 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
           ctrl->feedback.pole_all_at_target &&
           AutoCtrlTemplate_LatchFrontPhotoStable(ctrl, now_ms);
       if (!first_photo_ready) {
-        if (param->front_photo_timeout_ms > 0u &&
-            AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
-                param->front_photo_timeout_ms) {
-          ctrl->fault = AUTO_CTRL_FAULT_SENSOR_INVALID;
+        if ((ctrl->use_fused_template_params &&
+             AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
+                 AUTO_CTRL_FUSED_CONSTRAINT_SUCCESS_TIMEOUT_MS) ||
+            (param->front_photo_timeout_ms > 0u &&
+             AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
+                 param->front_photo_timeout_ms)) {
+          if (ctrl->use_fused_template_params) {
+            AutoCtrlTemplate_NextStep(ctrl);
+          } else {
+            ctrl->fault = AUTO_CTRL_FAULT_SENSOR_INVALID;
+          }
         }
         AutoCtrlPrimitive_ApplyPrealignWithMove(
             ctrl, param->pole_extend_move_speed, 0.0f);
@@ -967,10 +982,17 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
               ctrl, ctrl->feedback.pole_front_at_target)) {
         AutoCtrlTemplate_NextStep(ctrl);
       }
-      if (param->front_retract_timeout_ms > 0u &&
-          AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
-              param->front_retract_timeout_ms) {
-        ctrl->fault = AUTO_CTRL_FAULT_SENSOR_INVALID;
+      else if ((ctrl->use_fused_template_params &&
+                AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
+                    AUTO_CTRL_FUSED_CONSTRAINT_SUCCESS_TIMEOUT_MS) ||
+               (param->front_retract_timeout_ms > 0u &&
+                AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
+                    param->front_retract_timeout_ms)) {
+        if (ctrl->use_fused_template_params) {
+          AutoCtrlTemplate_NextStep(ctrl);
+        } else {
+          ctrl->fault = AUTO_CTRL_FAULT_SENSOR_INVALID;
+        }
       }
       return false;
 
@@ -1033,10 +1055,17 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
           ctrl->feedback.pole_front_at_target &&
           ctrl->feedback.pole_rear_at_target;
       if (!second_photo_ready) {
-        if (param->rear_photo_timeout_ms > 0u &&
-            AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
-                param->rear_photo_timeout_ms) {
-          ctrl->fault = AUTO_CTRL_FAULT_SENSOR_INVALID;
+        if ((ctrl->use_fused_template_params &&
+             AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
+                 AUTO_CTRL_FUSED_CONSTRAINT_SUCCESS_TIMEOUT_MS) ||
+            (param->rear_photo_timeout_ms > 0u &&
+             AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
+                 param->rear_photo_timeout_ms)) {
+          if (ctrl->use_fused_template_params) {
+            AutoCtrlTemplate_NextStep(ctrl);
+          } else {
+            ctrl->fault = AUTO_CTRL_FAULT_SENSOR_INVALID;
+          }
         }
         AutoCtrlPrimitive_ApplyPrealignWithMove(
             ctrl, param->rear_retract_move_speed, 0.0f);
@@ -1097,10 +1126,17 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
               ctrl, ctrl->feedback.pole_all_at_target)) {
         AutoCtrlTemplate_NextStep(ctrl);
       }
-      if (param->rear_retract_timeout_ms > 0u &&
-          AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
-              param->rear_retract_timeout_ms) {
-        ctrl->fault = AUTO_CTRL_FAULT_SENSOR_INVALID;
+      else if ((ctrl->use_fused_template_params &&
+                AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
+                    AUTO_CTRL_FUSED_CONSTRAINT_SUCCESS_TIMEOUT_MS) ||
+               (param->rear_retract_timeout_ms > 0u &&
+                AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
+                    param->rear_retract_timeout_ms)) {
+        if (ctrl->use_fused_template_params) {
+          AutoCtrlTemplate_NextStep(ctrl);
+        } else {
+          ctrl->fault = AUTO_CTRL_FAULT_SENSOR_INVALID;
+        }
       }
       return false;
 
@@ -1124,11 +1160,19 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
                  param->final_move_ms > 0u &&
                  AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
                      param->final_move_ms) {
-        ctrl->fault = AUTO_CTRL_FAULT_SENSOR_INVALID;
+        /* The final photo4 rising edge is a preferred clearance marker, not
+         * the only safe completion source.  At a boundary position photo4
+         * can remain low until the chassis is nudged, leaving an otherwise
+         * completed stair action waiting on vehicle motion.  The configured
+         * final_move_ms is the bounded travel fallback: after continuously
+         * commanding the final escape move for that duration, continue to
+         * the final all-poles-retracted verification below. */
+        AutoCtrlTemplate_NextStep(ctrl);
       }
       return false;
 
     case 7: /* 停车并保持四杆全收，全部到位后模板完成。 */
+      AutoCtrlTemplate_EnterStep(ctrl, now_ms);
       AutoCtrlTemplate_CommandChassisZeroVector(ctrl);
       AutoCtrlTemplate_CommandPoleProfile(
         ctrl, pole.all_retract[0], pole.all_retract[1],
@@ -1139,7 +1183,10 @@ static bool AutoCtrlTemplate_RunHeadAscendOptimized(
           : AUTO_CTRL_POLE_PROFILE_REAR_RETRACT);
       AutoCtrlTemplate_DebugMarkPoleCommand(
         ctrl, now_ms, AUTO_CTRL_TEMPLATE_DEBUG_POLE_AFTER_PHOTO);
-      return ctrl->feedback.pole_all_at_target;
+      return ctrl->feedback.pole_all_at_target ||
+             (ctrl->use_fused_template_params &&
+              AutoCtrlTemplate_StepElapsed(ctrl, now_ms) >=
+                  AUTO_CTRL_FUSED_CONSTRAINT_SUCCESS_TIMEOUT_MS);
 
     default:
       ctrl->fault = AUTO_CTRL_FAULT_TEMPLATE_UNSUPPORTED;

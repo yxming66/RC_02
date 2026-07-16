@@ -370,6 +370,7 @@ typedef struct {
   uint32_t fused_photo2_released_since_ms;
   uint8_t fused_store_step_index;
   uint8_t fused_store_step_phase;
+  uint32_t fused_store_step_enter_time_ms;
   uint8_t fused_step_template_start_step_index;
   AutoOre_Position_t fused_store_position;
   bool release_lift_observer_active;

@@ -1922,6 +1922,15 @@ static bool AutoCtrlFeed_HandleAutoOreDebugRequest(uint32_t now_ms) {
     return false;
   }
 
+  /* PC release may be dispatched immediately before another action becomes
+   * busy. Keep this request in the shared pending slot until the start can
+   * actually be attempted; an RC takeover still replaces it with ABORT. */
+  if (request == AUTO_ORE_DEBUG_REQUEST_RELEASE &&
+      AutoCtrlFeed_AnyAutoActionBusy()) {
+    g_auto_ore_debug.last_result = false;
+    return false;
+  }
+
   AutoCtrlFeed_SyncAutoOrePhotoOccupancy();
 
   g_auto_ore_debug.request = AUTO_ORE_DEBUG_REQUEST_NONE;

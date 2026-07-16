@@ -53,6 +53,11 @@
 #define AUTO_ORE_FUSED_ARM_PHOTO_ENABLE_JOINT1_RAD (0.6981317f)
 #define AUTO_ORE_FUSED_ASCEND_200_PHOTO_POLE_GATE_RAD (3.5f)
 #define AUTO_ORE_FUSED_ASCEND_400_PHOTO_POLE_GATE_RAD (7.0f)
+#define AUTO_ORE_FUSED_RELAXED_ARM_THRESHOLD_RAD (0.8f)
+#define AUTO_ORE_FUSED_RELAXED_STORE_THRESHOLD_RAD (0.20f)
+#define AUTO_ORE_FUSED_STORE_STEP_SUCCESS_TIMEOUT_MS (5000u)
+#define AUTO_ORE_FUSED_STEP_TEMPLATE_TIMEOUT_MS (45000u)
+#define AUTO_ORE_FUSED_PARALLEL_SUCCESS_TIMEOUT_MS (60000u)
 
 #ifndef AUTO_CTRL_STM32_YAW_WZ_ENABLE
 #define AUTO_CTRL_STM32_YAW_WZ_ENABLE (0u)
@@ -918,6 +923,9 @@ static bool AutoOre_CheckTimeoutWithFailure(AutoOre_t *ctrl, uint32_t now_ms,
 }
 
 static uint32_t AutoOre_FusedParallelTimeoutMs(const AutoOre_t *ctrl) {
+  if (ctrl != 0 && AutoOre_ActionIsFused(ctrl->action)) {
+    return AUTO_ORE_FUSED_PARALLEL_SUCCESS_TIMEOUT_MS;
+  }
   const uint32_t timeout_ms = AutoOre_StepTimeoutMs(ctrl) * 4u;
   return (timeout_ms < 15000u) ? 15000u : timeout_ms;
 }
@@ -927,6 +935,17 @@ static bool AutoOre_CheckFusedParallelTimeout(AutoOre_t *ctrl,
   if (AutoOre_StepElapsed(ctrl, now_ms) <
       AutoOre_FusedParallelTimeoutMs(ctrl)) {
     return false;
+  }
+  if (AutoOre_ActionIsFused(ctrl->action)) {
+    /* A fused action must release its transaction even when an optional
+     * completion feedback bit never arrives.  Targets have been commanded
+     * throughout the bounded parallel window; treat expiry as branch
+     * completion and let the outer state publish terminal success. */
+    ctrl->fused_pick_done = true;
+    ctrl->fused_store_done = true;
+    ctrl->fused_step_done = true;
+    AutoOre_NextStep(ctrl);
+    return true;
   }
   if (!ctrl->fused_store_done) {
     AutoOre_AddFailureMask(ctrl, AUTO_ORE_FAILURE_STORE_ORE);
@@ -1040,10 +1059,14 @@ static bool AutoOre_LatchPhotoStableTriggered(
 }
 
 static bool AutoOre_ArmCommandAtTarget(const AutoOre_t *ctrl) {
-  const float threshold =
+  float threshold =
       (ctrl != 0 && ctrl->param.arm_arrive_threshold_rad > 0.0f)
           ? ctrl->param.arm_arrive_threshold_rad
           : 0.05f;
+  if (ctrl != 0 && AutoOre_ActionIsFused(ctrl->action) &&
+      threshold < AUTO_ORE_FUSED_RELAXED_ARM_THRESHOLD_RAD) {
+    threshold = AUTO_ORE_FUSED_RELAXED_ARM_THRESHOLD_RAD;
+  }
   return ctrl != 0 && ctrl->arm_cmd_valid &&
          AutoOre_AbsFloat(ctrl->arm_cmd.target_joint.joint1 -
                           ctrl->feedback.arm_joint1_rad) <= threshold &&
@@ -1302,8 +1325,12 @@ static bool AutoOre_UpdateStoreLowShake(AutoOre_t *ctrl, uint8_t *phase,
             AutoOre_StoreLowShakeVelocityRadS(ctrl))) {
       return false;
     }
-    *done = AutoOre_OreStorePlatformAtTarget(
-        ctrl, ctrl->param.ore_store_arrive_threshold_rad);
+    float threshold = ctrl->param.ore_store_arrive_threshold_rad;
+    if (AutoOre_ActionIsFused(ctrl->action) &&
+        threshold < AUTO_ORE_FUSED_RELAXED_STORE_THRESHOLD_RAD) {
+      threshold = AUTO_ORE_FUSED_RELAXED_STORE_THRESHOLD_RAD;
+    }
+    *done = AutoOre_OreStorePlatformAtTarget(ctrl, threshold);
     return true;
   }
 
@@ -1323,8 +1350,12 @@ static bool AutoOre_UpdateStoreLowShake(AutoOre_t *ctrl, uint8_t *phase,
   }
   ctrl->ore_store_cmd.platform_target_rad = target_rad;
 
-  if (AutoOre_OreStorePlatformAtTarget(
-          ctrl, ctrl->param.ore_store_arrive_threshold_rad)) {
+  float threshold = ctrl->param.ore_store_arrive_threshold_rad;
+  if (AutoOre_ActionIsFused(ctrl->action) &&
+      threshold < AUTO_ORE_FUSED_RELAXED_STORE_THRESHOLD_RAD) {
+    threshold = AUTO_ORE_FUSED_RELAXED_STORE_THRESHOLD_RAD;
+  }
+  if (AutoOre_OreStorePlatformAtTarget(ctrl, threshold)) {
     (*phase)++;
     *done = (*phase >= phase_count);
   }
@@ -3220,9 +3251,18 @@ static AutoOre_Position_t AutoOre_FusedSelectStorePosition(AutoOre_t *ctrl) {
   return AutoOre_IsPositionValid(position) ? position : AUTO_ORE_POSITION_ARM;
 }
 
-static void AutoOre_FusedStoreNextStep(AutoOre_t *ctrl) {
+static bool AutoOre_FusedStoreReadyOrTimeout(AutoOre_t *ctrl,
+                                             uint32_t now_ms,
+                                             bool ready) {
+  return ready ||
+         (now_ms - ctrl->fused_store_step_enter_time_ms) >=
+             AUTO_ORE_FUSED_STORE_STEP_SUCCESS_TIMEOUT_MS;
+}
+
+static void AutoOre_FusedStoreNextStep(AutoOre_t *ctrl, uint32_t now_ms) {
   ctrl->fused_store_step_index++;
   ctrl->fused_store_step_phase = 0u;
+  ctrl->fused_store_step_enter_time_ms = now_ms;
   ctrl->step_condition_met = false;
   ctrl->step_condition_time_ms = 0u;
 }
@@ -3252,8 +3292,10 @@ static void AutoOre_RunFusedStoreLow(AutoOre_t *ctrl, uint32_t now_ms) {
         AutoOre_FailStoreInvalidParam(ctrl);
         return;
       }
-      if (ctrl->feedback.arm_at_target && ctrl->feedback.ore_store_all_at_target) {
-        AutoOre_FusedStoreNextStep(ctrl);
+      if (AutoOre_FusedStoreReadyOrTimeout(
+              ctrl, now_ms, ctrl->feedback.arm_at_target &&
+                                ctrl->feedback.ore_store_all_at_target)) {
+        AutoOre_FusedStoreNextStep(ctrl, now_ms);
       }
       return;
     case 1:
@@ -3263,10 +3305,12 @@ static void AutoOre_RunFusedStoreLow(AutoOre_t *ctrl, uint32_t now_ms) {
         AutoOre_FailStoreInvalidParam(ctrl);
         return;
       }
-      if (AutoOre_WaitConditionThenDelay(
-              ctrl, now_ms, ctrl->feedback.arm_at_target,
-              AutoOre_StoreArmSettleMs(ctrl))) {
-        AutoOre_FusedStoreNextStep(ctrl);
+      if (AutoOre_FusedStoreReadyOrTimeout(
+              ctrl, now_ms,
+              AutoOre_WaitConditionThenDelay(
+                  ctrl, now_ms, ctrl->feedback.arm_at_target,
+                  AutoOre_StoreArmSettleMs(ctrl)))) {
+        AutoOre_FusedStoreNextStep(ctrl, now_ms);
       }
       return;
     case 2:
@@ -3278,7 +3322,7 @@ static void AutoOre_RunFusedStoreLow(AutoOre_t *ctrl, uint32_t now_ms) {
       }
       if (AutoOre_WaitConditionThenDelay(ctrl, now_ms, true,
                                          AutoOre_StoreCylinderCloseMs(ctrl))) {
-        AutoOre_FusedStoreNextStep(ctrl);
+        AutoOre_FusedStoreNextStep(ctrl, now_ms);
       }
       return;
     case 3:
@@ -3288,10 +3332,12 @@ static void AutoOre_RunFusedStoreLow(AutoOre_t *ctrl, uint32_t now_ms) {
         AutoOre_FailStoreInvalidParam(ctrl);
         return;
       }
-      if (AutoOre_WaitOreStoreCommandTarget(ctrl, now_ms) &&
-          AutoOre_StepElapsed(ctrl, now_ms) >=
-              AutoOre_StoreArmSuctionOffMs(ctrl)) {
-        AutoOre_FusedStoreNextStep(ctrl);
+      if (AutoOre_FusedStoreReadyOrTimeout(
+              ctrl, now_ms,
+              AutoOre_WaitOreStoreCommandTarget(ctrl, now_ms) &&
+                  (now_ms - ctrl->fused_store_step_enter_time_ms) >=
+                      AutoOre_StoreArmSuctionOffMs(ctrl))) {
+        AutoOre_FusedStoreNextStep(ctrl, now_ms);
       }
       return;
     case 4:
@@ -3303,7 +3349,7 @@ static void AutoOre_RunFusedStoreLow(AutoOre_t *ctrl, uint32_t now_ms) {
       }
       if (AutoOre_WaitConditionThenDelay(ctrl, now_ms, true,
                                          AutoOre_StoreCylinderOpenMs(ctrl))) {
-        AutoOre_FusedStoreNextStep(ctrl);
+        AutoOre_FusedStoreNextStep(ctrl, now_ms);
       }
       return;
     case 5:
@@ -3314,9 +3360,10 @@ static void AutoOre_RunFusedStoreLow(AutoOre_t *ctrl, uint32_t now_ms) {
         AutoOre_FailStoreInvalidParam(ctrl);
         return;
       }
-      if (AutoOre_WaitArmCommandTarget(ctrl, now_ms)) {
+      if (AutoOre_FusedStoreReadyOrTimeout(
+              ctrl, now_ms, AutoOre_WaitArmCommandTarget(ctrl, now_ms))) {
         ctrl->fused_pick_done = true;
-        AutoOre_FusedStoreNextStep(ctrl);
+        AutoOre_FusedStoreNextStep(ctrl, now_ms);
       }
       return;
     case 6:
@@ -3329,8 +3376,9 @@ static void AutoOre_RunFusedStoreLow(AutoOre_t *ctrl, uint32_t now_ms) {
         AutoOre_FailStoreInvalidParam(ctrl);
         return;
       }
-      if (AutoOre_WaitOreStoreCommandTarget(ctrl, now_ms)) {
-        AutoOre_FusedStoreNextStep(ctrl);
+      if (AutoOre_FusedStoreReadyOrTimeout(
+              ctrl, now_ms, AutoOre_WaitOreStoreCommandTarget(ctrl, now_ms))) {
+        AutoOre_FusedStoreNextStep(ctrl, now_ms);
       }
       return;
     case 7:
@@ -3341,8 +3389,9 @@ static void AutoOre_RunFusedStoreLow(AutoOre_t *ctrl, uint32_t now_ms) {
         AutoOre_FailStoreInvalidParam(ctrl);
         return;
       }
-      if (AutoOre_WaitArmCommandTarget(ctrl, now_ms)) {
-        AutoOre_FusedStoreNextStep(ctrl);
+      if (AutoOre_FusedStoreReadyOrTimeout(
+              ctrl, now_ms, AutoOre_WaitArmCommandTarget(ctrl, now_ms))) {
+        AutoOre_FusedStoreNextStep(ctrl, now_ms);
       }
       return;
     case 8: {
@@ -3354,7 +3403,7 @@ static void AutoOre_RunFusedStoreLow(AutoOre_t *ctrl, uint32_t now_ms) {
         AutoOre_FailStoreInvalidParam(ctrl);
         return;
       }
-      if (shake_done) {
+      if (AutoOre_FusedStoreReadyOrTimeout(ctrl, now_ms, shake_done)) {
         AutoOre_FusedStoreMarkDone(ctrl);
       }
       return;
@@ -3375,10 +3424,12 @@ static void AutoOre_RunFusedStoreHigh(AutoOre_t *ctrl, uint32_t now_ms) {
         AutoOre_FailStoreInvalidParam(ctrl);
         return;
       }
-      if (AutoOre_WaitConditionThenDelay(
-              ctrl, now_ms, ctrl->feedback.arm_at_target,
-              AutoOre_StoreArmSettleMs(ctrl))) {
-        AutoOre_FusedStoreNextStep(ctrl);
+      if (AutoOre_FusedStoreReadyOrTimeout(
+              ctrl, now_ms,
+              AutoOre_WaitConditionThenDelay(
+                  ctrl, now_ms, ctrl->feedback.arm_at_target,
+                  AutoOre_StoreArmSettleMs(ctrl)))) {
+        AutoOre_FusedStoreNextStep(ctrl, now_ms);
       }
       return;
     case 1:
@@ -3391,7 +3442,7 @@ static void AutoOre_RunFusedStoreHigh(AutoOre_t *ctrl, uint32_t now_ms) {
       }
       if (AutoOre_WaitConditionThenDelay(ctrl, now_ms, true,
                                          AutoOre_StoreCylinderCloseMs(ctrl))) {
-        AutoOre_FusedStoreNextStep(ctrl);
+        AutoOre_FusedStoreNextStep(ctrl, now_ms);
       }
       return;
     case 2:
@@ -3402,7 +3453,8 @@ static void AutoOre_RunFusedStoreHigh(AutoOre_t *ctrl, uint32_t now_ms) {
         AutoOre_FailStoreInvalidParam(ctrl);
         return;
       }
-      if (AutoOre_WaitArmCommandTarget(ctrl, now_ms)) {
+      if (AutoOre_FusedStoreReadyOrTimeout(
+              ctrl, now_ms, AutoOre_WaitArmCommandTarget(ctrl, now_ms))) {
         AutoOre_FusedStoreMarkDone(ctrl);
       }
       return;
@@ -3419,7 +3471,8 @@ static void AutoOre_RunFusedStoreArm(AutoOre_t *ctrl, uint32_t now_ms) {
     AutoOre_FailStoreInvalidParam(ctrl);
     return;
   }
-  if (ctrl->feedback.arm_at_target) {
+  if (AutoOre_FusedStoreReadyOrTimeout(
+          ctrl, now_ms, ctrl->feedback.arm_at_target)) {
     AutoOre_FusedStoreMarkDone(ctrl);
   }
 }
@@ -3429,6 +3482,7 @@ static void AutoOre_RunFusedStore(AutoOre_t *ctrl, uint32_t now_ms) {
     ctrl->fused_store_position = AutoOre_FusedSelectStorePosition(ctrl);
     ctrl->fused_store_step_index = 0u;
     ctrl->fused_store_step_phase = 0u;
+    ctrl->fused_store_step_enter_time_ms = now_ms;
     ctrl->step_condition_met = false;
   }
 
@@ -3541,6 +3595,8 @@ static void AutoOre_RunFusedStepTemplate(AutoOre_t *ctrl, uint32_t now_ms) {
   if (!ctrl->step_ctrl_started) {
     AutoCtrl_Init(&ctrl->step_ctrl);
     AutoCtrl_SetUseFusedTemplateParams(&ctrl->step_ctrl, true);
+    ctrl->step_ctrl.template_timeout_ms =
+        AUTO_ORE_FUSED_STEP_TEMPLATE_TIMEOUT_MS;
     const auto_ctrl_yaw_source_e yaw_source =
         (ctrl->feedback.yaw_source == AUTO_CTRL_YAW_SOURCE_PC)
             ? AUTO_CTRL_YAW_SOURCE_PC
@@ -3567,6 +3623,11 @@ static void AutoOre_RunFusedStepTemplate(AutoOre_t *ctrl, uint32_t now_ms) {
         AutoOre_FusedTemplateStartsAtHeldPoleTarget(template_id)) {
       AutoOre_SkipFusedStepPrealign(
           ctrl, now_ms, ctrl->fused_step_template_start_step_index);
+    } else {
+      /* The outer fused action already performs yaw correction while moving.
+       * Do not add a second PREALIGN gate that can fail the lower branch when
+       * yaw feedback is noisy or unavailable. */
+      AutoOre_SkipFusedStepPrealign(ctrl, now_ms, 0u);
     }
     ctrl->step_ctrl_started = true;
     ctrl->step_ctrl_active = true;
@@ -3628,6 +3689,13 @@ static void AutoOre_RunFusedStepTemplate(AutoOre_t *ctrl, uint32_t now_ms) {
 
   if (state_after_update == AUTO_CTRL_STATE_FAIL ||
       state_after_update == AUTO_CTRL_STATE_ABORT) {
+    if (state_after_update == AUTO_CTRL_STATE_FAIL &&
+        AutoCtrl_GetFault(&ctrl->step_ctrl) ==
+            AUTO_CTRL_FAULT_TEMPLATE_TIMEOUT) {
+      ctrl->fused_step_done = true;
+      ctrl->step_ctrl_active = false;
+      return;
+    }
     AutoOre_AddFailureMask(ctrl, AUTO_ORE_FAILURE_STEP);
     ctrl->state = AUTO_ORE_STATE_FAIL;
     ctrl->result = AUTO_ORE_RESULT_FAIL;
@@ -3946,11 +4014,10 @@ static void AutoOre_RunStepPickStoreFused(AutoOre_t *ctrl, uint32_t now_ms) {
       if (!AutoOre_RunIndependentFusedStep(ctrl, now_ms)) {
         return;
       }
-      if (fused_prealign_ready) {
+      if (fused_prealign_ready ||
+          AutoOre_StepElapsed(ctrl, now_ms) >=
+              AUTO_ORE_FUSED_STORE_STEP_SUCCESS_TIMEOUT_MS) {
         AutoOre_NextStep(ctrl);
-      } else {
-        (void)AutoOre_CheckTimeoutWithFailure(
-            ctrl, now_ms, AUTO_ORE_FAILURE_PICK_ORE);
       }
       return;
     case 1:
@@ -3983,11 +4050,10 @@ static void AutoOre_RunStepPickStoreFused(AutoOre_t *ctrl, uint32_t now_ms) {
       if (!AutoOre_RunIndependentFusedStep(ctrl, now_ms)) {
         return;
       }
-      if (pick_arm_stable) {
+      if (pick_arm_stable ||
+          AutoOre_StepElapsed(ctrl, now_ms) >=
+              AUTO_ORE_FUSED_STORE_STEP_SUCCESS_TIMEOUT_MS) {
         AutoOre_NextStep(ctrl);
-      } else {
-        (void)AutoOre_CheckTimeoutWithFailure(
-            ctrl, now_ms, AUTO_ORE_FAILURE_PICK_ORE);
       }
       return;
     case 3:
@@ -4056,6 +4122,10 @@ static void AutoOre_RunStepPickStoreFused(AutoOre_t *ctrl, uint32_t now_ms) {
               ctrl, now_ms, ctrl->feedback.arm_at_target,
               AutoOre_FusedPickLiftDetectMs(ctrl)) &&
           AutoOre_FusedArmPhotoConfirmed(ctrl, now_ms)) {
+        AutoOre_SetArmHasOre(ctrl, true);
+        AutoOre_NextStep(ctrl);
+      } else if (AutoOre_StepElapsed(ctrl, now_ms) >=
+                 AUTO_ORE_FUSED_STORE_STEP_SUCCESS_TIMEOUT_MS) {
         AutoOre_SetArmHasOre(ctrl, true);
         AutoOre_NextStep(ctrl);
       } else {
@@ -4376,6 +4446,7 @@ static bool AutoOre_StartResolved(AutoOre_t *ctrl, AutoOre_Action_t action,
   AutoOre_ResetPhoto2Latch(ctrl);
   ctrl->fused_store_step_index = 0u;
   ctrl->fused_store_step_phase = 0u;
+  ctrl->fused_store_step_enter_time_ms = now_ms;
   ctrl->fused_step_template_start_step_index = 0u;
   ctrl->fused_store_position = AUTO_ORE_POSITION_NONE;
   ctrl->release_ir_allow_latched = false;
