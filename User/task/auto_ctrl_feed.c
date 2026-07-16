@@ -910,6 +910,12 @@ static bool AutoCtrlFeed_StartOreAction(AutoOre_Action_t action) {
   }
   if (result) {
     AutoCtrlFeed_UpdateAutoOre(now_ms, false);
+    if (AutoCtrlFeed_IsFusedOreAction(action)) {
+      /* The debug/request entry already forces the AutoOre output route.
+       * Apply the same ownership latch to PC-started fused actions so their
+       * Pole snapshot cannot be masked by the current RC/PC behavior plan. */
+      g_auto_ore_debug.force_output_enable = true;
+    }
   } else {
     AutoOre_SetReservedResourceMask(&auto_ore_ctrl,
                                     AUTO_ORE_RESOURCE_NONE);

@@ -110,7 +110,7 @@ Config_RobotParam_t robot_config = {
             .wheel_start_accel_mps2 = 0.0f,
             .wheel_static_friction_nm = 0.5f,
             .wheel_static_friction_deadband_mps = 0.01f,
-            .wheel_high_pole_pid_switch_lift = 15.0f,
+            .wheel_high_pole_pid_switch_lift = 4.0f,
         },
 
         .type = CHASSIS_TYPE_MECANUM,
