@@ -1595,7 +1595,7 @@ static bool Rc_StartAutoUpStepPickStore(void) {
 }
 
 static bool Rc_StartAutoDownStepPickStore(void) {
-  return Task_AutoStepStartDescend200Head();
+  return Task_AutoOreStartStepPickStoreDescend200Head();
 }
 
 static void Rc_TryStartAutoCtrlBySwitch(uint32_t now_ms) {

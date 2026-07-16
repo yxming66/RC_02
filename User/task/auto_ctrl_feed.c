@@ -68,6 +68,10 @@ static volatile uint8_t ore_high_photo_state = 0u;
 #define AUTO_CTRL_POLE_TARGET_STABLE_CYCLES (5u)
 #endif
 
+#define AUTO_ORE_FUSED_ARM_TARGET_THRESHOLD_RAD (1.0f)
+#define AUTO_ORE_FUSED_STORE_TARGET_THRESHOLD_RAD (0.30f)
+#define AUTO_ORE_FUSED_POLE_TARGET_THRESHOLD_RAD (2.0f)
+
 #ifndef AUTO_CTRL_MANUAL_STEP_YAW_TOLERANCE_RAD
 #define AUTO_CTRL_MANUAL_STEP_YAW_TOLERANCE_RAD (0.0872664626f)
 #endif
@@ -1227,14 +1231,26 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms, bool update_debug) {
     return;
   }
 
-  bool arm_at_target = AutoCtrlFeed_ArmSimpleAtTarget(
-      auto_ore_ctrl.param.arm_arrive_threshold_rad);
+  const bool fused_action =
+      AutoCtrlFeed_IsFusedOreAction(auto_ore_ctrl.action);
+  const float arm_target_threshold_rad =
+      fused_action ? AUTO_ORE_FUSED_ARM_TARGET_THRESHOLD_RAD
+                   : auto_ore_ctrl.param.arm_arrive_threshold_rad;
+  const float store_target_threshold_rad =
+      fused_action ? AUTO_ORE_FUSED_STORE_TARGET_THRESHOLD_RAD
+                   : auto_ore_ctrl.param.ore_store_arrive_threshold_rad;
+  const float pole_target_threshold_rad =
+      fused_action ? AUTO_ORE_FUSED_POLE_TARGET_THRESHOLD_RAD
+                   : auto_ore_ctrl.param.pole_arrive_threshold_rad;
+
+  bool arm_at_target =
+      AutoCtrlFeed_ArmSimpleAtTarget(arm_target_threshold_rad);
   if (auto_ore_ctrl.arm_cmd_valid) {
     arm_at_target = AutoCtrlFeed_ArmSimpleAtCommandTarget(
-        &auto_ore_ctrl.arm_cmd, auto_ore_ctrl.param.arm_arrive_threshold_rad);
+        &auto_ore_ctrl.arm_cmd, arm_target_threshold_rad);
   }
-  bool ore_store_all_at_target = Task_OreStoreIsAllAtTarget(
-      auto_ore_ctrl.param.ore_store_arrive_threshold_rad);
+  bool ore_store_all_at_target =
+      Task_OreStoreIsAllAtTarget(store_target_threshold_rad);
   float ore_store_platform_position_rad = 0.0f;
   float ore_store_platform_error_rad = 0.0f;
   const OreStore_Feedback_t *ore_store_fb = Task_OreStoreGetFeedback();
@@ -1250,8 +1266,7 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms, bool update_debug) {
   }
   if (auto_ore_ctrl.ore_store_cmd_valid) {
     ore_store_all_at_target = AutoCtrlFeed_OreStoreAtCommandTarget(
-        &auto_ore_ctrl.ore_store_cmd,
-        auto_ore_ctrl.param.ore_store_arrive_threshold_rad);
+        &auto_ore_ctrl.ore_store_cmd, store_target_threshold_rad);
   }
   const bool ore_low_photo_triggered = AutoCtrlFeed_ReadOreLowPhoto();
   const bool ore_high_photo_triggered = AutoCtrlFeed_ReadOreHighPhoto();
@@ -1273,10 +1288,18 @@ static void AutoCtrlFeed_UpdateAutoOre(uint32_t now_ms, bool update_debug) {
       .arm_at_target = arm_at_target,
       .ore_store_all_homed = Task_OreStoreIsAllHomed(),
       .ore_store_all_at_target = ore_store_all_at_target,
-      .pole_all_at_target = Task_PoleMainAllAtTarget(
-        auto_ore_ctrl.param.pole_arrive_threshold_rad),
-      .pole_front_at_target = feedback.pole_front_at_target,
-      .pole_rear_at_target = feedback.pole_rear_at_target,
+      .pole_all_at_target =
+          Task_PoleMainAllAtTarget(pole_target_threshold_rad),
+      .pole_front_at_target =
+          fused_action
+              ? Task_PoleMainGroupAtTarget(
+                    0u, AUTO_ORE_FUSED_POLE_TARGET_THRESHOLD_RAD)
+              : feedback.pole_front_at_target,
+      .pole_rear_at_target =
+          fused_action
+              ? Task_PoleMainGroupAtTarget(
+                    1u, AUTO_ORE_FUSED_POLE_TARGET_THRESHOLD_RAD)
+              : feedback.pole_rear_at_target,
       .arm_photo_has_ore = arm_ore_photo_triggered,
       .photo_transfer_valid = feedback.photo_transfer_valid,
       .pe13_photo1_triggered = feedback.pe13_photo1_triggered,
