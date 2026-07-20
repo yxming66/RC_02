@@ -149,9 +149,9 @@ Config_RobotParam_t robot_config = {
             /* 200mm 上台阶四杆全伸位；一键取矿 PICK_POS_200 也使用该撑杆高度。 */
             .step_200_all_extend = {5.65490055f, 5.65490055f},
             /* 200mm 上台阶前杆收回、后杆保持支撑位。 */
-            .step_200_front_retract = {0.2f, 5.65490055f},
+            .step_200_front_retract = {0.1f, 5.65490055f},
             /* 200mm 上台阶四杆全收位。 */
-            .step_200_all_retract = {0.2f, 0.2f},
+            .step_200_all_retract = {0.1f, 0.2f},
             /* 200mm 上台阶小抬升位；一键取矿 PICK_NEG_200 使用该撑杆高度。 */
             .step_200_small = {5.60490055f, 5.60490055f},
             /* 400mm 上台阶四杆全伸位；一键取矿 PICK_POS_400 也使用该撑杆高度。 */
@@ -419,7 +419,9 @@ Config_RobotParam_t robot_config = {
             /* 存矿：arm 到存矿位后的稳定等待、固矿气缸关闭等待、气缸重新打开等待。 */
             .store_arm_settle_ms = 300u,
             .store_cylinder_close_ms = 200u,
-            .store_arm_suction_off_ms = 1500u,  
+            /* 气缸已夹紧矿后再关闭吸盘；保留 600ms 脱离余量，避免原
+             * 1500ms 纯等待拖慢低位存矿。 */
+            .store_arm_suction_off_ms = 600u,
             .store_cylinder_open_ms = 200u, 
             /* 放矿：放矿前等待、Pole 到位后抬升观测超时、抬升确认后稳定等待、到放矿位后短暂停稳、吸盘关闭后矿石脱离等待。 */
             .release_wait_ms = 150u,
@@ -475,9 +477,11 @@ Config_RobotParam_t robot_config = {
         .pick_store_chassis_forward_vx_mps = 0.3f,
         .pick_store_chassis_retreat_vx_mps = 0.6f,
         /* 低位存矿完成后，transform 从高位 LIFT 回低位 STANDBY 的旧梯形速度规划；三段速度未配置时兜底使用。 */
-        .store_low_return_velocity_rad_s = 35.0f,
-        .store_low_return_accel_rad_s2 = 60.0f,
-        .store_low_return_decel_rad_s2 = 60.0f,
+        /* 低位平台回程加速；仍使用梯形规划、到位判定和主动减速，
+         * 不改变夹矿/Arm互锁时序。 */
+        .store_low_return_velocity_rad_s = 50.0f,
+        .store_low_return_accel_rad_s2 = 100.0f,
+        .store_low_return_decel_rad_s2 = 100.0f,
         /*
          * 低位存矿返回三段速度规划：end_ratio 为该段结束进度 0~1，velocity_rad_s 为该段速度。
          * 最多 3 段；end_ratio/velocity <=0 表示该段关闭；至少一段有效时禁用上面的梯形规划。
@@ -655,23 +659,23 @@ Config_RobotParam_t robot_config = {
             .rear_retract_timeout_ms = 5000u,   /* 后光电触发后，全收腿动作超时，单位 ms。 */
             .rear_retract_move_ms = 300u,       /* 后光电触发后，全收腿移动持续时间，单位 ms。 */
             .second_photo_retract_move_speed = 0.35f, /* 后一个光电触发收腿时向头向移动 vx，单位 m/s。 */
-            .final_move_speed = 1.2f,          /* 收尾离开台阶 vx，单位 m/s。 */
+            .final_move_speed = 1.5f,          /* 收尾离开台阶 vx，单位 m/s。 */
             .final_move_ms = 1200u,              /* 收尾离  开台阶角度门控兜底超时，单位 ms。 */
             .final_photo_sprint_ms = 50u,       /* 末尾光电触发后继续冲刺时间，单位 ms。 */
             .final_move_wheel_delta_rad = 0.0f, /* 编码器门控的收尾离开轮转角阈值，单位 rad；>0 优先按角度切步，<=0 使用 final_move_ms。 */
             /* 200mm全伸：快速建立速度，并在目标前按120rad/s^2主动制动。 */
             .pole_all_extend_speed = 15.0f,
             .pole_front_extend_speed = 22.0f,   /* 前杆伸出目标跟随速度，单位 rad/s。 */
-            .pole_front_retract_speed = 0.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
+            .pole_front_retract_speed = 70.0f,  /* 前杆回收目标跟随速度，单位 rad/s。 */
             .pole_rear_extend_speed = 22.0f,    /* 后杆伸出目标跟随速度，单位 rad/s。 */
             .pole_rear_retract_speed = 0.0f,   /* 后杆回收目标跟随速度，单位 rad/s。 */
             .pole_all_extend_accel = 120.0f,
             .pole_all_retract_speed = 30.0f,
             .pole_all_retract_accel = 600.0f,
             .pole_front_extend_accel = 120.0f,
-            .pole_front_retract_accel = 0.0f,
+            .pole_front_retract_accel = 1500.0f,
             .pole_rear_extend_accel = 120.0f,
-            .pole_rear_retract_accel = 0.0f,
+            .pole_rear_retract_accel = 1500.0f,
             
             /* 当前模板撑杆加速度限幅，单位 rad/s^2。 */
             .front_photo_timeout_ms = 5000u,    /* 等待前光电触发/下降沿超时，单位 ms。 */
